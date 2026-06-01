@@ -1,0 +1,294 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>WinsiBot — Panel</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+
+    :root {
+      --bg:      #0e0e0e;
+      --surface: #161616;
+      --border:  #2a2a2a;
+      --text:    #e0e0e0;
+      --muted:   #666;
+      --accent:  #00c896;
+      --warn:    #e0a020;
+      --danger:  #c84040;
+    }
+
+    body {
+      background: var(--bg);
+      color: var(--text);
+      font-family: 'Courier New', monospace;
+      font-size: 13px;
+      line-height: 1.6;
+    }
+
+    header {
+      border-bottom: 1px solid var(--border);
+      padding: 16px 24px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+
+    header h1 {
+      font-size: 14px;
+      font-weight: normal;
+      letter-spacing: 2px;
+      text-transform: uppercase;
+      color: var(--accent);
+    }
+
+    #status-dot {
+      width: 8px; height: 8px;
+      border-radius: 50%;
+      background: var(--muted);
+      display: inline-block;
+      margin-right: 8px;
+    }
+    #status-dot.online  { background: var(--accent); }
+    #status-dot.offline { background: var(--danger); }
+
+    .grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+      gap: 1px;
+      border: 1px solid var(--border);
+      margin: 24px;
+    }
+
+    .card {
+      background: var(--surface);
+      padding: 20px 24px;
+      border: 1px solid var(--border);
+    }
+
+    .card-label {
+      color: var(--muted);
+      font-size: 11px;
+      text-transform: uppercase;
+      letter-spacing: 1px;
+      margin-bottom: 8px;
+    }
+
+    .card-value {
+      font-size: 28px;
+      font-weight: bold;
+      color: var(--accent);
+    }
+
+    .card-sub {
+      color: var(--muted);
+      font-size: 11px;
+      margin-top: 4px;
+    }
+
+    section {
+      margin: 0 24px 24px;
+    }
+
+    section h2 {
+      font-size: 11px;
+      text-transform: uppercase;
+      letter-spacing: 2px;
+      color: var(--muted);
+      border-bottom: 1px solid var(--border);
+      padding-bottom: 8px;
+      margin-bottom: 12px;
+    }
+
+    table {
+      width: 100%;
+      border-collapse: collapse;
+    }
+
+    th {
+      text-align: left;
+      color: var(--muted);
+      font-size: 11px;
+      text-transform: uppercase;
+      letter-spacing: 1px;
+      padding: 8px 12px;
+      border-bottom: 1px solid var(--border);
+      font-weight: normal;
+    }
+
+    td {
+      padding: 8px 12px;
+      border-bottom: 1px solid var(--border);
+      color: var(--text);
+    }
+
+    tr:hover td { background: var(--surface); }
+
+    .badge {
+      display: inline-block;
+      padding: 2px 8px;
+      border-radius: 2px;
+      font-size: 10px;
+      text-transform: uppercase;
+      letter-spacing: 1px;
+    }
+
+    .badge-online  { background: #0e2e20; color: var(--accent); }
+    .badge-offline { background: #2e0e0e; color: var(--danger); }
+    .badge-banned  { background: #2e1a0e; color: var(--warn);   }
+    .badge-premium { background: #1a1a2e; color: #8080ff;       }
+
+    .bar-wrap {
+      background: var(--border);
+      height: 4px;
+      border-radius: 2px;
+      overflow: hidden;
+      margin-top: 4px;
+    }
+    .bar-fill {
+      height: 100%;
+      background: var(--accent);
+      border-radius: 2px;
+      transition: width 0.5s;
+    }
+
+    #refresh-btn {
+      background: none;
+      border: 1px solid var(--border);
+      color: var(--muted);
+      padding: 6px 14px;
+      cursor: pointer;
+      font-family: inherit;
+      font-size: 11px;
+      letter-spacing: 1px;
+      text-transform: uppercase;
+    }
+    #refresh-btn:hover { border-color: var(--accent); color: var(--accent); }
+
+    #last-update { color: var(--muted); font-size: 11px; }
+
+    .loading { color: var(--muted); padding: 16px 0; }
+  </style>
+</head>
+<body>
+
+<header>
+  <h1>
+    <span id="status-dot"></span>
+    WinsiBot ◆ Panel
+  </h1>
+  <div style="display:flex;align-items:center;gap:16px">
+    <span id="last-update">—</span>
+    <button id="refresh-btn" onclick="loadAll()">↻ Actualizar</button>
+  </div>
+</header>
+
+<!-- Stats -->
+<div class="grid" id="stats-grid">
+  <div class="card"><div class="card-label">Mensajes totales</div><div class="card-value" id="s-messages">—</div></div>
+  <div class="card"><div class="card-label">Usuarios</div><div class="card-value" id="s-users">—</div></div>
+  <div class="card"><div class="card-label">Comandos totales</div><div class="card-value" id="s-commands">—</div></div>
+  <div class="card"><div class="card-label">Hoy — mensajes</div><div class="card-value" id="s-today-msg">—</div></div>
+  <div class="card"><div class="card-label">Hoy — comandos</div><div class="card-value" id="s-today-cmd">—</div></div>
+  <div class="card"><div class="card-label">Baneados</div><div class="card-value" id="s-banned" style="color:var(--danger)">—</div></div>
+</div>
+
+<!-- Top comandos -->
+<section>
+  <h2>◈ Top comandos</h2>
+  <div id="top-commands" class="loading">Cargando...</div>
+</section>
+
+<!-- Usuarios -->
+<section>
+  <h2>◈ Usuarios recientes</h2>
+  <div id="users-table" class="loading">Cargando...</div>
+</section>
+
+<script>
+const API = 'http://localhost:8080'
+
+async function get(path) {
+  try {
+    const r = await fetch(API + path)
+    const d = await r.json()
+    return d.success ? d.data : null
+  } catch { return null }
+}
+
+async function loadStatus() {
+  const d = await get('/panel')
+  if (!d) return
+  const dot = document.getElementById('status-dot')
+  dot.className = d.bot?.status === 'online' ? 'online' : 'offline'
+}
+
+async function loadStats() {
+  const d = await get('/panel/stats')
+  if (!d) return
+  document.getElementById('s-messages').textContent  = d.total_messages  ?? '—'
+  document.getElementById('s-users').textContent     = d.total_users      ?? '—'
+  document.getElementById('s-commands').textContent  = d.total_commands   ?? '—'
+  document.getElementById('s-today-msg').textContent = d.messages_today   ?? '—'
+  document.getElementById('s-today-cmd').textContent = d.commands_today   ?? '—'
+  document.getElementById('s-banned').textContent    = d.banned_users     ?? '—'
+}
+
+async function loadTopCommands() {
+  const d = await get('/panel/commands')
+  const el = document.getElementById('top-commands')
+  if (!d?.topCommands?.length) { el.textContent = 'Sin datos'; return }
+
+  const max = d.topCommands[0]?.count ?? 1
+  el.innerHTML = `<table>
+    <tr><th>Comando</th><th>Usos</th><th style="width:200px">Frecuencia</th></tr>
+    ${d.topCommands.map(c => `
+      <tr>
+        <td>${c.command}</td>
+        <td>${c.count}</td>
+        <td>
+          <div class="bar-wrap">
+            <div class="bar-fill" style="width:${Math.round(c.count/max*100)}%"></div>
+          </div>
+        </td>
+      </tr>`).join('')}
+  </table>`
+}
+
+async function loadUsers() {
+  const d = await get('/panel/users')
+  const el = document.getElementById('users-table')
+  if (!d?.users?.length) { el.textContent = 'Sin usuarios'; return }
+
+  el.innerHTML = `<table>
+    <tr>
+      <th>JID</th><th>Nombre</th><th>Nivel</th>
+      <th>EXP</th><th>Warns</th><th>Estado</th>
+    </tr>
+    ${d.users.slice(0, 50).map(u => `
+      <tr>
+        <td style="color:var(--muted)">${u.jid?.replace('@s.whatsapp.net','').replace('@lid','') ?? '—'}</td>
+        <td>${u.pushName || '—'}</td>
+        <td>${u.level ?? 0}</td>
+        <td>${u.exp ?? 0}</td>
+        <td>${u.warns ?? 0}</td>
+        <td>
+          ${u.banned  ? '<span class="badge badge-banned">Baneado</span>'   : ''}
+          ${u.premium ? '<span class="badge badge-premium">Premium</span>'  : ''}
+          ${!u.banned && !u.premium ? '<span class="badge badge-online">Activo</span>' : ''}
+        </td>
+      </tr>`).join('')}
+  </table>`
+}
+
+async function loadAll() {
+  await Promise.all([loadStatus(), loadStats(), loadTopCommands(), loadUsers()])
+  document.getElementById('last-update').textContent =
+    'Actualizado: ' + new Date().toLocaleTimeString('es-PE')
+}
+
+loadAll()
+setInterval(loadAll, 30_000)
+</script>
+</body>
+</html>

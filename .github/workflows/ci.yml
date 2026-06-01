@@ -1,0 +1,72 @@
+name: CI
+
+on:
+  push:
+    branches: [main, dev]
+  pull_request:
+    branches: [main]
+
+jobs:
+  # ─── TypeScript ──────────────────────────────────────────────────────────────
+  typescript:
+    name: TypeScript check
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: "npm"
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Type check
+        run: npx tsc --noEmit
+
+  # ─── Rust ────────────────────────────────────────────────────────────────────
+  rust:
+    name: Rust check
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Cache Rust
+        uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: rust
+
+      - name: Create dummy .env for Rust
+        run: |
+          echo "PORT=3001" > rust/.env
+          echo "API_KEY=00000000000000000000000000000000" >> rust/.env
+          echo "SESSIONS_DIR=./sessions" >> rust/.env
+          echo "AUTH_DIR=../auth" >> rust/.env
+          echo "DB_PATH=./data/messages.db" >> rust/.env
+
+      - name: Cargo check
+        working-directory: rust
+        run: cargo check
+
+  # ─── Python ──────────────────────────────────────────────────────────────────
+  python:
+    name: Python lint
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Check syntax
+        run: |
+          python -m compileall python/terminal/manage.py
+          python -m compileall python/terminal/monitor.py
+          python -m compileall python/session/manager.py

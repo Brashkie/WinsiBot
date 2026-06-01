@@ -1,0 +1,90 @@
+# ─── WhatsApp session (NUNCA subir — contiene claves privadas) ────────────────
+auth/
+data/session_backups/
+data/emergency_*/
+
+# ─── Node.js ──────────────────────────────────────────────────────────────────
+node_modules/
+dist/
+*.js.map
+
+# ─── Variables de entorno (contienen secretos) ────────────────────────────────
+.env
+rust/.env
+!.env.example
+!rust/.env.example
+
+# ─── Python ───────────────────────────────────────────────────────────────────
+python/venv/
+python/__pycache__/
+python/**/__pycache__/
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+*.egg-info/
+.Python
+build/
+eggs/
+parts/
+var/
+sdist/
+wheels/
+pip-wheel-metadata/
+*.egg
+
+# ─── Rust ─────────────────────────────────────────────────────────────────────
+rust/target/
+
+# ─── Bases de datos y logs (pueden ser grandes o sensibles) ───────────────────
+data/*.db
+data/*.db-wal
+data/*.db-shm
+data/health_log.json
+data/alert_log.json
+data/session_log.json
+data/break_log.json
+data/code_analysis.json
+data/store.json
+data/store.json.tmp
+data/last_baileys_version.txt
+data/ai/
+data/db/
+data/models/
+data/subbots/
+data/tmp/
+
+# ─── PHP ──────────────────────────────────────────────────────────────────────
+php/vendor/
+php/.env
+
+# ─── Media del bot (puede ser grande) ────────────────────────────────────────
+# media/
+
+# ─── OS ───────────────────────────────────────────────────────────────────────
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# ─── Editor ───────────────────────────────────────────────────────────────────
+.vscode/settings.json
+.idea/
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.sw?
+
+# ─── Logs ─────────────────────────────────────────────────────────────────────
+*.log
+logs/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# ─── Build artifacts ──────────────────────────────────────────────────────────
+*.tsbuildinfo
+python/cython_ext/*.so
+python/cython_ext/*.pyd
+python/cython_ext/build/
+bin/

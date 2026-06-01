@@ -1,0 +1,13 @@
+{
+    "name": "hepein/winsibot-php",
+    "description": "WinsiBot PHP API — Webhooks y Panel",
+    "type": "project",
+    "autoload": {
+        "psr-4": {
+            "WinsiBot\\": "src/"
+        }
+    },
+    "require": {
+        "php": ">=8.1"
+    }
+}

@@ -1,0 +1,29 @@
+[build-system]
+requires = ["setuptools>=68.0", "Cython>=3.0", "numpy>=1.26"]
+build-backend = "setuptools.backends.legacy:build"
+
+[project]
+name = "winsibot-ext"
+version = "1.0.0"
+description = "Extensiones Cython para WinsiBot"
+requires-python = ">=3.11"
+dependencies = [
+    "cython>=3.0",
+    "numpy>=1.26",
+    "polars>=1.0",
+    "pandas>=2.2",
+    "pyarrow>=17.0",
+    "flask>=3.0",
+    "flask-cors>=4.0",
+    "scikit-learn>=1.5",
+    "openai>=1.40",
+    "python-dotenv>=1.0",
+    "gunicorn>=22.0",
+    "rich>=13.7",
+]
+
+[tool.cython]
+language_level = "3"
+
+[tool.setuptools.packages.find]
+where = ["python"]
