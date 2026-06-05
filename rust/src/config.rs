@@ -21,8 +21,9 @@ impl Config {
         let api_key = env::var("API_KEY")
             .expect("API_KEY es obligatorio en .env");
 
-        if api_key == "cambia_esto_por_una_clave_segura" || api_key.len() < 16 {
-            panic!("API_KEY insegura — genera una con: openssl rand -hex 32");
+        let weak = ["cambia_esto_por_una_clave_segura", "changeme", "secret", "password"];
+        if weak.contains(&api_key.as_str()) || api_key.len() < 32 {
+            panic!("API_KEY insegura — debe tener al menos 32 caracteres. Genera una con: openssl rand -hex 32");
         }
 
         let sessions_dir = env::var("SESSIONS_DIR")

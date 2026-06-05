@@ -106,7 +106,7 @@ class AnomalyDetector:
         self.model       = None
         self.samples     = []
         self.sample_count = 0
-        self._lock       = threading.Lock()
+        self._lock       = threading.RLock()   # RLock — predict llama add_sample bajo el mismo lock
         self._load()
 
     def _load(self) -> None:

@@ -8,7 +8,7 @@ import makeWASocket, {
 import { Boom } from '@hapi/boom'
 import EventEmitter3 from 'eventemitter3'
 import pino from 'pino'
-import chalk from 'chalk'
+import { color, themes } from 'ansimax'
 import { config } from '@config'
 import { logger } from './logger.js'
 import { winsiStore } from '@core/store.js'
@@ -222,14 +222,14 @@ export class WinsiSocket extends EventEmitter3<WinsiEvents> {
 
       const jidShort  = fmtJid(msg.key.remoteJid ?? '')
       const isGroup   = msg.key.remoteJid?.endsWith('@g.us') ?? false
-      const chatLabel = isGroup ? chalk.magenta('Grupo') : chalk.yellow('Privado')
+      const chatLabel = isGroup ? color.magenta('Grupo') : themes.warning('Privado')
       const meLabel   = msg.key.fromMe
-        ? chalk.gray('fromMe')
-        : chalk.cyan('entrante')
+        ? color.dim('fromMe')
+        : color.cyan('entrante')
 
       if (!msg.message) {
         console.log(
-          `  ${chalk.red('◈')} ${chalk.red.bold('Bad MAC')}  ${chatLabel} ${chalk.gray(jidShort)}  ${meLabel}`
+          `  ${color.red('◈')} ${color.bold(color.red('Bad MAC'))}  ${chatLabel} ${color.dim(jidShort)}  ${meLabel}`
         )
         // ─── Bad MAC flood detection ───────────────────────────────────────
         const now = Date.now()
@@ -260,7 +260,7 @@ export class WinsiSocket extends EventEmitter3<WinsiEvents> {
       }
 
       console.log(
-        `  ${chalk.blue('◈')} ${chalk.white.bold('Mensaje')}  ${chatLabel} ${chalk.gray(jidShort)}  ${meLabel}`
+        `  ${color.blue('◈')} ${color.bold('Mensaje')}  ${chatLabel} ${color.dim(jidShort)}  ${meLabel}`
       )
 
       this.emit('message', msg, this.sock!)

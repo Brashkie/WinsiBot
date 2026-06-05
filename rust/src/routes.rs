@@ -27,6 +27,10 @@ pub struct AppState {
     pub db:           db::Db,
 }
 
+// ── Límites de seguridad ──────────────────────────────────────────────────────
+const MAX_SESSION_BYTES: usize = 10_000_000; // 10 MB por sesión
+const MAX_BATCH:         usize = 1_000;       // items por request de track/ack
+
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
 fn ok(msg: impl Into<String>) -> Json<serde_json::Value> {
@@ -58,7 +62,7 @@ pub async fn health(State(state): State<AppState>) -> Json<serde_json::Value> {
     Json(serde_json::json!({
         "ok":            true,
         "service":       "winsibot-session-api",
-        "version":       "3.0.0",
+        "version":       "4.0.0",
         "activeSessions": sessions.len(),
         "sessions":      sessions,
         "locksInMemory": state.locks.active_count(),
@@ -117,6 +121,13 @@ pub async fn write(
     let bytes = B64
         .decode(&body.data)
         .map_err(|e| err(StatusCode::BAD_REQUEST, format!("base64 inválido: {e}")))?;
+
+    if bytes.len() > MAX_SESSION_BYTES {
+        return Err(err(
+            StatusCode::PAYLOAD_TOO_LARGE,
+            format!("datos demasiado grandes ({} bytes, máx {})", bytes.len(), MAX_SESSION_BYTES),
+        ));
+    }
 
     // Validar JSON antes de tocar disco
     serde_json::from_slice::<serde_json::Value>(&bytes)
@@ -342,6 +353,12 @@ pub async fn messages_track(
     if body.messages.is_empty() {
         return (StatusCode::BAD_REQUEST, Json(serde_json::json!({ "ok": false, "error": "lista vacía" })));
     }
+    if body.messages.len() > MAX_BATCH {
+        return (StatusCode::BAD_REQUEST, Json(serde_json::json!({
+            "ok": false,
+            "error": format!("lote demasiado grande ({} items, máx {})", body.messages.len(), MAX_BATCH),
+        })));
+    }
     let db = state.db.clone();
     match tokio::task::spawn_blocking(move || db::track(&db, &body.messages)).await {
         Ok(Ok(n)) => (StatusCode::OK, Json(serde_json::json!({ "ok": true, "tracked": n, "ts": Utc::now() }))),
@@ -368,6 +385,12 @@ pub async fn messages_ack(
 ) -> (StatusCode, Json<serde_json::Value>) {
     if body.updates.is_empty() {
         return (StatusCode::BAD_REQUEST, Json(serde_json::json!({ "ok": false, "error": "lista vacía" })));
+    }
+    if body.updates.len() > MAX_BATCH {
+        return (StatusCode::BAD_REQUEST, Json(serde_json::json!({
+            "ok": false,
+            "error": format!("lote demasiado grande ({} items, máx {})", body.updates.len(), MAX_BATCH),
+        })));
     }
     let db = state.db.clone();
     match tokio::task::spawn_blocking(move || db::ack(&db, &body.updates)).await {
@@ -397,13 +420,15 @@ pub async fn messages_pending(
     State(state): State<AppState>,
     Query(q): Query<PendingQuery>,
 ) -> (StatusCode, Json<serde_json::Value>) {
-    let db = state.db.clone();
-    let min_age = q.minutes * 60;
-    match tokio::task::spawn_blocking(move || db::get_pending(&db, min_age, q.limit)).await {
+    let minutes = q.minutes.clamp(1, 10_080); // 1 min – 7 días
+    let limit   = q.limit.clamp(1, 10_000);
+    let db      = state.db.clone();
+    let min_age = minutes * 60;
+    match tokio::task::spawn_blocking(move || db::get_pending(&db, min_age, limit)).await {
         Ok(Ok(list)) => (StatusCode::OK, Json(serde_json::json!({
             "ok":      true,
             "count":   list.len(),
-            "minutes": q.minutes,
+            "minutes": minutes,
             "pending": list,
             "ts":      Utc::now(),
         }))),
@@ -425,11 +450,12 @@ pub async fn messages_stats(
     State(state): State<AppState>,
     Query(q): Query<StatsQuery>,
 ) -> (StatusCode, Json<serde_json::Value>) {
-    let db = state.db.clone();
-    match tokio::task::spawn_blocking(move || db::get_stats(&db, q.hours)).await {
+    let hours = q.hours.clamp(1, 8_760); // 1 hora – 1 año
+    let db    = state.db.clone();
+    match tokio::task::spawn_blocking(move || db::get_stats(&db, hours)).await {
         Ok(Ok(s)) => (StatusCode::OK, Json(serde_json::json!({
             "ok":           true,
-            "hours":        q.hours,
+            "hours":        hours,
             "total":        s.total,
             "sent":         s.sent,
             "delivered":    s.delivered,
@@ -457,9 +483,10 @@ pub async fn messages_cleanup(
     State(state): State<AppState>,
     Query(q): Query<CleanupQuery>,
 ) -> (StatusCode, Json<serde_json::Value>) {
-    let db = state.db.clone();
-    match tokio::task::spawn_blocking(move || db::cleanup(&db, q.days)).await {
-        Ok(Ok(n)) => (StatusCode::OK, Json(serde_json::json!({ "ok": true, "deleted": n, "days": q.days, "ts": Utc::now() }))),
+    let days = q.days.clamp(1, 3_650); // 1 día – 10 años
+    let db   = state.db.clone();
+    match tokio::task::spawn_blocking(move || db::cleanup(&db, days)).await {
+        Ok(Ok(n)) => (StatusCode::OK, Json(serde_json::json!({ "ok": true, "deleted": n, "days": days, "ts": Utc::now() }))),
         Ok(Err(e)) => (StatusCode::INTERNAL_SERVER_ERROR, Json(serde_json::json!({ "ok": false, "error": e.to_string() }))),
         Err(e)     => (StatusCode::INTERNAL_SERVER_ERROR, Json(serde_json::json!({ "ok": false, "error": e.to_string() }))),
     }

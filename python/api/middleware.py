@@ -32,6 +32,13 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
             )
 
         _rate_store[key].append(now)
+
+        # Limpiar entradas vacías para evitar que _rate_store crezca indefinidamente
+        if len(_rate_store) > 2000:
+            stale = [k for k, v in list(_rate_store.items()) if not v]
+            for k in stale:
+                _rate_store.pop(k, None)
+
         return await call_next(request)
 
 # ─── Sanitizers (sin dependencia de Flask) ───────────────────────────────────

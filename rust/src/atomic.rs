@@ -18,7 +18,17 @@ pub fn atomic_write(path: &Path, data: &[u8]) -> std::io::Result<()> {
     Ok(())
 }
 
+const MAX_HEALTHY_BYTES: u64 = 10_000_000; // 10 MB — cap antes de parsear
+
 pub fn is_healthy(path: &Path) -> bool {
+    let meta = match fs::metadata(path) {
+        Ok(m) => m,
+        Err(_) => return false,
+    };
+    if meta.len() > MAX_HEALTHY_BYTES {
+        tracing::warn!(path = %path.display(), size = meta.len(), "archivo demasiado grande para validar");
+        return false;
+    }
     fs::read(path)
         .ok()
         .and_then(|b| serde_json::from_slice::<serde_json::Value>(&b).ok())

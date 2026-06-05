@@ -51,6 +51,7 @@ export type CommandCategory =
   | 'nsfw'
   | 'info'
   | 'jadibot'
+  | 'rpg'
 
 // ─── Usuario ──────────────────────────────────────────────────────────────────
 export interface UserProfile {
@@ -97,6 +98,7 @@ export interface BotConfig {
   sessionPath:          string
   pythonApiUrl:         string
   phpApiUrl:            string
+  rustApiUrl:           string
   openaiKey?:           string
   spotifyClientId?:     string
   spotifyClientSecret?: string

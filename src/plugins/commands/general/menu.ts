@@ -17,6 +17,8 @@ const CATEGORY_SYMBOLS: Record<string, string> = {
   roleplay:   '♡',
   nsfw:       '▣',
   info:       '§',
+  jadibot:    '⊕',
+  rpg:        '⚔',
 }
 
 const command: Command = {

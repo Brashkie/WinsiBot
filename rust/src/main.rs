@@ -3,6 +3,7 @@ mod auth;
 mod config;
 mod db;
 mod lock_manager;
+mod nlp;
 mod routes;
 mod session_id;
 mod snapshot;
@@ -65,6 +66,8 @@ async fn main() {
         .route("/healthy",                get(routes::is_healthy))
         .route("/sessions",               get(routes::list_sessions))
         .route("/sessions/signal/clear",  post(routes::clear_signal_sessions))
+        // ─── NLP fast-path ───────────────────────────────────────────────────
+        .route("/nlp/fast",               post(nlp::nlp_fast))
         // ─── Message delivery tracking ────────────────────────────────────────
         .route("/messages/track",         post(routes::messages_track))
         .route("/messages/ack",           post(routes::messages_ack))

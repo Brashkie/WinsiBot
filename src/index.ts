@@ -1,12 +1,14 @@
 import 'dotenv/config'
+import readline from 'readline'
 import { WinsiSocket } from '@core/socket.js'
 import { handleMessage } from '@core/handler.js'
 import { loadCommands } from '@plugins/commands/index.js'
 import { logger } from '@core/logger.js'
 import { config } from '@config'
-import chalk from 'chalk'
+import { color, gradient, loader, ascii, themes, configure } from 'ansimax'
 
-const sleep = (ms: number) => new Promise(r => setTimeout(r, ms))
+themes.use('dracula')
+configure({ animationSpeed: 'fast', reducedMotion: false })
 
 // ─── Suprimir errores conocidos de decrypt ────────────────────────────────────
 process.on('unhandledRejection', (reason: any) => {
@@ -39,127 +41,123 @@ process.on('uncaughtException', (err) => {
 })
 
 // ─── Graceful shutdown ────────────────────────────────────────────────────────
-process.on('SIGINT', () => {
+function shutdownCleanly(): void {
   console.log()
-  console.log(`  ${chalk.yellow('◆')} ${chalk.yellow.bold('WinsiBot detenido por el usuario')}`)
-  console.log(`  ${chalk.gray('Sesion guardada — puedes reiniciar con npm run monitor')}`)
+  console.log(`  ${themes.warning('◆')} ${color.bold(themes.warning('WinsiBot detenido por el usuario'))}`)
+  console.log(`  ${color.dim('Sesión guardada — puedes reiniciar con npm run dev')}`)
   console.log()
   import('@plugins/commands/jadibot/serbot.js').then(({ subBots }) => {
     for (const [, bot] of subBots) {
-      try {
-        bot.sock?.ev?.removeAllListeners()
-        bot.sock?.ws?.close()
-      } catch {}
+      try { bot.sock?.ev?.removeAllListeners() } catch {}
+      try { bot.sock?.ws?.close() }             catch {}
     }
-  }).catch(() => {}).finally(() => process.exit(0))
+  }).catch(() => {}).finally(() => {
+    try { process.stdin.setRawMode(false) } catch {}
+    process.exit(0)
+  })
+}
+
+let _askingExit = false
+
+process.on('SIGINT', () => {
+  if (_askingExit) return
+  _askingExit = true
+
+  process.stdout.write('\n')
+  process.stdout.write(`  ${themes.warning('◆')} ¿Deseas salir? (s/n): `)
+
+  // Sacar stdin de raw mode para que readline pueda leer
+  try { process.stdin.setRawMode(false) } catch {}
+  process.stdin.resume()
+  process.stdin.setEncoding('utf8')
+
+  const rl = readline.createInterface({ input: process.stdin, terminal: false })
+
+  // Sin respuesta en 10s → continuar
+  const timer = setTimeout(() => {
+    rl.close()
+    process.stdout.write('\n')
+    console.log(`  ${color.dim('(tiempo agotado — continuando...)')}`)
+    _askingExit = false
+  }, 10_000)
+
+  rl.once('line', (line) => {
+    clearTimeout(timer)
+    rl.close()
+    const ans = line.trim().toLowerCase()
+    if (ans === 's' || ans === 'si' || ans === 'y' || ans === 'yes' || ans === '1') {
+      shutdownCleanly()
+    } else {
+      console.log(`  ${color.dim('Continuando...')}`)
+      _askingExit = false
+    }
+  })
 })
 
 process.on('SIGTERM', () => {
   console.log()
-  console.log(`  ${chalk.yellow('◆')} ${chalk.yellow.bold('WinsiBot detenido (SIGTERM)')}`)
+  console.log(`  ${themes.warning('◆')} ${color.bold(themes.warning('WinsiBot detenido (SIGTERM)'))}`)
   console.log()
+  try { process.stdin.setRawMode(false) } catch {}
   process.exit(0)
 })
 
-// ─── UI ───────────────────────────────────────────────────────────────────────
-async function spinner(text: string, ms = 1500) {
-  const frames = ['⠋','⠙','⠹','⠸','⠼','⠴','⠦','⠧','⠇','⠏']
-  const end = Date.now() + ms
-  let i = 0
-  while (Date.now() < end) {
-    process.stdout.write(`\r  ${chalk.cyan(frames[i++ % frames.length])}  ${chalk.white(text)}`)
-    await sleep(80)
-  }
-  process.stdout.write(`\r  ${chalk.green('✔')}  ${chalk.white(text)}\n`)
-}
-
-async function barraProgreso() {
-  const fases = [
-    { bar: '▓░░░░░░░░░', pct: '15% ', msg: 'Cargando nucleo...' },
-    { bar: '▓▓▓░░░░░░░', pct: '35% ', msg: 'Inicializando modulos...' },
-    { bar: '▓▓▓▓▓░░░░░', pct: '55% ', msg: 'Conectando servicios...' },
-    { bar: '▓▓▓▓▓▓▓░░░', pct: '75% ', msg: 'Cargando plugins...' },
-    { bar: '▓▓▓▓▓▓▓▓▓░', pct: '95% ', msg: 'Finalizando inicio...' },
-    { bar: '▓▓▓▓▓▓▓▓▓▓', pct: '100%', msg: 'Sistema operativoo......' },
-  ]
-  for (const fase of fases) {
-    process.stdout.write(
-      `\r  ${chalk.magenta('𒁈')} ${chalk.cyan('[' + fase.bar + ']')} ${chalk.yellow(fase.pct)}  ${chalk.gray('⟡')} ${chalk.white(fase.msg)}`
-    )
-    await sleep(300)
-  }
-  console.log()
-}
-
+// ─── Banner ───────────────────────────────────────────────────────────────────
 async function printBanner() {
   console.clear()
-  await sleep(100)
-
-  console.log()
-  console.log(`  ${chalk.cyan.bold('WinsiBot')} ${chalk.gray('v8.0.0')}`)
-  console.log(`  ${chalk.gray('by Hepein Oficial')}`)
-  console.log()
-  console.log(`  ${chalk.gray('prefix')}   ${chalk.yellow(config.prefix.join(' '))}`)
-  console.log(`  ${chalk.gray('env')}      ${config.isDev ? chalk.green('development') : chalk.red('production')}`)
-  console.log(`  ${chalk.gray('github')}   ${chalk.blue('github.com/Brashkie')}`)
-  console.log()
-  console.log(`  ${chalk.gray('─'.repeat(30))}`)
   console.log()
 
-  await barraProgreso()
+  // Título con gradiente — ASCII art si está disponible, fallback a texto
+  let title: string
+  try {
+    title = ascii.banner('WinsiBot', {
+      font:    'small',
+      colorFn: (t: string) => gradient(t, ['#8be9fd', '#ff79c6', '#bd93f9']),
+    })
+  } catch {
+    title = `  ${gradient('WinsiBot v8.0.0', ['#8be9fd', '#ff79c6', '#bd93f9'])}`
+  }
+  console.log(title)
+  console.log(`  ${color.dim('by Hepein Oficial')}`)
+  console.log()
+
+  console.log(`  ${color.dim('prefix')}   ${themes.warning(config.prefix.join(' '))}`)
+  console.log(`  ${color.dim('env')}      ${config.isDev ? themes.success('development') : themes.error('production')}`)
+  console.log(`  ${color.dim('github')}   ${color.blue('github.com/Brashkie')}`)
+  console.log()
+  console.log(`  ${ascii.divider({ width: 30 })}`)
+  console.log()
+
+  await loader.progressAnimate(6, 'Iniciando sistema...', { delay: 280 })
   console.log()
 }
 
+// ─── Info de conexión ─────────────────────────────────────────────────────────
 async function printConnected(jid: string, cmdCount: number) {
   const number = jid.replace('@s.whatsapp.net', '').replace(':0', '').replace(/:.*/, '')
+
   console.log()
-  console.log(`  ${chalk.green('◆')} ${chalk.white.bold('Conectado')}`)
-  console.log(`  ${chalk.gray('numero')}    ${chalk.cyan('+' + number)}`)
-  console.log(`  ${chalk.gray('comandos')}  ${chalk.yellow(cmdCount + ' cargados')}`)
-  console.log(`  ${chalk.gray('hora')}      ${chalk.white(new Date().toLocaleTimeString('es-PE'))}`)
+  console.log(`  ${themes.success('◆')} ${color.bold('Conectado')}`)
+  console.log(`  ${color.dim('numero')}    ${color.cyan('+' + number)}`)
+  console.log(`  ${color.dim('comandos')}  ${themes.warning(String(cmdCount) + ' cargados')}`)
+  console.log(`  ${color.dim('hora')}      ${new Date().toLocaleTimeString('es-PE')}`)
   console.log()
-  console.log(`  ${chalk.gray('─'.repeat(30))}`)
+  console.log(`  ${ascii.divider({ width: 30 })}`)
   console.log()
 
   const { getPendingCount, getPendingMessages, markPendingProcessed } = await import('@lib/pythonBridge.js')
+
+  const stopPending = loader.spin('Verificando mensajes pendientes...')
   let pendingCount = 0
   try {
     pendingCount = await getPendingCount(30)
   } catch {
     pendingCount = 0
   }
-
-  const msgs = [
-    { pct: 20,  msg: 'Recuperando sesion...' },
-    { pct: 50,  msg: pendingCount > 0
-      ? `${pendingCount} mensajes pendientes...`
-      : 'Verificando mensajes...' },
-    { pct: 80,  msg: 'Procesando...' },
-    { pct: 100, msg: pendingCount > 0
-      ? `${pendingCount} mensajes recuperados`
-      : 'Sin mensajes pendientes' },
-  ]
-
-  const barLen = 10
-  let msgIdx   = 0
-
-  for (let pct = 1; pct <= 100; pct++) {
-    if (msgIdx < msgs.length - 1 && pct >= (msgs[msgIdx + 1]?.pct ?? 101)) {
-      msgIdx++
-    }
-    const filled = Math.floor((pct / 100) * barLen)
-    const empty  = barLen - filled
-    const bar    = '▓'.repeat(filled) + '░'.repeat(empty)
-    const pctStr = String(pct).padStart(3, ' ') + '%'
-    const msg    = msgs[msgIdx]?.msg ?? ''
-
-    process.stdout.write(
-      `\r  ${chalk.cyan('𒁈')} ${chalk.magenta('[' + bar + ']')} ${chalk.yellow(pctStr)}  ${chalk.gray('⟡')} ${chalk.white(msg)}`
-    )
-
-    const delay = pct < 30 ? 60 : pct < 60 ? 35 : pct < 90 ? 20 : 10
-    await sleep(delay)
-  }
+  stopPending(
+    pendingCount > 0 ? `${pendingCount} mensajes pendientes` : 'Sin mensajes pendientes',
+    true,
+  )
 
   if (pendingCount > 0) {
     const pending = await getPendingMessages(30).catch(() => [])
@@ -169,9 +167,7 @@ async function printConnected(jid: string, cmdCount: number) {
   }
 
   console.log()
-  console.log()
-  console.log(`  ${chalk.gray('─'.repeat(30))}`)
-  console.log(`  ${chalk.gray('listo — bot activo')}`)
+  console.log(`  ${color.dim('listo — bot activo')}`)
   console.log()
 }
 
@@ -179,31 +175,29 @@ async function printConnected(jid: string, cmdCount: number) {
 async function main() {
   await printBanner()
 
-  await spinner('Cargando comandos...', 1000)
+  const stopLoad = loader.spin('Cargando comandos...')
   await loadCommands()
-
-  await spinner('Inicializando Baileys...', 800)
-  await spinner('Conectando a WhatsApp...', 1200)
+  stopLoad('Comandos cargados', true)
 
   const winsi = new WinsiSocket()
 
-  // ─── listener de mensajes — registrado una sola vez fuera del ready ─────
   winsi.on('message', (msg, sock) => {
     handleMessage(msg, sock)
   })
 
+  const stopConn = loader.spin('Conectando a WhatsApp...')
+
   winsi.on('ready', async (sock) => {
+    stopConn('WhatsApp conectado', true)
     const jid = sock.user?.id ?? ''
     const { commandRegistry } = await import('@plugins/commands/index.js')
     await printConnected(jid, commandRegistry.size)
 
-    // ─── webhook receiver (health endpoint + eventos externos) ───────────
     try {
       const { startWebhookReceiver } = await import('@plugins/webhooks/receiver.js')
       startWebhookReceiver(sock)
     } catch {}
 
-    // ─── restaurar sub-bots ───────────────────────────────────────────────
     try {
       const { restoreSubBots } = await import('@plugins/commands/jadibot/serbot.js')
       await restoreSubBots(sock)
@@ -212,13 +206,18 @@ async function main() {
 
   winsi.on('closed', () => {
     console.log()
-    console.log(`  ${chalk.red('◆')} ${chalk.red.bold('Desconectado definitivamente')}`)
-    console.log(`  ${chalk.gray('Borra la carpeta /auth y reinicia para reconectar')}`)
+    console.log(`  ${themes.error('◆')} ${color.bold(themes.error('Desconectado definitivamente'))}`)
+    console.log(`  ${color.dim('Borra la carpeta /auth y reinicia para reconectar')}`)
     console.log()
     process.exit(1)
   })
 
-  await winsi.connect()
+  try {
+    await winsi.connect()
+  } catch (err) {
+    stopConn('Error al conectar', false)
+    throw err
+  }
 }
 
 main().catch(err => {

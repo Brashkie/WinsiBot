@@ -22,17 +22,22 @@ impl LockManager {
         Self::default()
     }
 
-    /// Retorna el lock para ese sessionId.
-    /// Si no existe aún, lo crea. El lock persiste en memoria
-    /// mientras el servidor esté corriendo.
+    /// Retorna el lock para ese sessionId, creándolo si no existe.
+    /// Cuando el mapa supera 512 entradas, elimina los locks sin uso
+    /// (Arc con strong_count == 1 significa que solo el mapa lo retiene).
     pub fn get(&self, session_id: &str) -> Arc<AsyncMutex<()>> {
         let mut map = self.locks.lock().unwrap();
+        if map.len() >= 512 && !map.contains_key(session_id) {
+            let before = map.len();
+            map.retain(|_, v| Arc::strong_count(v) > 1);
+            tracing::debug!(before, after = map.len(), "LockManager: evicted unused locks");
+        }
         map.entry(session_id.to_string())
             .or_insert_with(|| Arc::new(AsyncMutex::new(())))
             .clone()
     }
 
-    /// Cuántas sesiones tienen un lock activo en memoria.
+    /// Cuántas sesiones tienen un lock vivo en memoria.
     pub fn active_count(&self) -> usize {
         self.locks.lock().unwrap().len()
     }

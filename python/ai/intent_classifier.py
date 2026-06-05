@@ -151,6 +151,110 @@ INITIAL_CORPUS: list[tuple[str, str]] = [
     ('hdgsjhgdsjhg',       'nonsense'),
     ('pqowieuryt',         'nonsense'),
     ('xyzxyzxyz',          'nonsense'),
+    ('fsjhfkjshfkj',       'nonsense'),
+    ('!@#$%^',             'nonsense'),
+    ('hfdshfkjdsh',        'nonsense'),
+
+    # greeting — variantes latam
+    ('que hay',            'greeting'),
+    ('que onda',           'greeting'),
+    ('que mas pues',       'greeting'),
+    ('hola a todos',       'greeting'),
+    ('como estan',         'greeting'),
+    ('alguien activo',     'greeting'),
+    ('buenas tardes',      'greeting'),
+    ('buen dia',           'greeting'),
+    ('wenas',              'greeting'),
+    ('qtal',               'greeting'),
+
+    # farewell — más variantes
+    ('buenas noches',      'farewell'),
+    ('que descanses',      'farewell'),
+    ('hasta mañana',       'farewell'),
+    ('me despido',         'farewell'),
+    ('cuidense',           'farewell'),
+    ('hasta pronto',       'farewell'),
+
+    # question — más variantes
+    ('alguien sabe',       'question'),
+    ('me ayudan',          'question'),
+    ('donde puedo',        'question'),
+    ('como hago',          'question'),
+    ('que paso',           'question'),
+    ('cuando sale',        'question'),
+    ('por que no',         'question'),
+    ('me pueden decir',    'question'),
+    ('saben algo de',      'question'),
+    ('como se hace',       'question'),
+
+    # joke — más variantes
+    ('jajajajaja',         'joke'),
+    ('me cague de risa',   'joke'),
+    ('muerto de risa',     'joke'),
+    ('sksksksk',           'joke'),
+    ('ded',                'joke'),
+    ('me estoy muriendo',  'joke'),
+    ('jajaja que bueno',   'joke'),
+
+    # praise — más variantes
+    ('bacan',              'praise'),
+    ('chevere',            'praise'),
+    ('que buena',          'praise'),
+    ('excelente',          'praise'),
+    ('nice',               'praise'),
+    ('bien bueno',         'praise'),
+    ('de pana bueno',      'praise'),
+    ('crack',              'praise'),
+    ('eres lo mejor',      'praise'),
+
+    # complaint — más variantes
+    ('esto no sirve',      'complaint'),
+    ('que mal',            'complaint'),
+    ('cuando arreglan',    'complaint'),
+    ('no me ayuda',        'complaint'),
+    ('cuanto demora',      'complaint'),
+    ('no responde',        'complaint'),
+    ('tarda mucho',        'complaint'),
+
+    # insult — más variantes
+    ('bot de porqueria',   'insult'),
+    ('que asco de bot',    'insult'),
+    ('eres un inutil',     'insult'),
+    ('no sirves para nada','insult'),
+
+    # spam — más variantes
+    ('111111111111',       'spam'),
+    ('sisisisisisi',       'spam'),
+    ('nooooooooooo',       'spam'),
+    ('jajjajajajajajaj',   'spam'),
+    ('eeeeeeeeeeeee',      'spam'),
+
+    # neutral — más variantes
+    ('dale',               'neutral'),
+    ('ya vi',              'neutral'),
+    ('listo',              'neutral'),
+    ('ah ok',              'neutral'),
+    ('claro',              'neutral'),
+    ('perfecto',           'neutral'),
+    ('de acuerdo',         'neutral'),
+    ('ok gracias',         'neutral'),
+    ('ahi vemos',          'neutral'),
+    ('bien',               'neutral'),
+
+    # command_attempt — más prefijos
+    ('.menu',              'command_attempt'),
+    ('/sticker',           'command_attempt'),
+    ('!help',              'command_attempt'),
+    ('#bot',               'command_attempt'),
+    ('!perfil',            'command_attempt'),
+    ('/comandos',          'command_attempt'),
+    ('!rank',              'command_attempt'),
+
+    # nsfw — más variantes
+    ('fotos calientes',    'nsfw'),
+    ('manda algo picante', 'nsfw'),
+    ('contenido para mayores', 'nsfw'),
+    ('video xxx',          'nsfw'),
 ]
 
 # ─── Resultado ────────────────────────────────────────────────────────────────
@@ -166,20 +270,27 @@ class IntentResult:
     extras:       dict = field(default_factory=dict)
 
 # ─── Reglas rápidas (sin ML) ──────────────────────────────────────────────────
-_SPAM_RE    = re.compile(r'(.)\1{8,}')         # caracter repetido 8+ veces
+_SPAM_RE    = re.compile(r'(.)\1{7,}')         # caracter repetido 7+ veces
 _INSULT_RE  = re.compile(
-    r'\b(mierda|idiota|estúpido|imbécil|inútil|asco|pendejo|hdp|ctm|puta)\b',
+    r'\b(mierda|idiota|estup[ií]do|imb[eé]cil|in[uú]til|asco|pendejo|'
+    r'hdp|ctm|puta|basura|porquer[ií]a|malparido|gonorrea|hijueputa)\b',
     re.IGNORECASE
 )
 _NSFW_RE    = re.compile(
-    r'\b(hot|nsfw|adulto|porn|xxx|desnud|nud)\b',
+    r'\b(hot|nsfw|adulto|porn|xxx|desnud|nud|hentai|caliente|picante|erotic)\b',
     re.IGNORECASE
 )
 _GREET_RE   = re.compile(
-    r'^(hola|ola|hey|buenas?|buenos?\s*(días|tardes|noches)|saludos?|hi)\b',
+    r'^(hola+|ola+|hey+|buenas?|buenos?\s*(d[íi]as?|tardes?|noches?)|'
+    r'saludos?|hi|hello|wenas?|que\s*(onda|hay|tal)|buen\s*d[íi]a)\b',
     re.IGNORECASE
 )
 _CMD_RE     = re.compile(r'^[!#./][\w]+')
+_FAREWELL_RE = re.compile(
+    r'^(cha+o|bye|adi[oó]s|hasta\s*(luego|ma[ñn]ana|pronto)|'
+    r'nos\s*vemos|me\s*voy|ciao|cuidense?)\b',
+    re.IGNORECASE
+)
 
 _NONSENSE_RE = re.compile(
     r'^[^aeiouáéíóúAEIOUÁÉÍÓÚ\s]{6,}$|'   # solo consonantes
@@ -197,16 +308,19 @@ def _rule_based(text: str) -> Optional[IntentResult]:
         return IntentResult('nonsense', 0.95, method='rule')
 
     if _CMD_RE.match(stripped):
-        return IntentResult('command_attempt', 0.95, method='rule')
+        return IntentResult('command_attempt', 0.97, method='rule')
 
     if _INSULT_RE.search(stripped):
-        return IntentResult('insult', 0.90, method='rule', is_insult=True)
+        return IntentResult('insult', 0.92, method='rule', is_insult=True)
 
     if _NSFW_RE.search(stripped):
-        return IntentResult('nsfw', 0.90, method='rule', is_nsfw=True)
+        return IntentResult('nsfw', 0.92, method='rule', is_nsfw=True)
 
-    if _GREET_RE.match(stripped) and len(stripped) < 30:
-        return IntentResult('greeting', 0.92, method='rule')
+    if _GREET_RE.match(stripped) and len(stripped) < 40:
+        return IntentResult('greeting', 0.94, method='rule')
+
+    if _FAREWELL_RE.match(stripped) and len(stripped) < 40:
+        return IntentResult('farewell', 0.93, method='rule')
 
     return None
 
@@ -363,24 +477,24 @@ class TransformerClassifier:
         self.pipe = None
 
     def _load(self) -> bool:
-        if self._loaded:
-            return self.pipe is not None
-        try:
-            from transformers import pipeline
-            # modelo multilingüe liviano para clasificación de texto
-            self.pipe = pipeline(
-                'text-classification',
-                model     = 'cardiffnlp/twitter-xlm-roberta-base-sentiment',
-                top_k     = None,
-                truncation = True,
-                max_length = 128,
-            )
-            self.__class__._loaded = True
-            return True
-        except Exception as e:
-            console.print(f'  [dim]§ Transformer no disponible: {e}[/dim]')
-            self.__class__._loaded = True
-            return False
+        with self.__class__._lock:          # protege _loaded y la carga del modelo
+            if self.__class__._loaded:
+                return self.pipe is not None
+            try:
+                from transformers import pipeline
+                self.pipe = pipeline(
+                    'text-classification',
+                    model      = 'cardiffnlp/twitter-xlm-roberta-base-sentiment',
+                    top_k      = None,
+                    truncation = True,
+                    max_length = 128,
+                )
+                self.__class__._loaded = True
+                return True
+            except Exception as e:
+                console.print(f'  [dim]§ Transformer no disponible: {e}[/dim]')
+                self.__class__._loaded = True
+                return False
 
     def predict_sentiment(self, text: str) -> dict:
         """

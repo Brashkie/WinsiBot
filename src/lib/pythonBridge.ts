@@ -6,11 +6,18 @@ import { config } from '@config'
 import { logger } from '@core/logger.js'
 import type { PythonApiResponse } from '../types/index.js'
 
-// ─── Cliente HTTP ─────────────────────────────────────────────────────────────
+// ─── Clientes HTTP ────────────────────────────────────────────────────────────
 const client: AxiosInstance = axios.create({
   baseURL: config.pythonApiUrl,
   timeout: 5_000,
   headers: { 'Content-Type': 'application/json' },
+})
+
+// Cliente para el servidor Rust (sin reintentos — ya es sub-ms)
+const rustClient: AxiosInstance = axios.create({
+  baseURL: config.rustApiUrl,
+  timeout: 300,   // 300ms máximo; si no responde, cae a Python
+  headers: { 'Content-Type': 'application/json', 'x-api-key': process.env.RUST_API_KEY ?? '' },
 })
 
 axiosRetry(client, {
@@ -221,7 +228,30 @@ export interface NLPIntent {
   is_question: boolean
 }
 
+interface RustNlpResult {
+  ok:         boolean
+  intent:     string
+  confidence: number
+  method:     string
+}
+
+// Intenta Rust primero (regexes, sub-ms); si dice "unknown" o falla → Python
 export async function analyzeIntent(text: string): Promise<NLPIntent | null> {
+  try {
+    const rustRes = await rustClient.post<RustNlpResult>('/nlp/fast', { text })
+    if (rustRes.data?.ok && rustRes.data.intent !== 'unknown') {
+      const intent = rustRes.data.intent
+      return {
+        text,
+        intents:     [intent],
+        primary:     intent,
+        is_question: text.trimEnd().endsWith('?'),
+      }
+    }
+  } catch {
+    // Rust offline o timeout — cae a Python silenciosamente
+  }
+
   const res = await pythonPost<NLPIntent>('/api/v1/nlp/intent', { text })
   return res.success ? res.data ?? null : null
 }

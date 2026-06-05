@@ -1,4 +1,3 @@
-// src/plugins/commands/general/serbot.ts
 import type { Command } from '../../../types/index.js'
 import { makeWASocket, useMultiFileAuthState, makeCacheableSignalKeyStore, fetchLatestBaileysVersion } from '@whiskeysockets/baileys'
 import { safeSend } from '@lib/media_sender.js'
@@ -33,8 +32,8 @@ function getSubPath(phone: string): string {
 export async function startSubBot(
   phone:   string,
   method:  'qr' | 'code',
-  sock:    any,          // sock principal para enviar mensajes
-  chatJid: string,       // jid del privado del usuario
+  sock:    any,
+  chatJid: string,
   msg:     any,
   retries = 0,
 ): Promise<void> {
@@ -79,7 +78,7 @@ export async function startSubBot(
     if (qr && method === 'qr') {
       try {
         const qrBuffer = await qrcode.toBuffer(qr, { scale: 8 })
-        // borrar QR anterior
+
         if (qrMsg?.key)
           await safeSend(() => sock.sendMessage(chatJid, { delete: qrMsg.key })).catch(() => {})
 
@@ -126,7 +125,7 @@ export async function startSubBot(
         }, 60_000)
       } catch (e: any) {
         await safeSend(() => sock.sendMessage(chatJid, {
-          text: `✗ Error al generar código: ${e?.message ?? 'desconocido'}\n§ Intenta con *#serbot* para usar QR`,
+          text: `✗ Error al generar código: ${e?.message ?? 'desconocido'}`,
         }, { quoted: msg })).catch(() => {})
       }
     }
@@ -146,7 +145,6 @@ export async function startSubBot(
         method,
       })
 
-      // guardar meta
       try {
         fs.writeFileSync(
           path.join(subPath, 'meta.json'),
@@ -154,7 +152,6 @@ export async function startSubBot(
         )
       } catch {}
 
-      // limpiar QR/code
       for (const k of [qrMsg?.key, codeMsg?.key]) {
         if (k) safeSend(() => sock.sendMessage(chatJid, { delete: k })).catch(() => {})
       }
@@ -167,7 +164,7 @@ export async function startSubBot(
           ` Número:  *+${phone}*`,
           ` Método:  *${method === 'code' ? 'Código' : 'QR'}*`,
           ``,
-          `> § Para desconectarte escribe *#stopbot*`,
+          `§ Para desconectarte escribe *!stopbot*`,
         ].join('\n'),
       }, { quoted: msg })).catch(() => {})
     }
@@ -181,25 +178,22 @@ export async function startSubBot(
         subBots.set(phone, { ...current, status: 'disconnected', sock: null })
       }
 
-      // sesión inválida — borrar y notificar
       if (reason === 401 || reason === 405) {
         fs.rmSync(subPath, { recursive: true, force: true })
         subBots.delete(phone)
         await safeSend(() => sock.sendMessage(chatJid, {
-          text: `✗ Sesión cerrada permanentemente\n§ Usa *#serbot* para reconectarte`,
+          text: `✗ Sesión cerrada permanentemente\n§ Usa *!serbot* para reconectarte`,
         })).catch(() => {})
         return
       }
 
-      // reemplazado por otra sesión
       if (reason === 440) {
         await safeSend(() => sock.sendMessage(chatJid, {
-          text: `§ Tu sesión fue reemplazada por otro dispositivo\n§ Cierra WhatsApp Web y usa *#serbot* para reconectar`,
+          text: `§ Sesión reemplazada por otro dispositivo\n§ Usa *!serbot* para reconectar`,
         })).catch(() => {})
         return
       }
 
-      // reintentar automáticamente
       if (retries < MAX_RETRIES) {
         const delay = 1000 * Math.pow(2, retries)
         setTimeout(() => {
@@ -208,7 +202,7 @@ export async function startSubBot(
         }, delay)
       } else {
         await safeSend(() => sock.sendMessage(chatJid, {
-          text: `✗ No se pudo reconectar después de ${MAX_RETRIES} intentos\n§ Usa *#serbot* para intentar de nuevo`,
+          text: `✗ No se pudo reconectar (${MAX_RETRIES} intentos)\n§ Usa *!serbot* para reintentar`,
         })).catch(() => {})
       }
     }
@@ -238,25 +232,58 @@ export async function restoreSubBots(mainSock: any): Promise<void> {
   }
 }
 
+// ─── Texto de ayuda ───────────────────────────────────────────────────────────
+function buildListText(prefix: string): string {
+  if (subBots.size === 0) {
+    return `§ No hay sub-bots activos\n> Usa *${prefix}serbot* para conectar uno`
+  }
+
+  const statusIcon = (s: SubBot) =>
+    s.status === 'connected'   ? '✔' :
+    s.status === 'connecting'  ? '⏳' : '✗'
+
+  const lines = [...subBots.values()].map((b, i) => {
+    const since = b.connectedAt
+      ? `· ${Math.floor((Date.now() - b.connectedAt) / 60_000)}m`
+      : ''
+    return ` ${i + 1}. ${statusIcon(b)} *${b.name}* (+${b.phone}) ${since}`
+  })
+
+  return [
+    `◈ *Sub-bots activos — ${subBots.size}*`,
+    ``,
+    ...lines,
+    ``,
+    `§ ${prefix}stopbot  para desconectarte`,
+  ].join('\n')
+}
+
 // ─── Comando ──────────────────────────────────────────────────────────────────
 const command: Command = {
   name:        'serbot',
-  aliases:     ['jadibot', 'subbot'],
-  description: 'Conviértete en sub-bot',
-  category:    'general',
-  groupOnly:   false,
+  aliases:     ['jadibot', 'subbot', 'listbots', 'botslist'],
+  description: 'Conviértete en sub-bot  |  serbot lista — ver activos',
+  category:    'jadibot',
 
-  async execute({ sock, jid, msg, args, sender, isGroup }) {
+  async execute({ sock, jid, msg, args, sender, isGroup, command: cmd, prefix }) {
+    const sub = args[0]?.toLowerCase()
 
-    // solo en privado
-    if (isGroup) {
+    // ─── Lista de sub-bots — funciona en grupos y privado ─────────────────
+    if (cmd === 'listbots' || cmd === 'botslist' || sub === 'lista' || sub === 'list') {
       await safeSend(() => sock.sendMessage(jid, {
-        text: `§ Este comando solo funciona en privado\n§ Escríbeme directamente`,
+        text: buildListText(prefix),
       }, { quoted: msg }))
       return
     }
 
-    // extraer número del sender
+    // ─── Solo en privado para conectarse ──────────────────────────────────
+    if (isGroup) {
+      await safeSend(() => sock.sendMessage(jid, {
+        text: `§ Este comando solo funciona en privado\n§ Escríbeme directamente a mí`,
+      }, { quoted: msg }))
+      return
+    }
+
     const phone = sender
       .replace('@s.whatsapp.net', '')
       .replace('@lid', '')
@@ -269,23 +296,23 @@ const command: Command = {
       return
     }
 
-    // ya conectado
+    // ─── Ya conectado ─────────────────────────────────────────────────────
     if (subBots.get(phone)?.status === 'connected') {
       await safeSend(() => sock.sendMessage(jid, {
         text: [
           `§ Ya estás conectado como sub-bot`,
           ``,
-          `§ Para desconectarte: *#stopbot*`,
+          `§ Para desconectarte: *${prefix}stopbot*`,
         ].join('\n'),
       }, { quoted: msg }))
       return
     }
 
-    const method: 'qr' | 'code' = args[0]?.toLowerCase() === 'code' ? 'code' : 'qr'
+    const method: 'qr' | 'code' = sub === 'code' ? 'code' : 'qr'
 
     await safeSend(() => sock.sendMessage(jid, {
       text: method === 'code'
-        ? `◈ Generando código de emparejamiento para *+${phone}*...`
+        ? `◈ Generando código para *+${phone}*...`
         : `◈ Generando QR para *+${phone}*...`,
     }, { quoted: msg }))
 

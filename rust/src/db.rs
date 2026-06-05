@@ -108,11 +108,16 @@ pub fn track(db: &Db, items: &[TrackItem]) -> Result<usize, rusqlite::Error> {
 
 /// Actualizar estado de entrega en lote.
 /// Solo avanza (no permite bajar de 'leído' a 'entregado').
+/// Statuses válidos: -1 (fallido), 0 (enviado), 1 (entregado), 2 (leído), 3 (reproducido).
 pub fn ack(db: &Db, items: &[AckItem]) -> Result<usize, rusqlite::Error> {
     let conn  = db.lock().unwrap();
     let now   = Utc::now().timestamp();
     let mut n = 0usize;
     for a in items {
+        if !matches!(a.status, -1 | 0 | 1 | 2 | 3) {
+            tracing::warn!(id = %a.id, status = a.status, "ack status fuera de rango, ignorado");
+            continue;
+        }
         n += conn.execute(
             "UPDATE outbox SET status = ?1, updated_at = ?2
              WHERE id = ?3 AND status < ?1",

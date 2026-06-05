@@ -1,6 +1,6 @@
 [package]
 name = "winsibot-session-api"
-version = "3.0.0"
+version = "4.0.0"
 edition = "2021"
 
 [[bin]]
@@ -21,6 +21,7 @@ base64 = "0.22"
 dotenvy = "0.15"
 chrono = { version = "0.4", features = ["serde"] }
 rusqlite = { version = "0.31", features = ["bundled"] }
+regex    = { version = "1", features = ["unicode"] }
 
 [profile.release]
 lto = true

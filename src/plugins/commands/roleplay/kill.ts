@@ -3,20 +3,20 @@ import axios from 'axios'
 import { resolveTarget, fmt } from './_resolve.js'
 
 const VIDEOS = [
-  'https://telegra.ph/file/b6814c2bd8fead1051cee.mp4',
-  'https://telegra.ph/file/bbc8ac2b7c0827769d5c7.mp4',
-  'https://telegra.ph/file/c9f2c65d2ba87d6f87962.mp4',
-  'https://telegra.ph/file/a4f579ce162b62106f933.mp4',
-  'https://telegra.ph/file/7db4a7604a2a5b8ce1019.mp4',
-  'https://telegra.ph/file/d111a3b3d9accc6073202.mp4',
-  'https://telegra.ph/file/ece314cdf9e7bad5f9863.mp4',
-  'https://telegra.ph/file/47c80d1ef67c176f400d6.mp4',
+  'https://telegra.ph/file/526a85be4b4b8724c39d8.mp4',
+  'https://telegra.ph/file/cae7a2816daea40136d01.mp4',
+  'https://telegra.ph/file/b66c2f0ced094edf6c73c.mp4',
+  'https://telegra.ph/file/7d6d03d019ef4496d27c5.mp4',
+  'https://telegra.ph/file/15a2f9e19989a9989ef76.mp4',
+  'https://telegra.ph/file/ebab3240bf05403757d72.mp4',
+  'https://telegra.ph/file/7aa5ae37a4ef602a784ea.mp4',
+  'https://telegra.ph/file/d78a66110b5841bbb8099.mp4',
 ]
 
 const command: Command = {
-  name: 'hug',
-  aliases: ['abrazar', 'abrazo', 'hug1'],
-  description: 'Abraza a alguien',
+  name: 'kill',
+  aliases: ['matar', 'kill1'],
+  description: 'Mata a alguien',
   category: 'roleplay',
   cooldown: 5,
 
@@ -26,8 +26,8 @@ const command: Command = {
     const isSelf  = target.jid === sender
 
     const caption = isSelf
-      ? `${me} se abrazó a sí mismo`
-      : `${me} abrazó a ${target.display}`
+      ? `${me} intentó matarse a sí mismo`
+      : `${me} mató a ${target.display}`
 
     const url    = VIDEOS[Math.floor(Math.random() * VIDEOS.length)]!
     const res    = await axios.get<ArrayBuffer>(url, { responseType: 'arraybuffer', timeout: 15_000 })

@@ -55,19 +55,20 @@ pub fn recover(path: &Path) -> Option<String> {
 }
 
 /// Lista todos los snapshots con estado (válido / corrupto).
+/// Solo devuelve el número y estado — nunca rutas del sistema de archivos.
 pub fn list(path: &Path) -> Vec<String> {
     (1..=MAX).filter_map(|i| {
         let s = snap(path, i);
         if !s.exists() { return None; }
+        let meta = fs::metadata(&s).ok()?;
+        if meta.len() > 10_000_000 {
+            return Some(format!("#{i} [✗ demasiado grande]"));
+        }
         let healthy = fs::read(&s)
             .ok()
             .and_then(|b| serde_json::from_slice::<serde_json::Value>(&b).ok())
             .is_some();
-        Some(format!(
-            "#{i}: {} [{}]",
-            s.display(),
-            if healthy { "✓ válido" } else { "✗ corrupto" }
-        ))
+        Some(format!("#{i} [{}]", if healthy { "✓ válido" } else { "✗ corrupto" }))
     }).collect()
 }
 
@@ -75,19 +76,21 @@ pub fn list(path: &Path) -> Vec<String> {
 /// Usado por el endpoint /healthy para observabilidad.
 #[derive(Serialize)]
 pub struct SnapMeta {
-    pub path:       String,
+    pub index:      usize,
+    pub name:       String,
     pub size_bytes: u64,
     pub ts:         DateTime<Utc>,
 }
 
 pub fn latest_meta(session_path: &Path) -> Option<SnapMeta> {
-    let s = snap(session_path, 1);
+    let s    = snap(session_path, 1);
     let meta = fs::metadata(&s).ok()?;
-    let modified = meta.modified().ok()?;
+    let name = s.file_name()?.to_string_lossy().to_string();
     Some(SnapMeta {
-        path:       s.to_string_lossy().to_string(),
+        index:      1,
+        name,
         size_bytes: meta.len(),
-        ts:         DateTime::<Utc>::from(modified),
+        ts:         DateTime::<Utc>::from(meta.modified().ok()?),
     })
 }
 

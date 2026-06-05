@@ -3,20 +3,19 @@ import axios from 'axios'
 import { resolveTarget, fmt } from './_resolve.js'
 
 const VIDEOS = [
-  'https://telegra.ph/file/b6814c2bd8fead1051cee.mp4',
-  'https://telegra.ph/file/bbc8ac2b7c0827769d5c7.mp4',
-  'https://telegra.ph/file/c9f2c65d2ba87d6f87962.mp4',
-  'https://telegra.ph/file/a4f579ce162b62106f933.mp4',
-  'https://telegra.ph/file/7db4a7604a2a5b8ce1019.mp4',
-  'https://telegra.ph/file/d111a3b3d9accc6073202.mp4',
-  'https://telegra.ph/file/ece314cdf9e7bad5f9863.mp4',
-  'https://telegra.ph/file/47c80d1ef67c176f400d6.mp4',
+  'https://telegra.ph/file/bbdc5ee0c056a3d25e95d.mp4',
+  'https://telegra.ph/file/8cd4c0d5b75812d867c30.mp4',
+  'https://telegra.ph/file/e92fec68c657321740467.mp4',
+  'https://telegra.ph/file/6b53b030fe63ef59f9af2.mp4',
+  'https://telegra.ph/file/f4f09b3b424b0f31ba26e.mp4',
+  'https://telegra.ph/file/8c78a93d0761ddbe721b8.mp4',
+  'https://telegra.ph/file/149f178c1d476677360a5.mp4',
 ]
 
 const command: Command = {
-  name: 'hug',
-  aliases: ['abrazar', 'abrazo', 'hug1'],
-  description: 'Abraza a alguien',
+  name: 'pat',
+  aliases: ['acariciar', 'pat1'],
+  description: 'Acaricia a alguien',
   category: 'roleplay',
   cooldown: 5,
 
@@ -26,8 +25,8 @@ const command: Command = {
     const isSelf  = target.jid === sender
 
     const caption = isSelf
-      ? `${me} se abrazó a sí mismo`
-      : `${me} abrazó a ${target.display}`
+      ? `${me} se acarició a sí mismo`
+      : `${me} acarició a ${target.display}`
 
     const url    = VIDEOS[Math.floor(Math.random() * VIDEOS.length)]!
     const res    = await axios.get<ArrayBuffer>(url, { responseType: 'arraybuffer', timeout: 15_000 })

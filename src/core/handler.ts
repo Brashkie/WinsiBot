@@ -3,10 +3,10 @@ import { commandRegistry } from '@plugins/commands/index.js'
 import { applyMiddlewares } from '@plugins/middlewares/index.js'
 import { config } from '@config'
 import { logger } from './logger.js'
-import chalk from 'chalk'
+import { color, themes } from 'ansimax'
 import type { BotContext } from '../types/index.js'
 import { handleNotFound } from '@plugins/commands/general/notfound.js'
-import { pythonGet, pythonPost, fastProcess } from '@lib/pythonBridge.js'
+import { pythonGet, pythonPost, fastProcess, analyzeIntent } from '@lib/pythonBridge.js'
 import { safeSend } from '@lib/media_sender.js'
 import {
   addXP,
@@ -160,14 +160,44 @@ const AI_TRIGGERS = new Set([
 function isAITrigger(text: string, botName: string): boolean {
   const lower = text.toLowerCase().trim()
   const words = lower.split(/\s+/)
-
-  // trigger en cualquier posición del texto
   if (words.some(w => AI_TRIGGERS.has(w))) return true
-
-  // nombre del bot mencionado
   if (lower.includes(botName.toLowerCase())) return true
-
   return false
+}
+
+// ─── Fallback local (cuando Python está offline) ──────────────────────────────
+const FALLBACK_RESPONSES: Record<string, string[]> = {
+  greeting:        [
+    '¡Hola! ¿En qué te puedo ayudar? 😊',
+    '¡Buenas! Dime qué necesitas',
+    '¡Hey! ¿Qué tal? 👋',
+  ],
+  farewell:        ['¡Hasta luego! 👋', '¡Chao! Cuídate 😊'],
+  insult:          [
+    'Oye, tranquilo 😅 ¿Puedo ayudarte en algo?',
+    'Sin malos rollos, ¿qué necesitas?',
+  ],
+  question:        [
+    '¿Me das más detalles? 🤔',
+    'Cuéntame más para ayudarte mejor',
+  ],
+  command_attempt: [
+    `¿Buscas un comando? Escribe \`${config.prefix[0] ?? '!'}menu\``,
+    `Usa \`${config.prefix[0] ?? '!'}menu\` para ver todos los comandos`,
+  ],
+  nonsense:        ['No entendí bien, ¿puedes repetir? 🤔', 'Hmm, ¿puedes explicarme mejor?'],
+  spam:            ['¡Tranquilo! Uno a la vez 😄'],
+  nsfw:            ['Eso no lo manejo 😅'],
+  neutral:         [
+    '¡Sí! ¿En qué te ayudo? 😊',
+    'Aquí estoy, dime',
+    '¿Qué necesitas? 😊',
+  ],
+}
+
+function localFallback(intent: string): string {
+  const pool = FALLBACK_RESPONSES[intent] ?? FALLBACK_RESPONSES['neutral']!
+  return pool[Math.floor(Math.random() * pool.length)]!
 }
 
 // ─── Pipeline de IA ───────────────────────────────────────────────────────────
@@ -177,52 +207,36 @@ async function handleAIResponse(
   msg:  WAMessage,
 ): Promise<boolean> {
   try {
-    // 1. clasificar intención
-    const intentRes = await pythonPost<{
-      intent:      string
-      confidence:  number
-      is_spam:     boolean
-      is_insult:   boolean
-    }>('/api/v1/ai/intent/classify', {
-      text:            ctx.text,
-      use_transformer: false,
-    }).catch(() => null)
+    // 1. Intención — Rust fast-path → Python → fallback 'neutral'
+    const nlp    = await analyzeIntent(ctx.text)
+    const intent = nlp?.primary ?? 'neutral'
 
-    const intent = intentRes?.data?.intent ?? 'neutral'
-
-    // no responder a spam o nsfw
     if (intent === 'spam' || intent === 'nsfw') return false
 
-    // 2. actualizar memoria del usuario y obtener contexto
-    const memRes = await pythonPost<Record<string, any>>(
-      `/api/v1/ai/memory/${encodeURIComponent(ctx.sender)}/update`,
-      { text: ctx.text, intent, is_cmd: false }
-    ).catch(() => null)
+    // 2. Memoria — max 800ms, no bloquea si Python es lento
+    let context: Record<string, any> = {}
+    try {
+      const memRes = await Promise.race([
+        pythonPost<Record<string, any>>(
+          `/api/v1/ai/memory/${encodeURIComponent(ctx.sender)}/update`,
+          { text: ctx.text, intent, is_cmd: false },
+        ),
+        new Promise<null>(r => setTimeout(() => r(null), 800)),
+      ])
+      context = (memRes as any)?.data ?? {}
+    } catch {}
 
-    const context = memRes?.data ?? {}
-
-    // 3. generar respuesta con personalidad
+    // 3. Respuesta de personalidad — Python
     const replyRes = await pythonPost<string>(
       '/api/v1/ai/personality/respond',
-      {
-        intent,
-        text:      ctx.text,
-        context,
-        jid:       ctx.jid,
-        use_humor: true,
-      }
+      { intent, text: ctx.text, context, jid: ctx.jid, use_humor: true },
     ).catch(() => null)
 
-    const reply = typeof replyRes?.data === 'string'
+    const reply = (typeof replyRes?.data === 'string' && replyRes.data.trim())
       ? replyRes.data.trim()
-      : null
+      : localFallback(intent)   // Python offline → respuesta local
 
-    if (!reply) return false
-
-    await safeSend(() => sock.sendMessage(ctx.jid, {
-      text: reply,
-    }, { quoted: msg }))
-
+    await safeSend(() => sock.sendMessage(ctx.jid, { text: reply }, { quoted: msg }))
     return true
   } catch (err) {
     logger.warn({ err }, 'handleAIResponse error')
@@ -243,10 +257,10 @@ export async function handleMessage(msg: WAMessage, sock: WASocket): Promise<voi
     ).trim()
 
     const isGroupEarly  = jidEarly.endsWith('@g.us')
-    const chatLabel     = isGroupEarly ? chalk.magenta('Grupo') : chalk.yellow('Privado')
-    const meLabel       = msg.key.fromMe ? chalk.gray('fromMe') : chalk.cyan('entrante')
-    const textLabel     = textEarly ? chalk.white(`"${textEarly.slice(0, 50)}"`) : chalk.gray('(sin texto)')
-    console.log(`  ${chalk.green('◈')} ${chalk.white.bold('Handler')}  ${chatLabel} ${chalk.gray(jidEarly.replace('@g.us','').replace('@s.whatsapp.net',''))}  ${meLabel}  ${textLabel}`)
+    const chatLabel     = isGroupEarly ? color.magenta('Grupo') : themes.warning('Privado')
+    const meLabel       = msg.key.fromMe ? color.dim('fromMe') : color.cyan('entrante')
+    const textLabel     = textEarly ? `"${textEarly.slice(0, 50)}"` : color.dim('(sin texto)')
+    console.log(`  ${themes.success('◈')} ${color.bold('Handler')}  ${chatLabel} ${color.dim(jidEarly.replace('@g.us','').replace('@s.whatsapp.net',''))}  ${meLabel}  ${textLabel}`)
 
     if (msg.key.fromMe) return
 
@@ -279,7 +293,7 @@ export async function handleMessage(msg: WAMessage, sock: WASocket): Promise<voi
     }
 
     if (fast && !fast.allowed && !ctx.isOwner) {
-      console.log(`  ${chalk.red('◈')} ${chalk.red.bold('Bloqueado')}  ${chalk.gray(base.sender.replace('@s.whatsapp.net','').replace('@lid',''))}  ${chalk.gray('fast.allowed=false')}`)
+      console.log(`  ${themes.error('◈')} ${color.bold(themes.error('Bloqueado'))}  ${color.dim(base.sender.replace('@s.whatsapp.net','').replace('@lid',''))}  ${color.dim('fast.allowed=false')}`)
       return
     }
 
@@ -345,20 +359,21 @@ export async function handleMessage(msg: WAMessage, sock: WASocket): Promise<voi
 
     // ─── Sin prefijo — verificar si es trigger de IA ──────────────────────────
     if (!config.prefix.some(p => ctx.text.startsWith(p))) {
-      if (ctx.text && ctx.isGroup) {
-        const groupCfg = getGroupConfig(ctx.jid)
-        if (groupCfg.hepein) {
-          const botName = sock.user?.name ?? 'hepein'
-          if (isAITrigger(ctx.text, botName)) {
-            await handleAIResponse(ctx, sock, msg)
-          }
-        }
-      }
-      // en privado siempre responde si es trigger
-      if (ctx.text && !ctx.isGroup) {
+      if (ctx.text) {
         const botName = sock.user?.name ?? 'hepein'
-        if (isAITrigger(ctx.text, botName)) {
-          await handleAIResponse(ctx, sock, msg)
+        const lower   = ctx.text.toLowerCase().trim()
+        const words   = lower.split(/\s+/)
+
+        // Mencionar "hepein" o el nombre del bot siempre activa la IA (directo)
+        const isDirect = words.includes('hepein') || lower.includes(botName.toLowerCase())
+
+        if (ctx.isGroup) {
+          const groupCfg = getGroupConfig(ctx.jid)
+          // directo → siempre; otros triggers → solo si groupCfg.hepein está activo
+          const triggered = isDirect || (groupCfg.hepein && isAITrigger(ctx.text, botName))
+          if (triggered) await handleAIResponse(ctx, sock, msg)
+        } else {
+          if (isAITrigger(ctx.text, botName)) await handleAIResponse(ctx, sock, msg)
         }
       }
       return
