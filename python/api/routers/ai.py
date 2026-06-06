@@ -19,11 +19,13 @@ class MemoryUpdateRequest(BaseModel):
     is_cmd: bool = False
 
 class PersonalityRequest(BaseModel):
-    intent:    str  = 'neutral'
-    text:      str  = ''
-    context:   dict = {}
-    jid:       str  = ''
-    use_humor: bool = False
+    intent:     str             = 'neutral'
+    text:       str             = ''
+    context:    dict            = {}
+    jid:        str             = ''
+    use_humor:  bool            = False
+    history:    list            = []
+    user_style: Optional[dict]  = None
 
 class ModeRequest(BaseModel):
     mode: str
@@ -122,7 +124,10 @@ async def memory_update(sender: str, req: MemoryUpdateRequest):
 async def personality_respond(req: PersonalityRequest):
     try:
         from ai.personality import generate_response
-        result = generate_response(req.intent, req.text, req.context, req.jid, req.use_humor)
+        result = generate_response(
+            req.intent, req.text, req.context, req.jid, req.use_humor,
+            req.history, req.user_style,
+        )
         return { 'success': True, 'data': result }
     except Exception as e:
         return JSONResponse({ 'success': False, 'error': str(e) }, status_code=500)

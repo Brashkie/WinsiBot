@@ -43,6 +43,7 @@ export type CommandCategory =
   | 'scraper'
   | 'ai'
   | 'admin'
+  | 'owner'
   | 'fun'
   | 'util'
   | 'downloader'

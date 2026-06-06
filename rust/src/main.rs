@@ -1,6 +1,7 @@
 mod atomic;
 mod auth;
 mod config;
+mod conversations;
 mod db;
 mod lock_manager;
 mod nlp;
@@ -42,11 +43,14 @@ async fn main() {
 
     let database = db::open(&cfg.db_path).expect("no se pudo abrir SQLite");
 
+    conversations::init(&cfg.conv_db_path);
+
     let state = AppState {
-        sessions_dir: cfg.sessions_dir.clone(),
-        auth_dir:     cfg.auth_dir.clone(),
-        locks:        lock_manager::LockManager::new(),
-        db:           database,
+        sessions_dir:  cfg.sessions_dir.clone(),
+        auth_dir:      cfg.auth_dir.clone(),
+        locks:         lock_manager::LockManager::new(),
+        db:            database,
+        conv_db_path:  cfg.conv_db_path.clone(),
     };
 
     // Rutas públicas (sin API key)
@@ -68,6 +72,10 @@ async fn main() {
         .route("/sessions/signal/clear",  post(routes::clear_signal_sessions))
         // ─── NLP fast-path ───────────────────────────────────────────────────
         .route("/nlp/fast",               post(nlp::nlp_fast))
+        // ─── AI conversations (DuckDB) ────────────────────────────────────────
+        .route("/ai/learn",               post(conversations::ai_learn))
+        .route("/ai/context/:sender",     get(conversations::ai_context))
+        .route("/ai/export",              post(conversations::ai_export))
         // ─── Message delivery tracking ────────────────────────────────────────
         .route("/messages/track",         post(routes::messages_track))
         .route("/messages/ack",           post(routes::messages_ack))

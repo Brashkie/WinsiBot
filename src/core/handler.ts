@@ -6,7 +6,7 @@ import { logger } from './logger.js'
 import { color, themes } from 'ansimax'
 import type { BotContext } from '../types/index.js'
 import { handleNotFound } from '@plugins/commands/general/notfound.js'
-import { pythonGet, pythonPost, fastProcess, analyzeIntent } from '@lib/pythonBridge.js'
+import { pythonGet, pythonPost, fastProcess, analyzeIntent, getAIContext, learnConversation } from '@lib/pythonBridge.js'
 import { safeSend } from '@lib/media_sender.js'
 import {
   addXP,
@@ -213,30 +213,53 @@ async function handleAIResponse(
 
     if (intent === 'spam' || intent === 'nsfw') return false
 
-    // 2. Memoria — max 800ms, no bloquea si Python es lento
-    let context: Record<string, any> = {}
-    try {
-      const memRes = await Promise.race([
+    // 2. Paralelo: memoria Python + contexto conversacional DuckDB (Rust)
+    const [memResult, aiCtx] = await Promise.all([
+      Promise.race([
         pythonPost<Record<string, any>>(
           `/api/v1/ai/memory/${encodeURIComponent(ctx.sender)}/update`,
           { text: ctx.text, intent, is_cmd: false },
         ),
         new Promise<null>(r => setTimeout(() => r(null), 800)),
-      ])
-      context = (memRes as any)?.data ?? {}
-    } catch {}
+      ]).catch(() => null),
+      Promise.race([
+        getAIContext(ctx.sender),
+        new Promise<null>(r => setTimeout(() => r(null), 400)),
+      ]).catch(() => null),
+    ])
 
-    // 3. Respuesta de personalidad — Python
+    const context = (memResult as any)?.data ?? {}
+
+    // 3. Respuesta de personalidad — con historial y estilo del usuario
     const replyRes = await pythonPost<string>(
       '/api/v1/ai/personality/respond',
-      { intent, text: ctx.text, context, jid: ctx.jid, use_humor: true },
+      {
+        intent,
+        text:       ctx.text,
+        context,
+        jid:        ctx.jid,
+        use_humor:  true,
+        history:    aiCtx?.history   ?? [],
+        user_style: aiCtx?.style     ?? null,
+      },
     ).catch(() => null)
 
     const reply = (typeof replyRes?.data === 'string' && replyRes.data.trim())
       ? replyRes.data.trim()
-      : localFallback(intent)   // Python offline → respuesta local
+      : localFallback(intent)
 
     await safeSend(() => sock.sendMessage(ctx.jid, { text: reply }, { quoted: msg }))
+
+    // 4. Guardar conversación en DuckDB (fire-and-forget)
+    learnConversation({
+      sender: ctx.sender,
+      gjid:   ctx.isGroup ? ctx.jid : '',
+      text:   ctx.text,
+      intent,
+      reply,
+      mode:   'amable',
+    }).catch(() => {})
+
     return true
   } catch (err) {
     logger.warn({ err }, 'handleAIResponse error')
@@ -312,6 +335,37 @@ export async function handleMessage(msg: WAMessage, sock: WASocket): Promise<voi
 
     if (ctx.sender) {
       addXP(sock, ctx.jid, ctx.sender, ctx.pushName)
+    }
+
+    // ─── AFK check ────────────────────────────────────────────────────────────
+    if (user.profile.afk > -1) {
+      const reason = user.profile.afkReason
+      user.profile.afk       = -1
+      user.profile.afkReason = ''
+      await safeSend(() => sock.sendMessage(ctx.jid, {
+        text:     `ⴰ️ @${ctx.sender.split('@')[0]} ya no está AFK${reason ? `\n§ Estaba: _${reason}_` : ''}`,
+        mentions: [ctx.sender],
+      })).catch(() => {})
+    }
+
+    // Notificar si se menciona/cita a alguien AFK
+    {
+      const ctxInfo  = msg.message?.extendedTextMessage?.contextInfo
+      const jids     = [...new Set([
+        ...(ctxInfo?.mentionedJid ?? []),
+        ...(ctxInfo?.participant  ? [ctxInfo.participant] : []),
+      ])]
+      for (const j of jids) {
+        if (j === ctx.sender) continue
+        const target = getUserData(j, '')
+        if (target.profile.afk > -1) {
+          const elapsed = Math.floor((Date.now() - target.profile.afk) / 60_000)
+          await safeSend(() => sock.sendMessage(ctx.jid, {
+            text:     `ⴰ️ @${j.split('@')[0]} está AFK${target.profile.afkReason ? `\n§ Razón: _${target.profile.afkReason}_` : ''}\n§ Hace: ${elapsed} min`,
+            mentions: [j],
+          })).catch(() => {})
+        }
+      }
     }
 
     // ─── Anti-spam de flood ───────────────────────────────────────────────────

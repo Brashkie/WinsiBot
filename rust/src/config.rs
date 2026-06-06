@@ -2,11 +2,12 @@ use std::env;
 
 #[derive(Clone, Debug)]
 pub struct Config {
-    pub port: u16,
-    pub api_key: String,
-    pub sessions_dir: String,
-    pub auth_dir: String,
-    pub db_path: String,
+    pub port:          u16,
+    pub api_key:       String,
+    pub sessions_dir:  String,
+    pub auth_dir:      String,
+    pub db_path:       String,
+    pub conv_db_path:  String,
 }
 
 impl Config {
@@ -37,6 +38,10 @@ impl Config {
         let db_path = env::var("DB_PATH")
             .unwrap_or_else(|_| "./data/messages.db".into());
 
-        Config { port, api_key, sessions_dir, auth_dir, db_path }
+        // Ruta del archivo DuckDB para conversaciones de IA
+        let conv_db_path = env::var("CONV_DB_PATH")
+            .unwrap_or_else(|_| "./data/ai_conversations.duckdb".into());
+
+        Config { port, api_key, sessions_dir, auth_dir, db_path, conv_db_path }
     }
 }

@@ -21,6 +21,7 @@ base64 = "0.22"
 dotenvy = "0.15"
 chrono = { version = "0.4", features = ["serde"] }
 rusqlite = { version = "0.31", features = ["bundled"] }
+duckdb   = { version = "1",   features = ["bundled"] }
 regex    = { version = "1", features = ["unicode"] }
 
 [profile.release]

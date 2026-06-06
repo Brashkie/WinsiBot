@@ -1,29 +1,31 @@
 import type { Command } from '../../../types/index.js'
 import { activeChars, addToInventory } from './rw.js'
 
-const C_COOLDOWN = 10 * 60 * 1000
-const STEAL_TIME = 16 * 1000
-const cCooldowns = new Map<string, number>()
+const C_COOLDOWN  = 10 * 60 * 1000
+const STEAL_TIME  = 16 * 1000
+const cCooldowns  = new Map<string, number>()
 
 function formatTime(ms: number): string {
   const m = Math.floor(ms / 60_000)
   const s = Math.floor((ms % 60_000) / 1000)
-  if (m > 0) return `${m}m ${s}s`
-  return `${s}s`
+  return m > 0 ? `${m}m ${s}s` : `${s}s`
+}
+
+function num(jid: string): string {
+  return jid.replace(/@s\.whatsapp\.net|@lid/g, '').replace(/[^0-9]/g, '')
 }
 
 const command: Command = {
-  name: 'c',
-  aliases: ['claim', 'reclamar'],
+  name:     'c',
+  aliases:  ['claim', 'reclamar'],
   description: 'Reclama el personaje activo respondiendo su mensaje',
   category: 'fun',
   groupOnly: true,
-  cooldown: 0,
+  cooldown:  0,
 
   async execute({ sock, jid, msg, sender, prefix }) {
     const active = activeChars.get(jid)
 
-    // no hay personaje activo
     if (!active) {
       await sock.sendMessage(jid, {
         text: `✗ No hay personaje activo.\n  Usa *${prefix}rw* para rodar uno.`,
@@ -31,16 +33,15 @@ const command: Command = {
       return
     }
 
-    // personaje expirado
     if (active.expiresAt < Date.now()) {
       activeChars.delete(jid)
       await sock.sendMessage(jid, {
-        text: `✗ El personaje *${active.char.name}* ya expiro.`,
+        text: `✗ El personaje *${active.char.name}* ya expiró.`,
       }, { quoted: msg })
       return
     }
 
-    // ─── verificar que sea respuesta al mensaje del personaje ─────────────────
+    // ─── debe responder al mensaje del personaje ──────────────────────────────
     const quotedId   = msg.message?.extendedTextMessage?.contextInfo?.stanzaId
     const activeMsgId = active.msgKey?.id
 
@@ -54,57 +55,48 @@ const command: Command = {
       return
     }
 
-    // ─── verificar cooldown ───────────────────────────────────────────────────
+    // ─── cooldown ─────────────────────────────────────────────────────────────
     const lastClaim = cCooldowns.get(sender) ?? 0
     const elapsed   = Date.now() - lastClaim
     if (elapsed < C_COOLDOWN) {
-      const remaining = C_COOLDOWN - elapsed
       await sock.sendMessage(jid, {
-        text: `✗ Debes esperar *${formatTime(remaining)}* para reclamar de nuevo.`,
+        text: `✗ Debes esperar *${formatTime(C_COOLDOWN - elapsed)}* para reclamar de nuevo.`,
       }, { quoted: msg })
       return
     }
 
-    const num = sender
-      .replace('@s.whatsapp.net', '')
-      .replace('@lid', '')
-      .replace(/[^0-9]/g, '')
+    const charDetails = (name: string, owner: string) => [
+      `✔ *${name}* reclamado por @${num(owner)}!`,
+      ``,
+      `  ◈ Nombre  » *${name}*`,
+      `  ☆ Valor   » *${active.char.value}*`,
+      `  ◆ Fuente  » *${active.char.source}*`,
+    ].join('\n')
 
-    // ─── nadie ha reclamado — primer claim ────────────────────────────────────
+    // ─── primer claim ─────────────────────────────────────────────────────────
     if (!active.claimedBy) {
       active.claimedBy = sender
       active.claimedAt = Date.now()
       active.stealEnds = Date.now() + STEAL_TIME
       activeChars.set(jid, active)
-
       cCooldowns.set(sender, Date.now())
 
-      await sock.sendMessage(jid, {
-        text: [
-          `◆ @${num} reclamo *${active.char.name}*!`,
-        ].join('\n'),
+      const sent = await sock.sendMessage(jid, {
+        text:     `⏳ @${num(sender)} reclamando *${active.char.name}*...`,
         mentions: [sender],
       }, { quoted: msg })
+      const key = sent?.key
 
-      // después de 16s confirmar
       setTimeout(async () => {
         const current = activeChars.get(jid)
-        if (!current) return
-        if (current.claimedBy === sender && current.char.name === active.char.name) {
-          addToInventory(sender, current.char)
-          activeChars.delete(jid)
-
-          await sock.sendMessage(jid, {
-            text: [
-              `✔ *${current.char.name}* ha sido reclamado por @${num}!`,
-              ``,
-              `  ◈ Nombre  » *${current.char.name}*`,
-              `  ☆ Valor   » *${current.char.value}*`,
-              `  ◆ Fuente  » *${current.char.source}*`,
-            ].join('\n'),
-            mentions: [sender],
-          })
-        }
+        if (!current || current.claimedBy !== sender || current.char.name !== active.char.name) return
+        addToInventory(sender, current.char)
+        activeChars.delete(jid)
+        await sock.sendMessage(jid, {
+          text:     charDetails(current.char.name, sender),
+          mentions: [sender],
+          edit:     key,
+        } as any).catch(() => {})
       }, STEAL_TIME)
 
       return
@@ -119,46 +111,29 @@ const command: Command = {
         return
       }
 
-      const prevOwner    = active.claimedBy
-      const prevOwnerNum = prevOwner
-        .replace('@s.whatsapp.net', '')
-        .replace('@lid', '')
-        .replace(/[^0-9]/g, '')
-
+      const prevOwner = active.claimedBy
       active.claimedBy = sender
       active.claimedAt = Date.now()
       active.stealEnds = Date.now() + STEAL_TIME
       activeChars.set(jid, active)
-
       cCooldowns.set(sender, Date.now())
 
-      await sock.sendMessage(jid, {
-        text: [
-          `◆ @${num} robo *${active.char.name}* de @${prevOwnerNum}!`,
-        ].join('\n'),
+      const sent = await sock.sendMessage(jid, {
+        text:     `⚡ @${num(sender)} robó el claim a @${num(prevOwner)}!`,
         mentions: [sender, prevOwner],
       }, { quoted: msg })
+      const key = sent?.key
 
-      // nuevo timer 16s
-      const newSender = sender
       setTimeout(async () => {
         const current = activeChars.get(jid)
-        if (!current) return
-        if (current.claimedBy === newSender && current.char.name === active.char.name) {
-          addToInventory(newSender, current.char)
-          activeChars.delete(jid)
-
-          await sock.sendMessage(jid, {
-            text: [
-              `✔ *${current.char.name}* ha sido reclamado por @${num}!`,
-              ``,
-              `  ◈ Nombre  » *${current.char.name}*`,
-              `  ☆ Valor   » *${current.char.value}*`,
-              `  ◆ Fuente  » *${current.char.source}*`,
-            ].join('\n'),
-            mentions: [newSender],
-          })
-        }
+        if (!current || current.claimedBy !== sender || current.char.name !== active.char.name) return
+        addToInventory(sender, current.char)
+        activeChars.delete(jid)
+        await sock.sendMessage(jid, {
+          text:     charDetails(current.char.name, sender),
+          mentions: [sender],
+          edit:     key,
+        } as any).catch(() => {})
       }, STEAL_TIME)
 
       return
@@ -166,7 +141,7 @@ const command: Command = {
 
     // tiempo de robo expirado
     await sock.sendMessage(jid, {
-      text: `✗ El tiempo para reclamar *${active.char.name}* ya paso.`,
+      text: `✗ El tiempo para reclamar *${active.char.name}* ya pasó.`,
     }, { quoted: msg })
   },
 }

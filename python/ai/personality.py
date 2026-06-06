@@ -582,11 +582,13 @@ class PersonalityEngine:
     # ─── Core ─────────────────────────────────────────────────────────────
     def generate_response(
         self,
-        intent:    str,
-        text:      str  = '',
-        context:   dict = {},
-        jid:       str  = '',
-        use_humor: bool = False,
+        intent:     str,
+        text:       str             = '',
+        context:    dict            = {},
+        jid:        str             = '',
+        use_humor:  bool            = False,
+        history:    list            = [],
+        user_style: Optional[dict]  = None,
     ) -> str:
         # 1. modo activo
         mode = self.get_mode(jid)
@@ -596,24 +598,36 @@ class PersonalityEngine:
         if rep == 'toxic' and mode == 'amable':
             mode = 'sarcastico'
 
-        user_style = context.get('response_style', 'neutral')
-        if user_style == 'sarcastic' and mode not in ('toxico', 'sarcastico'):
+        ctx_style = context.get('response_style', 'neutral')
+        if ctx_style == 'sarcastic' and mode not in ('toxico', 'sarcastico'):
             mode = 'sarcastico'
-        elif user_style == 'humor' and mode == 'formal':
+        elif ctx_style == 'humor' and mode == 'formal':
             mode = 'alegre'
 
-        # 2. respuesta base
-        response = self._pick_response(mode, intent)
+        # 2. respuesta base — evitar repetir las últimas 5
+        if history:
+            recent = {h.get('reply', '').strip().lower() for h in history[-5:]}
+            mode_bank   = RESPONSES.get(mode, {})
+            intent_pool = list(
+                mode_bank.get(intent) or
+                mode_bank.get('fallback') or
+                RESPONSES.get(DEFAULT_MODE, {}).get(intent) or
+                ['...']
+            )
+            fresh = [r for r in intent_pool if r.strip().lower() not in recent]
+            response = random.choice(fresh if fresh else intent_pool)
+        else:
+            response = self._pick_response(mode, intent)
 
         # 3. intensidad
         intensity = self._get_intensity(context)
         response  = self._apply_intensity(response, intensity, mode)
 
-        # 4. adaptar estilo
+        # 4. adaptar estilo (memoria Python)
         if context:
             response = _adapt_response(response, context)
 
-        # 5. personalización
+        # 5. personalización horaria
         if context:
             response = self._personalize(response, context)
 
@@ -627,6 +641,14 @@ class PersonalityEngine:
                         response = enriched
                 except Exception:
                     pass
+
+        # 7. imitación de estilo del usuario (perfil DuckDB)
+        if user_style:
+            try:
+                from ai.imitation import adapt_response as imitate
+                response = imitate(response, user_style, history)
+            except Exception:
+                pass
 
         return response
 
@@ -654,13 +676,17 @@ def get_engine() -> PersonalityEngine:
     return _engine
 
 def generate_response(
-    intent:    str,
-    text:      str  = '',
-    context:   dict = {},
-    jid:       str  = '',
-    use_humor: bool = False,
+    intent:     str,
+    text:       str             = '',
+    context:    dict            = {},
+    jid:        str             = '',
+    use_humor:  bool            = False,
+    history:    list            = [],
+    user_style: Optional[dict]  = None,
 ) -> str:
-    return get_engine().generate_response(intent, text, context, jid, use_humor)
+    return get_engine().generate_response(
+        intent, text, context, jid, use_humor, history, user_style
+    )
 
 def set_mode(mode: str, jid: Optional[str] = None) -> bool:
     return get_engine().set_mode(mode, jid)

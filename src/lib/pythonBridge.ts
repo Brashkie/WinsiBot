@@ -289,3 +289,46 @@ export async function getPendingMessages(minutes = 30): Promise<PendingMessage[]
 export async function markPendingProcessed(ids: string[]): Promise<void> {
   await pythonPost('/api/v1/pending/processed', { ids })
 }
+
+// ─── AI conversaciones (DuckDB via Rust) ──────────────────────────────────────
+
+export interface AIContext {
+  ok:      boolean
+  history: Array<{ text: string; intent: string; reply: string; ts: number }>
+  style: {
+    total_msgs:    number
+    avg_len:       number
+    emoji_freq:    number
+    question_freq: number
+    common_words:  string[]
+  } | null
+}
+
+export interface LearnPayload {
+  sender: string
+  gjid:   string
+  text:   string
+  intent: string
+  reply:  string
+  mode:   string
+}
+
+export async function getAIContext(sender: string, limit = 8): Promise<AIContext | null> {
+  try {
+    const res = await rustClient.get<AIContext>(
+      `/ai/context/${encodeURIComponent(sender)}`,
+      { params: { limit: String(limit) } },
+    )
+    return res.data?.ok ? res.data : null
+  } catch {
+    return null
+  }
+}
+
+export async function learnConversation(payload: LearnPayload): Promise<void> {
+  try {
+    await rustClient.post('/ai/learn', payload)
+  } catch {
+    // fire-and-forget — ignorar errores
+  }
+}

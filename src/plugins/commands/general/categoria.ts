@@ -9,6 +9,7 @@ const CATEGORY_SYMBOLS: Record<string, string> = {
   fun:        '◉', util:       '▧', downloader: '▼',
   sticker:    '◆', roleplay:   '♡', nsfw:       '▣',
   info:       '§', jadibot:    '⊕', rpg:        '⚔',
+  owner:      '◉',
 }
 
 const command: Command = {

@@ -21,10 +21,11 @@ use crate::lock_manager::LockManager;
 
 #[derive(Clone)]
 pub struct AppState {
-    pub sessions_dir: String,
-    pub auth_dir:     String,
-    pub locks:        LockManager,
-    pub db:           db::Db,
+    pub sessions_dir:  String,
+    pub auth_dir:      String,
+    pub locks:         LockManager,
+    pub db:            db::Db,
+    pub conv_db_path:  String,
 }
 
 // ── Límites de seguridad ──────────────────────────────────────────────────────

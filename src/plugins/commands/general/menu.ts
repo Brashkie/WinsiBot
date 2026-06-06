@@ -19,6 +19,7 @@ const CATEGORY_SYMBOLS: Record<string, string> = {
   info:       '§',
   jadibot:    '⊕',
   rpg:        '⚔',
+  owner:      '◉',
 }
 
 const command: Command = {
