@@ -1,5 +1,5 @@
 import type { Command, RollCharacter, TradeRequest } from '../../../types/index'
-import { getUserInventory } from './rw.js'
+import { getUserInventory } from '../rpg/rollwaifu.js'
 
 const pendingTrades = new Map<string, TradeRequest>()
 

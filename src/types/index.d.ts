@@ -135,8 +135,8 @@ export interface RollCharacter {
   source:     string
   gender:     string
   value:      string | number
-  image:      string
-  vid?:       string
+  image:      string | string[]
+  vid?:       string | string[]
   status:     string
   user:       string | null
   votes:      number
