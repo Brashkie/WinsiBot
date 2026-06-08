@@ -1,6 +1,6 @@
 {
   "name": "winsi-bot",
-  "version": "8.1.0",
+  "version": "8.1.1",
   "description": "WinsiBot v8.1.0 — Bot de WhatsApp ultra optimizado en TypeScript, modular, rápido, eficiente y con IA avanzada.",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",

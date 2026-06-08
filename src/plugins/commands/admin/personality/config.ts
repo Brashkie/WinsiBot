@@ -1,4 +1,5 @@
 import { pythonPost, pythonGet } from '@lib/pythonBridge.js'
+import { hepein }               from '@lib/hepein.js'
 
 export const MODES = [
   'amable',
@@ -7,6 +8,13 @@ export const MODES = [
   'sarcastico',
   'formal',
   'misterioso',
+  // nuevos v8.1
+  'peruano',
+  'gamer',
+  'amoroso',
+  'chistoso',
+  'depresivo',
+  'kawaii',
 ] as const
 
 export type PersonalityMode = typeof MODES[number]
@@ -18,6 +26,13 @@ export const MODE_DESCRIPTIONS: Record<PersonalityMode, string> = {
   sarcastico: 'Ironía y burlas suaves 😏',
   formal:     'Profesional y educado 👔',
   misterioso: 'Críptico y filosófico 🌙',
+  // nuevos v8.1
+  peruano:    'Jerga peruana: causa, pe, bro, oe 🇵🇪',
+  gamer:      'Términos gaming: GG, lag, noob, meta 🎮',
+  amoroso:    'Cariñoso con emojis de corazón ❤️',
+  chistoso:   'Chistes y observaciones cómicas 😂',
+  depresivo:  'Apático y nihilista 😶',
+  kawaii:     'Estilo anime: uwu, owo, ~nyan 🌸',
 }
 
 interface PersonalityModeResponse {
@@ -27,6 +42,7 @@ interface PersonalityModeResponse {
 }
 
 // ─── Bridge a Flask/Python ────────────────────────────────────────────────────
+
 export async function getMode(jid?: string): Promise<PersonalityMode> {
   try {
     const res = await pythonGet<PersonalityModeResponse>('/api/v1/ai/personality/mode')
@@ -73,5 +89,37 @@ export async function getAllModes(): Promise<{ global: string; groups: Record<st
     }
   } catch {
     return { global: 'amable', groups: {} }
+  }
+}
+
+/**
+ * Registra un mensaje en el pipeline de entrenamiento Hepein.
+ * Fire-and-forget — no bloquea el handler.
+ */
+export function recordMessage(
+  groupJid:  string,
+  senderJid: string,
+  text:      string,
+  isReply    = false,
+): void {
+  hepein.record({ groupJid, senderJid, text, isReply })
+}
+
+/**
+ * Obtiene el modo activo del grupo y su perfil de estilo aprendido
+ * en paralelo, para usarlos juntos al construir respuestas.
+ */
+export async function getModeWithProfile(
+  groupJid:  string,
+  senderJid: string,
+): Promise<{ mode: PersonalityMode; hasProfile: boolean; msgCount: number }> {
+  const [mode, profile] = await Promise.all([
+    getMode(groupJid),
+    hepein.getProfile(senderJid),
+  ])
+  return {
+    mode,
+    hasProfile: (profile?.msg_count ?? 0) >= 15,
+    msgCount:   profile?.msg_count ?? 0,
   }
 }

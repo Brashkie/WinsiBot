@@ -1,70 +1,412 @@
-# WinsiBot Commands
+<div align="center">
 
-Commands are triggered with any of the configured prefixes (`!`, `.`, `#`, `/`).
+# 📖 Command Reference — WinsiBot v8.1.0
 
----
+[![Commands](https://img.shields.io/badge/Commands-90%2B-6C63FF?style=for-the-badge)](.)
+[![Categories](https://img.shields.io/badge/Categories-16-00C9FF?style=for-the-badge)](.)
+[![Version](https://img.shields.io/badge/Version-8.1.0-brightgreen?style=flat-square)](../README.en.md)
 
-## Admin
+[🇪🇸 Versión en español →](commands.md) &nbsp;·&nbsp; [← Back to README](../README.en.md)
 
-| Command | Description | Permission |
-|---------|-------------|------------|
-| `!ban @user` | Ban and remove from group | Admin |
-| `!kick @user` | Remove from group | Admin |
-| `!promote @user` | Promote to admin | Admin |
-| `!demote @user` | Remove admin role | Admin |
-| `!antilink on/off` | Enable/disable anti-link filter | Admin |
-| `!mute` | Silence bot in group | Admin |
-| `!unmute` | Re-enable bot | Admin |
-
-## Artificial Intelligence
-
-| Command | Description |
-|---------|-------------|
-| `!ai <query>` | Chat with AI |
-| `!gpt <query>` | GPT response |
-| `!imagine <description>` | Generate image with AI |
-
-## Downloads
-
-| Command | Description |
-|---------|-------------|
-| `!yt <url or name>` | Download from YouTube (audio/video) |
-| `!tiktok <url>` | Download TikTok video |
-| `!ig <url>` | Download from Instagram |
-| `!fb <url>` | Download from Facebook |
-
-## Stickers
-
-| Command | Description |
-|---------|-------------|
-| `!sticker` | Convert image/video to sticker |
-| `!toimg` | Convert sticker to image |
-| `!emojimix <emoji+emoji>` | Mix two emojis |
-
-## Music
-
-| Command | Description |
-|---------|-------------|
-| `!play <name>` | Search and send song |
-| `!lyrics <name>` | Song lyrics |
-
-## Information
-
-| Command | Description |
-|---------|-------------|
-| `!owner` | Bot owner info |
-| `!groups` | Bot group list |
-| `!uptime` | Bot uptime |
-| `!ping` | Bot latency |
-
-## Sub-bots (JadiBot)
-
-| Command | Description |
-|---------|-------------|
-| `!jadibot <number>` | Link new sub-bot |
-| `!stopbot <number>` | Stop sub-bot |
-| `!listbot` | View active sub-bots |
+</div>
 
 ---
 
-[← Back to README](../README.en.md)
+## Conventions
+
+| Symbol | Meaning |
+|:------:|---------|
+| `<arg>` | Required argument |
+| `[arg]` | Optional argument |
+| `@mention` | Mention a user in the message |
+| `↩️ reply` | Quote/reply to the user's message |
+| `⏱️ Xs` | Cooldown between uses |
+| `👤` | Any registered user |
+| `⭐` | Premium user or higher |
+| `🤝` | Helper or higher |
+| `🛡️` | Mod or higher |
+| `🔧` | Dev or higher |
+| `👑` | Owner only |
+| `🔑` | WhatsApp group admin |
+
+> **Prefixes:** `!` · `.` · `#` · `/`
+> Examples: `!ping`, `.gpt Hello`, `#profile`, `/menu`
+
+---
+
+## Category Index
+
+| # | Category | Commands |
+|---|----------|:--------:|
+| 1 | [🛠️ General](#%EF%B8%8F-general) | 7 |
+| 2 | [🤖 AI / ChatGPT](#-ai--chatgpt) | 4 |
+| 3 | [🎮 RPG / Economy](#-rpg--economy) | 13 |
+| 4 | [🎴 Gacha / Characters](#-gacha--characters) | 5 |
+| 5 | [💑 Couples](#-couples) | 5 |
+| 6 | [🎭 Roleplay](#-roleplay) | 4 |
+| 7 | [🎉 Fun](#-fun) | 9 |
+| 8 | [🖼️ Media & Stickers](#%EF%B8%8F-media--stickers) | 4 |
+| 9 | [🔽 Downloads](#-downloads) | 3 |
+| 10 | [🔍 Scrapers / Search](#-scrapers--search) | 4 |
+| 11 | [🎵 Music](#-music) | 1 |
+| 12 | [🔞 NSFW](#-nsfw) | 1 |
+| 13 | [🔑 Group Admin](#-group-admin) | 13 |
+| 14 | [🤖 JadiBot](#-jadibot) | 2 |
+| 15 | [ℹ️ Info](#%EF%B8%8F-info) | 1 |
+| 16 | [👑 Owner / System](#-owner--system) | 23 |
+
+---
+
+## 🛠️ General
+
+| Command | Aliases | Cooldown | Permission | Description |
+|---------|---------|:--------:|:----------:|-------------|
+| `ping` | `p` | 3s | 👤 | Check bot status and show latency |
+| `menu` | `help`, `ayuda` | — | 👤 | List all command categories |
+| `categoria` | `cat`, `category` | — | 👤 | Show commands for a specific category |
+| `registro` | `reg`, `register`, `registrar`, `verify` | 5s | 👤 | Register to access RPG features |
+| `unreg` | `unregister`, `desregistrar` | 5s | 👤 | Cancel your registration (requires serial number) |
+| `afk` | `ausente` | 10s | 👤 | Activate AFK mode with a custom reason |
+| `creator` | `info`, `about`, `botinfo`, `creador` | — | 👤 | Bot and creator information |
+
+```
+!ping
+!menu
+!categoria rpg
+!registro
+!afk studying for exams
+```
+
+---
+
+## 🤖 AI / ChatGPT
+
+| Command | Aliases | Cooldown | Permission | Description |
+|---------|---------|:--------:|:----------:|-------------|
+| `gpt` | `ai`, `chatgpt`, `ask` | — | 👤 | Chat with GPT-4o-mini, keeps history per user |
+| `gptreset` | — | — | 👤 | Clear your AI conversation history |
+| `imagine` | `dalle`, `img`, `imagen` | — | ⭐ | Generate an image with DALL-E 3 |
+| `traducir` | `tl`, `translate`, `tr` | — | 👤 | Translate text to any language (50+ languages) |
+
+> Automatic fallback: GPT → Gemini → Claude. Limit: 20 messages/hour per user.
+
+```
+!gpt Explain relativity
+!gptreset
+!imagine a dragon in space
+!traducir es Hello world
+!tl ja こんにちは
+```
+
+---
+
+## 🎮 RPG / Economy
+
+| Command | Aliases | Cooldown | Permission | Description |
+|---------|---------|:--------:|:----------:|-------------|
+| `perfil` | `profile`, `miperfil`, `yo` | 5s | 👤 | View your profile or another user's (`@mention`) |
+| `xp` | `exp`, `experiencia`, `stats`, `nivel` | 5s | 👤 | Detailed RPG statistics |
+| `rangos` | `roles`, `rango`, `rol`, `ranks` | 10s | 👤 | Server rank table |
+| `work` | `trabajar`, `trabajo`, `w` | 10min | 👤 | Work to earn BrasCoins (every 10 min) |
+| `daily` | `claim`, `reclamar`, `regalo` | 2h | 👤 | Daily reward (every 2 hours) |
+| `weekly` | `semana`, `semanal`, `cadasemana` | 3d | 👤 | Weekly reward (every 3 days) |
+| `monthly` | `mes`, `mensual`, `cadames` | 5d | 👤 | Monthly reward (every 5 days) |
+| `minar` | `mine`, `minarxp`, `mining` | 10min | 👤 | Mine resources for XP and materials |
+| `cofre` | `coffer`, `abrircofre`, `caja` | 24h | 👤 | Open the daily chest for random rewards |
+| `crime` | `crimen`, `delito` | 1h | 👤 | Commit a crime — win or lose coins |
+| `rob` | `robar` | variable | 👤 | Steal BrasCoins from another user (`@mention`) |
+| `transfer` | `transferir`, `dar`, `enviar` | 5s | 👤 | Transfer BrasCoins or XP to another user |
+| `depositar` | `dep`, `retirar`, `withdraw`, `banco` | 3s | 👤 | Deposit or withdraw coins from the bank |
+
+```
+!perfil
+!perfil @user
+!work
+!daily
+!minar
+!rob @user
+!transfer @user 500
+!depositar 1000
+!retirar 500
+```
+
+---
+
+## 🎴 Gacha / Characters
+
+| Command | Aliases | Cooldown | Permission | Description |
+|---------|---------|:--------:|:----------:|-------------|
+| `rw` | `roll`, `rollimage`, `gacha`, `rollwaifu` | variable | 👤 | Get a random character from the gacha |
+| `c` | `claim`, `reclamar` | — | 👤 | Claim the active character (by replying to its message) |
+| `wimage` | `waifuimage`, `wi` | 5s | 👤 | Random image of a character |
+| `winfo` | `waifuinfo`, `charinfo` | 5s | 👤 | Detailed information about a character |
+| `trade` | `intercambio`, `cambio` | 10s | 👤 | Trade characters with another user |
+
+```
+!rw
+!c          ← reply to the character's message
+!wimage Rem
+!winfo Naruto
+!trade @user
+```
+
+---
+
+## 💑 Couples
+
+| Command | Aliases | Cooldown | Permission | Description |
+|---------|---------|:--------:|:----------:|-------------|
+| `pareja` | `couple`, `elegirpareja`, `serpareja` | — | 👤 | Propose a relationship to someone (`@mention`) |
+| `aceptar` | `acepto`, `accept` | — | 👤 | Accept a relationship proposal |
+| `rechazar` | `cancelar`, `decline` | — | 👤 | Reject a relationship proposal |
+| `mipareja` | `miamor`, `mylove`, `minovio`, `minovia` | — | 👤 | View your current relationship status |
+| `terminar` | `cortar`, `romper`, `finish` | — | 👤 | End your relationship or cancel a pending proposal |
+
+```
+!pareja @user
+!aceptar @who_proposed
+!mipareja
+!terminar
+```
+
+---
+
+## 🎭 Roleplay
+
+| Command | Aliases | Cooldown | Permission | Description |
+|---------|---------|:--------:|:----------:|-------------|
+| `hug` | `abrazar`, `abrazo`, `hug1` | 5s | 👤 | Hug someone (`@mention`) |
+| `kiss` | `beso`, `kiss1` | 5s | 👤 | Kiss someone (`@mention`) |
+| `pat` | `acariciar`, `pat1` | 5s | 👤 | Pat someone (`@mention`) |
+| `kill` | `matar`, `kill1` | 5s | 👤 | Kill someone (roleplay) (`@mention`) |
+
+```
+!hug @user
+!kiss @user
+!pat @user
+!kill @user
+```
+
+---
+
+## 🎉 Fun
+
+| Command | Aliases | Cooldown | Permission | Description |
+|---------|---------|:--------:|:----------:|-------------|
+| `meme` | `memes`, `randommeme` | 5s | 👤 | Random meme from Reddit |
+| `memepe` | `mecausa`, `memeperu` | 5s | 👤 | Random Peruvian meme |
+| `giphy` | `gif` | 5s | 👤 | Search a GIF on GIPHY |
+| `top` | `top10`, `ranking` | 5s | 👤 | Random top 10 with group members |
+| `sus` | `impostor`, `among` | 5s | 👤 | Accuse someone of being the impostor |
+| `insultar` | `insult`, `abuse`, `ofender` | 5s | 👤 | Creatively insult someone |
+| `banana` | `bana`, `pito`, `pp`, `miembro` | 5s | 👤 | Measure the pp (just for laughs) |
+| `sega` | `fap`, `paja`, `chaquetita`, `ganzo` | 10s | 👤 | Fun animation |
+| `follar` | `coger` | 5s | 👤 | +18 command (requires NSFW enabled in group) |
+
+```
+!meme
+!giphy dancing cat
+!top best gamers
+!sus @user
+!insultar @user
+```
+
+---
+
+## 🖼️ Media & Stickers
+
+| Command | Aliases | Cooldown | Permission | Description |
+|---------|---------|:--------:|:----------:|-------------|
+| `sticker` | `s`, `stiker` | — | 👤 | Convert image/video to sticker |
+| `removebg` | `rmbg`, `sinfondo`, `nobg`, `quitarfondo` | 30s | 👤 | Remove background from an image |
+| `anime` | `anime4k`, `toanime` | 30s | 👤 | Enhance image with anime filter (x2 or x4) |
+| `imagen` | `img`, `image`, `gimage`, `buscarimg` | 10s | 👤 | Search for images on the internet |
+
+```
+!sticker        ← attach or reply to an image
+!removebg       ← reply to an image
+!anime x4       ← reply to an image
+!imagen dogs playing
+```
+
+---
+
+## 🔽 Downloads
+
+| Command | Aliases | Cooldown | Permission | Description |
+|---------|---------|:--------:|:----------:|-------------|
+| `ytmp3` | `yt`, `youtube`, `ytaudio` | 15s | 👤 | Download YouTube audio as MP3 |
+| `tiktok` | `tt`, `tik` | 10s | 👤 | Download TikTok video without watermark |
+| `ig` | `instagram`, `insta` | — | 👤 | Download photo/video from Instagram |
+
+```
+!ytmp3 https://youtube.com/watch?v=...
+!ytmp3 Shape of You Ed Sheeran
+!tiktok https://vm.tiktok.com/...
+!ig https://www.instagram.com/p/...
+```
+
+---
+
+## 🔍 Scrapers / Search
+
+| Command | Aliases | Cooldown | Permission | Description |
+|---------|---------|:--------:|:----------:|-------------|
+| `imagen` | `img`, `gimage`, `buscarimg` | 10s | 👤 | Search for images on the internet |
+| `pinterest` | `pin`, `pint` | 8s | 👤 | Search images on Pinterest |
+| `giphy` | `gif` | 5s | 👤 | Search GIFs on GIPHY |
+| `clima` | `weather`, `tiempo` | — | 👤 | Check the weather in any city |
+
+```
+!pinterest aesthetic room
+!weather London
+!clima New York
+```
+
+---
+
+## 🎵 Music
+
+| Command | Aliases | Cooldown | Permission | Description |
+|---------|---------|:--------:|:----------:|-------------|
+| `spotify` | `sp`, `spoti` | — | 👤 | Search song information on Spotify |
+
+```
+!spotify Bohemian Rhapsody
+!sp Feid INTER SHIBUYA
+```
+
+---
+
+## 🔞 NSFW
+
+> ⚠️ Requires the group admin to enable NSFW with `!on nsfw`
+
+| Command | Aliases | Cooldown | Permission | Description |
+|---------|---------|:--------:|:----------:|-------------|
+| `porn` | `porngif` | 10s | 👤 | Adult video (only if NSFW is enabled) |
+
+---
+
+## 🔑 Group Admin
+
+> All require being a WhatsApp group admin, unless noted otherwise.
+
+| Command | Aliases | Cooldown | Permission | Description |
+|---------|---------|:--------:|:----------:|-------------|
+| `ban` | `banear` | — | 🔑 | Ban a user from the bot |
+| `kick` | `expulsar` | — | 🔑 | Remove a user from the group |
+| `warn` | `advertir` | — | 🔑 | Warn a user (auto-kick at limit) |
+| `demote` | `quitaradmin`, `desadmin` | — | 🔑 | Remove admin role from a member |
+| `tag` | `tagall`, `todos`, `all` | — | 🔑 | Mention all group members |
+| `tagone` | `tago`, `mention` | — | 🔑 | Mention a specific person |
+| `delete` | `del`, `borrar`, `eliminar` | — | 🔑 | Delete a quoted message |
+| `antilink` | `antienlace` | — | 🔑 | Toggle link filter |
+| `mute` | `silenciar`, `unmute` | — | 🔑 | Mute or unmute the bot in the group |
+| `banchat` | `bangrupo`, `unbanchat` | — | 🛡️ | Silence/activate the bot in this group |
+| `groupinfo` | `grupoinfo`, `gcfg` | — | 🔑 | Group info + your profile in the group |
+| `stats` | `estadisticas` | — | 🔑 | Bot statistics in the group |
+| `on` / `off` | `enable`, `disable` | — | 🔑 | Toggle group features |
+
+**Available settings with `!on` / `!off`:**
+
+| Key | Description | Requires |
+|-----|-------------|:--------:|
+| `antilink` | Remove links from the group | 🔑 |
+| `antispam` | Detect and remove spam | 🔑 |
+| `antifake` | Block fake/virtual numbers | 🔑 |
+| `antidelete` | Show deleted messages | 🔑 |
+| `modoadmin` | Only admins can use commands | 🔑 |
+| `welcome` | Welcome and goodbye messages | 🔑 |
+| `detect` | Notifications for group changes | 🔑 |
+| `nsfw` | Enable +18 commands | 🔑 |
+| `muted` | Bot does not respond in this group | 🔑 |
+| `hepein` | AI responds when mentioned | 🔑 |
+| `anticall` | Automatically reject calls | 👑 |
+
+```
+!ban @user
+!kick @user
+!warn @user 3
+!tag Attention everyone
+!on antilink
+!off welcome
+!on nsfw
+!groupinfo
+```
+
+---
+
+## 🤖 JadiBot
+
+| Command | Aliases | Cooldown | Permission | Description |
+|---------|---------|:--------:|:----------:|-------------|
+| `serbot` | `jadibot`, `subbot`, `listbots` | — | 👤 | Become a sub-bot · `serbot lista` to list active |
+| `stopbot` | `salirbot`, `desconectarbot`, `pararbot` | — | 👤 | Disconnect as a sub-bot |
+
+```
+!serbot
+!serbot lista
+!stopbot
+```
+
+---
+
+## ℹ️ Info
+
+| Command | Aliases | Cooldown | Permission | Description |
+|---------|---------|:--------:|:----------:|-------------|
+| `creator` | `info`, `about`, `botinfo`, `creador` | — | 👤 | Bot and creator information |
+
+---
+
+## 👑 Owner / System
+
+> Only available to the owner configured in `.env` and `src/lib/globals.ts`.
+
+| Command | Aliases | Cooldown | Permission | Description |
+|---------|---------|:--------:|:----------:|-------------|
+| `addpremium` | `delpremium`, `addvip`, `delvip` | — | 👑 | Add or remove premium from a user |
+| `addcoins` | `delcoins`, `darcoins`, `quitarcoins` | — | 👑 | Add or remove BrasCoins from a user |
+| `adddiamonds` | `deldiamonds`, `dardiamantes` | — | 👑 | Add or remove diamonds from a user |
+| `addexp` | `delexp`, `addxp`, `darexp` | — | 👑 | Add or remove EXP from a user |
+| `addowner` | `delowner` | — | 👑 | Add or remove an owner at runtime |
+| `unban` | `desbanear`, `unbanuser` | — | 👑 | Unban a user from the database |
+| `resetuser` | `resetdata`, `borrardatos` | — | 👑 | Reset all data for a user |
+| `block` | `unblock`, `bloquear`, `desbloquear` | — | 👑 | Block or unblock a number on WhatsApp |
+| `bc` | `bcgroup`, `bcprivate`, `broadcast` | — | 👑 | Send a message to all chats |
+| `boost` | `refresh`, `acelerar` | — | 👑 | Restart cache and show bot status |
+| `backup` | `respaldo` | — | 👑 | Send `creds.json` to the owner's DM |
+| `clearsession` | `clearsess`, `limpiarsesion` | — | 👑 | Delete session files except `creds.json` |
+| `cleartmp` | `limpiartmp`, `clearcache` | — | 👑 | Clean temporary files on the server |
+| `creategroup` | `creargc`, `newgroup`, `nuevogc` | — | 👑 | Create a new group with a list of JIDs |
+| `join` | `joingroup`, `unirse` | — | 👑 | Make the bot join a group via invite link |
+| `leave` | `leavegc`, `salir`, `salirgrupo` | — | 👑 | Make the bot leave the current or a specific group |
+| `setbio` | `bio`, `estado` | — | 👑 | Change the bot's bio/status on WhatsApp |
+| `setname` | `nombrar`, `nombre` | — | 👑 | Change the bot's display name on WhatsApp |
+| `setpp` | `fotobot`, `cambiafoto` | — | 👑 | Change the bot's profile picture |
+| `exec` | `eval`, `run` | — | 👑 | Execute JavaScript code in the bot's context |
+| `terminal` | `term`, `shell`, `cmd` | — | 👑 | Execute a command in the server terminal |
+| `fetch` | `get`, `url` | — | 👑 | Fetch the content of a URL |
+| `restart` | `reiniciar`, `reboot`, `reset` | — | 👑 | Restart the bot (requires PM2 or nodemon) |
+
+```
+!addpremium @user 30        ← 30 days of premium
+!delpremium @user
+!addcoins @user 5000
+!bc Hello everyone!
+!exec ctx.userData.size
+!terminal ls -la
+!setbio WinsiBot is online 🟢
+!restart
+```
+
+---
+
+<div align="center">
+
+**[← Back to README](../README.en.md)** &nbsp;·&nbsp; **[🇪🇸 Versión en español →](commands.md)**
+
+*WinsiBot v8.1.0 — Developed by [Brashkie](https://github.com/Brashkie)*
+
+</div>

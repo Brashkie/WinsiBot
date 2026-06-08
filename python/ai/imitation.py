@@ -1,7 +1,7 @@
 """
 imitation.py — adapta la respuesta del bot al estilo del usuario.
 
-Usa el perfil user_style calculado por Rust (DuckDB) para:
+Usa el perfil user_style calculado por trainer.py (Parquet + DuckDB) para:
 - Ajustar longitud según avg_len del usuario
 - Omitir emojis si el usuario nunca los usa
 - Agregar emojis extra si el usuario los usa mucho
@@ -9,6 +9,7 @@ Usa el perfil user_style calculado por Rust (DuckDB) para:
 """
 
 import re
+import time
 from typing import Optional
 
 _EMOJI_RE = re.compile(
@@ -17,6 +18,46 @@ _EMOJI_RE = re.compile(
     r'⌀-⏿'
     r'■-◿]'
 )
+
+# ─── Caché de perfiles con TTL ───────────────────────────────────────────────
+_profile_cache: dict[str, tuple[dict, float]] = {}
+CACHE_TTL = 600  # 10 minutos
+
+
+def get_cached_style(sender_jid: str) -> Optional[dict]:
+    """
+    Obtiene user_style del cache; si expiró o no existe, consulta trainer.py.
+    Retorna None si el usuario tiene < 15 mensajes o trainer no está disponible.
+    """
+    now = time.monotonic()
+    cached = _profile_cache.get(sender_jid)
+    if cached:
+        style, ts = cached
+        if now - ts < CACHE_TTL:
+            return style if style else None
+    # expiró o no existe — recargar
+    try:
+        from ai.trainer import get_profile
+        p = get_profile(sender_jid)
+        if p.msg_count >= 15:
+            style = {
+                'avg_len':      p.avg_len,
+                'emoji_freq':   p.emoji_freq,
+                'common_words': p.common_words,
+            }
+            _profile_cache[sender_jid] = (style, now)
+            return style
+        else:
+            _profile_cache[sender_jid] = ({}, now)
+    except Exception:
+        pass
+    return None
+
+
+def invalidate_cache(sender_jid: str) -> None:
+    """Elimina la entrada del cache (llamar tras borrar perfil del usuario)."""
+    _profile_cache.pop(sender_jid, None)
+
 
 _SLANG = frozenset({
     'jaja', 'jeje', 'jajaja', 'lol', 'xd', 'xdd', 'kkk', 'we', 'wey',
@@ -72,3 +113,18 @@ def adapt_response(
             response = response.replace(formal, casual)
 
     return response.strip() or response
+
+
+def adapt_response_auto(
+    response:   str,
+    sender_jid: str,
+    history:    Optional[list] = None,
+) -> str:
+    """
+    Igual que adapt_response() pero obtiene user_style automáticamente
+    usando la caché TTL. Si no hay perfil suficiente, devuelve la respuesta sin cambios.
+    """
+    style = get_cached_style(sender_jid)
+    if style:
+        return adapt_response(response, style, history)
+    return response

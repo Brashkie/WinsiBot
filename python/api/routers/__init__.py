@@ -14,10 +14,12 @@ from .anime      import router as anime_router
 from .search     import router as search_router
 from .fast       import router as fast_router
 from .messages   import router as messages_router
+from .hepein     import router as hepein_router
 
 main_router = APIRouter()
 main_router.include_router(health_router,   prefix='/health',    tags=['health'])
 main_router.include_router(ai_router,       prefix='/ai',        tags=['ai'])
+main_router.include_router(hepein_router,   prefix='/hepein',    tags=['hepein'])
 main_router.include_router(spam_router,     prefix='/spam',      tags=['spam'])
 main_router.include_router(pending_router,  prefix='/pending',   tags=['pending'])
 main_router.include_router(ml_router,       prefix='/ml',        tags=['ml'])

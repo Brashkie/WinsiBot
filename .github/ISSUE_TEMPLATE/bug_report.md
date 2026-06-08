@@ -1,44 +1,106 @@
 ---
 name: "🐛 Reporte de bug"
-about: "Reportar un error o comportamiento inesperado"
-labels: bug
+about: "Reportar un error o comportamiento inesperado en WinsiBot"
+title: "[BUG] "
+labels: ["bug", "needs-triage"]
 assignees: Brashkie
 ---
 
-## Descripción del problema
+<!-- ¡Gracias por reportar! Completa cada sección con la mayor precisión posible. Las issues incompletas pueden cerrarse sin resolución. -->
 
-<!-- Describe claramente qué está fallando -->
+## 🐛 Descripción del problema
 
-## Pasos para reproducir
+> Una descripción clara y concisa de lo que está fallando.
 
-1. 
-2. 
-3. 
+<!-- Escribe aquí -->
 
-## Comportamiento esperado
+---
 
-<!-- Qué debería pasar -->
+## 🔬 Pasos para reproducir
 
-## Comportamiento actual
+> Pasos mínimos y exactos para que el bug ocurra consistentemente.
 
-<!-- Qué pasa en realidad -->
+1. Iniciar el bot con `npm run start:all`
+2. En el grupo/privado: enviar el comando `!...`
+3. Observar que ...
 
-## Logs / Output de la terminal
+---
+
+## ✅ Comportamiento esperado
+
+> ¿Qué debería pasar?
+
+<!-- Escribe aquí -->
+
+## ❌ Comportamiento actual
+
+> ¿Qué pasa en realidad?
+
+<!-- Escribe aquí -->
+
+---
+
+## 📋 Logs / Output del terminal
+
+> Pega el output de `npm run monitor` o `npm run dev` donde se ve el error.
+> **Elimina cualquier creds.json, token o número de teléfono antes de pegar.**
 
 ```
-Pega aquí el output del terminal (npm run monitor o npm run dev)
+Pega aquí
 ```
 
-## Entorno
+<details>
+<summary>Stack trace completo (si hay)</summary>
+
+```
+Pega aquí
+```
+
+</details>
+
+---
+
+## 🖥️ Entorno
 
 | Campo | Valor |
 |-------|-------|
-| OS | Windows / Ubuntu / Debian |
-| Node.js | `node --version` |
-| Python | `python --version` |
-| WinsiBot | v8.0.0 |
-| Baileys | `npm list @whiskeysockets/baileys` |
+| OS | Windows 11 / Ubuntu 22.04 / Debian 12 |
+| Node.js | `node --version` → |
+| npm | `npm --version` → |
+| Python | `python --version` → |
+| Rust | `rustc --version` → |
+| WinsiBot | v8.1.0 |
+| Baileys | `npm list @whiskeysockets/baileys` → |
+| Redis activo | Sí / No |
 
-## Información adicional
+---
 
-<!-- Capturas de pantalla, contexto extra, etc. -->
+## 📦 Categoría del bug
+
+> Marca con `x` donde aplica.
+
+- [ ] 🟦 TypeScript / Core (handler, comandos, eventos)
+- [ ] 🐍 Python (monitor, FastAPI, Celery, watchdog)
+- [ ] ⚙️ Rust (Session API, snapshots, atomic write)
+- [ ] 🔐 Sesión / QR / Reconexión
+- [ ] 🤖 IA (GPT, Claude, Gemini)
+- [ ] 🎮 RPG / Economía / Gacha
+- [ ] 🛡️ Moderación (antilink, antispam, warn)
+- [ ] 🔧 Infraestructura (Docker, PM2, variables de entorno)
+- [ ] 📚 Documentación
+- [ ] ❓ Otro
+
+---
+
+## 🧩 Información adicional
+
+> Capturas de pantalla, contexto extra, comportamiento intermitente, etc.
+
+<!-- Escribe aquí -->
+
+---
+
+> **Antes de enviar:**
+> - [ ] Busqué en las [issues existentes](../../issues) y no encontré duplicado
+> - [ ] Probé con `npm run manage:diagnose` y el problema persiste
+> - [ ] No incluí sesión, creds ni datos sensibles en los logs

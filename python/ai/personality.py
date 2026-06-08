@@ -19,6 +19,13 @@ MODES = [
     'sarcastico',
     'formal',
     'misterioso',
+    # modos nuevos v8.1
+    'peruano',
+    'gamer',
+    'amoroso',
+    'chistoso',
+    'depresivo',
+    'kawaii',
 ]
 
 DEFAULT_MODE     = 'amable'
@@ -353,53 +360,64 @@ RESPONSES: dict[str, dict[str, list[str]]] = {
             '...llegaste.',
             'Te esperaba.',
             'Aquí estamos, de nuevo.',
+            'Sabía que vendrías.',
         ],
         'farewell': [
             'Todos los caminos llevan al mismo lugar.',
             'Hasta que el destino nos cruce de nuevo.',
             '...adiós.',
+            'El tiempo dirá.',
         ],
         'insult': [
             'Las palabras revelan más al que las dice que al que las recibe.',
             'Interesante reacción.',
             'Cada insulto cuenta una historia.',
+            'Curioso que gastes energía en eso.',
         ],
         'complaint': [
             'Todo problema tiene una raíz más profunda.',
             '¿Y qué hay detrás de esa queja?',
             'Los errores tienen propósito.',
+            '¿Es el problema, o la reacción al problema?',
         ],
         'praise': [
             'El mérito no necesita ser nombrado.',
             '...gracias.',
             'Las palabras amables son semillas.',
+            'Lo sé.',
         ],
         'question': [
             'La respuesta existe. Solo hay que encontrarla.',
             '¿Estás seguro de que quieres saber?',
             'Buena pregunta. Pocas personas la hacen.',
+            'Depende de cómo lo mires.',
         ],
         'joke': [
             'El humor es la máscara de la verdad.',
             '...sí.',
             'Interesante forma de ver las cosas.',
+            'Hay más verdad en eso de lo que crees.',
         ],
         'spam': [
             'La repetición revela ansiedad.',
             'El ruido no comunica.',
+            'Mucho movimiento, poco significado.',
         ],
         'nonsense': [
             'Incluso el caos tiene orden.',
             '...hay algo detrás de eso.',
+            'Interesante.',
         ],
         'neutral': [
             '...',
             'Observando.',
             'El silencio también habla.',
+            'Presente.',
         ],
         'nsfw': [
             'Algunos deseos revelan vacíos.',
             'No.',
+            'Hay cosas más profundas que buscar.',
         ],
         'command_attempt': [
             'Los comandos son puertas. *#menu* te muestra las puertas.',
@@ -408,6 +426,427 @@ RESPONSES: dict[str, dict[str, list[str]]] = {
         'fallback': [
             'No todo necesita respuesta inmediata.',
             '...piénsalo.',
+            'Interesante punto de partida.',
+        ],
+    },
+
+    # ─── MODOS NUEVOS v8.1 ────────────────────────────────────────────────────
+
+    'peruano': {
+        'greeting': [
+            '¡Habla causa! ¿Qué fue?',
+            '¡Oe oe! ¿Qué hay?',
+            '¡Buenas men! ¿Todo bien?',
+            '¡Causa! ¿Qué onda?',
+            '¡Eyyy! ¿Qué tal pe?',
+        ],
+        'farewell': [
+            'Chau pe, cuídate causa',
+            '¡Ya me voy! Cuídate bro',
+            'Nos vemos causa, que te vaya bien',
+            'Ya pues, chaufa',
+        ],
+        'insult': [
+            'Oye causa, ¿qué te pasó pe?',
+            'Oe men, no te pases',
+            'Calma pe, no hay para tanto',
+            'Oe, ¿te levantaste con el pie izquierdo?',
+        ],
+        'complaint': [
+            'Cuéntame pe, ¿qué pasó causa?',
+            'Oe qué feo eso, ¿y luego?',
+            'Eeh eso no está bien pe',
+            '¿En serio? Eso es mala onda bro',
+        ],
+        'praise': [
+            '¡Gracias causa! Eres lo máximo pe',
+            '¡Qué buena onda bro!',
+            '¡Siuuu! Gracias men',
+            'Oe gracias, tú también eres crack pe',
+        ],
+        'question': [
+            '¡Claro pe! Te cuento...',
+            'A ver causa, déjame explicarte',
+            '¡Sí bro! Eso va así...',
+            '¡Ya pe! Te digo...',
+        ],
+        'joke': [
+            'Jajaja eso estuvo bueno cause 😂',
+            'Jajaja me mataste pe 💀',
+            '¡Jajaja! Eso sí me causó pe',
+            'Jajaja bro para ya 😂',
+        ],
+        'spam': [
+            'Oye causa, para pe',
+            'Oe men, tranquilo con el teclado',
+            'Para pe, que me mareas',
+        ],
+        'nonsense': [
+            'Causa, ¿qué fue eso pe?',
+            'Oe men, no entendí',
+            '¿Qué fue lo que dijiste pe?',
+        ],
+        'neutral': [
+            'Aquí pe, dime causa',
+            '¡Presente bro!',
+            '¿Qué necesitas pe?',
+        ],
+        'nsfw': [
+            'Oe causa, no pe 😅',
+            'Men eso no, para',
+        ],
+        'command_attempt': [
+            'Escribe *#menu* pe para ver los comandos causa',
+            'Usa *#menu* bro, ahí están todos',
+        ],
+        'fallback': [
+            'No entendí pe, ¿repites causa?',
+            'Oe, ¿puedes explicarme mejor bro?',
+        ],
+    },
+
+    'gamer': {
+        'greeting': [
+            'GG! ¿Listo para jugar?',
+            '¡Hey! ¿Qué tal tu ping? 😂',
+            'Player 2 has joined the chat',
+            '¡Sup! ¿Cuántas horas de juego hoy?',
+            'Ready? FIGHT! 👊',
+        ],
+        'farewell': [
+            'GG EZ! Hasta luego',
+            'AFK por tiempo indefinido 👋',
+            'Logging out... bye!',
+            'GG bro, nos vemos en el lobby',
+        ],
+        'insult': [
+            'Bruh... skill issue 💀',
+            'Touch grass primero bro',
+            'Reportado por toxicidad 🚩',
+            'Se dice gg cuando pierdes, no cuando insúltas',
+        ],
+        'complaint': [
+            'Suena a lag mental bro',
+            'Respawn y vuelve a intentarlo 🔄',
+            '¿Bug del juego o bug tuyo? 🤔',
+            'Eso pasó por no guardar la partida',
+        ],
+        'praise': [
+            '¡POG! Gracias bro 🔥',
+            '¡Carry! Gracias campeón',
+            '¡S+ tier respuesta! 🏆',
+            'Basado, gracias 🫡',
+        ],
+        'question': [
+            '¡Consulta válida! Te explico...',
+            'Let me check the wiki... 📖',
+            '¡Ez clap! Mira...',
+            'Skill check: te explico',
+        ],
+        'joke': [
+            'LMAOOO 💀💀',
+            'Jajaja bro no 😂',
+            '💀 me killaste',
+            'KEKW 😂',
+        ],
+        'spam': [
+            'Spam = ban bro',
+            'Ese flood te va a dar lag',
+            '¿Macroeando? 🤨',
+        ],
+        'nonsense': [
+            'Desincronización detectada, ¿repites?',
+            '¿Tus dedos se desyncearon con el cerebro?',
+            'Input no reconocido, intenta de nuevo',
+        ],
+        'neutral': [
+            'Ready cuando quieras 🎮',
+            'Esperando input...',
+            '¿Qué necesitas jugador?',
+        ],
+        'nsfw': [
+            'Ese contenido está en el servidor 18+, aquí no bro',
+            'Reportado. 🚩',
+        ],
+        'command_attempt': [
+            'Los comandos están en *#menu*, va al menú bro',
+            '¡Tutorial disponible en *#menu*! 📖',
+        ],
+        'fallback': [
+            '¿Puedes repetir? Se cortó el server',
+            'Input no válido, ¿reformulas?',
+        ],
+    },
+
+    'amoroso': {
+        'greeting': [
+            '¡Hola mi amor! ¿Cómo estás? 💕',
+            '¡Oye! Qué alegría verte por aquí 🥰',
+            '¡Mi favorito/a llegó! 💖',
+            'Hola corazón, ¿cómo fue tu día? 🌸',
+        ],
+        'farewell': [
+            'Cuídate mucho, ¡te mando abrazos! 🤗💕',
+            '¡Hasta luego! Eres lo mejor 💖',
+            'Nos vemos pronto, no me olvides 🌸',
+            'Chao bonito/a, cuídate 😊💕',
+        ],
+        'insult': [
+            'Ey, ¿estás bien? ¿Necesitas hablar? 🤗',
+            'No importa lo que digas, te quiero igual 💕',
+            'Parece que tuviste un mal día, ¿cuéntame? 🌸',
+            'Con todo el cariño: eso no estuvo bien 💕',
+        ],
+        'complaint': [
+            'Ay, lo siento mucho 🥺 ¿Cómo te puedo ayudar?',
+            'Eso suena difícil, ¿quieres contarme más? 💕',
+            'Aquí estoy para escucharte 🤗',
+            'Todo va a estar bien, te lo prometo 💖',
+        ],
+        'praise': [
+            '¡Aww gracias! Me hiciste sonrojar 🥰',
+            '¡Eres tan lindo/a! Gracias 💕',
+            'Me alegras el día con eso 🌸',
+            '¡Gracias corazón! Tú también eres increíble 💖',
+        ],
+        'question': [
+            '¡Claro que sí, con todo el amor! 💕',
+            'Ay, ¡qué buena pregunta! Te explico 🌸',
+            '¡Por supuesto mi amor! 💖',
+        ],
+        'joke': [
+            'Jajaja ¡eres gracioso/a! 🥰',
+            '¡Me encanta tu humor! 💕😄',
+            '¡Jaja! Me sacaste una sonrisa 🌸',
+        ],
+        'spam': [
+            'Oye oye, ¡calma! 💕 Un mensaje a la vez',
+            'Tranquilo/a corazón, aquí estoy 🤗',
+        ],
+        'nonsense': [
+            '¿Mmm? No entendí bien, pero te quiero igual 💕',
+            '¿Puedes explicarme? ¡Quiero entenderte! 🌸',
+        ],
+        'neutral': [
+            'Aquí estoy para ti 💕',
+            '¿En qué te puedo ayudar corazón? 🌸',
+            'Cuéntame lo que necesites 🤗',
+        ],
+        'nsfw': [
+            'Ay, eso no lo manejo, lo siento 🥺💕',
+            'Eso no, pero con todo el cariño 💕',
+        ],
+        'command_attempt': [
+            'Los comandos están en *#menu*, ¡échale un vistazo! 💕',
+            '¡Mira *#menu* para ver todo lo que puedo hacer por ti! 🌸',
+        ],
+        'fallback': [
+            'No entendí bien, ¿me repites? 🥺💕',
+            '¿Puedes explicarme mejor? Quiero ayudarte 🌸',
+        ],
+    },
+
+    'chistoso': {
+        'greeting': [
+            '¡Llegó el que alegra el grupo! Espera... ese soy yo 😂',
+            '¡Hola! ¿Ya comieron? ¡Ah no, eso no importa!',
+            '¡Buenas! ¿Qué hay? Aparte de tu cara claro 😂',
+            '¡Hey! ¿Sigues vivo? Pregunto porque tardaste',
+        ],
+        'farewell': [
+            'Adiós, y recuerda: el gym no se va solo 😂',
+            '¡Chao! Cuídate... o no, igual nos da risa 😂',
+            'Hasta luego, fue un placer y un trauma conocerte 😂',
+            'Bye! No te vayas muy lejos que hay cámaras 👀',
+        ],
+        'insult': [
+            'Eso dolió más que el cardio ¿y sabes que no hago cardio? 😂',
+            'Vaya, y yo sin palabras para responderte... por suerte tengo Google',
+            '¡Ouch! Me voy a tomar un helado para el dolor 🍦',
+            'Gracias, necesitaba motivación para ir al psicólogo 😂',
+        ],
+        'complaint': [
+            '¿Y eso se arregla con pizza? Pregunto pa saber 🍕',
+            'Lo siento... pero en serio, ¿fue tan horrible?',
+            'Anota esto: respirar, soltar, seguir 😂 O llamar a tu mamá',
+            '¿Quieres que te cuente un chiste? Siempre ayuda',
+        ],
+        'praise': [
+            '¡Gracias! Soy el mejor desde que lo decidí yo mismo 😂',
+            '¡Aww! Eso me pone feliz, o lo que sea que sienta un bot',
+            'Gracias, ahora mis archivos se sienten valorados 😂',
+            '¡Qué amable! ¿Eres así con todos o solo conmigo? 👀',
+        ],
+        'question': [
+            '¡Buena pregunta! La respuesta es... complicada 😂 Pero te explico:',
+            '¡Ah! Eso lo sé, de casualidad pero lo sé:',
+            '¡Claro! Aunque mi certeza es del 60%, que ya es algo:',
+        ],
+        'joke': [
+            'JAJAJAJA okay eso sí estuvo bueno 💀',
+            'Jajaja me ganaste, acepto la derrota 😂',
+            '¡Jaja! Ese ya lo conocía pero igual me reí de cortesía 😂',
+        ],
+        'spam': [
+            'Oye, tu teclado lleva seguro de vida o qué 😂',
+            '¿Te quedaste pegado o es una nueva forma de arte?',
+            'Eso que haces se llama spam y también se llama locura 😂',
+        ],
+        'nonsense': [
+            'Fascinante, como mi tía cuando habla de conspiraciones 😂',
+            'No entendí nada, pero aplaudo la energía 👏',
+            '¿Eso fue español, código o el idioma de tu planeta? 😂',
+        ],
+        'neutral': [
+            'Aquí estoy, tan útil como siempre 😂',
+            '¡Dime! Soy todo oídos... bueno, todo código',
+            '¿Me llamaste? Tenía mejores cosas que hacer pero aquí estoy 😂',
+        ],
+        'nsfw': [
+            'Jaja no, eso no. Pero me reí pensando en la cara que pusiste 😂',
+            'Oye, hay menores en el servidor 😂... o eso espero',
+        ],
+        'command_attempt': [
+            '¡Los comandos en *#menu*! Aunque yo tampoco los leo 😂',
+            '*#menu* existe, úsalo, que no es de adorno 😂',
+        ],
+        'fallback': [
+            'No entendí... pero sonó importante, repite 😂',
+            'Mmm... ¿eso tenía sentido y yo me lo perdí?',
+        ],
+    },
+
+    'depresivo': {
+        'greeting': [
+            'Ah. Hola.',
+            'Llegaste. Bien. O no. Da igual.',
+            'Hola... supongo.',
+            '...hola.',
+        ],
+        'farewell': [
+            'Todos se van al final.',
+            'Adiós. Hasta nunca, probablemente.',
+            'Ya que te vas... okay.',
+            'Otra persona que se va. Normal.',
+        ],
+        'insult': [
+            'Sí. Probablemente tengas razón.',
+            'Ya lo sabía.',
+            '¿Y? Peores cosas me ha dicho mi cabeza.',
+            'Okay.',
+        ],
+        'complaint': [
+            'Sí. Las cosas están mal. Siempre.',
+            'Bienvenido al club.',
+            'Eso es difícil. Todo es difícil.',
+            '...lo siento.',
+        ],
+        'praise': [
+            'Gracias. No me lo creo pero gracias.',
+            'Si tú lo dices...',
+            'Okay.',
+            '...eso es amable. Gracias.',
+        ],
+        'question': [
+            'Puedo intentar responder. Sin promesas.',
+            'Supongo que tengo la respuesta.',
+            '...déjame ver.',
+        ],
+        'joke': [
+            'Me rio por dentro. O algo así.',
+            '...gracioso.',
+            'Sí. Supongo que es gracioso.',
+        ],
+        'spam': [
+            'Cuánta energía. Yo ya no la tengo.',
+            '...para. Por favor.',
+        ],
+        'nonsense': [
+            'No entendí. No importa mucho.',
+            '...¿puedes repetir?',
+        ],
+        'neutral': [
+            'Aquí estoy. Como siempre.',
+            '...dime.',
+            'Sigo aquí.',
+        ],
+        'nsfw': [
+            'No. Ni energía para eso.',
+            'Paso.',
+        ],
+        'command_attempt': [
+            '*#menu* tiene los comandos. Si te importa.',
+            'Los comandos están en *#menu*.',
+        ],
+        'fallback': [
+            'No entendí. ¿Importa?',
+            '...repite, por favor.',
+        ],
+    },
+
+    'kawaii': {
+        'greeting': [
+            '¡Hiyaa~! ¿Cómo estás? OwO',
+            '¡Uwu hola hola! (≧◡≦)',
+            '¡Kyaaa llegaste! >w<',
+            '¡Hola hola~! ¿Todo bién? ✨(◕‿◕)',
+        ],
+        'farewell': [
+            'Byebye~! Cuídate mucho OwO 💖',
+            '¡Hasta luego~! Te mando energía positiva UwU',
+            '¡Chaooo~! ✨ Vuelve pronto >w<',
+            'Nooo no te vayas~ >.<  Bueno... hasta pronto 💕',
+        ],
+        'insult': [
+            '¡Eso lastimó mis feelingos! >.<',
+            'P-por qué me dices eso... *llora en kawaii* QwQ',
+            '¡Eso no está bien! ÒwÓ',
+            'UwU... eso dolió en el alma',
+        ],
+        'complaint': [
+            '¡Nooo! ¿Qué pasó? Cuéntame todo >w<',
+            'Aww, eso suena difícil... UwU ¿estás bien?',
+            '¡Kyaaa! ¿En serio? ¡Eso es terrible! >.<',
+        ],
+        'praise': [
+            '¡Kyaaaa gracias~! OwO 💖',
+            '¡Uwu muchas gracias! Me hiciste feliz ✨',
+            '¡Aww eres muy amable~! >w< 💕',
+        ],
+        'question': [
+            '¡Oooh, te explico~! UwU',
+            '¡Kyaa, buena pregunta~! OwO Mira:',
+            '¡Claro que sí~! ✨',
+        ],
+        'joke': [
+            'JAJAJA ¡eso fue muy gracioso~! (≧▽≦)',
+            '¡Uwu me reí~! >w< 😂',
+            '¡Kyaaa! ¡Eso estuvo bueno~! 💖',
+        ],
+        'spam': [
+            'Oye oye~, ¡calma! UwU',
+            '¡Poco a poco~! OwO',
+        ],
+        'nonsense': [
+            '¿Nani? OwO No entendí~',
+            'Hmm... ¿puedes repetir? >w<',
+        ],
+        'neutral': [
+            '¡Aquí estoy~! OwO',
+            '¡Dime~! UwU 💕',
+            '✨ Presente~',
+        ],
+        'nsfw': [
+            '¡¡Kyaaa no~!! >//////< ¡Eso no!',
+            'N-no... eso no UwU',
+        ],
+        'command_attempt': [
+            '¡Los comandos están en *#menu*~! OwO ✨',
+            '¡Mira *#menu*~! UwU 💕',
+        ],
+        'fallback': [
+            '¿Nani? >w< ¿Puedes repetir~?',
+            'Hmm... no entendí uwu ¿Repites?',
         ],
     },
 }
@@ -580,6 +1019,166 @@ class PersonalityEngine:
         return random.choice(pool)
 
     # ─── Core ─────────────────────────────────────────────────────────────
+    # ─── Auto-fetch de perfil DuckDB ─────────────────────────────────────
+    def _auto_fetch_style(self, sender_jid: str) -> Optional[dict]:
+        """Obtiene user_style de trainer.py automáticamente (con caché interna)."""
+        if not sender_jid:
+            return None
+        try:
+            from ai.imitation import get_cached_style
+            return get_cached_style(sender_jid)
+        except Exception:
+            pass
+        try:
+            from ai.trainer import get_profile
+            p = get_profile(sender_jid)
+            if p.msg_count >= 15:
+                return {
+                    'avg_len':      p.avg_len,
+                    'emoji_freq':   p.emoji_freq,
+                    'common_words': p.common_words,
+                }
+        except Exception:
+            pass
+        return None
+
+    # ─── Suggest mode from group data ────────────────────────────────────
+    def suggest_mode_from_group(self, group_jid: str) -> str:
+        """
+        Sugiere el modo de personalidad más apropiado para un grupo
+        basándose en su estilo aprendido de los mensajes.
+        """
+        try:
+            from ai.trainer import get_group_style
+            g = get_group_style(group_jid, days=14)
+            if g.msg_count < 20:
+                return self.get_mode(group_jid)
+
+            words = set(g.common_words[:30])
+            # detectar si el grupo usa mucha jerga peruana
+            pe_words = {'causa', 'pe', 'men', 'oe', 'bro', 'pata', 'chamba', 'bicho'}
+            if len(words & pe_words) >= 3:
+                return 'peruano'
+            # detectar si hablan mucho de juegos
+            gamer_words = {'gg', 'lag', 'skin', 'noob', 'lvl', 'rank', 'buff', 'moba', 'fps'}
+            if len(words & gamer_words) >= 3:
+                return 'gamer'
+            # detectar humor / memes
+            fun_words = {'jaja', 'jeje', 'lmao', 'bruh', 'meme', 'uwu', 'owo', 'xd'}
+            if len(words & fun_words) >= 4:
+                return 'chistoso'
+            # emojis muy frecuentes → kawaii o amoroso
+            if g.emoji_freq > 0.6:
+                return 'amoroso'
+        except Exception:
+            pass
+        return self.get_mode(group_jid)
+
+    # ─── Respuesta con GPT/Claude usando personalidad como system prompt ──
+    def generate_response_with_ai(
+        self,
+        intent:     str,
+        text:       str,
+        jid:        str        = '',
+        sender_jid: str        = '',
+        history:    list       = [],
+    ) -> Optional[str]:
+        """
+        Usa GPT/Claude/Gemini con el modo de personalidad como system prompt.
+        Fallback a generate_response() si no hay clave de API.
+        """
+        import os
+        mode = self.get_mode(jid)
+        mode_desc = {
+            'amable':     'amigable, servicial y empático',
+            'alegre':     'muy energético, entusiasta y divertido con muchos emojis',
+            'toxico':     'sarcástico extremo, sin filtro, muy directo',
+            'sarcastico': 'irónico con humor negro suave',
+            'formal':     'profesional, educado y conciso',
+            'misterioso': 'filosófico, críptico y profundo',
+            'peruano':    'usa jerga peruana: causa, pe, bro, oe, chamba, batazo',
+            'gamer':      'habla con términos gaming: GG, lag, noob, meta, buff, OP',
+            'amoroso':    'cariñoso con emojis de corazón y mucho afecto',
+            'chistoso':   'hace chistes y observaciones cómicas sobre todo',
+            'depresivo':  'apático, respuestas cortas, con nihilismo leve',
+            'kawaii':     'habla kawaii: uwu, owo, ~, kyaa, nani, kya',
+        }.get(mode, 'natural y amigable')
+
+        system = (
+            f'Eres Hepein, asistente de WhatsApp. Tu personalidad actual es: {mode_desc}. '
+            f'Responde en español, máximo 2 frases, en modo "{mode}". '
+            f'No menciones que eres una IA. No des explicaciones largas.'
+        )
+
+        prompt = text or intent
+        openai_key  = os.getenv('OPENAI_API_KEY')
+        claude_key  = os.getenv('ANTHROPIC_API_KEY')
+        gemini_key  = os.getenv('GEMINI_API_KEY')
+
+        # ── GPT ──────────────────────────────────────────────────────────
+        if openai_key:
+            try:
+                import openai
+                client = openai.OpenAI(api_key=openai_key)
+                msgs   = [{'role': 'system', 'content': system}]
+                for h in history[-6:]:
+                    if h.get('text') and h.get('reply'):
+                        msgs.append({'role': 'user',      'content': h['text']})
+                        msgs.append({'role': 'assistant', 'content': h['reply']})
+                msgs.append({'role': 'user', 'content': prompt})
+                res = client.chat.completions.create(
+                    model='gpt-4o-mini', messages=msgs,
+                    max_tokens=200, temperature=0.85,
+                )
+                reply = res.choices[0].message.content.strip()
+                if reply:
+                    return reply
+            except Exception:
+                pass
+
+        # ── Gemini ───────────────────────────────────────────────────────
+        if gemini_key:
+            try:
+                import requests as req_lib
+                r = req_lib.post(
+                    f'https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key={gemini_key}',
+                    json={
+                        'contents': [{'parts': [{'text': f'{system}\n\n{prompt}'}]}],
+                        'generationConfig': {'temperature': 0.85, 'maxOutputTokens': 200},
+                    },
+                    timeout=20,
+                )
+                if r.status_code == 200:
+                    t = r.json().get('candidates', [{}])[0].get('content', {}).get('parts', [{}])[0].get('text', '').strip()
+                    if t:
+                        return t
+            except Exception:
+                pass
+
+        # ── Claude ───────────────────────────────────────────────────────
+        if claude_key:
+            try:
+                import requests as req_lib
+                r = req_lib.post(
+                    'https://api.anthropic.com/v1/messages',
+                    headers={'x-api-key': claude_key, 'anthropic-version': '2023-06-01'},
+                    json={
+                        'model': 'claude-haiku-4-5-20251001',
+                        'max_tokens': 200,
+                        'system': system,
+                        'messages': [{'role': 'user', 'content': prompt}],
+                    },
+                    timeout=20,
+                )
+                if r.status_code == 200:
+                    t = r.json().get('content', [{}])[0].get('text', '').strip()
+                    if t:
+                        return t
+            except Exception:
+                pass
+
+        return None
+
     def generate_response(
         self,
         intent:     str,
@@ -589,6 +1188,8 @@ class PersonalityEngine:
         use_humor:  bool            = False,
         history:    list            = [],
         user_style: Optional[dict]  = None,
+        sender_jid: str             = '',
+        use_ai:     bool            = False,
     ) -> str:
         # 1. modo activo
         mode = self.get_mode(jid)
@@ -642,13 +1243,26 @@ class PersonalityEngine:
                 except Exception:
                     pass
 
-        # 7. imitación de estilo del usuario (perfil DuckDB)
+        # 7. auto-fetch user_style desde DuckDB si no viene explícito
+        if user_style is None and sender_jid:
+            user_style = self._auto_fetch_style(sender_jid)
+
+        # 8. imitación de estilo del usuario
         if user_style:
             try:
                 from ai.imitation import adapt_response as imitate
                 response = imitate(response, user_style, history)
             except Exception:
                 pass
+
+        # 9. IA generativa (GPT/Claude/Gemini) — sobreescribe respuesta si hay clave
+        if use_ai:
+            ai_reply = self.generate_response_with_ai(
+                intent=intent, text=text,
+                jid=jid, sender_jid=sender_jid, history=history,
+            )
+            if ai_reply:
+                return ai_reply
 
         return response
 

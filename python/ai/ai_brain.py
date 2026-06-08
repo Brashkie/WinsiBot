@@ -489,6 +489,64 @@ class AIBrain:
     def stop(self) -> None:
         self._running = False
 
+    # ─── Aprendizaje desde mensajes de grupo ──────────────────────────────────
+
+    def learn_from_message(
+        self,
+        group_jid:  str,
+        sender_jid: str,
+        text:       str,
+        is_reply:   bool = False,
+    ) -> None:
+        """
+        Registra un mensaje real de grupo en el pipeline Parquet + DuckDB.
+        Fire-and-forget: los errores se silencian para no bloquear el handler.
+        """
+        if not text or len(text.strip()) < 3:
+            return
+        try:
+            from ai.trainer import record as trainer_record
+            trainer_record(
+                group_jid  = group_jid,
+                sender_jid = sender_jid,
+                text       = text.strip(),
+                is_reply   = is_reply,
+            )
+        except Exception:
+            pass
+
+    def get_group_context(self, group_jid: str, days: int = 14) -> dict:
+        """
+        Devuelve un resumen del estilo del grupo: vocabulario común, usuarios
+        activos, frecuencia de emojis. Útil para construir system prompts.
+        """
+        try:
+            from ai.trainer import get_group_style
+            g = get_group_style(group_jid, days=days)
+            return {
+                'msg_count':    g.msg_count,
+                'active_users': g.active_users,
+                'common_words': g.common_words,
+                'avg_msg_len':  g.avg_msg_len,
+                'emoji_freq':   g.emoji_freq,
+                'vocab_sample': g.vocab_sample,
+                'topics':       g.topics,
+            }
+        except Exception:
+            return {}
+
+    def suggest_personality_mode(self, group_jid: str) -> str:
+        """
+        Sugiere el modo de personalidad más apropiado para un grupo
+        basándose en su historial de mensajes aprendido.
+        """
+        try:
+            from ai.personality import personality_engine
+            return personality_engine.suggest_mode_from_group(group_jid)
+        except Exception:
+            pass
+        return 'amable'
+
 # ─── Instancia global ─────────────────────────────────────────────────────────
 brain = AIBrain()
 

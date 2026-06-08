@@ -15,12 +15,19 @@ export async function loadCommands(): Promise<void> {
   for (const file of files) {
     try {
       const mod = await import(pathToFileURL(file).href)
-      const command: Command = mod.default ?? mod.command
+      const exported = mod.default ?? mod.command
 
-      if (!command?.name) continue
+      // soporta tanto default = Command como default = Command[]
+      const commands: Command[] = Array.isArray(exported) ? exported : exported ? [exported] : []
 
-      commandRegistry.set(command.name, command)
-      logger.debug(`Comando cargado: ${command.name}`)
+      for (const command of commands) {
+        if (!command?.name) continue
+        commandRegistry.set(command.name, command)
+        for (const alias of command.aliases ?? []) {
+          commandRegistry.set(alias, command)
+        }
+        logger.debug(`Comando cargado: ${command.name}`)
+      }
     } catch (err) {
       logger.error({ err, file }, 'Error cargando comando')
     }
