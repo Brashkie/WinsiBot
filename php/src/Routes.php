@@ -8,10 +8,13 @@ class Routes
     private WebhookController $webhook;
     private Panel $panel;
 
+    private Sse $sse;
+
     public function __construct()
     {
         $this->webhook = new WebhookController();
         $this->panel   = new Panel();
+        $this->sse     = new Sse();
     }
 
     public function dispatch(string $method, string $uri): void
@@ -46,6 +49,10 @@ class Routes
 
             $method === 'POST' && $path === '/webhook/command'
                 => $this->webhook->onCommand(),
+
+            // ─── SSE real-time stream ─────────────────────────────────────
+            $method === 'GET' && $path === '/events'
+                => $this->sse->stream(),
 
             // ─── Panel API ────────────────────────────────────────────────
             $method === 'GET' && $path === '/panel'

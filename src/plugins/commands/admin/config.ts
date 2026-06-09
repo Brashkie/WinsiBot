@@ -1,53 +1,137 @@
 import type { Command } from '../../../types/index.js'
 import { getGroupConfig, setGroupConfig } from '@core/events/index'
 
-// ─── Opciones disponibles ─────────────────────────────────────────────────────
-type ConfigKey = keyof ReturnType<typeof getGroupConfig>
+// ─── Definición de opciones ───────────────────────────────────────────────────
 
-interface ConfigOption {
-  key:         ConfigKey
+type BoolKey =
+  | 'antilink' | 'antilink2' | 'antispam' | 'antiflood' | 'antifake'
+  | 'antibot'  | 'antidelete' | 'antitoxic' | 'antitraba'
+  | 'antitelegram' | 'antidiscord' | 'antitiktok' | 'antiyoutube'
+  | 'welcome'  | 'detect'   | 'modoadmin' | 'nsfw'  | 'muted'
+  | 'anticall' | 'hepein'   | 'game'      | 'rpg'
+  | 'reaction' | 'autosticker' | 'viewonce' | 'audios'
+  | 'autoresponder' | 'autoAccept' | 'autoReject'
+
+interface Opt {
+  key:         BoolKey
   description: string
   adminOnly:   boolean
   ownerOnly:   boolean
 }
 
-const OPTIONS: Record<string, ConfigOption> = {
-  // moderacion
-  antilink:   { key: 'antilink',   description: 'Elimina links en el grupo',              adminOnly: true,  ownerOnly: false },
-  antispam:   { key: 'antispam',   description: 'Detecta y elimina spam',                  adminOnly: true,  ownerOnly: false },
-  antifake:   { key: 'antifake',   description: 'Bloquea numeros falsos/virtuales',        adminOnly: true,  ownerOnly: false },
-  antidelete: { key: 'antidelete', description: 'Muestra mensajes eliminados',              adminOnly: true,  ownerOnly: false },
-  modoadmin:  { key: 'modoadmin',  description: 'Solo admins pueden usar comandos',        adminOnly: true,  ownerOnly: false },
-  // welcome
-  welcome:    { key: 'welcome',    description: 'Mensaje de bienvenida y despedida',       adminOnly: true,  ownerOnly: false },
-  detect:     { key: 'detect',     description: 'Avisos de cambios en el grupo',           adminOnly: true,  ownerOnly: false },
-  // misc
-  nsfw:       { key: 'nsfw',       description: 'Activa comandos +18 en el grupo',         adminOnly: true,  ownerOnly: false },
-  muted:      { key: 'muted',      description: 'Bot no responde en este grupo',           adminOnly: true,  ownerOnly: false },
-  // ia
-  hepein:     { key: 'hepein',     description: 'IA responde cuando la mencionan',         adminOnly: true,  ownerOnly: false },
-  // owner
-  anticall:   { key: 'anticall',   description: 'Rechaza llamadas automaticamente',        adminOnly: false, ownerOnly: true  },
+// Categorías para el panel
+const GROUPS: Array<{ label: string; keys: string[] }> = [
+  { label: '🛡️  Moderación',     keys: ['antilink','antilink2','antispam','antiflood','antifake','antibot','antidelete','antitoxic','antitraba'] },
+  { label: '🚫  Anti-plataformas', keys: ['antitelegram','antidiscord','antitiktok','antiyoutube'] },
+  { label: '📢  Bienvenida',       keys: ['welcome','detect'] },
+  { label: '⚙️  Funciones',        keys: ['modoadmin','nsfw','muted','hepein','game','rpg','reaction','autosticker','viewonce','audios','autoresponder','autoAccept','autoReject'] },
+  { label: '📵  Global (owner)',    keys: ['anticall'] },
+]
+
+const OPTIONS: Record<string, Opt> = {
+  // ── Moderación ─────────────────────────────────────────────────────────────
+  antilink:     { key: 'antilink',     description: 'Elimina links en el grupo',                    adminOnly: true,  ownerOnly: false },
+  antilink2:    { key: 'antilink2',    description: 'Solo admins pueden enviar links',               adminOnly: true,  ownerOnly: false },
+  antispam:     { key: 'antispam',     description: 'Detecta y elimina spam',                        adminOnly: true,  ownerOnly: false },
+  antiflood:    { key: 'antiflood',    description: 'Limita mensajes rápidos seguidos',              adminOnly: true,  ownerOnly: false },
+  antifake:     { key: 'antifake',     description: 'Bloquea números falsos/virtuales',              adminOnly: true,  ownerOnly: false },
+  antibot:      { key: 'antibot',      description: 'Bloquea bots en el grupo',                      adminOnly: true,  ownerOnly: false },
+  antidelete:   { key: 'antidelete',   description: 'Muestra mensajes eliminados',                   adminOnly: true,  ownerOnly: false },
+  antitoxic:    { key: 'antitoxic',    description: 'Elimina palabras ofensivas',                    adminOnly: true,  ownerOnly: false },
+  antitraba:    { key: 'antitraba',    description: 'Elimina textos que traban el chat',              adminOnly: true,  ownerOnly: false },
+  // ── Anti-plataformas ───────────────────────────────────────────────────────
+  antitelegram: { key: 'antitelegram', description: 'Bloquea links de Telegram',                     adminOnly: true,  ownerOnly: false },
+  antidiscord:  { key: 'antidiscord',  description: 'Bloquea links de Discord',                      adminOnly: true,  ownerOnly: false },
+  antitiktok:   { key: 'antitiktok',   description: 'Bloquea links de TikTok',                       adminOnly: true,  ownerOnly: false },
+  antiyoutube:  { key: 'antiyoutube',  description: 'Bloquea links de YouTube',                      adminOnly: true,  ownerOnly: false },
+  // ── Bienvenida ─────────────────────────────────────────────────────────────
+  welcome:      { key: 'welcome',      description: 'Mensaje de bienvenida y despedida',              adminOnly: true,  ownerOnly: false },
+  detect:       { key: 'detect',       description: 'Avisos de cambios en el grupo',                  adminOnly: true,  ownerOnly: false },
+  // ── Funciones ──────────────────────────────────────────────────────────────
+  modoadmin:    { key: 'modoadmin',    description: 'Solo admins pueden usar comandos',               adminOnly: true,  ownerOnly: false },
+  nsfw:         { key: 'nsfw',         description: 'Activa comandos +18 en el grupo',                adminOnly: true,  ownerOnly: false },
+  muted:        { key: 'muted',        description: 'Bot silenciado en este grupo',                   adminOnly: true,  ownerOnly: false },
+  hepein:       { key: 'hepein',       description: 'IA responde cuando la mencionan',                adminOnly: true,  ownerOnly: false },
+  game:         { key: 'game',         description: 'Comandos de juegos permitidos',                  adminOnly: true,  ownerOnly: false },
+  rpg:          { key: 'rpg',          description: 'Comandos RPG permitidos',                        adminOnly: true,  ownerOnly: false },
+  reaction:     { key: 'reaction',     description: 'Reacciones automáticas del bot',                 adminOnly: true,  ownerOnly: false },
+  autosticker:  { key: 'autosticker',  description: 'Convierte imágenes a sticker automáticamente',  adminOnly: true,  ownerOnly: false },
+  viewonce:     { key: 'viewonce',     description: 'Reenvía mensajes de ver-una-vez',                adminOnly: true,  ownerOnly: false },
+  audios:       { key: 'audios',       description: 'Comandos de audio permitidos',                   adminOnly: true,  ownerOnly: false },
+  autoresponder:{ key: 'autoresponder',description: 'Respuestas automáticas activas',                 adminOnly: true,  ownerOnly: false },
+  autoaccept:   { key: 'autoAccept',   description: 'Acepta solicitudes de unirse automáticamente',   adminOnly: true,  ownerOnly: false },
+  autoreject:   { key: 'autoReject',   description: 'Rechaza solicitudes automáticamente',            adminOnly: true,  ownerOnly: false },
+  // ── Global (owner) ─────────────────────────────────────────────────────────
+  anticall:     { key: 'anticall',     description: 'Rechaza llamadas automáticamente',               adminOnly: false, ownerOnly: true  },
 }
 
-// alias
 const ALIASES: Record<string, string> = {
-  'antienlace':    'antilink',
-  'antilink2':     'antilink',
-  'bienvenida':    'welcome',
-  'avisos':        'detect',
-  'antieliminar':  'antidelete',
-  'soloadmin':     'modoadmin',
-  'modeadmin':     'modoadmin',
-  'antillamar':    'anticall',
-  'antifake':      'antifake',
-  'antifalsos':    'antifake',
-  'caliente':      'nsfw',
-  'modohorny':     'nsfw',
-  'ia':            'hepein',
-  'bot':           'hepein',
-  'ai':            'hepein',
+  'antienlace':     'antilink',
+  'antienlace2':    'antilink2',
+  'bienvenida':     'welcome',
+  'avisos':         'detect',
+  'antieliminar':   'antidelete',
+  'soloadmin':      'modoadmin',
+  'modeadmin':      'modoadmin',
+  'antillamar':     'anticall',
+  'antifalsos':     'antifake',
+  'antivirtuales':  'antifake',
+  'caliente':       'nsfw',
+  'modohorny':      'nsfw',
+  'ia':             'hepein',
+  'bot':            'hepein',
+  'ai':             'hepein',
+  'chatbot':        'hepein',
+  'chatgpt':        'hepein',
+  'modoia':         'hepein',
+  'juegos':         'game',
+  'reaccion':       'reaction',
+  'reacciones':     'reaction',
+  'stickers':       'autosticker',
+  'antitg':         'antitelegram',
+  'antitel':        'antitelegram',
+  'antitele':       'antitelegram',
+  'antiyt':         'antiyoutube',
+  'antitk':         'antitiktok',
+  'antitik':        'antitiktok',
+  'antidc':         'antidiscord',
+  'antiver':        'viewonce',
+  'antiviewonce':   'viewonce',
+  'aceptar':        'autoaccept',
+  'rechazar':       'autoreject',
+  'antitraba':      'antitraba',
+  'antilag':        'antitraba',
 }
+
+// ─── Helper: panel completo ───────────────────────────────────────────────────
+
+function buildPanel(cfg: ReturnType<typeof getGroupConfig>, prefix: string): string {
+  const lines: string[] = []
+  lines.push(`┌─────────────────────────────`)
+  lines.push(`│  ◈ *CONFIGURACIÓN DEL GRUPO*`)
+  lines.push(`└─────────────────────────────`)
+
+  for (const group of GROUPS) {
+    lines.push(``)
+    lines.push(`*${group.label}*`)
+    for (const name of group.keys) {
+      const opt = OPTIONS[name]
+      if (!opt) continue
+      const val    = cfg[opt.key] as boolean
+      const icon   = val ? '✅' : '❌'
+      const who    = opt.ownerOnly ? '▲' : '◆'
+      lines.push(`  ${icon} ${who} *${name}* — ${opt.description}`)
+    }
+  }
+
+  lines.push(``)
+  lines.push(`─────────────────────────────`)
+  lines.push(`  ${prefix}on  <opcion> — activar`)
+  lines.push(`  ${prefix}off <opcion> — desactivar`)
+  return lines.join('\n')
+}
+
+// ─── Comando ──────────────────────────────────────────────────────────────────
 
 const command: Command = {
   name:        'on',
@@ -58,33 +142,11 @@ const command: Command = {
 
   async execute({ sock, jid, msg, args, command: cmd, prefix, isAdmin, isOwner }) {
     const isEnable = cmd === 'on' || cmd === 'enable'
+    const cfg      = getGroupConfig(jid)
 
-    // sin argumento — mostrar lista de opciones
+    // Sin argumento — mostrar panel
     if (!args[0]) {
-      const config = getGroupConfig(jid)
-      const lines: string[] = []
-
-      lines.push(`┌─────────────────────────`)
-      lines.push(`│  ◈ *CONFIGURACION DEL GRUPO*`)
-      lines.push(`└─────────────────────────`)
-      lines.push(``)
-
-      for (const [name, opt] of Object.entries(OPTIONS)) {
-        const val    = config[opt.key] as boolean
-        const status = val ? '✔' : '✗'
-        const who    = opt.ownerOnly ? '▲ owner' : '◈ admin'
-        lines.push(`  ${status} *${name}*  ·  ${who}`)
-        lines.push(`     ${opt.description}`)
-        lines.push(``)
-      }
-
-      lines.push(`─────────────────────────`)
-      lines.push(`  ${prefix}on <opcion>   — activar`)
-      lines.push(`  ${prefix}off <opcion>  — desactivar`)
-
-      await sock.sendMessage(jid, {
-        text: lines.join('\n'),
-      }, { quoted: msg })
+      await sock.sendMessage(jid, { text: buildPanel(cfg, prefix) }, { quoted: msg })
       return
     }
 
@@ -94,31 +156,28 @@ const command: Command = {
 
     if (!option) {
       await sock.sendMessage(jid, {
-        text: `✗ Opcion *${rawType}* no encontrada.\nUsa *${prefix}on* para ver todas las opciones.`,
+        text: `❌ Opción *${rawType}* no encontrada.\nUsa *${prefix}on* para ver todas las opciones.`,
       }, { quoted: msg })
       return
     }
 
-    // verificar permisos
     if (option.ownerOnly && !isOwner) {
       await sock.sendMessage(jid, {
-        text: `✗ Solo el *owner* puede cambiar esta opcion.`,
+        text: `❌ Solo el *owner* puede cambiar esta opción.`,
       }, { quoted: msg })
       return
     }
 
     if (option.adminOnly && !isAdmin && !isOwner) {
       await sock.sendMessage(jid, {
-        text: `✗ Solo los *administradores* pueden cambiar esta opcion.`,
+        text: `❌ Solo los *administradores* pueden cambiar esta opción.`,
       }, { quoted: msg })
       return
     }
 
-    // aplicar cambio
     setGroupConfig(jid, { [option.key]: isEnable })
 
-    const status = isEnable ? '✔ Activado' : '✗ Desactivado'
-
+    const status = isEnable ? '✅ Activado' : '❌ Desactivado'
     await sock.sendMessage(jid, {
       text: [
         `┌─────────────────────────`,
@@ -127,10 +186,7 @@ const command: Command = {
         ``,
         `  ◆ *${type}*`,
         `  § ${option.description}`,
-        isEnable && type === 'hepein'
-          ? `\n  § Menciona *hepein* o *brashkie* para activarme`
-          : '',
-      ].filter(Boolean).join('\n'),
+      ].join('\n'),
     }, { quoted: msg })
   },
 }

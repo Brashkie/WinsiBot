@@ -1,294 +1,395 @@
 <!DOCTYPE html>
 <html lang="es">
 <head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>WinsiBot — Panel</title>
-  <style>
-    * { margin: 0; padding: 0; box-sizing: border-box; }
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>WinsiBot Panel</title>
+<style>
+:root {
+  --bg:      #080808;
+  --surface: #0f0f0f;
+  --card:    #141414;
+  --border:  #1c1c1c;
+  --green:   #00c896;
+  --green-d: rgba(0,200,150,.10);
+  --red:     #ff4b4b;
+  --yellow:  #f5c542;
+  --text:    #d8d8d8;
+  --muted:   #444;
+  --muted2:  #1e1e1e;
+}
+*{box-sizing:border-box;margin:0;padding:0}
+html,body{height:100%;background:var(--bg);color:var(--text);font-family:'Cascadia Code','Fira Code','SF Mono',monospace;font-size:13px;line-height:1.5}
+::-webkit-scrollbar{width:4px;height:4px}
+::-webkit-scrollbar-track{background:var(--surface)}
+::-webkit-scrollbar-thumb{background:var(--border);border-radius:2px}
 
-    :root {
-      --bg:      #0e0e0e;
-      --surface: #161616;
-      --border:  #2a2a2a;
-      --text:    #e0e0e0;
-      --muted:   #666;
-      --accent:  #00c896;
-      --warn:    #e0a020;
-      --danger:  #c84040;
-    }
+/* ── header ── */
+header{
+  position:sticky;top:0;z-index:20;
+  display:flex;align-items:center;gap:12px;
+  padding:0 20px;height:48px;
+  background:var(--surface);border-bottom:1px solid var(--border);
+}
+.logo{font-size:16px;font-weight:700;color:var(--green);letter-spacing:-.5px}
+.ver{color:var(--muted);font-size:11px}
+.spacer{flex:1}
+#clockEl{color:var(--muted);font-size:11px;font-variant-numeric:tabular-nums}
 
-    body {
-      background: var(--bg);
-      color: var(--text);
-      font-family: 'Courier New', monospace;
-      font-size: 13px;
-      line-height: 1.6;
-    }
+/* ── status badge ── */
+.badge-status{
+  display:flex;align-items:center;gap:7px;
+  padding:5px 12px;border-radius:20px;
+  background:var(--green-d);border:1px solid rgba(0,200,150,.15);
+  font-size:11px;font-weight:600;transition:all .4s;
+}
+.badge-status.offline{background:rgba(255,75,75,.08);border-color:rgba(255,75,75,.15)}
+.dot{width:7px;height:7px;border-radius:50%}
+.dot.online{background:var(--green);animation:pulse 2s infinite}
+.dot.offline{background:var(--red)}
+@keyframes pulse{0%{box-shadow:0 0 0 0 rgba(0,200,150,.5)}70%{box-shadow:0 0 0 6px rgba(0,200,150,0)}100%{box-shadow:0 0 0 0 rgba(0,200,150,0)}}
 
-    header {
-      border-bottom: 1px solid var(--border);
-      padding: 16px 24px;
-      display: flex;
-      align-items: center;
-      justify-content: space-between;
-    }
+/* ── SSE pill ── */
+.sse-pill{
+  display:flex;align-items:center;gap:5px;
+  padding:4px 9px;border-radius:12px;
+  background:var(--muted2);font-size:10px;color:var(--muted);transition:all .3s;
+}
+.sse-pill.live{background:var(--green-d);color:var(--green)}
+.sse-d{width:5px;height:5px;border-radius:50%;background:currentColor}
+.sse-pill.live .sse-d{animation:pulse 2s infinite}
 
-    header h1 {
-      font-size: 14px;
-      font-weight: normal;
-      letter-spacing: 2px;
-      text-transform: uppercase;
-      color: var(--accent);
-    }
+/* ── main ── */
+main{max-width:1280px;margin:0 auto;padding:20px;display:flex;flex-direction:column;gap:14px}
 
-    #status-dot {
-      width: 8px; height: 8px;
-      border-radius: 50%;
-      background: var(--muted);
-      display: inline-block;
-      margin-right: 8px;
-    }
-    #status-dot.online  { background: var(--accent); }
-    #status-dot.offline { background: var(--danger); }
+/* ── stat grid ── */
+.stats{display:grid;grid-template-columns:repeat(6,1fr);gap:10px}
+@media(max-width:900px){.stats{grid-template-columns:repeat(3,1fr)}}
+@media(max-width:480px){.stats{grid-template-columns:repeat(2,1fr)}}
+.stat{background:var(--card);border:1px solid var(--border);border-radius:8px;padding:14px 16px;transition:border-color .2s;cursor:default}
+.stat:hover{border-color:rgba(0,200,150,.3)}
+.stat-lbl{font-size:10px;text-transform:uppercase;letter-spacing:1px;color:var(--muted);margin-bottom:6px}
+.stat-val{font-size:26px;font-weight:700;color:var(--text);font-variant-numeric:tabular-nums;transition:color .3s}
+.stat-val.flash{color:var(--green)}
 
-    .grid {
-      display: grid;
-      grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
-      gap: 1px;
-      border: 1px solid var(--border);
-      margin: 24px;
-    }
+/* ── split ── */
+.split{display:grid;grid-template-columns:1fr 1fr;gap:14px}
+@media(max-width:700px){.split{grid-template-columns:1fr}}
 
-    .card {
-      background: var(--surface);
-      padding: 20px 24px;
-      border: 1px solid var(--border);
-    }
+/* ── box ── */
+.box{background:var(--card);border:1px solid var(--border);border-radius:8px;overflow:hidden;display:flex;flex-direction:column}
+.box-head{
+  display:flex;align-items:center;justify-content:space-between;
+  padding:10px 14px;border-bottom:1px solid var(--border);flex-shrink:0;
+  font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:1px;color:var(--green);
+}
+.box-head small{color:var(--muted);font-weight:400;text-transform:none;letter-spacing:0;font-size:10px}
 
-    .card-label {
-      color: var(--muted);
-      font-size: 11px;
-      text-transform: uppercase;
-      letter-spacing: 1px;
-      margin-bottom: 8px;
-    }
+/* ── feed ── */
+#feed{height:308px;overflow-y:auto;flex:1}
+.feed-item{
+  display:flex;align-items:flex-start;gap:10px;
+  padding:7px 14px;border-bottom:1px solid var(--border);
+  animation:fi .2s ease;
+}
+.feed-item:last-child{border-bottom:none}
+@keyframes fi{from{opacity:0;transform:translateY(-3px)}to{opacity:1;transform:none}}
+.fi-icon{font-size:13px;flex-shrink:0;margin-top:1px;width:18px;text-align:center}
+.fi-body{flex:1;min-width:0}
+.fi-ev{font-size:9px;text-transform:uppercase;letter-spacing:.8px;color:var(--green);margin-bottom:1px}
+.fi-txt{font-size:11px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;color:var(--text)}
+.fi-time{font-size:10px;color:var(--muted);flex-shrink:0;font-variant-numeric:tabular-nums}
+.feed-empty{padding:50px 14px;text-align:center;color:var(--muted);font-size:11px}
 
-    .card-value {
-      font-size: 28px;
-      font-weight: bold;
-      color: var(--accent);
-    }
-
-    .card-sub {
-      color: var(--muted);
-      font-size: 11px;
-      margin-top: 4px;
-    }
-
-    section {
-      margin: 0 24px 24px;
-    }
-
-    section h2 {
-      font-size: 11px;
-      text-transform: uppercase;
-      letter-spacing: 2px;
-      color: var(--muted);
-      border-bottom: 1px solid var(--border);
-      padding-bottom: 8px;
-      margin-bottom: 12px;
-    }
-
-    table {
-      width: 100%;
-      border-collapse: collapse;
-    }
-
-    th {
-      text-align: left;
-      color: var(--muted);
-      font-size: 11px;
-      text-transform: uppercase;
-      letter-spacing: 1px;
-      padding: 8px 12px;
-      border-bottom: 1px solid var(--border);
-      font-weight: normal;
-    }
-
-    td {
-      padding: 8px 12px;
-      border-bottom: 1px solid var(--border);
-      color: var(--text);
-    }
-
-    tr:hover td { background: var(--surface); }
-
-    .badge {
-      display: inline-block;
-      padding: 2px 8px;
-      border-radius: 2px;
-      font-size: 10px;
-      text-transform: uppercase;
-      letter-spacing: 1px;
-    }
-
-    .badge-online  { background: #0e2e20; color: var(--accent); }
-    .badge-offline { background: #2e0e0e; color: var(--danger); }
-    .badge-banned  { background: #2e1a0e; color: var(--warn);   }
-    .badge-premium { background: #1a1a2e; color: #8080ff;       }
-
-    .bar-wrap {
-      background: var(--border);
-      height: 4px;
-      border-radius: 2px;
-      overflow: hidden;
-      margin-top: 4px;
-    }
-    .bar-fill {
-      height: 100%;
-      background: var(--accent);
-      border-radius: 2px;
-      transition: width 0.5s;
-    }
-
-    #refresh-btn {
-      background: none;
-      border: 1px solid var(--border);
-      color: var(--muted);
-      padding: 6px 14px;
-      cursor: pointer;
-      font-family: inherit;
-      font-size: 11px;
-      letter-spacing: 1px;
-      text-transform: uppercase;
-    }
-    #refresh-btn:hover { border-color: var(--accent); color: var(--accent); }
-
-    #last-update { color: var(--muted); font-size: 11px; }
-
-    .loading { color: var(--muted); padding: 16px 0; }
-  </style>
+/* ── tables ── */
+.tbl-wrap{overflow-y:auto;max-height:308px;flex:1}
+table{width:100%;border-collapse:collapse}
+th{
+  position:sticky;top:0;z-index:1;
+  padding:7px 14px;font-size:9px;text-transform:uppercase;letter-spacing:1px;
+  color:var(--muted);text-align:left;background:var(--card);border-bottom:1px solid var(--border);
+}
+td{padding:7px 14px;font-size:11px;border-bottom:1px solid var(--border);color:var(--text)}
+tr:last-child td{border-bottom:none}
+tr:hover td{background:var(--muted2)}
+.bar-wrap{background:var(--border);border-radius:2px;height:3px;min-width:50px}
+.bar{background:var(--green);height:3px;border-radius:2px;transition:width .5s ease}
+.chip{display:inline-block;padding:2px 7px;border-radius:4px;font-size:9px;font-weight:700}
+.chip-g{background:var(--green-d);color:var(--green)}
+.chip-r{background:rgba(255,75,75,.12);color:var(--red)}
+.chip-y{background:rgba(245,197,66,.10);color:var(--yellow)}
+.chip-m{background:#1c1c1c;color:var(--muted)}
+.num{color:var(--muted);font-size:10px}
+.mono{font-variant-numeric:tabular-nums}
+</style>
 </head>
 <body>
 
 <header>
-  <h1>
-    <span id="status-dot"></span>
-    WinsiBot ◆ Panel
-  </h1>
-  <div style="display:flex;align-items:center;gap:16px">
-    <span id="last-update">—</span>
-    <button id="refresh-btn" onclick="loadAll()">↻ Actualizar</button>
+  <span class="logo">⬡ WinsiBot</span>
+  <span class="ver" id="verEl">v8.1.1</span>
+  <div class="spacer"></div>
+  <span id="clockEl">—</span>
+  &nbsp;
+  <div class="sse-pill" id="ssePill">
+    <div class="sse-d"></div>
+    <span id="sseLabel">Conectando…</span>
+  </div>
+  &nbsp;
+  <div class="badge-status offline" id="statusBadge">
+    <div class="dot offline" id="statusDot"></div>
+    <span id="statusTxt">Offline</span>
   </div>
 </header>
 
-<!-- Stats -->
-<div class="grid" id="stats-grid">
-  <div class="card"><div class="card-label">Mensajes totales</div><div class="card-value" id="s-messages">—</div></div>
-  <div class="card"><div class="card-label">Usuarios</div><div class="card-value" id="s-users">—</div></div>
-  <div class="card"><div class="card-label">Comandos totales</div><div class="card-value" id="s-commands">—</div></div>
-  <div class="card"><div class="card-label">Hoy — mensajes</div><div class="card-value" id="s-today-msg">—</div></div>
-  <div class="card"><div class="card-label">Hoy — comandos</div><div class="card-value" id="s-today-cmd">—</div></div>
-  <div class="card"><div class="card-label">Baneados</div><div class="card-value" id="s-banned" style="color:var(--danger)">—</div></div>
-</div>
+<main>
 
-<!-- Top comandos -->
-<section>
-  <h2>◈ Top comandos</h2>
-  <div id="top-commands" class="loading">Cargando...</div>
-</section>
+  <div class="stats">
+    <div class="stat"><div class="stat-lbl">Mensajes</div><div class="stat-val" id="s-msgs">—</div></div>
+    <div class="stat"><div class="stat-lbl">Usuarios</div><div class="stat-val" id="s-users">—</div></div>
+    <div class="stat"><div class="stat-lbl">Comandos</div><div class="stat-val" id="s-cmds">—</div></div>
+    <div class="stat"><div class="stat-lbl">Hoy mensajes</div><div class="stat-val" id="s-tmsg">—</div></div>
+    <div class="stat"><div class="stat-lbl">Hoy comandos</div><div class="stat-val" id="s-tcmd">—</div></div>
+    <div class="stat"><div class="stat-lbl">Baneados</div><div class="stat-val" id="s-ban">—</div></div>
+  </div>
 
-<!-- Usuarios -->
-<section>
-  <h2>◈ Usuarios recientes</h2>
-  <div id="users-table" class="loading">Cargando...</div>
-</section>
+  <div class="split">
+
+    <div class="box">
+      <div class="box-head">
+        Actividad en vivo
+        <small id="feedCount">—</small>
+      </div>
+      <div id="feed">
+        <div class="feed-empty">Esperando eventos en tiempo real…</div>
+      </div>
+    </div>
+
+    <div class="box">
+      <div class="box-head">Top comandos</div>
+      <div class="tbl-wrap">
+        <table>
+          <thead><tr><th>#</th><th>Comando</th><th>Usos</th><th style="min-width:70px">Freq.</th></tr></thead>
+          <tbody id="cmdBody">
+            <tr><td colspan="4" style="color:var(--muted);text-align:center;padding:28px">Cargando…</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+  </div>
+
+  <div class="box">
+    <div class="box-head">Usuarios recientes <small id="userCount"></small></div>
+    <div class="tbl-wrap" style="max-height:250px">
+      <table>
+        <thead><tr><th>Número</th><th>Nombre</th><th>Nivel</th><th>EXP</th><th>Warns</th><th>Estado</th></tr></thead>
+        <tbody id="userBody">
+          <tr><td colspan="6" style="color:var(--muted);text-align:center;padding:28px">Cargando…</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+</main>
 
 <script>
-const API = 'http://localhost:8080'
+'use strict'
 
-async function get(path) {
+// ─── Clock ───────────────────────────────────────────────────────────────────
+const clockEl = document.getElementById('clockEl')
+const tick = () => clockEl.textContent = new Date().toLocaleTimeString('es', { hour12: false })
+tick(); setInterval(tick, 1000)
+
+// ─── Utils ───────────────────────────────────────────────────────────────────
+const $ = id => document.getElementById(id)
+const esc = s => String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;')
+const loc = v => Number.isFinite(Number(v)) ? Number(v).toLocaleString('es') : String(v ?? '—')
+
+function fmtTs(ts) {
+  if (!ts) return '—'
+  const d = typeof ts === 'number' ? new Date(ts * 1000) : new Date(ts)
+  if (isNaN(+d)) return '—'
+  return d.toLocaleTimeString('es', { hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false })
+}
+
+function setVal(id, raw) {
+  const el = $(id)
+  if (!el || raw == null) return
+  const next = loc(raw)
+  if (el.textContent === next) return
+  el.textContent = next
+  el.classList.add('flash')
+  setTimeout(() => el.classList.remove('flash'), 700)
+}
+
+// ─── Status ──────────────────────────────────────────────────────────────────
+function setStatus(online, number) {
+  $('statusDot').className   = 'dot ' + (online ? 'online' : 'offline')
+  $('statusBadge').className = 'badge-status' + (online ? '' : ' offline')
+  $('statusTxt').textContent = online ? (number ? `Online — ${number}` : 'Online') : 'Offline'
+}
+
+// ─── Feed ────────────────────────────────────────────────────────────────────
+const feed = $('feed')
+let feedN = 0, feedReady = false
+const MAX_FEED = 80
+const ICON = { message:'💬', command:'⚡', connected:'🟢', disconnected:'🔴' }
+
+function addFeed(type, label, text, ts) {
+  if (!feedReady) { feed.innerHTML = ''; feedReady = true }
+  feedN++
+  $('feedCount').textContent = `${loc(feedN)} evento${feedN === 1 ? '' : 's'}`
+
+  const el = document.createElement('div')
+  el.className = 'feed-item'
+  el.innerHTML = `
+    <span class="fi-icon">${ICON[type] ?? '◈'}</span>
+    <div class="fi-body">
+      <div class="fi-ev">${esc(label)}</div>
+      <div class="fi-txt" title="${esc(text)}">${esc(text)}</div>
+    </div>
+    <span class="fi-time">${fmtTs(ts)}</span>`
+
+  feed.insertBefore(el, feed.firstChild)
+  while (feed.children.length > MAX_FEED) feed.removeChild(feed.lastChild)
+}
+
+// ─── Tables ──────────────────────────────────────────────────────────────────
+function renderCmds(list) {
+  if (!Array.isArray(list) || !list.length) return
+  const max = Math.max(1, list[0]?.count ?? 1)
+  $('cmdBody').innerHTML = list.slice(0, 25).map((c, i) => {
+    const name  = esc(c.command ?? c.name ?? '?')
+    const count = c.count ?? c.uses ?? 0
+    const pct   = Math.round((count / max) * 100)
+    return `<tr>
+      <td class="num">${i + 1}</td>
+      <td><strong>${name}</strong></td>
+      <td class="mono">${loc(count)}</td>
+      <td><div class="bar-wrap"><div class="bar" style="width:${pct}%"></div></div></td>
+    </tr>`
+  }).join('')
+}
+
+function renderUsers(list) {
+  if (!Array.isArray(list) || !list.length) return
+  $('userCount').textContent = `${list.length} usuarios`
+  $('userBody').innerHTML = list.map(u => {
+    const jid  = esc((u.jid ?? '').split('@')[0].slice(0, 16))
+    const name = esc(u.name ?? u.pushName ?? '—')
+    const st   = u.status ?? (u.banned ? 'banned' : u.premium ? 'premium' : 'normal')
+    const chip = st === 'banned'  ? '<span class="chip chip-r">Baneado</span>'
+               : st === 'premium' ? '<span class="chip chip-y">Premium</span>'
+               : st === 'admin'   ? '<span class="chip chip-g">Admin</span>'
+               : '<span class="chip chip-m">Normal</span>'
+    return `<tr>
+      <td class="num">${jid}</td>
+      <td>${name}</td>
+      <td class="mono">${u.level ?? '—'}</td>
+      <td class="mono">${loc(u.exp ?? u.xp ?? 0)}</td>
+      <td class="mono">${u.warns ?? 0}</td>
+      <td>${chip}</td>
+    </tr>`
+  }).join('')
+}
+
+// ─── SSE ─────────────────────────────────────────────────────────────────────
+let src = null, retryMs = 2000
+
+function connect() {
+  if (src) { src.close(); src = null }
+  src = new EventSource('/events')
+
+  src.onopen = () => {
+    $('ssePill').className   = 'sse-pill live'
+    $('sseLabel').textContent = 'En vivo'
+    retryMs = 2000
+  }
+
+  src.onerror = () => {
+    $('ssePill').className   = 'sse-pill'
+    $('sseLabel').textContent = 'Reconectando…'
+    src.close(); src = null
+    setTimeout(connect, retryMs)
+    retryMs = Math.min(retryMs * 1.5, 15000)
+  }
+
+  src.addEventListener('status', e => {
+    const d = JSON.parse(e.data)
+    setStatus(d.online, d.number)
+    if (d.version) $('verEl').textContent = 'v' + d.version
+  })
+
+  src.addEventListener('stats', e => {
+    const d = JSON.parse(e.data)
+    setVal('s-msgs',  d.total_messages ?? d.messages)
+    setVal('s-users', d.total_users    ?? d.users)
+    setVal('s-cmds',  d.total_commands ?? d.commands)
+    setVal('s-tmsg',  d.messages_today ?? d.today_messages)
+    setVal('s-tcmd',  d.commands_today ?? d.today_commands)
+    setVal('s-ban',   d.banned_users   ?? d.banned)
+  })
+
+  src.addEventListener('commands', e => renderCmds(JSON.parse(e.data)))
+  src.addEventListener('users',    e => renderUsers(JSON.parse(e.data)))
+
+  src.addEventListener('message', e => {
+    const d   = JSON.parse(e.data)
+    const who = d.pushName || (d.sender ?? '').split('@')[0] || '?'
+    addFeed('message', 'Mensaje', `${who}: ${d.text ?? d.body ?? ''}`, d.ts)
+  })
+
+  src.addEventListener('command', e => {
+    const d   = JSON.parse(e.data)
+    const who = (d.sender ?? '').split('@')[0] || '?'
+    addFeed('command', 'Comando', `${d.command ?? '?'} — @${who}`, d.ts)
+  })
+
+  src.addEventListener('connected', e => {
+    const d = JSON.parse(e.data)
+    addFeed('connected', 'Conectado', `Bot online${d.number ? ' — ' + d.number : ''}`, d.ts)
+    setStatus(true, d.number ?? '')
+  })
+
+  src.addEventListener('disconnected', e => {
+    const d = JSON.parse(e.data)
+    addFeed('disconnected', 'Desconectado', d.reason ? `Razón: ${d.reason}` : 'Bot offline', d.ts)
+    setStatus(false, '')
+  })
+}
+
+// ─── Fallback REST (si SSE cae, cada 30s) ────────────────────────────────────
+async function pollFallback() {
   try {
-    const r = await fetch(API + path)
-    const d = await r.json()
-    return d.success ? d.data : null
-  } catch { return null }
+    const r = await fetch('/panel/stats', { signal: AbortSignal.timeout(4000) })
+    if (!r.ok) return
+    const { data: d } = await r.json()
+    if (!d) return
+    setVal('s-msgs',  d.total_messages)
+    setVal('s-users', d.total_users)
+    setVal('s-cmds',  d.total_commands)
+    setVal('s-tmsg',  d.messages_today)
+    setVal('s-tcmd',  d.commands_today)
+    setVal('s-ban',   d.banned_users)
+  } catch {}
 }
+setInterval(pollFallback, 30_000)
 
-async function loadStatus() {
-  const d = await get('/panel')
-  if (!d) return
-  const dot = document.getElementById('status-dot')
-  dot.className = d.bot?.status === 'online' ? 'online' : 'offline'
-}
+// ─── Init ─────────────────────────────────────────────────────────────────────
+connect()
 
-async function loadStats() {
-  const d = await get('/panel/stats')
-  if (!d) return
-  document.getElementById('s-messages').textContent  = d.total_messages  ?? '—'
-  document.getElementById('s-users').textContent     = d.total_users      ?? '—'
-  document.getElementById('s-commands').textContent  = d.total_commands   ?? '—'
-  document.getElementById('s-today-msg').textContent = d.messages_today   ?? '—'
-  document.getElementById('s-today-cmd').textContent = d.commands_today   ?? '—'
-  document.getElementById('s-banned').textContent    = d.banned_users     ?? '—'
-}
-
-async function loadTopCommands() {
-  const d = await get('/panel/commands')
-  const el = document.getElementById('top-commands')
-  if (!d?.topCommands?.length) { el.textContent = 'Sin datos'; return }
-
-  const max = d.topCommands[0]?.count ?? 1
-  el.innerHTML = `<table>
-    <tr><th>Comando</th><th>Usos</th><th style="width:200px">Frecuencia</th></tr>
-    ${d.topCommands.map(c => `
-      <tr>
-        <td>${c.command}</td>
-        <td>${c.count}</td>
-        <td>
-          <div class="bar-wrap">
-            <div class="bar-fill" style="width:${Math.round(c.count/max*100)}%"></div>
-          </div>
-        </td>
-      </tr>`).join('')}
-  </table>`
-}
-
-async function loadUsers() {
-  const d = await get('/panel/users')
-  const el = document.getElementById('users-table')
-  if (!d?.users?.length) { el.textContent = 'Sin usuarios'; return }
-
-  el.innerHTML = `<table>
-    <tr>
-      <th>JID</th><th>Nombre</th><th>Nivel</th>
-      <th>EXP</th><th>Warns</th><th>Estado</th>
-    </tr>
-    ${d.users.slice(0, 50).map(u => `
-      <tr>
-        <td style="color:var(--muted)">${u.jid?.replace('@s.whatsapp.net','').replace('@lid','') ?? '—'}</td>
-        <td>${u.pushName || '—'}</td>
-        <td>${u.level ?? 0}</td>
-        <td>${u.exp ?? 0}</td>
-        <td>${u.warns ?? 0}</td>
-        <td>
-          ${u.banned  ? '<span class="badge badge-banned">Baneado</span>'   : ''}
-          ${u.premium ? '<span class="badge badge-premium">Premium</span>'  : ''}
-          ${!u.banned && !u.premium ? '<span class="badge badge-online">Activo</span>' : ''}
-        </td>
-      </tr>`).join('')}
-  </table>`
-}
-
-async function loadAll() {
-  await Promise.all([loadStatus(), loadStats(), loadTopCommands(), loadUsers()])
-  document.getElementById('last-update').textContent =
-    'Actualizado: ' + new Date().toLocaleTimeString('es-PE')
-}
-
-loadAll()
-setInterval(loadAll, 30_000)
+// Carga inicial via REST para que las tablas no queden vacías
+;(async () => {
+  try {
+    const [c, u] = await Promise.all([
+      fetch('/panel/commands').then(r => r.json()).catch(() => null),
+      fetch('/panel/users').then(r => r.json()).catch(() => null),
+    ])
+    if (c?.data) renderCmds(c.data)
+    if (u?.data) renderUsers(u.data)
+  } catch {}
+})()
 </script>
 </body>
 </html>

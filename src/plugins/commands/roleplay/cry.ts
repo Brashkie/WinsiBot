@@ -2,13 +2,13 @@ import type { Command } from '../../../types/index.js'
 import axios from 'axios'
 import { resolveTarget, fmt } from './_resolve.js'
 
-const BASE = 'https://raw.githubusercontent.com/Brashkie/module/main/download/anime/vid/role/kiss'
+const BASE  = 'https://raw.githubusercontent.com/Brashkie/module/main/download/anime/vid/role/cry'
 const TOTAL = 60
 
 const command: Command = {
-  name: 'kiss',
-  aliases: ['beso', 'kiss1'],
-  description: 'Besa a alguien',
+  name: 'cry',
+  aliases: ['llorar', 'llora', 'cry1'],
+  description: 'Llora (o hace llorar a alguien)',
   category: 'roleplay',
   cooldown: 5,
 
@@ -18,8 +18,8 @@ const command: Command = {
     const isSelf = target.jid === sender
 
     const caption = isSelf
-      ? `${me} se besó a sí mismo`
-      : `${me} besó a ${target.display}`
+      ? `${me} está llorando 😢`
+      : `${me} hizo llorar a ${target.display} 😢`
 
     const n   = String(Math.floor(Math.random() * TOTAL) + 1).padStart(6, '0')
     const url = `${BASE}/${n}.mp4`

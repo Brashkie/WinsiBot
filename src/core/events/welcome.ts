@@ -1,5 +1,6 @@
 import type { WASocket } from '@whiskeysockets/baileys'
 import { getGroupConfig } from './index.js'
+import { handleCaptchaJoin } from './captcha.js'
 
 export async function handleParticipantsUpdate(
   sock:   WASocket,
@@ -13,6 +14,10 @@ export async function handleParticipantsUpdate(
 
     switch (action) {
       case 'add': {
+        if (config.captcha) {
+          await handleCaptchaJoin(sock, id, participant)
+          break
+        }
         if (!config.welcome) break
         const text = config.sWelcome
           ? config.sWelcome.replace('@user', `@${num}`)

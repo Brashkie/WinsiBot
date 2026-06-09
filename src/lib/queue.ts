@@ -2,84 +2,118 @@ import { EventEmitter } from 'events'
 
 // ─────────────────────────────────────────────────────────────────────────────
 //  WinsiBot — GENERIC QUEUE
-//  Cola genérica con EventEmitter: enqueue, wait, processAll, stats.
+//  Cola genérica con concurrencia configurable, timeout por tarea y pause/resume.
 // ─────────────────────────────────────────────────────────────────────────────
 
 interface QueueTask<T> {
-  id:      string
-  fn:      () => Promise<T>
-  resolve: (v: T)       => void
-  reject:  (e: unknown) => void
+  id:        string
+  fn:        () => Promise<T>
+  resolve:   (v: T)       => void
+  reject:    (e: unknown) => void
+  timeoutMs?: number
 }
 
 export class Queue<T = unknown> extends EventEmitter {
-  private _tasks:     QueueTask<T>[] = []
-  private _running    = false
+  private _pending:   QueueTask<T>[] = []
+  private _active     = 0
+  private _paused     = false
   private _processed  = 0
   private _failed     = 0
 
-  /** Encola una tarea y devuelve una Promise con su resultado. */
-  enqueue(fn: () => Promise<T>): Promise<T> {
+  constructor(private readonly concurrency = 1) {
+    super()
+  }
+
+  /**
+   * Encola una tarea y devuelve una Promise con su resultado.
+   * @param fn         Función asíncrona a ejecutar.
+   * @param timeoutMs  Abortar la tarea si supera este tiempo (opcional).
+   */
+  enqueue(fn: () => Promise<T>, timeoutMs?: number): Promise<T> {
     return new Promise<T>((resolve, reject) => {
       const id = Math.random().toString(36).slice(2, 10)
-      this._tasks.push({ id, fn, resolve, reject })
-      this.emit('enqueue', { id, size: this._tasks.length })
-      void this._run()
+      this._pending.push({ id, fn, resolve, reject, ...(timeoutMs != null && { timeoutMs }) })
+      this.emit('enqueue', { id, size: this._pending.length + this._active })
+      this._flush()
     })
   }
 
-  /** Posición en la cola (−1 si no está). */
+  /** Posición en la cola de espera (−1 = ya en ejecución o no existe). */
   position(id: string): number {
-    return this._tasks.findIndex(t => t.id === id)
+    return this._pending.findIndex(t => t.id === id)
   }
 
-  /** Promise que resuelve cuando la cola queda vacía. */
+  /** Promise que resuelve cuando pending + active quedan en cero. */
   processAll(): Promise<void> {
     return new Promise(resolve => {
-      if (!this._tasks.length && !this._running) return resolve()
+      if (!this._pending.length && !this._active) { resolve(); return }
       this.once('idle', resolve)
     })
   }
 
-  /** Descarta todas las tareas pendientes (las en curso siguen). */
+  /** Rechaza y descarta todas las tareas pendientes (las activas terminan). */
   clear(): void {
-    this._tasks.forEach(t => t.reject(new Error('Queue cleared')))
-    this._tasks = []
+    this._pending.forEach(t => t.reject(new Error('Queue cleared')))
+    this._pending = []
+  }
+
+  /** Detiene el despacho de nuevas tareas (las activas siguen hasta terminar). */
+  pause(): void { this._paused = true }
+
+  /** Reanuda el despacho de tareas. */
+  resume(): void {
+    this._paused = false
+    this._flush()
   }
 
   stats() {
     return {
-      pending:   this._tasks.length,
-      running:   this._running,
-      processed: this._processed,
-      failed:    this._failed,
+      pending:     this._pending.length,
+      active:      this._active,
+      processed:   this._processed,
+      failed:      this._failed,
+      concurrency: this.concurrency,
+      paused:      this._paused,
     }
   }
 
-  get size(): number { return this._tasks.length }
+  /** Total de tareas en la cola (pending + active). */
+  get size(): number { return this._pending.length + this._active }
 
-  private async _run(): Promise<void> {
-    if (this._running) return
-    this._running = true
-
-    while (this._tasks.length > 0) {
-      const task = this._tasks.shift()!
-      try {
-        const result = await task.fn()
-        task.resolve(result)
-        this._processed++
-        this.emit('done', { id: task.id, processed: this._processed })
-      } catch (e) {
-        task.reject(e)
-        this._failed++
-        this.emit('task-error', { id: task.id, error: e })
-      }
+  private _flush(): void {
+    while (!this._paused && this._pending.length > 0 && this._active < this.concurrency) {
+      const task = this._pending.shift()!
+      this._active++
+      void this._exec(task)
     }
+  }
 
-    this._running = false
-    this.emit('idle')
+  private async _exec(task: QueueTask<T>): Promise<void> {
+    try {
+      const fn: () => Promise<T> = task.timeoutMs != null
+        ? () => Promise.race([
+            task.fn(),
+            new Promise<never>((_, rej) =>
+              setTimeout(() => rej(new Error(`Task ${task.id} timed out after ${task.timeoutMs}ms`)), task.timeoutMs!),
+            ),
+          ])
+        : task.fn
+
+      const result = await fn()
+      task.resolve(result)
+      this._processed++
+      this.emit('done', { id: task.id, processed: this._processed })
+    } catch (e) {
+      task.reject(e)
+      this._failed++
+      this.emit('task-error', { id: task.id, error: e })
+    } finally {
+      this._active--
+      this._flush()
+      if (!this._active && !this._pending.length) this.emit('idle')
+    }
   }
 }
 
-/** Cola singleton de propósito general. */
+/** Cola singleton de propósito general (concurrencia = 1). */
 export const queue = new Queue()

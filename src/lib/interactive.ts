@@ -7,11 +7,13 @@ import type { WASocket, WAMessage } from '@whiskeysockets/baileys'
 import axios              from 'axios'
 import { fileTypeFromBuffer } from 'file-type'
 import { extractMentions } from './utils.js'
+import { analyzeContent }  from './security.js'
 
 // ─────────────────────────────────────────────────────────────────────────────
 //  WinsiBot — INTERACTIVE MESSAGES
 //  Botones nativos, listas, external ad reply (sylph) y álbumes de medios.
 //  Puerto TypeScript de simple.js — Avenix-Multi / Hepein.
+//  NLP pre-check via Rust · retry automático en relayMessage.
 // ─────────────────────────────────────────────────────────────────────────────
 
 // ─── Newsletter IDs para reply con forwarding ─────────────────────────────────
@@ -59,6 +61,22 @@ export interface AlbumMedia {
 function _genOpts(sock: WASocket, quoted?: WAMessage): any {
   const base = { userJid: sock.user?.id ?? '' }
   return quoted ? { ...base, quoted } : base
+}
+
+/** relayMessage con retry automático (2 reintentos, backoff 500ms). */
+async function _relay(
+  sock:      WASocket,
+  jid:       string,
+  message:   any,
+  messageId: string,
+  retries    = 2,
+): Promise<void> {
+  for (let i = 0; i <= retries; i++) {
+    try { await sock.relayMessage(jid, message, { messageId }); return } catch (e: any) {
+      if (i === retries) throw e
+      await new Promise<void>(r => setTimeout(r, 500 * (i + 1)))
+    }
+  }
 }
 
 /** Prepara una imagen o video para usarla en el header de botones/listas. */
@@ -201,7 +219,7 @@ export async function sendButton(
     _genOpts(sock, opts.quoted),
   )
 
-  return sock.relayMessage(jid, msg.message!, { messageId: msg.key.id! })
+  return _relay(sock, jid, msg.message!, msg.key.id!)
 }
 
 // ─── 3. sendList — lista interactiva (sin media en header) ───────────────────
@@ -240,7 +258,7 @@ export async function sendList(
     _genOpts(sock, quoted),
   )
 
-  return sock.relayMessage(jid, msg.message!, { messageId: msg.key.id! })
+  return _relay(sock, jid, msg.message!, msg.key.id!)
 }
 
 // ─── 4. sendListB — lista interactiva con imagen/video en header ──────────────
@@ -328,7 +346,7 @@ export async function sendSylph(
     _genOpts(sock, quoted),
   )
 
-  return sock.relayMessage(jid, msg.message!, { messageId: msg.key.id! })
+  return _relay(sock, jid, msg.message!, msg.key.id!)
 }
 
 // ─── 6. sendAlbum — álbum de medios (albumMessage) ───────────────────────────
@@ -371,7 +389,7 @@ export async function sendAlbum(
 
   const album = generateWAMessageFromContent(jid, albumContent, { userJid })
 
-  await sock.relayMessage(album.key.remoteJid!, album.message!, { messageId: album.key.id! })
+  await _relay(sock, album.key.remoteJid!, album.message!, album.key.id!)
 
   for (const media of medias) {
     const wamsg = await generateWAMessage(
@@ -387,7 +405,7 @@ export async function sendAlbum(
       },
     }
 
-    await sock.relayMessage(wamsg.key.remoteJid!, wamsg.message!, { messageId: wamsg.key.id! })
+    await _relay(sock, wamsg.key.remoteJid!, wamsg.message!, wamsg.key.id!)
     await new Promise<void>(r => setTimeout(r, delay))
   }
 

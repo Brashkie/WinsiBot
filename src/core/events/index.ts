@@ -95,6 +95,18 @@ export interface UserData {
   items:        ItemInventory
   // ── Cooldowns ──────────────────────────────────────────────────────────────
   cooldowns:    Cooldowns
+  // ── Avatar ─────────────────────────────────────────────────────────────────
+  avatar?:       import('@lib/avatar.js').AvatarInventory
+  // ── Gift System ─────────────────────────────────────────────────────────────
+  giftInbox?:    import('@lib/gift.js').GiftInventory
+  // ── PvP Arena ───────────────────────────────────────────────────────────────
+  pvp?:          import('@lib/pvp.js').PvpProfile
+  // ── Coding Quiz ─────────────────────────────────────────────────────────────
+  quizProfile?:  import('@lib/quiz.js').QuizProfile
+  // ── Leveling avanzado ───────────────────────────────────────────────────────
+  levelingMeta?: import('@lib/leveling.js').LevelingMeta
+  // ── Mascota avanzada ────────────────────────────────────────────────────────
+  petFull?:      import('@lib/petAdvanced.js').PetFullData
 }
 
 // ─── Configuración de grupo ───────────────────────────────────────────────────
@@ -138,6 +150,8 @@ export interface GroupConfig {
   // ── Solicitudes ────────────────────────────────────────────────────────────
   autoAccept:    boolean   // aceptar solicitudes de unirse automáticamente
   autoReject:    boolean   // rechazar solicitudes automáticamente
+  // ── Captcha de bienvenida ──────────────────────────────────────────────────
+  captcha:       boolean   // verificación captcha al unirse
   // ── Expiración ─────────────────────────────────────────────────────────────
   expired:       number    // timestamp (0 = sin expiración)
 }
@@ -298,6 +312,7 @@ export function defaultGroupConfig(): GroupConfig {
     audios:        true,
     autoAccept:    false,
     autoReject:    false,
+    captcha:       false,
     expired:       0,
   }
 }

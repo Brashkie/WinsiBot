@@ -16,6 +16,8 @@ import {
   getUserData,
   setUserData,
 } from '@core/events.js'
+import { hasPendingCaptcha, verifyCaptchaAnswer } from '@core/events/captcha.js'
+import { handleDrawGuessMessage, handleQuizMessage } from '@core/events/gameHandlers.js'
 
 // ─── Bots conocidos a ignorar ─────────────────────────────────────────────────
 const KNOWN_BOTS = new Set([
@@ -323,6 +325,12 @@ export async function handleMessage(msg: WAMessage, sock: WASocket): Promise<voi
     const passed = await applyMiddlewares(ctx)
     if (!passed) return
 
+    // ─── Captcha de bienvenida ────────────────────────────────────────────────
+    if (ctx.isGroup && ctx.text && hasPendingCaptcha(ctx.jid, ctx.sender)) {
+      await verifyCaptchaAnswer(sock, ctx.jid, ctx.sender, ctx.text)
+      return
+    }
+
     const user = getUserData(ctx.sender, ctx.pushName)
 
     // ─── Usuario baneado ──────────────────────────────────────────────────────
@@ -414,6 +422,18 @@ export async function handleMessage(msg: WAMessage, sock: WASocket): Promise<voi
     // ─── Sin prefijo — verificar si es trigger de IA ──────────────────────────
     if (!config.prefix.some(p => ctx.text.startsWith(p))) {
       if (ctx.text) {
+        // ── Draw & Guess: intercept guesses in active group games ─────────────
+        if (ctx.isGroup) {
+          const dgConsumed = await handleDrawGuessMessage(sock, ctx.jid, ctx.sender, ctx.text)
+          if (dgConsumed) return
+        }
+
+        // ── Quiz: intercept numeric answers for active sessions ───────────────
+        if (/^[1-4]$/.test(ctx.text.trim())) {
+          const qConsumed = await handleQuizMessage(sock, ctx.jid, ctx.sender, ctx.text.trim(), ctx.pushName)
+          if (qConsumed) return
+        }
+
         const botName = sock.user?.name ?? 'hepein'
         const lower   = ctx.text.toLowerCase().trim()
         const words   = lower.split(/\s+/)
