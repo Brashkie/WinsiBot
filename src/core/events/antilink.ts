@@ -8,7 +8,7 @@ import { getGroupConfig } from './index.js'
 
 // ─── Regexes por plataforma ───────────────────────────────────────────────────
 
-const RE: Record<string, RegExp> = {
+const RE = {
   // Links de grupos de WhatsApp (antilink)
   wa:        /chat\.whatsapp\.com\/[0-9A-Za-z]{10,}|5chat-whatzapp\.vercel\.app/i,
   // Links de canales/newsletters de WhatsApp (antilink)

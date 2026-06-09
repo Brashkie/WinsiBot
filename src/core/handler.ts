@@ -380,7 +380,7 @@ export async function handleMessage(msg: WAMessage, sock: WASocket): Promise<voi
     if (ctx.isGroup && !ctx.isOwner && !ctx.isAdmin) {
       const isSpam = checkSpam(ctx.sender, ctx.jid)
       if (isSpam) {
-        await handleSpam(sock, ctx.jid, ctx.sender)
+        await handleSpam(sock, ctx.jid, ctx.sender, msg.key, ctx.text, ctx.isAdmin, ctx.isBotAdmin)
         return
       }
     }
