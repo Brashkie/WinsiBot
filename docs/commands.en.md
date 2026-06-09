@@ -1,10 +1,10 @@
 <div align="center">
 
-# 📖 Command Reference — WinsiBot v8.1.0
+# 📖 Command Reference — WinsiBot v8.2.0
 
-[![Commands](https://img.shields.io/badge/Commands-90%2B-6C63FF?style=for-the-badge)](.)
-[![Categories](https://img.shields.io/badge/Categories-16-00C9FF?style=for-the-badge)](.)
-[![Version](https://img.shields.io/badge/Version-8.1.0-brightgreen?style=flat-square)](../README.en.md)
+[![Commands](https://img.shields.io/badge/Commands-110%2B-6C63FF?style=for-the-badge)](.)
+[![Categories](https://img.shields.io/badge/Categories-19-00C9FF?style=for-the-badge)](.)
+[![Version](https://img.shields.io/badge/Version-8.2.0-brightgreen?style=flat-square)](../README.en.md)
 
 [🇪🇸 Versión en español →](commands.md) &nbsp;·&nbsp; [← Back to README](../README.en.md)
 
@@ -40,20 +40,22 @@
 |---|----------|:--------:|
 | 1 | [🛠️ General](#%EF%B8%8F-general) | 7 |
 | 2 | [🤖 AI / ChatGPT](#-ai--chatgpt) | 4 |
-| 3 | [🎮 RPG / Economy](#-rpg--economy) | 13 |
+| 3 | [🎮 RPG / Economy](#-rpg--economy) | 16 |
 | 4 | [🎴 Gacha / Characters](#-gacha--characters) | 5 |
 | 5 | [💑 Couples](#-couples) | 5 |
 | 6 | [🎭 Roleplay](#-roleplay) | 4 |
 | 7 | [🎉 Fun](#-fun) | 9 |
-| 8 | [🖼️ Media & Stickers](#%EF%B8%8F-media--stickers) | 4 |
-| 9 | [🔽 Downloads](#-downloads) | 3 |
-| 10 | [🔍 Scrapers / Search](#-scrapers--search) | 4 |
-| 11 | [🎵 Music](#-music) | 1 |
-| 12 | [🔞 NSFW](#-nsfw) | 1 |
-| 13 | [🔑 Group Admin](#-group-admin) | 13 |
-| 14 | [🤖 JadiBot](#-jadibot) | 2 |
-| 15 | [ℹ️ Info](#%EF%B8%8F-info) | 1 |
-| 16 | [👑 Owner / System](#-owner--system) | 23 |
+| 8 | [🕹️ Games](#%EF%B8%8F-games) | 3 |
+| 9 | [🎁 Gifts](#-gifts) | 1 |
+| 10 | [🖼️ Media & Stickers](#%EF%B8%8F-media--stickers) | 5 |
+| 11 | [🔽 Downloads](#-downloads) | 6 |
+| 12 | [🔍 Scrapers / Search](#-scrapers--search) | 4 |
+| 13 | [🎵 Music](#-music) | 1 |
+| 14 | [🔞 NSFW](#-nsfw) | 1 |
+| 15 | [🔑 Group Admin](#-group-admin) | 13 |
+| 16 | [🤖 JadiBot](#-jadibot) | 2 |
+| 17 | [ℹ️ Info](#%EF%B8%8F-info) | 1 |
+| 18 | [👑 Owner / System](#-owner--system) | 23 |
 
 ---
 
@@ -117,6 +119,9 @@
 | `rob` | `robar` | variable | 👤 | Steal BrasCoins from another user (`@mention`) |
 | `transfer` | `transferir`, `dar`, `enviar` | 5s | 👤 | Transfer BrasCoins or XP to another user |
 | `depositar` | `dep`, `retirar`, `withdraw`, `banco` | 3s | 👤 | Deposit or withdraw coins from the bank |
+| `prestige` | `prestigio`, `ascender` | — | 👤 | Reset progress in exchange for exclusive prestige rewards |
+| `mascota` | `pet`, `mipet` | 5s | 👤 | Manage your pet: feed, train, evolve, send on adventure |
+| `regalo` | `gift`, `dar`, `regalar` | 10s | 👤 | Gift coins, XP or items to another user |
 
 ```
 !perfil
@@ -128,6 +133,40 @@
 !transfer @user 500
 !depositar 1000
 !retirar 500
+!prestige
+!mascota feed
+!regalo @user 500 coins
+```
+
+---
+
+---
+
+## 🕹️ Games
+
+| Command | Aliases | Cooldown | Permission | Description |
+|---------|---------|:--------:|:----------:|-------------|
+| `arena` | `pvp`, `batalla`, `fight` | 30s | 👤 | Challenge another user to a 1v1 PvP duel with a diamond wager |
+| `quiz` | `qz`, `pregunta`, `coding` | 15s | 👤 | Programming question by category (JS, Python, SQL…) |
+| `adivinar` | `drawguess`, `dibujar`, `guess` | 20s | 👤 | Group draw-and-guess mini-game |
+
+```
+!arena @user 10
+!quiz javascript
+!adivinar start
+```
+
+---
+
+## 🎁 Gifts
+
+| Command | Aliases | Cooldown | Permission | Description |
+|---------|---------|:--------:|:----------:|-------------|
+| `regalo` | `gift`, `dar`, `regalar` | 10s | 👤 | Gift BrasCoins, XP or items to another user |
+
+```
+!regalo @user 500 coins
+!regalo @user 200 xp
 ```
 
 ---
@@ -218,12 +257,14 @@
 | Command | Aliases | Cooldown | Permission | Description |
 |---------|---------|:--------:|:----------:|-------------|
 | `sticker` | `s`, `stiker` | — | 👤 | Convert image/video to sticker |
+| `stickerpack` | `packsticker`, `spack` | 30s | 👤 | Download a sticker pack from getstickerpack.com |
 | `removebg` | `rmbg`, `sinfondo`, `nobg`, `quitarfondo` | 30s | 👤 | Remove background from an image |
 | `anime` | `anime4k`, `toanime` | 30s | 👤 | Enhance image with anime filter (x2 or x4) |
 | `imagen` | `img`, `image`, `gimage`, `buscarimg` | 10s | 👤 | Search for images on the internet |
 
 ```
 !sticker        ← attach or reply to an image
+!stickerpack https://getstickerpack.com/stickers/flork-memes
 !removebg       ← reply to an image
 !anime x4       ← reply to an image
 !imagen dogs playing
@@ -237,13 +278,19 @@
 |---------|---------|:--------:|:----------:|-------------|
 | `ytmp3` | `yt`, `youtube`, `ytaudio` | 15s | 👤 | Download YouTube audio as MP3 |
 | `tiktok` | `tt`, `tik` | 10s | 👤 | Download TikTok video without watermark |
+| `ttsearch` | `vitiktok`, `tiktoksearch`, `ttsb` | 15s | 👤 | Search TikTok videos, shows carousel with download buttons |
 | `ig` | `instagram`, `insta` | — | 👤 | Download photo/video from Instagram |
+| `apk` | `apkdl`, `buscarapk` | 10s | 👤 | Search an app on Aptoide and show results in a carousel |
+| `downloadapk` | `apkdownload`, `getapk` | 30s | 💎×2 | Download the APK selected from the `!apk` carousel |
 
 ```
 !ytmp3 https://youtube.com/watch?v=...
 !ytmp3 Shape of You Ed Sheeran
 !tiktok https://vm.tiktok.com/...
+!ttsearch funny cats
 !ig https://www.instagram.com/p/...
+!apk minecraft
+!downloadapk        ← tap button from !apk carousel
 ```
 
 ---
@@ -407,6 +454,6 @@
 
 **[← Back to README](../README.en.md)** &nbsp;·&nbsp; **[🇪🇸 Versión en español →](commands.md)**
 
-*WinsiBot v8.1.0 — Developed by [Brashkie](https://github.com/Brashkie)*
+*WinsiBot v8.2.0 — Developed by [Brashkie](https://github.com/Brashkie)*
 
 </div>

@@ -2,12 +2,12 @@ import {
   generateWAMessageFromContent,
   generateWAMessage,
   prepareWAMessageMedia,
+  proto,
 } from '@whiskeysockets/baileys'
 import type { WASocket, WAMessage } from '@whiskeysockets/baileys'
 import axios              from 'axios'
 import { fileTypeFromBuffer } from 'file-type'
 import { extractMentions } from './utils.js'
-import { analyzeContent }  from './security.js'
 
 // ─────────────────────────────────────────────────────────────────────────────
 //  WinsiBot — INTERACTIVE MESSAGES
@@ -50,6 +50,17 @@ export interface AlbumMedia {
   type:     'image' | 'video'
   data:     Buffer | { url: string }
   caption?: string
+}
+
+/** Una card del carrusel interactivo. */
+export interface CarouselCard {
+  text:     string
+  footer?:  string
+  media?:   Buffer | string
+  buttons:  Array<[string, string]>
+  copy?:    string[]
+  urls?:    Array<[string, string]>
+  list?:    Array<[string, unknown[]]>
 }
 
 // ─── Helpers internos ─────────────────────────────────────────────────────────
@@ -410,4 +421,107 @@ export async function sendAlbum(
   }
 
   return album
+}
+
+// ─── 7. sendCarousel — carrusel de cards interactivas ────────────────────────
+
+/**
+ * Envía un carrusel horizontal de cards interactivas (≥ 2 cards).
+ * Con una sola card degrada automáticamente a sendButton.
+ *
+ * @param cards  Array de CarouselCard (mínimo 2 para carrusel real).
+ * @param text   Texto del cuerpo exterior del carrusel.
+ * @param footer Pie de página global (se usa en cada card si no trae el suyo).
+ */
+export async function sendCarousel(
+  sock:    WASocket,
+  jid:     string,
+  text:    string,
+  footer:  string,
+  cards:   CarouselCard[],
+  quoted?: WAMessage,
+): Promise<void> {
+  if (cards.length === 0) return
+
+  // Con una sola card usa sendButton directamente
+  if (cards.length === 1) {
+    const c = cards[0]!
+    const opts: { media?: Buffer | string; quoted?: WAMessage } = {}
+    if (c.media  !== undefined) opts.media  = c.media
+    if (quoted   !== undefined) opts.quoted = quoted
+    await sendButton(sock, jid, c.text, c.footer ?? footer,
+      c.buttons.map(([t, id]) => ({ text: t, id })), opts)
+    return
+  }
+
+  const builtCards = await Promise.all(cards.map(async (card) => {
+    const prepared = card.media ? await _prepareMedia(sock, card.media) : null
+    const img = prepared?.imageMessage
+    const vid = prepared?.videoMessage
+
+    const dynamicButtons: unknown[] = card.buttons.map(([display_text, id]) => ({
+      name: 'quick_reply',
+      buttonParamsJson: JSON.stringify({ display_text, id }),
+    }))
+    for (const code of card.copy ?? []) {
+      dynamicButtons.push({
+        name: 'cta_copy',
+        buttonParamsJson: JSON.stringify({ display_text: 'Copiar', copy_code: code }),
+      })
+    }
+    for (const [display_text, url] of card.urls ?? []) {
+      dynamicButtons.push({
+        name: 'cta_url',
+        buttonParamsJson: JSON.stringify({ display_text, url, merchant_url: url }),
+      })
+    }
+    for (const [title, sections] of card.list ?? []) {
+      dynamicButtons.push({
+        name: 'single_select',
+        buttonParamsJson: JSON.stringify({ title, sections }),
+      })
+    }
+
+    return proto.Message.InteractiveMessage.create({
+      body:   proto.Message.InteractiveMessage.Body.fromObject({ text: card.text }),
+      footer: proto.Message.InteractiveMessage.Footer.fromObject({ text: card.footer ?? footer }),
+      header: proto.Message.InteractiveMessage.Header.fromObject({
+        hasMediaAttachment: !!(img || vid),
+        imageMessage: img ?? null,
+        videoMessage: vid ?? null,
+      }),
+      nativeFlowMessage: proto.Message.InteractiveMessage.NativeFlowMessage.fromObject({
+        buttons:           dynamicButtons,
+        messageParamsJson: '',
+      }),
+    })
+  }))
+
+  const interactiveMessage = proto.Message.InteractiveMessage.create({
+    body:   proto.Message.InteractiveMessage.Body.fromObject({ text }),
+    footer: proto.Message.InteractiveMessage.Footer.fromObject({ text: footer }),
+    header: proto.Message.InteractiveMessage.Header.fromObject({
+      hasMediaAttachment: false,
+      title:    text,
+      subtitle: text,
+    }),
+    carouselMessage: proto.Message.InteractiveMessage.CarouselMessage.fromObject({
+      cards: builtCards,
+    }),
+  })
+
+  const content = proto.Message.fromObject({
+    viewOnceMessage: {
+      message: {
+        messageContextInfo: {
+          deviceListMetadata:        {},
+          deviceListMetadataVersion: 2,
+        },
+        interactiveMessage,
+      },
+    },
+  })
+
+  const msg = generateWAMessageFromContent(jid, content as any, _genOpts(sock, quoted))
+  await _relay(sock, jid, msg.message!, msg.key.id!)
 }

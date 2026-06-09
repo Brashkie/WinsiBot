@@ -5,9 +5,14 @@ import { downloadBuffer } from '@lib/downloader.js'
 async function findCharacter(name: string): Promise<RollCharacter | null> {
   const needle = name.toLowerCase()
 
+  const matches = (name: string) => {
+    const n = name.toLowerCase()
+    return n === needle || n.includes(needle) || needle.includes(n)
+  }
+
   // search cached sources first
   for (const chars of charCache.values()) {
-    const found = chars.find(c => c.name.toLowerCase() === needle)
+    const found = chars.find(c => matches(c.name))
     if (found) return found
   }
 
@@ -15,7 +20,7 @@ async function findCharacter(name: string): Promise<RollCharacter | null> {
   for (const source of Object.keys(SOURCES)) {
     if (charCache.has(source)) continue
     const chars = await getCharacters(source).catch(() => [] as RollCharacter[])
-    const found = chars.find(c => c.name.toLowerCase() === needle)
+    const found = chars.find(c => matches(c.name))
     if (found) return found
   }
 

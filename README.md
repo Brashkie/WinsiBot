@@ -1,6 +1,6 @@
 <div align="center">
 
-<img src="https://capsule-render.vercel.app/api?type=waving&color=0:6C63FF,100:00C9FF&height=180&section=header&text=WinsiBot&fontSize=62&fontColor=ffffff&fontAlignY=38&desc=v8.1.0%20%E2%80%94%20Enterprise%20WhatsApp%20Bot&descAlignY=58&descSize=18" width="100%"/>
+<img src="https://capsule-render.vercel.app/api?type=waving&color=0:6C63FF,100:00C9FF&height=180&section=header&text=WinsiBot&fontSize=62&fontColor=ffffff&fontAlignY=38&desc=v8.2.0%20%E2%80%94%20Enterprise%20WhatsApp%20Bot&descAlignY=58&descSize=18" width="100%"/>
 
 <br/>
 
@@ -10,14 +10,15 @@
 [![Rust](https://img.shields.io/badge/Rust-1.75%2B-CE422B?style=for-the-badge&logo=rust&logoColor=white)](https://rust-lang.org)
 
 [![License](https://img.shields.io/badge/License-GPL--3.0-blue?style=flat-square)](LICENSE)
-[![Version](https://img.shields.io/badge/Version-8.1.0-6C63FF?style=flat-square)](CHANGELOG.md)
+[![Version](https://img.shields.io/badge/Version-8.2.0-6C63FF?style=flat-square)](CHANGELOG.md)
 [![Platform](https://img.shields.io/badge/Platform-Windows%20%7C%20Linux-lightgrey?style=flat-square)](https://github.com/Brashkie/WinsiBot)
 [![PRs Welcome](https://img.shields.io/badge/PRs-welcome-brightgreen?style=flat-square)](https://github.com/Brashkie/WinsiBot/pulls)
 
 <br/>
 
 > Bot de WhatsApp de alto rendimiento con arquitectura multi-lenguaje.<br/>
-> Diseñado para **443+ grupos simultáneos**, miles de mensajes por hora y múltiples instancias.
+> Diseñado para **443+ grupos simultáneos**, miles de mensajes por hora y múltiples instancias.<br/>
+> v8.2.0 — Gift, PvP Arena, Quiz, Draw & Guess, Prestige, Mascotas avanzadas, Clan completo, Carrusel nativo.
 
 <br/>
 
@@ -114,11 +115,16 @@
 <td width="50%">
 
 ### 🎮 RPG & Economía
-- Sistema de XP / niveles / roles
+- Sistema de XP / niveles / prestige (10 rangos) + medallas
 - Moneda propia (BrasCoins) + banco
 - Gacha (rollwaifu / pokedex / marvel)
-- Clanes con líder, co-líderes y ranking
+- **Clanes avanzados**: territorios, guerras 24h, alianzas, tesorería
 - Misiones: trabajo, minería, cofre, crimen, robo
+- **Sistema de regalos**: catálogo 30+ items, buzón, wishlist, trueques
+- **Arena PvP**: ELO, 9 divisiones, apuestas, 5 acciones de combate
+- **Mascotas avanzadas**: 25 especies, evolución, batallas auto
+- **Quiz de programación**: 42 preguntas, ELO, 5 dificultades
+- **Draw & Guess**: 55 palabras, pistas progresivas, puntuación
 
 </td>
 <td width="50%">
@@ -151,6 +157,8 @@
 - Scheduler con jobs programables vía cron
 - CLI de mantenimiento multi-servicio
 - Panel PHP opcional para estadísticas
+- **Mensajes interactivos**: botones nativos, listas, carrusel, álbum, sylph
+- **Respuesta automática de botones**: handler intercepta `interactiveResponseMessage`
 
 </td>
 </tr>
@@ -162,7 +170,7 @@
 
 ```
 ╔══════════════════════════════════════════════════════════════════════╗
-║                        WinsiBot v8.1.0                               ║
+║                        WinsiBot v8.2.0                               ║
 ╠═══════════════════╦═══════════════════╦════════════════════════════╣
 ║   TypeScript      ║      Python       ║           Rust             ║
 ║   Node.js :4001   ║                   ║                            ║
@@ -368,7 +376,7 @@ npm run dev             # Solo Node.js (sin monitor, QR directo)
 
 ## Comandos
 
-El bot tiene **50+ comandos** en **16 categorías**.
+El bot tiene **75+ comandos** en **17 categorías**.
 
 → **[📖 Ver referencia completa de comandos](docs/commands.md)**
 
@@ -378,15 +386,17 @@ El bot tiene **50+ comandos** en **16 categorías**.
 | Categoría | Comandos destacados | Descripción |
 |-----------|--------------------|----|
 | 🤖 IA | `!gpt` `!claude` `!imagine` `!translate` | Chat multi-modelo, imágenes, traducciones |
-| 💰 RPG | `!work` `!daily` `!perfil` `!rw` `!clan` | Economía, gacha, niveles, clanes |
+| 💰 RPG | `!work` `!daily` `!perfil` `!rw` `!clan` `!prestige` | Economía, gacha, niveles, clanes, prestige |
+| 🎮 Juegos | `!arena` `!quiz` `!adivinar` `!mascota` | PvP Arena, Quiz coding, Draw & Guess, mascotas |
+| 🎁 Social | `!regalo` | Sistema de regalos, buzón, wishlist, trueques |
 | 🛡️ Admin | `!ban` `!kick` `!antilink` `!warn` | Moderación de grupos |
 | 👑 Owner | `!exec` `!broadcast` `!premium` `!boost` | Control total del bot |
-| ⬇️ Descargas | `!yt` `!tiktok` `!ig` `!spotify` | Descargadores multimedia |
-| 🎨 Stickers | `!sticker` `!toimg` `!emojimix` | Creación y conversión |
+| ⬇️ Descargas | `!yt` `!tiktok` `!ttsearch` `!ig` `!spotify` `!apk` | Descargadores multimedia + búsqueda con carrusel |
+| 🎨 Stickers | `!sticker` `!toimg` `!emojimix` `!stickerpack` | Creación, conversión y packs completos |
 | 🎮 Fun | `!meme` `!sega` `!giphy` `!top` | Entretenimiento |
 | 💞 Roleplay | `!hug` `!kiss` `!pat` `!kill` | GIFs de anime interactivos |
 | 🎵 Música | `!play` `!lyrics` `!spotify` | Audio y letras |
-| 🌐 Media | `!anime` `!removebg` | Imágenes de anime, fondo |
+| 🌐 Media | `!anime` `!removebg` `!wimage` | Imágenes de anime, fondo, personajes |
 | 🔧 Util | `!clima` `!imagen` | Clima, generación de imágenes |
 | ℹ️ Info | `!ping` `!creator` `!menu` | Información del bot |
 | 🤝 Jadibot | `!jadibot` `!stopbot` | Sub-bots vinculados |
@@ -555,9 +565,17 @@ WinsiBot/
 │   │       ├── anticall.ts           # Bloqueo de llamadas
 │   │       └── nsfw.ts               # Control de contenido adulto
 │   ├── lib/
-│   │   ├── globals.ts                # 🆕 Sistema de roles: owner/dev/mod/helper/prem
-│   │   ├── db.ts                     # 🆕 Persistencia SQLite (userData, grupos, clanes)
-│   │   ├── ai.ts                     # 🆕 Cliente IA multi-modelo: GPT · Claude · Gemini
+│   │   ├── globals.ts                # Sistema de roles: owner/dev/mod/helper/prem
+│   │   ├── db.ts                     # Persistencia SQLite (userData, grupos, clanes)
+│   │   ├── ai.ts                     # Cliente IA multi-modelo: GPT · Claude · Gemini
+│   │   ├── interactive.ts            # 🆕 Mensajes interactivos: botones, listas, carrusel, álbum
+│   │   ├── gift.ts                   # 🆕 Sistema de regalos (30+ items, buzón, wishlist, trueques)
+│   │   ├── pvp.ts                    # 🆕 Arena PvP (ELO K=32, 9 divisiones, 5 acciones)
+│   │   ├── quiz.ts                   # 🆕 Quiz de programación (42 preguntas, 5 dificultades)
+│   │   ├── drawguess.ts              # 🆕 Draw & Guess (55 palabras, pistas, puntuación)
+│   │   ├── leveling.ts               # 🆕 Prestige (10 rangos), rachas, medallas, multiplicadores
+│   │   ├── petAdvanced.ts            # 🆕 Mascotas avanzadas (25 especies, evolución, batallas)
+│   │   ├── clan.ts                   # 🆕 Clan extendido (territorios, guerras 24h, alianzas)
 │   │   ├── downloader.ts             # yt-dlp wrapper (YouTube, TikTok, Instagram)
 │   │   ├── media.ts                  # Procesamiento de media
 │   │   ├── media_sender.ts           # safeSend / enqueueSend / broadcastSend
@@ -568,17 +586,21 @@ WinsiBot/
 │   │   ├── jid_utils.ts              # Utilidades de JID
 │   │   └── utils.ts                  # Helpers generales
 │   └── plugins/
-│       ├── commands/                 # 50+ comandos organizados por categoría
-│       │   ├── rpg/                  # work, daily, perfil, rollwaifu, clan, couple…
+│       ├── commands/                 # 75+ comandos organizados por categoría
+│       │   ├── rpg/                  # work, daily, perfil, rollwaifu, wimage, clan, regalo, prestige, mascota…
+│       │   ├── games/                # 🆕 arena, quiz, adivinar
 │       │   ├── admin/                # ban, kick, warn, antilink, config…
 │       │   ├── owner/                # exec, broadcast, premium, boost…
 │       │   ├── ai/                   # gpt, imagine, translate
 │       │   ├── fun/                  # meme, sega, giphy, top…
-│       │   ├── downloader/           # youtube, tiktok
+│       │   ├── downloader/           # youtube, tiktok, ttsearch, apk, downloadapk
+│       │   ├── sticker/              # sticker, stickerpack
 │       │   └── …
 │       ├── middlewares/              # Auth, anti-spam, cooldown, rate limit
 │       ├── scheduler/                # Jobs programados (node-cron)
 │       └── webhooks/                 # Receiver HTTP
+│   └── core/events/
+│       ├── gameHandlers.ts           # 🆕 Intercept Draw & Guess + Quiz en handler
 ├── python/                           # Python — servicios auxiliares
 │   ├── api/                          # FastAPI + Celery
 │   ├── ai/                           # IA, break detector, health monitor

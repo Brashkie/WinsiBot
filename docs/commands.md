@@ -1,10 +1,10 @@
 <div align="center">
 
-# 📖 Referencia de Comandos — WinsiBot v8.1.0
+# 📖 Referencia de Comandos — WinsiBot v8.2.0
 
-[![Comandos](https://img.shields.io/badge/Comandos-90%2B-6C63FF?style=for-the-badge)](.)
-[![Categorías](https://img.shields.io/badge/Categorías-16-00C9FF?style=for-the-badge)](.)
-[![Versión](https://img.shields.io/badge/Versión-8.1.0-brightgreen?style=flat-square)](../README.md)
+[![Comandos](https://img.shields.io/badge/Comandos-110%2B-6C63FF?style=for-the-badge)](.)
+[![Categorías](https://img.shields.io/badge/Categorías-19-00C9FF?style=for-the-badge)](.)
+[![Versión](https://img.shields.io/badge/Versión-8.2.0-brightgreen?style=flat-square)](../README.md)
 
 [🇬🇧 English version →](commands.en.md) &nbsp;·&nbsp; [← Volver al README](../README.md)
 
@@ -40,20 +40,22 @@
 |---|-----------|:--------:|
 | 1 | [🛠️ General](#%EF%B8%8F-general) | 7 |
 | 2 | [🤖 IA / ChatGPT](#-ia--chatgpt) | 4 |
-| 3 | [🎮 RPG / Economía](#-rpg--economía) | 13 |
+| 3 | [🎮 RPG / Economía](#-rpg--economía) | 16 |
 | 4 | [🎴 Gacha / Personajes](#-gacha--personajes) | 5 |
 | 5 | [💑 Parejas](#-parejas) | 5 |
 | 6 | [🎭 Roleplay](#-roleplay) | 4 |
 | 7 | [🎉 Diversión](#-diversión) | 9 |
-| 8 | [🖼️ Media & Stickers](#%EF%B8%8F-media--stickers) | 4 |
-| 9 | [🔽 Descargas](#-descargas) | 3 |
-| 10 | [🔍 Scrapers / Búsqueda](#-scrapers--búsqueda) | 4 |
-| 11 | [🎵 Música](#-música) | 1 |
-| 12 | [🔞 NSFW](#-nsfw) | 1 |
-| 13 | [🔑 Admin del grupo](#-admin-del-grupo) | 13 |
-| 14 | [🤖 JadiBot](#-jadibot) | 2 |
-| 15 | [ℹ️ Info](#%EF%B8%8F-info) | 1 |
-| 16 | [👑 Owner / Sistema](#-owner--sistema) | 23 |
+| 8 | [🕹️ Juegos](#%EF%B8%8F-juegos) | 3 |
+| 9 | [🎁 Regalos](#-regalos) | 1 |
+| 10 | [🖼️ Media & Stickers](#%EF%B8%8F-media--stickers) | 5 |
+| 11 | [🔽 Descargas](#-descargas) | 6 |
+| 12 | [🔍 Scrapers / Búsqueda](#-scrapers--búsqueda) | 4 |
+| 13 | [🎵 Música](#-música) | 1 |
+| 14 | [🔞 NSFW](#-nsfw) | 1 |
+| 15 | [🔑 Admin del grupo](#-admin-del-grupo) | 13 |
+| 16 | [🤖 JadiBot](#-jadibot) | 2 |
+| 17 | [ℹ️ Info](#%EF%B8%8F-info) | 1 |
+| 18 | [👑 Owner / Sistema](#-owner--sistema) | 23 |
 
 ---
 
@@ -117,6 +119,9 @@
 | `rob` | `robar` | variable | 👤 | Roba BrasCoins a otro usuario (`@mención`) |
 | `transfer` | `transferir`, `dar`, `enviar` | 5s | 👤 | Transfiere BrasCoins o XP a otro usuario |
 | `depositar` | `dep`, `retirar`, `withdraw`, `banco` | 3s | 👤 | Deposita o retira monedas del banco |
+| `prestige` | `prestigio`, `ascender` | — | 👤 | Reinicia progreso a cambio de recompensas exclusivas |
+| `mascota` | `pet`, `mimasocta`, `mipet` | 5s | 👤 | Gestiona tu mascota: alimentar, entrenar, evolucionar |
+| `regalo` | `gift`, `dar`, `regalar` | 10s | 👤 | Regala monedas, XP o ítems a otro usuario |
 
 ```
 !perfil
@@ -128,6 +133,40 @@
 !transfer @usuario 500
 !depositar 1000
 !retirar 500
+!prestige
+!mascota alimentar
+!regalo @usuario 500 coins
+```
+
+---
+
+---
+
+## 🕹️ Juegos
+
+| Comando | Aliases | Cooldown | Permiso | Descripción |
+|---------|---------|:--------:|:-------:|-------------|
+| `arena` | `pvp`, `batalla`, `fight` | 30s | 👤 | Reta a otro usuario a un duelo PvP con apuesta de diamantes |
+| `quiz` | `qz`, `pregunta`, `coding` | 15s | 👤 | Pregunta de programación por categoría (JS, Python, SQL…) |
+| `adivinar` | `drawguess`, `dibujar`, `guess` | 20s | 👤 | Mini-juego de dibujar y adivinar en grupo |
+
+```
+!arena @usuario 10
+!quiz javascript
+!adivinar iniciar
+```
+
+---
+
+## 🎁 Regalos
+
+| Comando | Aliases | Cooldown | Permiso | Descripción |
+|---------|---------|:--------:|:-------:|-------------|
+| `regalo` | `gift`, `dar`, `regalar` | 10s | 👤 | Regala BrasCoins, XP o ítems a otro usuario |
+
+```
+!regalo @usuario 500 coins
+!regalo @usuario 200 xp
 ```
 
 ---
@@ -218,12 +257,14 @@
 | Comando | Aliases | Cooldown | Permiso | Descripción |
 |---------|---------|:--------:|:-------:|-------------|
 | `sticker` | `s`, `stiker` | — | 👤 | Convierte imagen/video a sticker |
+| `stickerpack` | `packsticker`, `spack` | 30s | 👤 | Descarga un paquete de stickers desde getstickerpack.com |
 | `removebg` | `rmbg`, `sinfondo`, `nobg`, `quitarfondo` | 30s | 👤 | Elimina el fondo de una imagen |
 | `anime` | `anime4k`, `toanime` | 30s | 👤 | Mejora imagen con filtro anime (x2 o x4) |
 | `imagen` | `img`, `image`, `gimage`, `buscarimg` | 10s | 👤 | Busca imágenes en internet |
 
 ```
 !sticker          ← adjuntar o citar imagen
+!stickerpack https://getstickerpack.com/stickers/flork-memes
 !removebg         ← citar imagen
 !anime x4         ← citar imagen
 !imagen perros jugando
@@ -237,13 +278,19 @@
 |---------|---------|:--------:|:-------:|-------------|
 | `ytmp3` | `yt`, `youtube`, `ytaudio` | 15s | 👤 | Descarga audio de YouTube como MP3 |
 | `tiktok` | `tt`, `tik` | 10s | 👤 | Descarga video de TikTok sin marca de agua |
+| `ttsearch` | `vitiktok`, `tiktoksearch`, `ttsb` | 15s | 👤 | Busca videos en TikTok y muestra carrusel con botones de descarga |
 | `ig` | `instagram`, `insta` | — | 👤 | Descarga foto/video de Instagram |
+| `apk` | `apkdl`, `buscarapk` | 10s | 👤 | Busca una aplicación en Aptoide y muestra resultados en carrusel |
+| `downloadapk` | `apkdownload`, `getapk` | 30s | 💎×2 | Descarga el APK seleccionado del carrusel `!apk` |
 
 ```
 !ytmp3 https://youtube.com/watch?v=...
 !ytmp3 Shape of You Ed Sheeran
 !tiktok https://vm.tiktok.com/...
+!ttsearch gatos graciosos
 !ig https://www.instagram.com/p/...
+!apk minecraft
+!downloadapk          ← pulsar botón del carrusel !apk
 ```
 
 ---
@@ -407,6 +454,6 @@
 
 **[← Volver al README](../README.md)** &nbsp;·&nbsp; **[🇬🇧 English version →](commands.en.md)**
 
-*WinsiBot v8.1.0 — Desarrollado por [Brashkie](https://github.com/Brashkie)*
+*WinsiBot v8.2.0 — Desarrollado por [Brashkie](https://github.com/Brashkie)*
 
 </div>

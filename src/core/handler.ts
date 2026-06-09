@@ -74,6 +74,25 @@ export function invalidateGroupCache(jid: string): void {
 
 // ─── Extraer texto del mensaje ────────────────────────────────────────────────
 function extractText(msg: WAMessage): string {
+  // Respuesta a botón interactivo (quick_reply del carrusel/botones nativos)
+  // paramsJson = '{"id":"!tiktok https://...","display_text":"Descargar"}'
+  const nfParams = (msg.message as any)?.interactiveResponseMessage
+    ?.nativeFlowResponseMessage?.paramsJson
+  if (typeof nfParams === 'string') {
+    try {
+      const p = JSON.parse(nfParams) as { id?: string }
+      if (p.id) return p.id
+    } catch { /* ignore */ }
+  }
+
+  // Respuesta a botón antiguo (buttonsMessage)
+  const btnId = (msg.message as any)?.buttonsResponseMessage?.selectedButtonId
+  if (typeof btnId === 'string' && btnId) return btnId
+
+  // Respuesta a template button
+  const tplId = (msg.message as any)?.templateButtonReplyMessage?.selectedId
+  if (typeof tplId === 'string' && tplId) return tplId
+
   return (
     msg.message?.conversation ??
     msg.message?.extendedTextMessage?.text ??

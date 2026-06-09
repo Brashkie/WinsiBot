@@ -1,6 +1,6 @@
 <div align="center">
 
-<img src="https://capsule-render.vercel.app/api?type=waving&color=0:6C63FF,100:00C9FF&height=180&section=header&text=WinsiBot&fontSize=62&fontColor=ffffff&fontAlignY=38&desc=v8.1.0%20%E2%80%94%20Enterprise%20WhatsApp%20Bot&descAlignY=58&descSize=18" width="100%"/>
+<img src="https://capsule-render.vercel.app/api?type=waving&color=0:6C63FF,100:00C9FF&height=180&section=header&text=WinsiBot&fontSize=62&fontColor=ffffff&fontAlignY=38&desc=v8.2.0%20%E2%80%94%20Enterprise%20WhatsApp%20Bot&descAlignY=58&descSize=18" width="100%"/>
 
 <br/>
 
@@ -10,14 +10,15 @@
 [![Rust](https://img.shields.io/badge/Rust-1.75%2B-CE422B?style=for-the-badge&logo=rust&logoColor=white)](https://rust-lang.org)
 
 [![License](https://img.shields.io/badge/License-GPL--3.0-blue?style=flat-square)](LICENSE)
-[![Version](https://img.shields.io/badge/Version-8.1.0-6C63FF?style=flat-square)](CHANGELOG.md)
+[![Version](https://img.shields.io/badge/Version-8.2.0-6C63FF?style=flat-square)](CHANGELOG.md)
 [![Platform](https://img.shields.io/badge/Platform-Windows%20%7C%20Linux-lightgrey?style=flat-square)](https://github.com/Brashkie/WinsiBot)
 [![PRs Welcome](https://img.shields.io/badge/PRs-welcome-brightgreen?style=flat-square)](https://github.com/Brashkie/WinsiBot/pulls)
 
 <br/>
 
 > High-performance WhatsApp bot with multi-language architecture.<br/>
-> Built for **443+ simultaneous groups**, thousands of messages per hour, and multiple instances.
+> Built for **443+ simultaneous groups**, thousands of messages per hour, and multiple instances.<br/>
+> v8.2.0 — Gift System, PvP Arena, Coding Quiz, Draw & Guess, Prestige, Advanced Pets, Full Clans, Native Carousel.
 
 <br/>
 
@@ -115,10 +116,17 @@
 
 ### 🎮 RPG & Economy
 - XP / levels / role system
-- Custom currency (BrasCoins) + bank
+- Custom currency (BrasCoins) + bank + prestige
 - Gacha system (rollwaifu / pokedex / marvel)
-- Clans with leader, co-leaders and ranking
+- Full clans: warehouse, treasury, co-leaders, ranking
 - Missions: work, mining, chest, crime, robbery
+- **PvP Arena**: 1v1 battles with diamond wager
+- **Coding Quiz**: type-based programming questions
+- **Draw & Guess**: collaborative group drawing mini-game
+- **Advanced Pets**: feed, train, evolve, adventure
+- **Prestige system**: resets progress for exclusive rewards
+- **Gift system**: send coins/XP/items to other users
+- Native carousel: TikTok search with download buttons
 
 </td>
 <td width="50%">
@@ -151,6 +159,8 @@
 - Scheduler with cron-based jobs
 - Multi-service maintenance CLI
 - Optional PHP panel for statistics
+- Native interactive messages: buttons, lists, carousels
+- Automatic `interactiveResponseMessage` handling
 
 </td>
 </tr>
@@ -162,7 +172,7 @@
 
 ```
 ╔══════════════════════════════════════════════════════════════════════╗
-║                        WinsiBot v8.1.0                               ║
+║                        WinsiBot v8.2.0                               ║
 ╠═══════════════════╦═══════════════════╦════════════════════════════╣
 ║   TypeScript      ║      Python       ║           Rust             ║
 ║   Node.js :4001   ║                   ║                            ║
@@ -172,7 +182,7 @@
 ║  ├─────────────┤  ║  ├─────────────┤  ║  │  ● atomic write      │ ║
 ║  │   Handler   │◄─╬─►│  Celery     │  ║  │  ● snapshots ×5      │ ║
 ║  ├─────────────┤  ║  ├─────────────┤  ║  │  ● delivery SQLite   │ ║
-║  │ 50+ Cmds    │  ║  │  Monitor    │  ║  │  ● Signal clear      │ ║
+║  │ 75+ Cmds    │  ║  │  Monitor    │  ║  │  ● Signal clear      │ ║
 ║  ├─────────────┤  ║  │  Watchdog   │  ║  └──────────────────────┘ ║
 ║  │  lib/db.ts  │  ║  ├─────────────┤  ║                            ║
 ║  │  (SQLite)   │  ║  │  AI Brain   │  ║  ┌──────────────────────┐ ║
@@ -336,7 +346,7 @@ npm run dev             # Node.js only (no monitor, direct QR)
 
 ## Commands
 
-The bot has **50+ commands** in **16 categories**.
+The bot has **75+ commands** in **17 categories**.
 
 → **[📖 Full command reference](docs/commands.en.md)**
 
@@ -443,9 +453,17 @@ WinsiBot/
 │   │       ├── anticall.ts           # Call blocking
 │   │       └── nsfw.ts               # Adult content control
 │   ├── lib/
-│   │   ├── globals.ts                # 🆕 Role system: owner/dev/mod/helper/prem
-│   │   ├── db.ts                     # 🆕 SQLite persistence (userData, groups, clans)
-│   │   ├── ai.ts                     # 🆕 Multi-model AI: GPT · Claude · Gemini
+│   │   ├── globals.ts                # Role system: owner/dev/mod/helper/prem
+│   │   ├── db.ts                     # SQLite persistence (userData, groups, clans)
+│   │   ├── ai.ts                     # Multi-model AI: GPT · Claude · Gemini
+│   │   ├── interactive.ts            # 🆕 sendButton / sendList / sendCarousel
+│   │   ├── gift.ts                   # 🆕 Gift system between users
+│   │   ├── pvp.ts                    # 🆕 PvP Arena engine
+│   │   ├── quiz.ts                   # 🆕 Coding Quiz engine
+│   │   ├── drawguess.ts              # 🆕 Draw & Guess engine
+│   │   ├── leveling.ts               # 🆕 XP / level / prestige logic
+│   │   ├── petAdvanced.ts            # 🆕 Advanced pet: feed, train, evolve
+│   │   ├── clan.ts                   # 🆕 Full clan: warehouse, treasury, ranking
 │   │   ├── downloader.ts             # yt-dlp wrapper (YouTube, TikTok, Instagram)
 │   │   ├── media.ts                  # Media processing
 │   │   ├── media_sender.ts           # safeSend / enqueueSend / broadcastSend
@@ -456,12 +474,15 @@ WinsiBot/
 │   │   ├── jid_utils.ts              # JID utilities
 │   │   └── utils.ts                  # General helpers
 │   └── plugins/
-│       ├── commands/                 # 50+ commands by category
+│       ├── commands/                 # 75+ commands by category
 │       │   ├── rpg/                  # work, daily, perfil, rollwaifu, clan, couple…
+│       │   ├── games/                # 🆕 arena, quiz, adivinar (PvP, quiz, draw&guess)
 │       │   ├── admin/                # ban, kick, warn, antilink, config…
 │       │   ├── owner/                # exec, broadcast, premium, boost…
 │       │   ├── ai/                   # gpt, imagine, translate
 │       │   ├── fun/                  # meme, sega, giphy, top…
+│       │   ├── downloader/           # 🆕 ttsearch, apk, downloadapk, tiktok, ytmp3…
+│       │   ├── sticker/              # 🆕 sticker, stickerpack, removebg…
 │       │   └── …
 │       ├── middlewares/              # Auth, anti-spam, cooldown, rate limit
 │       ├── scheduler/                # Scheduled jobs (node-cron)
