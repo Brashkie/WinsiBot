@@ -1,5 +1,5 @@
 import type { Command } from '../../../types/index.js'
-import { getGroupConfig, setGroupConfig } from '@core/events/index'
+import { getGroupConfig, setGroupConfig } from '@core/events/index.js'
 
 // ─── Definición de opciones ───────────────────────────────────────────────────
 

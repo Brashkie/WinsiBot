@@ -12,7 +12,7 @@ use std::fs;
 use std::path::{Path, PathBuf};
 use crate::atomic::atomic_write;
 
-const MAX: usize = 5;
+const MAX: usize = 10; // 10 versiones rotativas — suficiente para recuperar tras horas de corrupción
 
 /// Crea un snapshot rotativo del archivo de sesión.
 /// Rota: 004→005, 003→004, 002→003, 001→002, nuevo→001
@@ -92,6 +92,21 @@ pub fn latest_meta(session_path: &Path) -> Option<SnapMeta> {
         size_bytes: meta.len(),
         ts:         DateTime::<Utc>::from(meta.modified().ok()?),
     })
+}
+
+/// Lee el contenido del primer snapshot válido sin sobreescribir el archivo principal.
+/// Útil para recuperar creds.json sin tocar sessions/main.json.
+/// Devuelve (datos_crudos, índice_snapshot).
+pub fn read_best_valid(path: &Path) -> Option<(Vec<u8>, usize)> {
+    for i in 1..=MAX {
+        let s = snap(path, i);
+        if let Ok(data) = fs::read(&s) {
+            if serde_json::from_slice::<serde_json::Value>(&data).is_ok() {
+                return Some((data, i));
+            }
+        }
+    }
+    None
 }
 
 // ── helpers ───────────────────────────────────────────────────────────────────

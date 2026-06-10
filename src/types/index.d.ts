@@ -130,18 +130,19 @@ export interface PythonApiResponse<T = unknown> {
 
 // ─── Roll / Gacha ─────────────────────────────────────────────────────────────
 export interface RollCharacter {
-  id:         number
-  name:       string
-  source:     string
-  gender:     string
-  value:      string | number
-  image:      string | string[]
-  vid?:       string | string[]
-  status:     string
-  user:       string | null
-  votes:      number
-  habilidad?: string
-  debilidad?: string
+  id:          number
+  name:        string
+  source:      string
+  gender:      string
+  value:       string | number
+  image:       string | string[]
+  vid?:        string | string[]
+  status:      string
+  user:        string | null
+  votes:       number
+  habilidad?:  string
+  debilidad?:  string
+  claimedAt?:  number   // timestamp ms cuando fue reclamado en inventario
 }
 
 export interface RollData {

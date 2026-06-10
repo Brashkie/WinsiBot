@@ -56,10 +56,12 @@ def _build_system_prompt(
     user_profile,
     personality_mode: str,
     bot_name: str = 'Hepein',
+    prompt: str = '',
 ) -> str:
     """
     Construye el system prompt enriquecido con el estilo aprendido del grupo.
     Este prompt hace que el modelo hable como un miembro real del grupo.
+    Si el usuario pregunta sobre comandos, inyecta el catálogo relevante.
     """
     mode_desc = {
         'amable':     'amigable y servicial',
@@ -71,7 +73,7 @@ def _build_system_prompt(
     }.get(personality_mode, 'natural')
 
     parts = [
-        f"Eres {bot_name}, un miembro activo de este grupo de WhatsApp.",
+        f"Eres {bot_name}, la IA del bot WinsiBot en este grupo de WhatsApp.",
         f"Tu personalidad es: {mode_desc}.",
         "Responde siempre en español. Sé breve: máximo 2 frases salvo que pidan algo largo.",
         "",
@@ -110,6 +112,17 @@ def _build_system_prompt(
         if user_profile.vocab_sample:
             parts.append(f'  - Ejemplos: "{user_profile.vocab_sample[0]}"')
         parts.append("")
+
+    # Conocimiento de comandos — se inyecta si el usuario pregunta sobre el bot
+    try:
+        from ai.commands_ref import is_command_query, build_commands_section
+        if prompt and is_command_query(prompt):
+            cmd_section = build_commands_section(prompt)
+            if cmd_section:
+                parts.append(cmd_section)
+                parts.append("")
+    except Exception:
+        pass
 
     parts.append("Responde de forma natural, como lo haría un miembro de este grupo específico.")
     return '\n'.join(parts)
@@ -151,11 +164,28 @@ SLANG_WORDS = frozenset({
 })
 
 async def _call_ai(prompt: str, system: str, use_gpt: bool = True) -> Optional[str]:
-    """Llama a GPT → Claude → Gemini con fallback."""
+    """
+    Orden de prioridad:
+      1. Ollama  — IA local, sin costo, sin internet
+      2. GPT     — si hay OPENAI_API_KEY
+      3. Gemini  — si hay GEMINI_API_KEY
+      4. Claude  — si hay ANTHROPIC_API_KEY
+    """
     import httpx
     openai_key  = os.getenv('OPENAI_API_KEY')
     claude_key  = os.getenv('ANTHROPIC_API_KEY')
     gemini_key  = os.getenv('GEMINI_API_KEY')
+
+    # ── Ollama (IA local — primera opción) ───────────────────────────────
+    try:
+        from ai.ollama_client import chat as ollama_chat, is_available
+        if await is_available():
+            text = await ollama_chat(prompt, system)
+            if text:
+                log.debug('Hepein → Ollama (local)')
+                return text
+    except Exception as e:
+        log.debug(f'Ollama no disponible: {e}')
 
     async with httpx.AsyncClient(timeout=25) as http:
 
@@ -175,6 +205,7 @@ async def _call_ai(prompt: str, system: str, use_gpt: bool = True) -> Optional[s
                 if r.status_code == 200:
                     text = r.json()['choices'][0]['message']['content'].strip()
                     if text:
+                        log.debug('Hepein → GPT')
                         return text
             except Exception as e:
                 log.warning(f'Hepein GPT error: {e}')
@@ -192,6 +223,7 @@ async def _call_ai(prompt: str, system: str, use_gpt: bool = True) -> Optional[s
                 if r.status_code == 200:
                     text = r.json().get('candidates', [{}])[0].get('content', {}).get('parts', [{}])[0].get('text', '').strip()
                     if text:
+                        log.debug('Hepein → Gemini')
                         return text
             except Exception as e:
                 log.warning(f'Hepein Gemini error: {e}')
@@ -212,6 +244,7 @@ async def _call_ai(prompt: str, system: str, use_gpt: bool = True) -> Optional[s
                 if r.status_code == 200:
                     text = r.json().get('content', [{}])[0].get('text', '').strip()
                     if text:
+                        log.debug('Hepein → Claude')
                         return text
             except Exception as e:
                 log.warning(f'Hepein Claude error: {e}')
@@ -258,7 +291,7 @@ async def hepein_respond(req: RespondRequest):
         mode = req.mode or get_mode(req.group_jid)
 
         if req.use_gpt:
-            system  = _build_system_prompt(group_style, user_profile, mode)
+            system  = _build_system_prompt(group_style, user_profile, mode, prompt=req.prompt)
             ai_text = await _call_ai(req.prompt, system)
         else:
             ai_text = None

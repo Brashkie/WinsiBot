@@ -12,6 +12,7 @@ import { color, themes } from 'ansimax'
 import { config } from '@config'
 import { logger } from './logger.js'
 import { winsiStore } from '@core/store.js'
+import { verifyAndReport } from '@lib/authVerifier.js'
 
 function fmtJid(jid: string): string {
   return jid.replace('@s.whatsapp.net', '').replace('@g.us', '').replace('@lid', '')
@@ -30,20 +31,29 @@ const NO_RETRY_CODES = new Set([
   401,
 ])
 
-// Bad MAC flood detection — umbral para auto-clear de sesiones Signal
-const BAD_MAC_THRESHOLD = 8   // Bad MACs en ventana de 60s → limpiar + reconectar
-const BAD_MAC_WINDOW_MS = 60_000
+// Fallback local: por si Rust no está corriendo, rastreamos Bad MAC en proceso
+// (Rust es la fuente de verdad cuando está disponible)
+const LOCAL_BAD_MAC_THRESHOLD = 5
+const LOCAL_BAD_MAC_WINDOW_MS = 30_000
+const LOCAL_BAD_MAC_COOLDOWN  = 10_000  // evitar clear loop
 
 export class WinsiSocket extends EventEmitter3<WinsiEvents> {
-  private sock:              WASocket | null = null
-  private retryCount:        number = 0
-  private retryTimer:        ReturnType<typeof setTimeout> | null = null
-  private isReconnecting     = false
-  private readonly maxRetries = 50
+  constructor() {
+    super()
+    this._startMemoryTrim()
+  }
 
-  private badMacCount        = 0
-  private badMacWindowStart  = 0
-  private signalClearInProgress = false
+  private sock:          WASocket | null = null
+  private retryCount:    number = 0
+  private retryTimer:    ReturnType<typeof setTimeout> | null = null
+  private isReconnecting = false
+  // Sin límite de reintentos — el bot no muere nunca por desconexión.
+  // Solo 'loggedOut' (401) o kick de otra sesión (440) detienen el loop.
+
+  // Per-group Bad MAC tracking (fallback local cuando Rust no responde)
+  private badMacByGroup = new Map<string, { count: number; windowStart: number; clearedAt: number }>()
+  // Grupos que están en proceso de clear
+  private clearingGroups = new Set<string>()
 
   private cleanup() {
     if (this.retryTimer) {
@@ -68,15 +78,11 @@ export class WinsiSocket extends EventEmitter3<WinsiEvents> {
 
   private scheduleReconnect() {
     if (this.isReconnecting) return
-    if (this.retryCount >= this.maxRetries) {
-      logger.error('Maximo de reconexiones alcanzado')
-      this.emit('closed')
-      return
-    }
     this.isReconnecting = true
     this.retryCount++
-    const delay = Math.min(1000 * 2 ** this.retryCount, 60_000)
-    logger.info(`Reconectando en ${delay}ms (intento ${this.retryCount}/${this.maxRetries})`)
+    // Backoff exponencial: 2s → 4s → 8s → … máx 60s — sin límite de intentos
+    const delay = Math.min(1000 * 2 ** Math.min(this.retryCount, 6), 60_000)
+    logger.info(`Reconectando en ${Math.round(delay / 1000)}s (intento #${this.retryCount})`)
     this.retryTimer = setTimeout(async () => {
       this.isReconnecting = false
       await this.connect()
@@ -91,6 +97,12 @@ export class WinsiSocket extends EventEmitter3<WinsiEvents> {
     // ─── Rust session API — health check + auto-recover (opcional) ────────────
     const { sessionClient } = await import('@lib/session.js')
     await sessionClient.ensureHealthy()
+
+    // ─── Verificación criptográfica del auth dir ──────────────────────────────
+    // Usa @brashkie/signalis-core para validar todos los pares Curve25519 antes
+    // de pasárselos a Baileys. Archivos corruptos se eliminan aquí, evitando
+    // que Baileys los cargue y falle en descifrado con Bad MAC.
+    await verifyAndReport(config.sessionPath).catch(() => {})
 
     const { state, saveCreds } = await useMultiFileAuthState(config.sessionPath)
     const { version }          = await fetchLatestBaileysVersion()
@@ -191,17 +203,21 @@ export class WinsiSocket extends EventEmitter3<WinsiEvents> {
         logger.info('WinsiBot conectado')
         this.emit('ready', this.sock!)
 
-        // precargar grupos
-        try {
-          const groups = await this.sock!.groupFetchAllParticipating()
-          const keys   = Object.keys(groups)
+        // precargar grupos en background — no bloquea la conexión ni el handler de mensajes
+        // timeout de 30s para evitar colgar en grupos grandes (10k+)
+        const sockRef = this.sock!
+        Promise.race([
+          sockRef.groupFetchAllParticipating(),
+          new Promise<never>((_, rej) => setTimeout(() => rej(new Error('timeout')), 30_000)),
+        ]).then(groups => {
+          const keys = Object.keys(groups)
           for (const groupJid of keys) {
-            winsiStore.preloadFromData(groupJid, groups[groupJid])
+            winsiStore.preloadFromData(groupJid, (groups as Record<string, any>)[groupJid])
           }
           logger.info(`${keys.length} grupos precargados`)
-        } catch (err) {
-          logger.warn({ err }, 'Error precargando grupos')
-        }
+        }).catch(err => {
+          logger.warn({ err }, 'Error precargando grupos (no crítico — se cargan bajo demanda)')
+        })
       }
     })
 
@@ -228,34 +244,13 @@ export class WinsiSocket extends EventEmitter3<WinsiEvents> {
         : color.cyan('entrante')
 
       if (!msg.message) {
+        const groupJid = msg.key.remoteJid ?? ''
         console.log(
           `  ${color.red('◈')} ${color.bold(color.red('Bad MAC'))}  ${chatLabel} ${color.dim(jidShort)}  ${meLabel}`
         )
-        // ─── Bad MAC flood detection ───────────────────────────────────────
-        const now = Date.now()
-        if (now - this.badMacWindowStart > BAD_MAC_WINDOW_MS) {
-          this.badMacCount       = 0
-          this.badMacWindowStart = now
-        }
-        this.badMacCount++
-        if (this.badMacCount >= BAD_MAC_THRESHOLD && !this.signalClearInProgress) {
-          this.signalClearInProgress = true
-          this.badMacCount           = 0
-          logger.warn(`[socket] ${BAD_MAC_THRESHOLD} Bad MACs en ${BAD_MAC_WINDOW_MS / 1000}s — limpiando sesiones Signal y reconectando`)
-          import('@lib/session.js').then(({ sessionClient }) =>
-            sessionClient.clearSignalSessions()
-          ).then(res => {
-            logger.info(`[socket] ${res.deleted} archivos Signal eliminados — reconectando`)
-            this.signalClearInProgress = false
-            this.cleanup()
-            this.scheduleReconnect()
-          }).catch(err => {
-            logger.warn({ err }, '[socket] clearSignalSessions falló — reconectando igual')
-            this.signalClearInProgress = false
-            this.cleanup()
-            this.scheduleReconnect()
-          })
-        }
+        // ─── Bad MAC flood detection — por grupo, aislado ──────────────────
+        // Un grupo con flood NO afecta a los demás grupos.
+        this._handleBadMac(groupJid)
         return
       }
 
@@ -268,4 +263,84 @@ export class WinsiSocket extends EventEmitter3<WinsiEvents> {
   }
 
   getSocket(): WASocket | null { return this.sock  }
+
+  // ─── Limpieza periódica de mapas en memoria ────────────────────────────────
+  // Previene leak de memoria en bots con miles de grupos activos.
+  private _startMemoryTrim(): void {
+    setInterval(() => {
+      const now = Date.now()
+      // Limpiar entradas de Bad MAC inactivas (ventana expirada hace 5+ min)
+      for (const [jid, entry] of this.badMacByGroup) {
+        if (now - entry.windowStart > LOCAL_BAD_MAC_WINDOW_MS * 10) {
+          this.badMacByGroup.delete(jid)
+        }
+      }
+      // Limpiar clearingGroups atascados (seguridad: no debería quedar > 30s)
+      if (this.clearingGroups.size > 10) {
+        this.clearingGroups.clear()
+      }
+    }, 5 * 60_000).unref()
+  }
+
+  // ─── Bad MAC — por grupo, aislado ──────────────────────────────────────────
+  // Primero consulta Rust (fuente de verdad). Si Rust no está disponible,
+  // usa el tracker en proceso como fallback.
+  private _handleBadMac(groupJid: string): void {
+    if (!groupJid || this.clearingGroups.has(groupJid)) return
+
+    // Intentar con Rust primero (async, no bloquea el hilo)
+    import('@lib/session.js').then(({ sessionClient }) => {
+      return sessionClient.reportBadMac(groupJid)
+    }).then(({ count, shouldClear }) => {
+      if (shouldClear) {
+        this._doClearForGroup(groupJid, count, 'Rust')
+      }
+    }).catch(() => {
+      // Rust no disponible — usar fallback local
+      this._localBadMacCheck(groupJid)
+    })
+  }
+
+  private _localBadMacCheck(groupJid: string): void {
+    if (this.clearingGroups.has(groupJid)) return
+    const now  = Date.now()
+    let entry  = this.badMacByGroup.get(groupJid)
+    if (!entry) {
+      entry = { count: 0, windowStart: now, clearedAt: 0 }
+      this.badMacByGroup.set(groupJid, entry)
+    }
+    // Cooldown post-clear
+    if (now - entry.clearedAt < LOCAL_BAD_MAC_COOLDOWN) return
+    // Reset ventana si expiró
+    if (now - entry.windowStart > LOCAL_BAD_MAC_WINDOW_MS) {
+      entry.count       = 0
+      entry.windowStart = now
+    }
+    entry.count++
+    if (entry.count >= LOCAL_BAD_MAC_THRESHOLD) {
+      entry.count     = 0
+      entry.clearedAt = now
+      this._doClearForGroup(groupJid, LOCAL_BAD_MAC_THRESHOLD, 'local')
+    }
+  }
+
+  private _doClearForGroup(groupJid: string, count: number, source: string): void {
+    this.clearingGroups.add(groupJid)
+    logger.warn(
+      `[socket] ${count} Bad MACs en grupo ${groupJid.replace('@g.us', '')} (${source}) — limpiando Signal + reconectando`
+    )
+    import('@lib/session.js').then(({ sessionClient }) =>
+      sessionClient.clearSignalSessions()
+    ).then(res => {
+      logger.info(`[socket] ${res.deleted} archivos Signal eliminados — reconectando`)
+      this.clearingGroups.delete(groupJid)
+      this.cleanup()
+      this.scheduleReconnect()
+    }).catch(err => {
+      logger.warn({ err }, '[socket] clearSignalSessions falló — reconectando igual')
+      this.clearingGroups.delete(groupJid)
+      this.cleanup()
+      this.scheduleReconnect()
+    })
+  }
 }

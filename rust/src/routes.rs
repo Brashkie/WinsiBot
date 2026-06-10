@@ -13,7 +13,7 @@ use base64::{engine::general_purpose::STANDARD as B64, Engine as _};
 use chrono::Utc;
 use serde::{Deserialize, Serialize};
 
-use crate::{atomic, db, session_id, snapshot};
+use crate::{atomic, bad_mac, db, rate_limiter, session_id, snapshot, watchdog};
 
 // ── AppState ──────────────────────────────────────────────────────────────────
 
@@ -26,6 +26,9 @@ pub struct AppState {
     pub locks:         LockManager,
     pub db:            db::Db,
     pub conv_db_path:  String,
+    pub bad_mac:       bad_mac::BadMacTracker,
+    pub rate_limiter:  rate_limiter::RateLimiter,
+    pub watchdog:      watchdog::WatchdogState,
 }
 
 // ── Límites de seguridad ──────────────────────────────────────────────────────
@@ -264,6 +267,57 @@ pub async fn is_healthy(
         "lastSnapshot":      last_snapshot,
         "ts":                Utc::now(),
     })))
+}
+
+// ── GET /sessions/backup?sessionId=main ──────────────────────────────────────
+// Lee el backup actual (sessions/main.json) sin restaurar nada.
+// Si está corrupto, devuelve el primer snapshot válido.
+// Usado por authVerifier para recuperar creds.json sin QR.
+
+pub async fn read_backup(
+    State(state): State<AppState>,
+    Query(q):     Query<SessionQuery>,
+) -> (StatusCode, Json<serde_json::Value>) {
+    let path = match resolve_path(&state.sessions_dir, &q.session_id) {
+        Ok(p)  => p,
+        Err(e) => return e,
+    };
+
+    // 1. Intentar el backup actual
+    if let Ok(bytes) = std::fs::read(&path) {
+        if serde_json::from_slice::<serde_json::Value>(&bytes).is_ok() {
+            tracing::debug!(session = %q.session_id, "read_backup desde archivo principal");
+            return (StatusCode::OK, Json(serde_json::json!({
+                "ok":     true,
+                "source": "current",
+                "index":  0,
+                "data":   B64.encode(&bytes),
+                "ts":     Utc::now(),
+            })));
+        }
+    }
+
+    // 2. Buscar el mejor snapshot sin sobreescribir nada
+    match snapshot::read_best_valid(&path) {
+        Some((bytes, idx)) => {
+            tracing::info!(session = %q.session_id, index = idx, "read_backup desde snapshot");
+            (StatusCode::OK, Json(serde_json::json!({
+                "ok":     true,
+                "source": "snapshot",
+                "index":  idx,
+                "data":   B64.encode(&bytes),
+                "ts":     Utc::now(),
+            })))
+        }
+        None => {
+            tracing::warn!(session = %q.session_id, "read_backup — sin backup válido");
+            (StatusCode::NOT_FOUND, Json(serde_json::json!({
+                "ok":    false,
+                "error": "sin backup disponible — se requiere nuevo QR",
+                "ts":    Utc::now(),
+            })))
+        }
+    }
 }
 
 // ── POST /sessions/signal/clear ───────────────────────────────────────────────

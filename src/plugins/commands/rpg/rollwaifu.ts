@@ -40,7 +40,7 @@ export function getUserInventory(jid: string): RollCharacter[] {
 
 export function addToInventory(jid: string, char: RollCharacter): void {
   const inv = getUserInventory(jid)
-  inv.push({ ...char, user: jid })
+  inv.push({ ...char, user: jid, claimedAt: Date.now() })
   inventory.set(jid, inv)
 }
 

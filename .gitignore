@@ -32,6 +32,7 @@ sdist/
 wheels/
 pip-wheel-metadata/
 *.egg
+python/data/
 
 # ─── Rust ─────────────────────────────────────────────────────────────────────
 rust/target/
@@ -53,6 +54,7 @@ data/db/
 data/models/
 data/subbots/
 data/tmp/
+data/
 
 # ─── PHP ──────────────────────────────────────────────────────────────────────
 php/vendor/

@@ -1,6 +1,6 @@
 <div align="center">
 
-<img src="https://capsule-render.vercel.app/api?type=waving&color=0:6C63FF,100:00C9FF&height=180&section=header&text=WinsiBot&fontSize=62&fontColor=ffffff&fontAlignY=38&desc=v8.2.0%20%E2%80%94%20Enterprise%20WhatsApp%20Bot&descAlignY=58&descSize=18" width="100%"/>
+<img src="https://capsule-render.vercel.app/api?type=waving&color=0:6C63FF,100:00C9FF&height=180&section=header&text=WinsiBot&fontSize=62&fontColor=ffffff&fontAlignY=38&desc=v8.2.1%20%E2%80%94%20Enterprise%20WhatsApp%20Bot&descAlignY=58&descSize=18" width="100%"/>
 
 <br/>
 
@@ -10,15 +10,15 @@
 [![Rust](https://img.shields.io/badge/Rust-1.75%2B-CE422B?style=for-the-badge&logo=rust&logoColor=white)](https://rust-lang.org)
 
 [![License](https://img.shields.io/badge/License-GPL--3.0-blue?style=flat-square)](LICENSE)
-[![Version](https://img.shields.io/badge/Version-8.2.0-6C63FF?style=flat-square)](CHANGELOG.md)
+[![Version](https://img.shields.io/badge/Version-8.2.1-6C63FF?style=flat-square)](CHANGELOG.md)
 [![Platform](https://img.shields.io/badge/Platform-Windows%20%7C%20Linux-lightgrey?style=flat-square)](https://github.com/Brashkie/WinsiBot)
 [![PRs Welcome](https://img.shields.io/badge/PRs-welcome-brightgreen?style=flat-square)](https://github.com/Brashkie/WinsiBot/pulls)
 
 <br/>
 
-> Bot de WhatsApp de alto rendimiento con arquitectura multi-lenguaje.<br/>
-> Diseñado para **443+ grupos simultáneos**, miles de mensajes por hora y múltiples instancias.<br/>
-> v8.2.0 — Gift, PvP Arena, Quiz, Draw & Guess, Prestige, Mascotas avanzadas, Clan completo, Carrusel nativo.
+> Bot de WhatsApp de alto rendimiento con arquitectura multi-lenguaje de tres capas.<br/>
+> Diseñado para **10,000+ grupos simultáneos**, miles de mensajes por hora y múltiples instancias.<br/>
+> v8.2.1 — Integridad criptográfica de sesión, recuperación sin QR, Bad MAC por grupo, IA local con Ollama y hardening completo de estabilidad.
 
 <br/>
 
@@ -45,6 +45,7 @@
 - [CLI de mantenimiento](#cli-de-mantenimiento)
 - [API Webhook](#api-webhook)
 - [Monitoreo](#monitoreo)
+- [Referencia Session API](#referencia-session-api)
 - [Estructura del proyecto](#estructura-del-proyecto)
 - [Solución de problemas](#solución-de-problemas)
 - [Preguntas frecuentes](#preguntas-frecuentes)
@@ -57,13 +58,30 @@
 
 ## ¿Qué es WinsiBot?
 
-**WinsiBot** es un bot de WhatsApp empresarial construido sobre [Baileys](https://github.com/WhiskeySockets/Baileys) con una arquitectura de tres capas especializadas que cooperan entre sí:
+**WinsiBot** es un bot de WhatsApp empresarial construido sobre [Baileys](https://github.com/WhiskeySockets/Baileys) con una arquitectura de tres capas especializadas que cooperan en tiempo real:
 
 | Capa | Tecnología | Responsabilidad |
 |------|-----------|----------------|
-| 🟦 **Core** | TypeScript / Node.js | Protocolo WhatsApp, comandos, handler de mensajes, RPG, IA |
-| 🐍 **Services** | Python / FastAPI / Celery | IA avanzada, monitor watchdog, backups de sesión, health check |
-| ⚙️ **Session** | Rust / Axum | Escritura atómica de creds, snapshots x5, delivery tracker SQLite |
+| 🟦 **Core** | TypeScript / Node.js | Protocolo WhatsApp, dispatcher de comandos, RPG, IA |
+| 🐍 **Services** | Python / FastAPI / Celery | IA avanzada (Ollama + GPT + Claude + Gemini), watchdog, health checks |
+| ⚙️ **Session** | Rust / Axum | Escritura atómica de creds, 10 snapshots rotativos, tracker Bad MAC, rate limiter, delivery SQLite |
+
+### Novedades en v8.2.1
+
+| Área | Cambio |
+|------|--------|
+| **Integridad criptográfica** | Directorio auth verificado con Curve25519 `publicFromPrivate` en cada arranque vía `@brashkie/signalis-core` |
+| **Recuperación sin QR** | `creds.json` corrupto se restaura automáticamente desde snapshot de Rust — sin escanear QR |
+| **Bad MAC por grupo** | Cada grupo tiene su propio contador de ventana deslizante (5 MACs / 30s); un grupo inundado ya no dispara reconexión global |
+| **Reconexión infinita** | `maxRetries` eliminado — el bot reconecta para siempre con backoff exponencial máx 64s |
+| **Semáforo** | Máximo 25 handlers de mensajes concurrentes — previene agotamiento del event loop bajo flood |
+| **Watchdog Rust** | Node.js hace ping a Rust cada 20s; `GET /watchdog/status` devuelve 503 si Node muere |
+| **Rate limiter Rust** | 15 msgs / 10s por sender con buckets individuales, sin lock global |
+| **AbortController** | Todas las llamadas a la API Rust tienen timeout de 3s — un servidor colgado no acumula Promises pendientes |
+| **Soporte Ollama** | IA local (Llama 3, Mistral, etc.) se intenta primero en `_call_ai`, antes de cualquier API cloud |
+| **Conteo de snapshots** | Aumentado de 5 → 10 snapshots rotativos por sesión |
+| **Aislamiento Python** | `stdio: 'ignore'` evita que el buffer de pipe de 4 KB bloquee el proceso hijo |
+| **Fix db.ts** | Eliminado `process.exit(0)` en el handler SIGINT que saltaba el graceful shutdown |
 
 ---
 
@@ -79,6 +97,7 @@
 | Servicios | Python 3.11 + FastAPI | IA, watchdog, backup |
 | Tasks | Celery + Redis | Cola de tareas async |
 | Session Store | Rust + Axum + SQLite | Creds atómicas + delivery tracking |
+| Criptografía | `@brashkie/signalis-core` | Curve25519 / Ed25519 / HKDF / AES-GCM (Rust NAPI) |
 | Base de datos | SQLite (better-sqlite3) | userData, groupConfigs, clanes |
 | Panel web | PHP 8.1 *(opcional)* | Dashboard de administración |
 
@@ -93,20 +112,22 @@
 <td width="50%">
 
 ### 📡 Mensajería
-- Rate limiting con token bucket por JID
+- Rate limiting por sender (Rust, sin lock global)
 - Cola priorizada: `urgent` → `normal` → `broadcast`
 - Tracking de entrega: enviado → entregado → leído
-- Auto-detección de Bad MAC flood + auto-limpieza
-- 443+ grupos sin degradación de rendimiento
+- Detección de Bad MAC flood por grupo + auto-limpieza
+- 10,000+ grupos sin degradación de rendimiento
+- Máximo 25 handlers concurrentes (semáforo)
 
 </td>
 <td width="50%">
 
 ### 🔒 Sesión & Estabilidad
 - Escritura atómica Rust: `tmp → fsync → rename`
-- 5 snapshots rotativos con recovery automático
-- Backup con checksum SHA-256
-- Reconexión exponencial (50 reintentos, máx 60s)
+- 10 snapshots rotativos con recovery automático
+- Verificación de claves Curve25519 al arrancar
+- Restauración automática de creds sin QR
+- Reconexión infinita con backoff exponencial (máx 64s)
 - Monitor Python con watchdog y freeze detection
 
 </td>
@@ -117,7 +138,7 @@
 ### 🎮 RPG & Economía
 - Sistema de XP / niveles / prestige (10 rangos) + medallas
 - Moneda propia (BrasCoins) + banco
-- Gacha (rollwaifu / pokedex / marvel)
+- Gacha (rollwaifu / pokédex / marvel)
 - **Clanes avanzados**: territorios, guerras 24h, alianzas, tesorería
 - Misiones: trabajo, minería, cofre, crimen, robo
 - **Sistema de regalos**: catálogo 30+ items, buzón, wishlist, trueques
@@ -130,11 +151,12 @@
 <td width="50%">
 
 ### 🤖 Inteligencia Artificial
-- Multi-modelo: GPT · Claude · Gemini con fallback
+- Multi-modelo: **Ollama (local)** → GPT → Claude → Gemini
 - Historial de conversación por usuario (12 msgs)
 - Rate limiting: 20 req/hora por JID
 - Generación de imágenes con DALL-E
 - Traducción automática (50+ idiomas)
+- NLP fast-path en Rust para detección de palabras clave
 
 </td>
 </tr>
@@ -169,30 +191,32 @@
 ## Arquitectura
 
 ```
-╔══════════════════════════════════════════════════════════════════════╗
-║                        WinsiBot v8.2.0                               ║
-╠═══════════════════╦═══════════════════╦════════════════════════════╣
-║   TypeScript      ║      Python       ║           Rust             ║
-║   Node.js :4001   ║                   ║                            ║
-║                   ║  ┌─────────────┐  ║  ┌──────────────────────┐ ║
-║  ┌─────────────┐  ║  │  FastAPI    │  ║  │   Session API :3001  │ ║
-║  │ Baileys WS  │  ║  │  :5000      │  ║  │                      │ ║
-║  ├─────────────┤  ║  ├─────────────┤  ║  │  ● atomic write      │ ║
-║  │   Handler   │◄─╬─►│  Celery     │  ║  │  ● snapshots ×5      │ ║
-║  ├─────────────┤  ║  ├─────────────┤  ║  │  ● delivery SQLite   │ ║
-║  │ 45+ Cmds    │  ║  │  Monitor    │  ║  │  ● Signal clear      │ ║
-║  ├─────────────┤  ║  │  Watchdog   │  ║  └──────────────────────┘ ║
-║  │  lib/db.ts  │  ║  ├─────────────┤  ║                            ║
-║  │  (SQLite)   │  ║  │  AI Brain   │  ║  ┌──────────────────────┐ ║
-║  ├─────────────┤  ║  │  Health     │  ║  │   messages.db        │ ║
-║  │  lib/ai.ts  │  ║  └─────────────┘  ║  │  ● outbox tracking   │ ║
-║  │  GPT/Claude │  ║                   ║  │  ● delivery stats    │ ║
-║  └─────────────┘  ║                   ║  └──────────────────────┘ ║
-╚═══════════════════╩═══════════════════╩════════════════════════════╝
-         │                   │                        │
-         └───────────────────┴────────────────────────┘
-                             │
-                    WhatsApp Network
+╔══════════════════════════════════════════════════════════════════════════════╗
+║                           WinsiBot v8.2.1                                    ║
+╠════════════════════╦═══════════════════════╦═══════════════════════════════╣
+║   TypeScript        ║       Python           ║           Rust                ║
+║   Node.js :4001     ║                        ║                               ║
+║                     ║  ┌──────────────────┐  ║  ┌───────────────────────┐   ║
+║  ┌───────────────┐  ║  │  FastAPI :5000   │  ║  │  Session API :3001    │   ║
+║  │  Baileys WS   │  ║  ├──────────────────┤  ║  │                       │   ║
+║  ├───────────────┤  ║  │  Celery + Redis  │  ║  │  ● atomic write       │   ║
+║  │   Handler     │◄─╬─►│  Ollama client   │  ║  │  ● snapshots ×10      │   ║
+║  │  (semáforo)   │  ║  │  GPT/Claude/     │  ║  │  ● bad_mac tracker    │   ║
+║  ├───────────────┤  ║  │  Gemini fallback │  ║  │  ● rate_limiter       │   ║
+║  │  75+ Cmds     │  ║  ├──────────────────┤  ║  │  ● watchdog heartbeat │   ║
+║  ├───────────────┤  ║  │  Monitor         │  ║  │  ● delivery SQLite    │   ║
+║  │  lib/db.ts    │  ║  │  Watchdog        │  ║  │  ● /sessions/backup   │   ║
+║  │  (SQLite)     │  ║  └──────────────────┘  ║  └───────────────────────┘   ║
+║  ├───────────────┤  ║                        ║                               ║
+║  │ authVerifier  │  ║                        ║  ┌───────────────────────┐   ║
+║  │ Curve25519    │  ║                        ║  │   messages.db         │   ║
+║  │ + sin QR      │  ║                        ║  │  ● outbox tracking    │   ║
+║  └───────────────┘  ║                        ║  │  ● delivery stats     │   ║
+╚════════════════════╩═══════════════════════╩   └───────────────────────┘   ║
+          │                     │                           │                  ╝
+          └─────────────────────┴───────────────────────────┘
+                                │
+                       WhatsApp Network
 ```
 
 ---
@@ -206,10 +230,13 @@
 | Python | 3.11+ | ✅ | `python --version` |
 | Rust + Cargo | 1.75+ | ✅ | para compilar Session API |
 | Redis | 6.x | ✅ | para Celery / cola |
+| Ollama | latest | ❌ | IA local (recomendado, 16 GB RAM+) |
 | PHP | 8.1+ | ❌ | panel web opcional |
 | FFmpeg | 6.x | ❌ | conversión de media |
 
 **Sistemas operativos soportados:** Windows 10/11 · Ubuntu 20.04+ · Debian 11+
+
+> **Ollama:** Descarga un modelo antes de iniciar — `ollama pull llama3` o `ollama pull mistral`. El bot intenta Ollama primero y cae en las APIs cloud automáticamente si no está disponible.
 
 ---
 
@@ -261,7 +288,7 @@ npm run start:all
 ### `.env` — Variables principales
 
 ```env
-# ─── Bot ──────────────────────────────────────────────────────────────────
+# ─── Bot ──────────────────────────────────────────────────────────────────────
 PREFIX="!,.,#,/"                        # Prefijos que activan comandos
 BOT_NAME=WinsiBot                        # Nombre del bot
 OWNER_JID=51999999999@s.whatsapp.net     # Tu número (código de país, sin +)
@@ -269,25 +296,27 @@ SESSION_PATH=./auth                      # Carpeta de sesión de WhatsApp
 NODE_ENV=production                      # development | production
 LOG_LEVEL=info                           # silent | info | debug | error
 
-# ─── IA ───────────────────────────────────────────────────────────────────
+# ─── IA — todos opcionales, el bot funciona con cualquier subconjunto ──────────
 OPENAI_API_KEY=sk-...                    # GPT-4o-mini / DALL-E 3
-ANTHROPIC_API_KEY=sk-ant-...            # Claude Haiku
+ANTHROPIC_API_KEY=sk-ant-...             # Claude Haiku
 GEMINI_API_KEY=AIza...                   # Gemini 1.5 Flash
+OLLAMA_BASE_URL=http://localhost:11434   # Ollama local (puerto por defecto)
+OLLAMA_MODEL=llama3                      # Modelo a usar con Ollama
 
-# ─── Session API (Rust) ───────────────────────────────────────────────────
+# ─── Session API (Rust) ───────────────────────────────────────────────────────
 SESSION_API_URL=http://127.0.0.1:3001
 SESSION_API_KEY=                         # openssl rand -hex 32
 
-# ─── Webhook ──────────────────────────────────────────────────────────────
+# ─── Webhook ──────────────────────────────────────────────────────────────────
 WEBHOOK_PORT=4001
 WEBHOOK_SECRET=                          # openssl rand -hex 32
 
-# ─── Servicios Python ─────────────────────────────────────────────────────
+# ─── Servicios Python ─────────────────────────────────────────────────────────
 PYTHON_API_URL=http://localhost:5000
 REDIS_URL=redis://localhost:6379
 API_SECRET_KEY=                          # openssl rand -hex 32
 
-# ─── Spotify (opcional) ───────────────────────────────────────────────────
+# ─── Spotify (opcional) ───────────────────────────────────────────────────────
 SPOTIFY_CLIENT_ID=
 SPOTIFY_CLIENT_SECRET=
 ```
@@ -305,8 +334,6 @@ RUST_LOG=winsibot_session_api=info
 
 > **Generar claves seguras:** `openssl rand -hex 32`
 
-### Variables avanzadas
-
 <details>
 <summary>Ver todas las variables</summary>
 
@@ -321,6 +348,8 @@ RUST_LOG=winsibot_session_api=info
 | `OPENAI_API_KEY` | — | GPT / DALL-E (opcional) |
 | `ANTHROPIC_API_KEY` | — | Claude (opcional) |
 | `GEMINI_API_KEY` | — | Gemini (opcional) |
+| `OLLAMA_BASE_URL` | `http://localhost:11434` | Endpoint local de Ollama (opcional) |
+| `OLLAMA_MODEL` | `llama3` | Nombre del modelo Ollama |
 
 </details>
 
@@ -344,8 +373,6 @@ npm run monitor         # Monitor Python + Node.js + servicios
 npm run dev             # Solo Node.js (sin monitor, QR directo)
 ```
 
-### Scripts disponibles
-
 <details>
 <summary>Ver todos los scripts npm</summary>
 
@@ -360,7 +387,7 @@ npm run dev             # Solo Node.js (sin monitor, QR directo)
 | `manage` | CLI de mantenimiento (menú interactivo) |
 | `manage:status` | Estado de servicios |
 | `manage:diagnose` | Diagnóstico profundo |
-| `manage:repair` | Reparación automática |
+| `manage:repair` | Reparación automática (intenta restauración sin QR primero) |
 | `manage:reset-signal` | Limpiar sesiones Signal (Bad MAC) |
 | `manage:reset-qr` | Reset completo + nuevo QR |
 | `manage:backup` | Forzar backup de sesión |
@@ -418,7 +445,7 @@ Menú interactivo multi-servicio que orquesta Python, Rust y Node.js.
 |:------:|---------|---------------|
 | 1 | `manage:status` | Ver estado de FastAPI / Rust / Webhook / PHP |
 | 2 | `manage:diagnose` | Analizar sesión, archivos Signal, Rust, logs |
-| 3 | `manage:repair` | Signal corrupto → recuperar creds → restaurar backup |
+| 3 | `manage:repair` | Signal corrupto → intenta restauración sin QR → recupera backup |
 | 4 | `manage:reset-signal` | Solo borrar `session-*.json` (conserva `creds.json`) |
 | 5 | `manage:reset-qr` | Eliminar sesión completa y obtener QR nuevo |
 | 6 | `manage:backup` | Crear backup verificado con SHA-256 |
@@ -430,9 +457,9 @@ Menú interactivo multi-servicio que orquesta Python, Rust y Node.js.
 | Síntoma | Solución |
 |---------|---------|
 | Bot sin respuesta, mensajes no llegan | `manage:reset-signal` |
-| "Bad MAC" repetitivo en terminal | `manage:reset-signal` |
+| "Bad MAC" repetitivo en terminal | automático — o `manage:reset-signal` |
 | Sesión expirada / `loggedOut` | `manage:reset-qr` |
-| `creds.json` corrupto | `manage:repair` |
+| `creds.json` corrupto | `manage:repair` (intenta sin QR primero) |
 | Antes de apagar el servidor | `manage:backup` |
 | Después de actualizar | `manage:diagnose` |
 
@@ -452,8 +479,6 @@ import hmac, hashlib
 sig = hmac.new(WEBHOOK_SECRET.encode(), body.encode(), hashlib.sha256).hexdigest()
 headers = { "x-webhook-signature": f"sha256={sig}" }
 ```
-
-### Endpoints
 
 <details>
 <summary>Ver todos los endpoints</summary>
@@ -518,6 +543,10 @@ headers = { "x-webhook-signature": f"sha256={sig}" }
 | `GET /health/ready` | Readiness |
 | `GET /messages/stats?hours=24` | Tasa de delivery en las últimas N horas |
 | `GET /messages/pending?minutes=5` | Mensajes sin confirmar entrega |
+| `GET /badmac/stats` | Contadores Bad MAC por grupo |
+| `GET /rate/stats` | Buckets del rate limiter por sender |
+| `GET /watchdog/status` | Heartbeat de Node.js — 503 si Node murió |
+| `GET /sessions/backup?sessionId=main` | Mejor backup disponible (restauración sin QR) |
 
 ### Estadísticas de delivery
 
@@ -536,7 +565,56 @@ curl -H "x-api-key: TU_CLAVE" http://127.0.0.1:3001/messages/stats
 }
 ```
 
-> ⚠️ Si `delivery_pct` baja de **80%**, ejecuta `npm run manage:repair`.
+> Si `delivery_pct` baja de **80%**, ejecuta `npm run manage:repair`.
+
+---
+
+## Referencia Session API
+
+<details>
+<summary>Lista completa de rutas</summary>
+
+| Método | Ruta | Descripción |
+|--------|------|-------------|
+| `POST` | `/write` | Escribir creds (base64) con rename atómico |
+| `GET` | `/read` | Leer creds actuales |
+| `POST` | `/snapshot` | Forzar rotación de snapshot |
+| `POST` | `/recover` | Restaurar desde el mejor snapshot válido |
+| `GET` | `/snapshots` | Listar snapshots con estado de salud |
+| `GET` | `/healthy` | Salud de sesión + detección de corrupción |
+| `GET` | `/sessions` | Listar IDs de sesión activos |
+| `POST` | `/sessions/signal/clear` | Eliminar archivos Signal (fix Bad MAC) |
+| `GET` | `/sessions/backup` | Devolver mejor creds válido para restauración sin QR |
+| `POST` | `/badmac/report` | Reportar evento Bad MAC para un JID de grupo |
+| `POST` | `/badmac/reset` | Resetear contador Bad MAC de un grupo |
+| `GET` | `/badmac/stats` | Todos los contadores + tiempos de último trigger |
+| `POST` | `/rate/check` | Verificar si un sender está dentro del rate limit |
+| `GET` | `/rate/stats` | Todos los buckets por sender + uso |
+| `POST` | `/watchdog/ping` | Ping de heartbeat desde Node.js |
+| `GET` | `/watchdog/status` | Vivo/muerto + tiempo último ping + conteo |
+| `POST` | `/nlp/fast` | Detección NLP de palabras clave en Rust |
+| `POST` | `/ai/learn` | Guardar turno de conversación IA (DuckDB) |
+| `GET` | `/ai/context/:sender` | Recuperar contexto de conversación |
+| `POST` | `/messages/track` | Trackear IDs de mensajes salientes |
+| `POST` | `/messages/ack` | Actualizar estado de entrega en lote |
+| `GET` | `/messages/pending` | Mensajes sin confirmación de entrega |
+| `GET` | `/messages/stats` | Estadísticas de delivery |
+| `DELETE` | `/messages/cleanup` | Eliminar registros más viejos de N días |
+
+</details>
+
+### Flujo de recuperación sin QR
+
+```
+Bot arranca → verifyAndReport(authDir)
+  → creds.json corrupto detectado vía Curve25519 publicFromPrivate
+  → _restoreCredsFromRust() → GET /sessions/backup (Rust)
+    → Rust prueba: archivo actual → snapshot #1 → ... → snapshot #10
+    → primer JSON válido devuelto
+  → TypeScript re-verifica el backup con Curve25519
+  → escritura atómica: creds.json.tmp → rename → creds.json
+  → bot continúa — sin QR necesario
+```
 
 ---
 
@@ -551,7 +629,7 @@ WinsiBot/
 │   │   └── index.d.ts                # Tipos globales (Command, UserData, etc.)
 │   ├── core/
 │   │   ├── socket.ts                 # Conexión WebSocket a WhatsApp
-│   │   ├── handler.ts                # Dispatcher de mensajes → comandos
+│   │   ├── handler.ts                # Dispatcher de mensajes → comandos (semáforo)
 │   │   ├── store.ts                  # Cache de contactos/chats (escritura atómica)
 │   │   ├── logger.ts                 # Pino logger
 │   │   ├── queue.ts                  # Cola de mensajes priorizada
@@ -568,18 +646,19 @@ WinsiBot/
 │   │   ├── globals.ts                # Sistema de roles: owner/dev/mod/helper/prem
 │   │   ├── db.ts                     # Persistencia SQLite (userData, grupos, clanes)
 │   │   ├── ai.ts                     # Cliente IA multi-modelo: GPT · Claude · Gemini
-│   │   ├── interactive.ts            # 🆕 Mensajes interactivos: botones, listas, carrusel, álbum
-│   │   ├── gift.ts                   # 🆕 Sistema de regalos (30+ items, buzón, wishlist, trueques)
-│   │   ├── pvp.ts                    # 🆕 Arena PvP (ELO K=32, 9 divisiones, 5 acciones)
-│   │   ├── quiz.ts                   # 🆕 Quiz de programación (42 preguntas, 5 dificultades)
-│   │   ├── drawguess.ts              # 🆕 Draw & Guess (55 palabras, pistas, puntuación)
-│   │   ├── leveling.ts               # 🆕 Prestige (10 rangos), rachas, medallas, multiplicadores
-│   │   ├── petAdvanced.ts            # 🆕 Mascotas avanzadas (25 especies, evolución, batallas)
-│   │   ├── clan.ts                   # 🆕 Clan extendido (territorios, guerras 24h, alianzas)
+│   │   ├── authVerifier.ts           # Verificación Curve25519 + restauración sin QR
+│   │   ├── interactive.ts            # Mensajes interactivos: botones, listas, carrusel, álbum
+│   │   ├── gift.ts                   # Sistema de regalos (30+ items, buzón, wishlist, trueques)
+│   │   ├── pvp.ts                    # Arena PvP (ELO K=32, 9 divisiones, 5 acciones)
+│   │   ├── quiz.ts                   # Quiz de programación (42 preguntas, 5 dificultades)
+│   │   ├── drawguess.ts              # Draw & Guess (55 palabras, pistas, puntuación)
+│   │   ├── leveling.ts               # Prestige (10 rangos), rachas, medallas, multiplicadores
+│   │   ├── petAdvanced.ts            # Mascotas avanzadas (25 especies, evolución, batallas)
+│   │   ├── clan.ts                   # Clan extendido (territorios, guerras 24h, alianzas)
 │   │   ├── downloader.ts             # yt-dlp wrapper (YouTube, TikTok, Instagram)
 │   │   ├── media.ts                  # Procesamiento de media
 │   │   ├── media_sender.ts           # safeSend / enqueueSend / broadcastSend
-│   │   ├── rateLimiter.ts            # Token bucket rate limiter
+│   │   ├── rateLimiter.ts            # Token bucket rate limiter (TypeScript)
 │   │   ├── safeMessage.ts            # Envío seguro con reintentos
 │   │   ├── session.ts                # Cliente Session API de Rust
 │   │   ├── sticker.ts                # Creación de stickers
@@ -587,38 +666,36 @@ WinsiBot/
 │   │   └── utils.ts                  # Helpers generales
 │   └── plugins/
 │       ├── commands/                 # 75+ comandos organizados por categoría
-│       │   ├── rpg/                  # work, daily, perfil, rollwaifu, wimage, clan, regalo, prestige, mascota…
-│       │   ├── games/                # 🆕 arena, quiz, adivinar
-│       │   ├── admin/                # ban, kick, warn, antilink, config…
-│       │   ├── owner/                # exec, broadcast, premium, boost…
-│       │   ├── ai/                   # gpt, imagine, translate
-│       │   ├── fun/                  # meme, sega, giphy, top…
-│       │   ├── downloader/           # youtube, tiktok, ttsearch, apk, downloadapk
-│       │   ├── sticker/              # sticker, stickerpack
-│       │   └── …
 │       ├── middlewares/              # Auth, anti-spam, cooldown, rate limit
 │       ├── scheduler/                # Jobs programados (node-cron)
 │       └── webhooks/                 # Receiver HTTP
-│   └── core/events/
-│       ├── gameHandlers.ts           # 🆕 Intercept Draw & Guess + Quiz en handler
 ├── python/                           # Python — servicios auxiliares
-│   ├── api/                          # FastAPI + Celery
-│   ├── ai/                           # IA, break detector, health monitor
+│   ├── api/
+│   │   └── routers/
+│   │       └── hepein.py             # Router IA: Ollama → GPT → Claude → Gemini
+│   ├── ai/
+│   │   ├── ollama_client.py          # Cliente Ollama async con verificación de disponibilidad
+│   │   └── commands_ref.py           # Referencia de comandos para contexto IA
 │   ├── session/                      # Backup / restore / checksum SHA-256
 │   └── terminal/
 │       ├── monitor.py                # Watchdog principal con auto-restart
 │       └── manage.py                 # CLI de mantenimiento interactivo
 ├── rust/                             # Rust — Session API
+│   ├── build.rs                      # Fix linker Windows (rstrtmgr.lib para DuckDB)
 │   └── src/
 │       ├── main.rs                   # Entry point (Axum)
-│       ├── routes.rs                 # Handlers HTTP
+│       ├── routes.rs                 # Handlers HTTP + AppState
+│       ├── bad_mac.rs                # Tracker Bad MAC por grupo (ventana deslizante)
+│       ├── rate_limiter.rs           # Rate limiter por sender (15 msgs / 10s)
+│       ├── watchdog.rs               # Heartbeat de Node.js (umbral 90s muerto)
+│       ├── snapshot.rs               # 10 snapshots rotativos + read_best_valid()
 │       ├── db.rs                     # SQLite delivery tracker
-│       ├── atomic.rs                 # Escritura atómica de archivos
-│       └── snapshot.rs               # Snapshots rotativos ×5
+│       ├── atomic.rs                 # Escritura atómica (tmp → fsync → rename)
+│       └── nlp.rs                    # NLP fast-path en Rust
 ├── php/                              # Panel web opcional
 ├── docs/
 │   ├── commands.md                   # Referencia completa de comandos (ES)
-│   └── commands.en.md                # Command reference (EN)
+│   └── commands.en.md                # Full command reference (EN)
 ├── .env.example                      # Plantilla de configuración principal
 ├── rust/.env.example                 # Plantilla de Rust
 └── package.json
@@ -632,7 +709,7 @@ WinsiBot/
 <summary><b>El bot no responde a mensajes</b></summary>
 
 1. Verifica que está conectado: `npm run manage:status`
-2. Revisa si hay errores Bad MAC en la terminal
+2. Revisa si hay errores Bad MAC en la terminal (gestionados por grupo desde v8.2.1)
 3. Ejecuta: `npm run manage:reset-signal`
 4. Si persiste: `npm run manage:repair`
 
@@ -641,7 +718,9 @@ WinsiBot/
 <details>
 <summary><b>"Bad MAC" continuamente en terminal</b></summary>
 
-Las sesiones Signal están corruptas. El bot detecta esto automáticamente (8 Bad MACs en 60s) y se auto-repara. Para forzarlo manualmente:
+Desde v8.2.1, el Bad MAC se gestiona **por grupo** — un grupo inundando Bad MACs ya no dispara una reconexión global. El bot detecta el umbral automáticamente (5 MACs en 30s por grupo) y limpia solo la sesión Signal de ese grupo.
+
+Para forzarlo manualmente:
 
 ```bash
 npm run manage:reset-signal
@@ -651,6 +730,8 @@ npm run manage:reset-signal
 
 <details>
 <summary><b>Error "auth dir missing" o "creds.json corrupt"</b></summary>
+
+Desde v8.2.1, el bot intenta recuperación automática sin QR desde los snapshots de Rust al arrancar. Si eso falla:
 
 ```bash
 npm run manage:repair
@@ -663,14 +744,14 @@ npm run manage:reset-qr
 <details>
 <summary><b>El bot se reinicia cada cierto tiempo</b></summary>
 
-Revisa `HANG_TIMEOUT` en `python/terminal/monitor.py`. El valor por defecto es 15 minutos. Si el bot está en muchos grupos activos, es normal no tener output por períodos cortos.
+Revisa `HANG_TIMEOUT` en `python/terminal/monitor.py`. El valor por defecto es 15 minutos. El watchdog de Rust también monitorea el heartbeat de Node.js — consulta `GET /watchdog/status` para ver el tiempo del último ping.
 
 </details>
 
 <details>
 <summary><b>Error 440 — "Expulsado por otra instancia"</b></summary>
 
-WhatsApp Web está abierto en el navegador con el mismo número. Cierra todas las sesiones web y espera 60 segundos. El bot se reconectará solo.
+WhatsApp Web está abierto en el navegador con el mismo número. Cierra todas las sesiones web y espera 60 segundos. El bot se reconectará solo (sin límite de reintentos desde v8.2.1).
 
 </details>
 
@@ -682,6 +763,14 @@ rustup update stable
 ```
 
 En Windows también necesitas las **Build Tools de Visual Studio** (MSVC). Descárgalas desde el instalador de Visual Studio seleccionando "Desarrollo para escritorio con C++".
+
+</details>
+
+<details>
+<summary><b>Ollama no responde / IA cae en cloud</b></summary>
+
+Verifica que Ollama está corriendo: `ollama serve`. Descarga un modelo si no lo tienes: `ollama pull llama3`.  
+El bot verifica la disponibilidad de Ollama en cada petición y cae silenciosamente en GPT → Claude → Gemini si no está disponible.
 
 </details>
 
@@ -699,14 +788,14 @@ Sí, mediante el sistema **JadiBot** (`!jadibot`). Cada sub-bot tiene su propia 
 <details>
 <summary><b>¿Cuántos grupos puede manejar?</b></summary>
 
-Se ha probado con **443+ grupos simultáneos** sin degradación. El store no cachea mensajes de grupos (solo metadatos) para mantener el uso de memoria bajo.
+Diseñado para **10,000+ grupos simultáneos**. El rate limiter de Rust y el tracker Bad MAC por grupo usan estructuras `HashMap` diseñadas para alta cardinalidad con limpieza automática cada 5,000 llamadas.
 
 </details>
 
 <details>
 <summary><b>¿Cada cuánto tiempo hacer backup?</b></summary>
 
-El monitor hace backup automático al iniciar (si la sesión es válida) y al recibir señal de cierre. Puedes forzarlo con `npm run manage:backup`. Se conservan los últimos **5 backups**.
+El monitor hace backup automático al iniciar (si la sesión es válida) y al recibir señal de cierre. Puedes forzarlo con `npm run manage:backup`. Rust conserva los últimos **10 snapshots**, además de los backups manuales.
 
 </details>
 
@@ -720,7 +809,14 @@ Sí. El tracking de delivery también funciona con Business. Sin embargo, funcio
 <details>
 <summary><b>¿Los datos de usuarios se pierden al reiniciar?</b></summary>
 
-No desde la v8.1.0. La librería `lib/db.ts` persiste `userData`, `groupConfigs` y clanes en SQLite (`data/winsi.db`). Los datos se cargan automáticamente al iniciar.
+No. `lib/db.ts` persiste `userData`, `groupConfigs` y clanes en SQLite (`data/winsi.db`). Los datos se cargan automáticamente al iniciar.
+
+</details>
+
+<details>
+<summary><b>¿Qué hace @brashkie/signalis-core?</b></summary>
+
+Es una librería NAPI basada en Rust que expone primitivos criptográficos a Node.js: Curve25519, Ed25519, HKDF, AES-GCM, HMAC, SHA-256. WinsiBot la usa para verificar que cada par de claves en `creds.json` sea internamente consistente (`publicFromPrivate(priv) === stored_pub`) antes de que Baileys las cargue — detectando corrupción antes de que cause errores Bad MAC en tiempo de ejecución.
 
 </details>
 
@@ -735,6 +831,7 @@ No desde la v8.1.0. La librería `lib/db.ts` persiste `userData`, `groupConfigs`
 - Todas las rutas de la Session API requieren API key en header
 - El webhook valida firma HMAC-SHA256 en cada petición
 - Los backups incluyen verificación de checksums SHA-256
+- Los pares de claves de `creds.json` verificados con Curve25519 en cada arranque
 - `auth/` está en `.gitignore` — no la expongas
 
 ---

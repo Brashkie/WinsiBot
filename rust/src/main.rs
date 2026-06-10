@@ -1,13 +1,16 @@
 mod atomic;
 mod auth;
+mod bad_mac;
 mod config;
 mod conversations;
 mod db;
 mod lock_manager;
 mod nlp;
+mod rate_limiter;
 mod routes;
 mod session_id;
 mod snapshot;
+mod watchdog;
 
 use axum::{middleware, routing::delete, routing::get, routing::post, Router};
 use routes::AppState;
@@ -51,6 +54,9 @@ async fn main() {
         locks:         lock_manager::LockManager::new(),
         db:            database,
         conv_db_path:  cfg.conv_db_path.clone(),
+        bad_mac:       bad_mac::BadMacTracker::new(),
+        rate_limiter:  rate_limiter::RateLimiter::new(),
+        watchdog:      watchdog::WatchdogState::new(),
     };
 
     // Rutas públicas (sin API key)
@@ -70,12 +76,23 @@ async fn main() {
         .route("/healthy",                get(routes::is_healthy))
         .route("/sessions",               get(routes::list_sessions))
         .route("/sessions/signal/clear",  post(routes::clear_signal_sessions))
+        .route("/sessions/backup",        get(routes::read_backup))
         // ─── NLP fast-path ───────────────────────────────────────────────────
         .route("/nlp/fast",               post(nlp::nlp_fast))
         // ─── AI conversations (DuckDB) ────────────────────────────────────────
         .route("/ai/learn",               post(conversations::ai_learn))
         .route("/ai/context/:sender",     get(conversations::ai_context))
         .route("/ai/export",              post(conversations::ai_export))
+        // ─── Bad MAC per-group tracker ────────────────────────────────────────
+        .route("/badmac/report",          post(bad_mac::report_bad_mac))
+        .route("/badmac/reset",           post(bad_mac::reset_bad_mac))
+        .route("/badmac/stats",           get(bad_mac::bad_mac_stats))
+        // ─── Rate limiter per-sender ──────────────────────────────────────────
+        .route("/rate/check",             post(rate_limiter::rate_check))
+        .route("/rate/stats",             get(rate_limiter::rate_stats))
+        // ─── Watchdog — heartbeat desde Node.js ────────────────────────────────
+        .route("/watchdog/ping",          post(watchdog::ping))
+        .route("/watchdog/status",        get(watchdog::status))
         // ─── Message delivery tracking ────────────────────────────────────────
         .route("/messages/track",         post(routes::messages_track))
         .route("/messages/ack",           post(routes::messages_ack))

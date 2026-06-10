@@ -1,10 +1,10 @@
 <div align="center">
 
-# 📖 Referencia de Comandos — WinsiBot v8.2.0
+# 📖 Referencia de Comandos — WinsiBot v8.2.1
 
 [![Comandos](https://img.shields.io/badge/Comandos-110%2B-6C63FF?style=for-the-badge)](.)
 [![Categorías](https://img.shields.io/badge/Categorías-19-00C9FF?style=for-the-badge)](.)
-[![Versión](https://img.shields.io/badge/Versión-8.2.0-brightgreen?style=flat-square)](../README.md)
+[![Versión](https://img.shields.io/badge/Versión-8.2.1-brightgreen?style=flat-square)](../README.md)
 
 [🇬🇧 English version →](commands.en.md) &nbsp;·&nbsp; [← Volver al README](../README.md)
 
@@ -90,7 +90,7 @@
 | `imagine` | `dalle`, `img`, `imagen` | — | ⭐ | Genera una imagen con DALL-E 3 |
 | `traducir` | `tl`, `translate`, `tr` | — | 👤 | Traduce texto a cualquier idioma (50+ idiomas) |
 
-> Fallback automático GPT → Gemini → Claude. Límite: 20 mensajes/hora por usuario.
+> Prioridad: **Ollama (local)** → GPT → Claude → Gemini (fallback automático). Límite: 20 mensajes/hora por usuario.
 
 ```
 !gpt Explícame la relatividad
@@ -454,6 +454,6 @@
 
 **[← Volver al README](../README.md)** &nbsp;·&nbsp; **[🇬🇧 English version →](commands.en.md)**
 
-*WinsiBot v8.2.0 — Desarrollado por [Brashkie](https://github.com/Brashkie)*
+*WinsiBot v8.2.1 — Desarrollado por [Brashkie](https://github.com/Brashkie)*
 
 </div>

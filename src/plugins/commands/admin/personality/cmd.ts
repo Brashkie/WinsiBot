@@ -31,7 +31,7 @@ const command: Command = {
   category:    'admin',
   adminOnly:   true,
 
-  async execute({ sock, jid, msg, args, prefix, isOwner, isAdmin, isGroup }) {
+  async execute({ sock, jid, msg, args, prefix, isOwner, isGroup }) {
 
     // #hepein sin args — mostrar menú
     if (!args.length) {
@@ -118,7 +118,7 @@ const command: Command = {
 
       if (!ok) {
         await safeSend(() => sock.sendMessage(jid, {
-          text: `✗ No se pudo cambiar el modo — Flask no disponible`,
+          text: `✗ No se pudo cambiar el modo — Python API no disponible`,
         }, { quoted: msg }))
         return
       }

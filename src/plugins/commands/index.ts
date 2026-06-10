@@ -1,14 +1,19 @@
 import fg from 'fast-glob'
-import { pathToFileURL } from 'url'
-import { join } from 'path'
+import { pathToFileURL, fileURLToPath } from 'url'
+import { dirname } from 'path'
 import type { Command } from '../../types/index.js'
 import { logger } from '@core/logger.js'
 
 export const commandRegistry = new Map<string, Command>()
 
 export async function loadCommands(): Promise<void> {
-  const files = await fg('src/plugins/commands/**/*.ts', {
-    ignore: ['**/index.ts'],
+  // Funciona tanto en src/ (tsx) como en dist/ (node)
+  const base = dirname(fileURLToPath(import.meta.url))
+  const ext  = import.meta.url.endsWith('.ts') ? 'ts' : 'js'
+
+  const files = await fg(`**/*.${ext}`, {
+    cwd:      base,
+    ignore:   [`**/index.${ext}`, '**/*.d.ts'],
     absolute: true,
   })
 

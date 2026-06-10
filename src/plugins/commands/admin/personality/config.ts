@@ -61,7 +61,7 @@ export async function setMode(mode: PersonalityMode, jid?: string): Promise<bool
       mode,
       jid: jid ?? null,
     })
-    return res?.data?.success ?? false
+    return res?.success ?? false
   } catch {
     return false
   }
@@ -72,7 +72,7 @@ export async function resetMode(jid?: string): Promise<boolean> {
     const res = await pythonPost<{ success: boolean }>('/api/v1/ai/personality/reset', {
       jid: jid ?? null,
     })
-    return res?.data?.success ?? false
+    return res?.success ?? false
   } catch {
     return false
   }

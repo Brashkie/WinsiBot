@@ -63,6 +63,39 @@ export interface CarouselCard {
   list?:    Array<[string, unknown[]]>
 }
 
+/** Parámetros para un botón de WhatsApp Flow (formulario interactivo). */
+export interface FlowButton {
+  flowId:    string
+  flowToken: string
+  flowCta:   string
+  screen?:   string
+  data?:     Record<string, unknown>
+}
+
+/** Definición de un producto individual. */
+export interface ProductDef {
+  image:        Buffer | string
+  productId:    string
+  title:        string
+  description?: string
+  currency?:    string
+  /** Precio en centavos ×1000 — ej: $10.00 USD = 10_000 */
+  price?:       number
+  retailerId?:  string
+  url?:         string
+}
+
+/** Producto ligero para usar en catálogo. */
+export interface CatalogProduct {
+  image?:       Buffer | string
+  productId:    string
+  title:        string
+  description?: string
+  currency?:    string
+  price?:       number
+  url?:         string
+}
+
 // ─── Helpers internos ─────────────────────────────────────────────────────────
 
 /**
@@ -423,15 +456,20 @@ export async function sendAlbum(
   return album
 }
 
-// ─── 7. sendCarousel — carrusel de cards interactivas ────────────────────────
+// ─── 7. sendCarousel — carrusel de cards interactivas (optimizado) ───────────
+
+const CAROUSEL_MAX = 10
 
 /**
- * Envía un carrusel horizontal de cards interactivas (≥ 2 cards).
+ * Envía un carrusel horizontal de cards interactivas (≥ 2 cards, máx 10).
  * Con una sola card degrada automáticamente a sendButton.
+ * Las cards con fallo de media se envían sin imagen (no abortan el carrusel).
  *
- * @param cards  Array de CarouselCard (mínimo 2 para carrusel real).
- * @param text   Texto del cuerpo exterior del carrusel.
- * @param footer Pie de página global (se usa en cada card si no trae el suyo).
+ * @param cards         Array de CarouselCard (mínimo 2 para carrusel real).
+ * @param text          Texto del cuerpo exterior del carrusel.
+ * @param footer        Pie de página global (se usa en cada card si no tiene el suyo).
+ * @param opts.title    Título en el header exterior (por defecto usa `text`).
+ * @param opts.subtitle Subtítulo en el header exterior.
  */
 export async function sendCarousel(
   sock:    WASocket,
@@ -440,24 +478,34 @@ export async function sendCarousel(
   footer:  string,
   cards:   CarouselCard[],
   quoted?: WAMessage,
+  opts: { title?: string; subtitle?: string } = {},
 ): Promise<void> {
   if (cards.length === 0) return
 
-  // Con una sola card usa sendButton directamente
   if (cards.length === 1) {
     const c = cards[0]!
-    const opts: { media?: Buffer | string; quoted?: WAMessage } = {}
-    if (c.media  !== undefined) opts.media  = c.media
-    if (quoted   !== undefined) opts.quoted = quoted
+    const btnOpts: { media?: Buffer | string; quoted?: WAMessage } = {}
+    if (c.media  !== undefined) btnOpts.media  = c.media
+    if (quoted   !== undefined) btnOpts.quoted = quoted
     await sendButton(sock, jid, c.text, c.footer ?? footer,
-      c.buttons.map(([t, id]) => ({ text: t, id })), opts)
+      c.buttons.map(([t, id]) => ({ text: t, id })), btnOpts)
     return
   }
 
-  const builtCards = await Promise.all(cards.map(async (card) => {
-    const prepared = card.media ? await _prepareMedia(sock, card.media) : null
-    const img = prepared?.imageMessage
-    const vid = prepared?.videoMessage
+  const capped = cards.length > CAROUSEL_MAX
+    ? (console.warn(`sendCarousel: ${cards.length} cards → cortado a ${CAROUSEL_MAX}`), cards.slice(0, CAROUSEL_MAX))
+    : cards
+
+  const builtCards = await Promise.all(capped.map(async (card) => {
+    let img: unknown = null
+    let vid: unknown = null
+    if (card.media) {
+      try {
+        const prepared = await _prepareMedia(sock, card.media)
+        img = prepared?.imageMessage ?? null
+        vid = prepared?.videoMessage ?? null
+      } catch { /* card se envía sin media */ }
+    }
 
     const dynamicButtons: unknown[] = card.buttons.map(([display_text, id]) => ({
       name: 'quick_reply',
@@ -487,8 +535,8 @@ export async function sendCarousel(
       footer: proto.Message.InteractiveMessage.Footer.fromObject({ text: card.footer ?? footer }),
       header: proto.Message.InteractiveMessage.Header.fromObject({
         hasMediaAttachment: !!(img || vid),
-        imageMessage: img ?? null,
-        videoMessage: vid ?? null,
+        imageMessage: img,
+        videoMessage: vid,
       }),
       nativeFlowMessage: proto.Message.InteractiveMessage.NativeFlowMessage.fromObject({
         buttons:           dynamicButtons,
@@ -497,13 +545,16 @@ export async function sendCarousel(
     })
   }))
 
+  const outerTitle    = opts.title    ?? text
+  const outerSubtitle = opts.subtitle ?? ''
+
   const interactiveMessage = proto.Message.InteractiveMessage.create({
     body:   proto.Message.InteractiveMessage.Body.fromObject({ text }),
     footer: proto.Message.InteractiveMessage.Footer.fromObject({ text: footer }),
     header: proto.Message.InteractiveMessage.Header.fromObject({
       hasMediaAttachment: false,
-      title:    text,
-      subtitle: text,
+      title:    outerTitle,
+      subtitle: outerSubtitle,
     }),
     carouselMessage: proto.Message.InteractiveMessage.CarouselMessage.fromObject({
       cards: builtCards,
@@ -524,4 +575,170 @@ export async function sendCarousel(
 
   const msg = generateWAMessageFromContent(jid, content as any, _genOpts(sock, quoted))
   await _relay(sock, jid, msg.message!, msg.key.id!)
+}
+
+// ─── 8. sendFlow — formulario interactivo (WhatsApp Flows) ───────────────────
+
+/**
+ * Envía un botón que abre un WhatsApp Flow (formulario interactivo nativo).
+ * Requiere un Flow ID activo en Meta Business Manager.
+ *
+ * @param flow.flowId    ID del Flow en Meta (ej: "1234567890")
+ * @param flow.flowToken Token único de sesión (puede ser "unused" para flows sin auth)
+ * @param flow.flowCta   Texto del botón de apertura (ej: "Abrir formulario")
+ * @param flow.screen    Pantalla inicial del flow (default "WELCOME")
+ * @param flow.data      Datos iniciales a pasar al flow
+ */
+export async function sendFlow(
+  sock:    WASocket,
+  jid:     string,
+  text:    string,
+  footer:  string,
+  flow:    FlowButton,
+  opts: {
+    media?:  Buffer | string
+    quoted?: WAMessage
+  } = {},
+): Promise<any> {
+  const media = opts.media ? await _prepareMedia(sock, opts.media) : null
+  const img   = media?.imageMessage
+  const vid   = media?.videoMessage
+
+  const flowParams = {
+    flow_message_version: '3',
+    flow_token:           flow.flowToken,
+    flow_id:              flow.flowId,
+    flow_cta:             flow.flowCta,
+    flow_action:          'navigate',
+    flow_action_payload: {
+      screen: flow.screen ?? 'WELCOME',
+      data:   flow.data   ?? {},
+    },
+  }
+
+  const msg = generateWAMessageFromContent(
+    jid,
+    {
+      viewOnceMessage: {
+        message: {
+          interactiveMessage: {
+            body:   { text },
+            footer: { text: footer },
+            header: {
+              hasMediaAttachment: !!(img || vid),
+              imageMessage: img  ?? null,
+              videoMessage: vid  ?? null,
+            },
+            nativeFlowMessage: {
+              buttons: [{
+                name:             'flow',
+                buttonParamsJson: JSON.stringify(flowParams),
+              }],
+              messageParamsJson: '',
+            },
+          },
+        },
+      },
+    } as any,
+    _genOpts(sock, opts.quoted),
+  )
+
+  return _relay(sock, jid, msg.message!, msg.key.id!)
+}
+
+// ─── 9. sendProduct — producto individual (WhatsApp Business) ────────────────
+
+/**
+ * Envía un mensaje de producto individual (requiere cuenta WhatsApp Business
+ * con catálogo configurado en Meta Business Manager).
+ *
+ * @param product.price  Precio en centavos ×1000 — ej: $10.00 = 10_000
+ */
+export async function sendProduct(
+  sock:         WASocket,
+  jid:          string,
+  product:      ProductDef,
+  businessJid?: string,
+  quoted?:      WAMessage,
+): Promise<any> {
+  const prepared   = await _prepareMedia(sock, product.image)
+  const productImg = prepared?.imageMessage ?? null
+
+  const msg = generateWAMessageFromContent(
+    jid,
+    {
+      productMessage: {
+        product: {
+          productImage:      productImg,
+          productId:         product.productId,
+          title:             product.title,
+          description:       product.description    ?? '',
+          currencyCode:      product.currency       ?? 'USD',
+          priceAmount1000:   product.price          ?? 0,
+          retailerId:        product.retailerId      ?? '',
+          url:               product.url            ?? '',
+          productImageCount: productImg ? 1 : 0,
+        },
+        businessOwnerJid: businessJid ?? sock.user?.id ?? '',
+      },
+    } as any,
+    _genOpts(sock, quoted),
+  )
+
+  return _relay(sock, jid, msg.message!, msg.key.id!)
+}
+
+// ─── 10. sendCatalog — catálogo de productos ─────────────────────────────────
+
+/**
+ * Envía un catálogo de productos como carrusel interactivo.
+ * Cada card muestra imagen, título, precio y un botón "Ver producto".
+ *
+ * Para 1 producto usa sendProduct directamente.
+ * Para 2–10 productos usa sendCarousel con una card por producto.
+ *
+ * @param businessJid  JID de la cuenta business (default: sock.user.id).
+ *                     Solo aplica cuando products.length === 1.
+ */
+export async function sendCatalog(
+  sock:         WASocket,
+  jid:          string,
+  title:        string,
+  body:         string,
+  products:     CatalogProduct[],
+  businessJid?: string,
+  quoted?:      WAMessage,
+): Promise<void> {
+  if (products.length === 0) return
+
+  if (products.length === 1) {
+    const p = products[0]!
+    const def: ProductDef = {
+      image:     p.image ?? Buffer.alloc(0),
+      productId: p.productId,
+      title:     p.title,
+      ...(p.description !== undefined ? { description: p.description } : {}),
+      ...(p.currency    !== undefined ? { currency:    p.currency    } : {}),
+      ...(p.price       !== undefined ? { price:       p.price       } : {}),
+      ...(p.url         !== undefined ? { url:         p.url         } : {}),
+    }
+    await sendProduct(sock, jid, def, businessJid, quoted)
+    return
+  }
+
+  const priceLabel = (p: CatalogProduct) =>
+    p.price ? `${p.currency ?? 'USD'} ${(p.price / 1000).toFixed(2)}` : ''
+
+  const cards: CarouselCard[] = products.map(p => {
+    const card: CarouselCard = {
+      text:    `*${p.title}*${p.description ? `\n${p.description}` : ''}`,
+      footer:  priceLabel(p),
+      buttons: [['🛒 Ver producto', `!product ${p.productId}`]],
+    }
+    if (p.image !== undefined) card.media = p.image
+    if (p.url   !== undefined) card.urls  = [['🔗 Más info', p.url]]
+    return card
+  })
+
+  await sendCarousel(sock, jid, body, title, cards, quoted, { title })
 }

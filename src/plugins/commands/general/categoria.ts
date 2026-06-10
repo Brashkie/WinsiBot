@@ -21,16 +21,19 @@ const command: Command = {
   async execute({ sock, jid, msg, args, prefix }) {
     const cat = args[0]?.toLowerCase()
 
+    // comandos únicos (el registry indexa nombre + aliases, deduplicamos por name)
+    const unique = [...new Map([...commandRegistry.values()].map(c => [c.name, c])).values()]
+
     // sin argumento — mostrar lista de categorias
     if (!cat) {
-      const categories = [...new Set([...commandRegistry.values()].map(c => c.category))]
+      const categories = [...new Set(unique.map(c => c.category))]
 
       let text = `(つ▀¯▀)つ═𖡼 *${config.botName}* 𖡼═══\n`
       text    += `‖ ❖ *Categorias disponibles*\n`
       text    += `(つ▀¯▀)つ══════════════\n\n`
 
       for (const c of categories) {
-        const count  = [...commandRegistry.values()].filter(cmd => cmd.category === c).length
+        const count  = unique.filter(cmd => cmd.category === c).length
         const symbol = CATEGORY_SYMBOLS[c] ?? '·'
         text += `${symbol} *${c.toUpperCase()}* 𒀭 ${count} cmds\n`
         text += `> ${prefix}category ${c}\n\n`
@@ -43,7 +46,7 @@ const command: Command = {
     }
 
     // con argumento — mostrar comandos de esa categoria
-    const cmds = [...commandRegistry.values()].filter(c => c.category === cat)
+    const cmds = unique.filter(c => c.category === cat)
 
     if (!cmds.length) {
       await sock.sendMessage(jid, {
@@ -64,7 +67,7 @@ const command: Command = {
       if (cmd.aliases?.length) {
         text += `  ${cmd.aliases.map(a => `${prefix}${a}`).join('  ')}`
       }
-      text += `\n> ✉ ${cmd.description}\n`
+      text += `\n> ${cmd.description}\n`
     }
 
     text += `\n𒉺══════════════𒉺`

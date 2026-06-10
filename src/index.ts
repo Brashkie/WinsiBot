@@ -1,10 +1,14 @@
 import 'dotenv/config'
 import readline from 'readline'
+import { spawn, type ChildProcess } from 'child_process'
+import { join } from 'path'
+import { existsSync } from 'fs'
 import { WinsiSocket } from '@core/socket.js'
 import { handleMessage } from '@core/handler.js'
 import { loadCommands } from '@plugins/commands/index.js'
 import { logger } from '@core/logger.js'
 import { config } from '@config'
+import { loadAll, saveAll, startAutoSave } from '@core/persistence.js'
 import { color, gradient, loader, ascii, themes, configure } from 'ansimax'
 
 themes.use('dracula')
@@ -44,17 +48,23 @@ process.on('uncaughtException', (err) => {
 function shutdownCleanly(): void {
   console.log()
   console.log(`  ${themes.warning('◆')} ${color.bold(themes.warning('WinsiBot detenido por el usuario'))}`)
-  console.log(`  ${color.dim('Sesión guardada — puedes reiniciar con npm run dev')}`)
-  console.log()
-  import('@plugins/commands/jadibot/serbot.js').then(({ subBots }) => {
-    for (const [, bot] of subBots) {
-      try { bot.sock?.ev?.removeAllListeners() } catch {}
-      try { bot.sock?.ws?.close() }             catch {}
-    }
-  }).catch(() => {}).finally(() => {
-    try { process.stdin.setRawMode(false) } catch {}
-    process.exit(0)
-  })
+  console.log(`  ${color.dim('Guardando datos...')}`)
+
+  saveAll()
+    .catch(() => {})
+    .finally(() => {
+      console.log(`  ${color.dim('Datos guardados — puedes reiniciar con npm run dev')}`)
+      console.log()
+      import('@plugins/commands/jadibot/serbot.js').then(({ subBots }) => {
+        for (const [, bot] of subBots) {
+          try { bot.sock?.ev?.removeAllListeners() } catch {}
+          try { bot.sock?.ws?.close() }             catch {}
+        }
+      }).catch(() => {}).finally(() => {
+        try { process.stdin.setRawMode(false) } catch {}
+        process.exit(0)
+      })
+    })
 }
 
 let _askingExit = false
@@ -97,10 +107,78 @@ process.on('SIGINT', () => {
 process.on('SIGTERM', () => {
   console.log()
   console.log(`  ${themes.warning('◆')} ${color.bold(themes.warning('WinsiBot detenido (SIGTERM)'))}`)
-  console.log()
   try { process.stdin.setRawMode(false) } catch {}
-  process.exit(0)
+  saveAll().catch(() => {}).finally(() => process.exit(0))
 })
+
+// ─── Python API auto-arranque ─────────────────────────────────────────────────
+
+let _pythonProc: ChildProcess | null = null
+
+async function isPythonApiUp(): Promise<boolean> {
+  try {
+    const { default: axios } = await import('axios')
+    await axios.get(`${config.pythonApiUrl}/api/v1/health`, { timeout: 2_000 })
+    return true
+  } catch {
+    return false
+  }
+}
+
+async function waitPythonApi(maxWaitMs = 20_000): Promise<boolean> {
+  const deadline = Date.now() + maxWaitMs
+  while (Date.now() < deadline) {
+    if (await isPythonApiUp()) return true
+    await new Promise(r => setTimeout(r, 800))
+  }
+  return false
+}
+
+async function ensurePythonApi(): Promise<void> {
+  // Si ya responde, no hacer nada
+  if (await isPythonApiUp()) return
+
+  // Buscar el ejecutable de Python del venv
+  const venvPython = join(process.cwd(), 'python', 'venv', 'Scripts', 'python.exe')
+  const sysPython  = process.platform === 'win32' ? 'python' : 'python3'
+  const python     = existsSync(venvPython) ? venvPython : sysPython
+
+  const stopSpin = loader.spin('Iniciando Python API...')
+
+  _pythonProc = spawn(python, [
+    '-m', 'uvicorn',
+    'api.app:app',
+    '--host', '127.0.0.1',
+    '--port', '5000',
+    '--workers', '1',
+    '--log-level', 'warning',
+    '--no-access-log',
+  ], {
+    cwd:   join(process.cwd(), 'python'),
+    // 'ignore' descarta stdout/stderr — evita que el pipe buffer se llene y bloquee Python
+    stdio: ['ignore', 'ignore', 'ignore'],
+  })
+
+  _pythonProc.on('error', (err) => {
+    stopSpin(`Python API no pudo iniciar: ${err.message}`, false)
+  })
+
+  // Reinicar Python si muere inesperadamente (exit code != 0)
+  _pythonProc.on('exit', (code) => {
+    if (code !== 0 && code !== null) {
+      logger.warn(`Python API terminó con código ${code} — reiniciando en 3s`)
+      setTimeout(() => ensurePythonApi().catch(() => {}), 3_000)
+    }
+  })
+
+  // Esperar hasta que responda (máx 20s)
+  const ok = await waitPythonApi(20_000)
+  if (ok) {
+    stopSpin('Python API lista', true)
+  } else {
+    stopSpin('Python API tardó demasiado — continuando sin ella', false)
+  }
+}
 
 // ─── Banner ───────────────────────────────────────────────────────────────────
 async function printBanner() {
@@ -175,6 +253,13 @@ async function printConnected(jid: string, cmdCount: number) {
 async function main() {
   await printBanner()
 
+  await ensurePythonApi()
+
+  const stopData = loader.spin('Cargando datos guardados...')
+  await loadAll()
+  startAutoSave(30_000)
+  stopData('Datos cargados', true)
+
   const stopLoad = loader.spin('Cargando comandos...')
   await loadCommands()
   stopLoad('Comandos cargados', true)
@@ -205,11 +290,14 @@ async function main() {
   })
 
   winsi.on('closed', () => {
+    // 'closed' solo llega por loggedOut (401) o kick de otra sesión (440)
+    // — no es un error de red, es que WhatsApp desconectó la sesión intencionalmente.
     console.log()
-    console.log(`  ${themes.error('◆')} ${color.bold(themes.error('Desconectado definitivamente'))}`)
-    console.log(`  ${color.dim('Borra la carpeta /auth y reinicia para reconectar')}`)
+    console.log(`  ${themes.error('◆')} ${color.bold(themes.error('Sesión cerrada por WhatsApp'))}`)
+    console.log(`  ${color.dim('Si fue un logout: borra /auth y reinicia para escanear QR nuevo')}`)
+    console.log(`  ${color.dim('Si fue un kick por otra instancia: cierra WhatsApp Web y reinicia')}`)
     console.log()
-    process.exit(1)
+    saveAll().catch(() => {}).finally(() => process.exit(0))
   })
 
   try {
@@ -220,7 +308,27 @@ async function main() {
   }
 }
 
+// ─── Watchdog heartbeat — ping a Rust cada 20s ───────────────────────────────
+// Si el event loop se congela, los pings dejan de llegar y Rust lo detecta.
+// GET /watchdog/status desde un monitor externo puede alertar o reiniciar.
+function startWatchdogPing(): void {
+  const RUST_URL = process.env.SESSION_API_URL ?? 'http://127.0.0.1:3001'
+  const RUST_KEY = process.env.RUST_API_KEY ?? ''
+  setInterval(async () => {
+    try {
+      await fetch(`${RUST_URL}/watchdog/ping`, {
+        method:  'POST',
+        headers: { 'x-api-key': RUST_KEY, 'Content-Type': 'application/json' },
+        body:    '{}',
+        signal:  AbortSignal.timeout(2_000),
+      })
+    } catch { /* silencioso si Rust no está corriendo */ }
+  }, 20_000).unref()
+}
+
 main().catch(err => {
   logger.error({ err }, 'Error fatal')
   process.exit(1)
 })
+
+startWatchdogPing()

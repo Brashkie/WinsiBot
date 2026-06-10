@@ -6,7 +6,8 @@ import { logger } from './logger.js'
 import { color, themes } from 'ansimax'
 import type { BotContext } from '../types/index.js'
 import { handleNotFound } from '@plugins/commands/general/notfound.js'
-import { pythonGet, pythonPost, fastProcess, analyzeIntent, getAIContext, learnConversation } from '@lib/pythonBridge.js'
+import { pythonGet, pythonPost, fastProcess, analyzeIntent, learnConversation } from '@lib/pythonBridge.js'
+import { hepein } from '@lib/hepein.js'
 import { safeSend } from '@lib/media_sender.js'
 import {
   addXP,
@@ -18,12 +19,19 @@ import {
 } from '@core/events.js'
 import { hasPendingCaptcha, verifyCaptchaAnswer } from '@core/events/captcha.js'
 import { handleDrawGuessMessage, handleQuizMessage } from '@core/events/gameHandlers.js'
+import { sessionClient } from '@lib/session.js'
 
 // ─── Bots conocidos a ignorar ─────────────────────────────────────────────────
 const KNOWN_BOTS = new Set([
   '+50251513940@s.whatsapp.net',
   '50251513940@s.whatsapp.net',
 ])
+
+// ─── Semáforo de concurrencia ─────────────────────────────────────────────────
+// Sin esto, en grupos muy activos se crean 100+ Promises concurrentes haciendo
+// HTTP calls a Rust/Python, agotando el event loop y causando timeouts en cascada.
+const MAX_CONCURRENT = 25
+let _activeHandlers  = 0
 
 // ─── Cache de groupMetadata en RAM con límite LRU ────────────────────────────
 const GROUP_META_TTL = 5 * 60 * 1000
@@ -228,56 +236,54 @@ async function handleAIResponse(
   msg:  WAMessage,
 ): Promise<boolean> {
   try {
-    // 1. Intención — Rust fast-path → Python → fallback 'neutral'
+    // 1. Intención rápida (Rust → Python)
     const nlp    = await analyzeIntent(ctx.text)
     const intent = nlp?.primary ?? 'neutral'
-
     if (intent === 'spam' || intent === 'nsfw') return false
 
-    // 2. Paralelo: memoria Python + contexto conversacional DuckDB (Rust)
-    const [memResult, aiCtx] = await Promise.all([
-      Promise.race([
-        pythonPost<Record<string, any>>(
-          `/api/v1/ai/memory/${encodeURIComponent(ctx.sender)}/update`,
-          { text: ctx.text, intent, is_cmd: false },
-        ),
-        new Promise<null>(r => setTimeout(() => r(null), 800)),
-      ]).catch(() => null),
-      Promise.race([
-        getAIContext(ctx.sender),
-        new Promise<null>(r => setTimeout(() => r(null), 400)),
-      ]).catch(() => null),
-    ])
-
-    const context = (memResult as any)?.data ?? {}
-
-    // 3. Respuesta de personalidad — con historial y estilo del usuario
-    const replyRes = await pythonPost<string>(
-      '/api/v1/ai/personality/respond',
-      {
+    // 2. Hepein: GPT / Gemini / Claude con perfil aprendido del grupo
+    const hepeinRes = await Promise.race([
+      hepein.respond({
+        prompt:    ctx.text,
+        groupJid:  ctx.isGroup ? ctx.jid : '',
+        senderJid: ctx.sender,
         intent,
-        text:       ctx.text,
-        context,
-        jid:        ctx.jid,
-        use_humor:  true,
-        history:    aiCtx?.history   ?? [],
-        user_style: aiCtx?.style     ?? null,
-      },
-    ).catch(() => null)
+        force:     true,   // omitir cooldown interno — ya lo controla handler
+      }),
+      new Promise<null>(r => setTimeout(() => r(null), 8_000)),
+    ]).catch(() => null)
 
-    const reply = (typeof replyRes?.data === 'string' && replyRes.data.trim())
-      ? replyRes.data.trim()
-      : localFallback(intent)
+    let reply: string | null = hepeinRes?.ok ? hepeinRes.text ?? null : null
 
-    await safeSend(() => sock.sendMessage(ctx.jid, { text: reply }, { quoted: msg }))
+    // 3. Fallback: plantilla local si la IA no respondió
+    if (!reply) {
+      // Intentar con el motor de personalidad local (tiene en cuenta el modo del grupo)
+      const localRes = await pythonPost<string>(
+        '/api/v1/ai/personality/respond',
+        {
+          intent,
+          text:       ctx.text,
+          jid:        ctx.jid,
+          use_humor:  true,
+          history:    [],
+          user_style: null,
+        },
+      ).catch(() => null)
 
-    // 4. Guardar conversación en DuckDB (fire-and-forget)
+      reply = (typeof localRes?.data === 'string' && localRes.data.trim())
+        ? localRes.data.trim()
+        : localFallback(intent)
+    }
+
+    await safeSend(() => sock.sendMessage(ctx.jid, { text: reply! }, { quoted: msg }))
+
+    // 4. Guardar conversación (fire-and-forget)
     learnConversation({
       sender: ctx.sender,
       gjid:   ctx.isGroup ? ctx.jid : '',
       text:   ctx.text,
       intent,
-      reply,
+      reply:  reply!,
       mode:   'amable',
     }).catch(() => {})
 
@@ -290,6 +296,10 @@ async function handleAIResponse(
 
 // ─── Handler principal ────────────────────────────────────────────────────────
 export async function handleMessage(msg: WAMessage, sock: WASocket): Promise<void> {
+  // Semáforo — si hay demasiados mensajes procesándose en paralelo, descartar.
+  // Rust ya tiene rate limiting — si llegamos aquí con +25 activos es un burst anormal.
+  if (_activeHandlers >= MAX_CONCURRENT) return
+  _activeHandlers++
   try {
     const jidEarly = msg.key.remoteJid ?? ''
     const textEarly = (
@@ -312,6 +322,17 @@ export async function handleMessage(msg: WAMessage, sock: WASocket): Promise<voi
     if (!base.jid || base.jid === 'status@broadcast') return
 
     if (KNOWN_BOTS.has(base.sender)) return
+
+    // ─── Rate limit por Rust (< 1ms, siempre disponible, sin Python) ─────────
+    // Owners y admins no se limitan aquí — el check es solo para usuarios normales.
+    // Falla abierto: si Rust no responde, el mensaje pasa igual.
+    if (!base.isOwner && base.text) {
+      const rate = await sessionClient.checkRate(base.sender).catch(() => ({ allowed: true, remaining: 15 }))
+      if (!rate.allowed) {
+        console.log(`  ${themes.error('◈')} ${color.bold(themes.error('Rate'))}  ${color.dim(base.sender.replace('@s.whatsapp.net','').replace('@lid',''))}  ${color.dim('bloqueado por Rust')}`)
+        return
+      }
+    }
 
     const [rolesResult, fastResult] = await Promise.allSettled([
       base.isGroup
@@ -563,5 +584,7 @@ export async function handleMessage(msg: WAMessage, sock: WASocket): Promise<voi
       return
     }
     logger.error({ err }, 'Error en handleMessage')
+  } finally {
+    _activeHandlers--
   }
 }

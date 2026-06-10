@@ -256,7 +256,7 @@ class WinsiDB {
 // ─── Singleton ────────────────────────────────────────────────────────────────
 export const db = new WinsiDB()
 
-// Guardar al salir del proceso
-process.once('exit',    () => db.close())
-process.once('SIGINT',  () => { db.close(); process.exit(0) })
-process.once('SIGTERM', () => { db.close(); process.exit(0) })
+// Solo 'exit' — NUNCA manejar SIGINT/SIGTERM aquí.
+// index.ts tiene el shutdown completo (saveAll, cerrar subbots, etc.).
+// 'exit' se dispara siempre al final, sin importar cómo salió el proceso.
+process.once('exit', () => db.close())

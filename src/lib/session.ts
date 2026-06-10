@@ -15,14 +15,26 @@ const _headers = {
 }
 
 // ─── Fetch helper ─────────────────────────────────────────────────────────────
+// Timeout hardcoded de 3s — Rust debe responder sub-ms, 3s es el worst-case.
+// Sin timeout, un Rust colgado (no offline) acumula promesas pendientes para
+// siempre y eventualmente agota la memoria del proceso Node.
+const FETCH_TIMEOUT_MS = 3_000
+
 async function apiFetch<T>(path: string, init?: RequestInit): Promise<T> {
-  const res  = await fetch(`${API_URL}${path}`, {
-    ...init,
-    headers: { ..._headers, ...init?.headers },
-  })
-  const json = (await res.json()) as T & { ok: boolean; error?: string }
-  if (!res.ok || !json.ok) throw new Error(json.error ?? `HTTP ${res.status}`)
-  return json
+  const ctrl = new AbortController()
+  const timer = setTimeout(() => ctrl.abort(), FETCH_TIMEOUT_MS)
+  try {
+    const res  = await fetch(`${API_URL}${path}`, {
+      ...init,
+      signal:  ctrl.signal,
+      headers: { ..._headers, ...init?.headers },
+    })
+    const json = (await res.json()) as T & { ok: boolean; error?: string }
+    if (!res.ok || !json.ok) throw new Error(json.error ?? `HTTP ${res.status}`)
+    return json
+  } finally {
+    clearTimeout(timer)
+  }
 }
 
 // ─── Tipos ────────────────────────────────────────────────────────────────────
@@ -132,6 +144,24 @@ export class SessionClient {
     return JSON.parse(Buffer.from(res.data, 'base64').toString('utf8'))
   }
 
+  /**
+   * Lee el mejor backup disponible de creds sin restaurar ni sobreescribir nada.
+   * Prueba: archivo actual → snapshot #1..10.
+   * Devuelve el objeto de creds parseado, o null si no hay ninguno válido.
+   * Usado por authVerifier para recuperar creds.json sin necesitar QR.
+   */
+  async readBackup(): Promise<{ creds: unknown; source: string; index: number } | null> {
+    try {
+      const res = await apiFetch<{ data: string; source: string; index: number }>(
+        `/sessions/backup?sessionId=${this.sessionId}`
+      )
+      const creds = JSON.parse(Buffer.from(res.data, 'base64').toString('utf8'))
+      return { creds, source: res.source, index: res.index }
+    } catch {
+      return null
+    }
+  }
+
   async health(): Promise<HealthResult> {
     return apiFetch<HealthResult>(`/healthy?sessionId=${this.sessionId}`)
   }
@@ -171,6 +201,53 @@ export class SessionClient {
       method: 'POST',
       body:   '{}',
     })
+  }
+
+  /**
+   * Reporta un Bad MAC para un grupo específico.
+   * Devuelve shouldClear=true cuando ese grupo alcanzó el umbral (5 en 30s).
+   * Cada grupo tiene su propio contador — un grupo no afecta a los demás.
+   * Falla silenciosamente si Rust no está corriendo.
+   */
+  async reportBadMac(jid: string): Promise<{ count: number; shouldClear: boolean }> {
+    try {
+      const res = await apiFetch<{ count: number; shouldClear: boolean }>('/badmac/report', {
+        method: 'POST',
+        body:   JSON.stringify({ jid }),
+      })
+      return { count: res.count, shouldClear: res.shouldClear }
+    } catch {
+      return { count: 0, shouldClear: false }
+    }
+  }
+
+  /**
+   * Resetea el contador Bad MAC de un grupo (después de hacer clear manual).
+   */
+  async resetBadMac(jid: string): Promise<void> {
+    try {
+      await apiFetch('/badmac/reset', {
+        method: 'POST',
+        body:   JSON.stringify({ jid }),
+      })
+    } catch { /* silencioso */ }
+  }
+
+  /**
+   * Verifica si un sender puede enviar mensajes (rate limiting).
+   * Límite: 15 mensajes / 10s por sender.
+   * Falla abierto: si Rust no responde, siempre permite.
+   */
+  async checkRate(sender: string): Promise<{ allowed: boolean; remaining: number }> {
+    try {
+      const res = await apiFetch<{ allowed: boolean; remaining: number }>('/rate/check', {
+        method: 'POST',
+        body:   JSON.stringify({ sender }),
+      })
+      return { allowed: res.allowed, remaining: res.remaining }
+    } catch {
+      return { allowed: true, remaining: 15 }
+    }
   }
 
   // ─── Message delivery tracking ───────────────────────────────────────────────

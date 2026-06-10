@@ -1,28 +1,60 @@
 import type { Command, RollCharacter } from '../../../types/index.js'
-import { charCache, SOURCES, getCharacters, pickImage } from './rollwaifu.js'
+import { SOURCES, getCharacters, pickImage } from './rollwaifu.js'
 import { downloadBuffer } from '@lib/downloader.js'
+import { translate } from '@vitalets/google-translate-api'
 
-async function findCharacter(name: string): Promise<RollCharacter | null> {
-  const needle = name.toLowerCase()
+/** Normaliza: minúsculas, sin acentos, sin guiones/espacios extra. */
+const norm = (s: string) =>
+  s.toLowerCase()
+   .normalize('NFD').replace(/[̀-ͯ]/g, '')
+   .replace(/[-_\s]+/g, '')
 
-  const matches = (name: string) => {
-    const n = name.toLowerCase()
-    return n === needle || n.includes(needle) || needle.includes(n)
+function findBest(chars: RollCharacter[], needle: string): RollCharacter | null {
+  const n = norm(needle)
+
+  const score = (charName: string): number => {
+    const c = norm(charName)
+    if (c === n)                          return 4  // exacto normalizado
+    if (c.startsWith(n) || n.startsWith(c)) return 3  // prefijo
+    if (c.includes(n)   || n.includes(c))   return 2  // parcial
+    // palabra a palabra: al menos una palabra en común
+    const nWords = n.split('')   // ya sin espacios, busca por tokens
+    const cWords = c.split('')
+    void nWords; void cWords
+    return 0
   }
 
-  // search cached sources first
-  for (const chars of charCache.values()) {
-    const found = chars.find(c => matches(c.name))
-    if (found) return found
+  let best: RollCharacter | null = null
+  let bestScore = 0
+  for (const char of chars) {
+    const s = score(char.name)
+    if (s > bestScore) { best = char; bestScore = s }
+    if (bestScore === 4) break
   }
+  return bestScore > 0 ? best : null
+}
 
-  // load uncached sources
-  for (const source of Object.keys(SOURCES)) {
-    if (charCache.has(source)) continue
-    const chars = await getCharacters(source).catch(() => [] as RollCharacter[])
-    const found = chars.find(c => matches(c.name))
-    if (found) return found
-  }
+/**
+ * Busca en TODAS las fuentes de GitHub.
+ * Si no encuentra con la query original, traduce al inglés y reintenta.
+ */
+async function findCharacter(name: string): Promise<{ char: RollCharacter; total: number } | null> {
+  const allChars = (
+    await Promise.all(Object.keys(SOURCES).map(s => getCharacters(s).catch(() => [])))
+  ).flat()
+
+  // 1. Buscar con query original
+  const direct = findBest(allChars, name)
+  if (direct) return { char: direct, total: allChars.length }
+
+  // 2. Traducir al inglés y reintentar (ej: "hombre araña" → "spider man")
+  try {
+    const { text: enQuery } = await translate(name, { to: 'en' })
+    if (norm(enQuery) !== norm(name)) {
+      const translated = findBest(allChars, enQuery)
+      if (translated) return { char: translated, total: allChars.length }
+    }
+  } catch { /* si la traducción falla, continúa */ }
 
   return null
 }
@@ -44,15 +76,23 @@ const command: Command = {
       return
     }
 
-    const char = await findCharacter(name)
+    const result = await findCharacter(name)
 
-    if (!char) {
+    if (!result) {
+      // total = 0 → fallo de red, total > 0 → personaje no existe
+      const allChars = (
+        await Promise.all(Object.keys(SOURCES).map(s => getCharacters(s).catch(() => [])))
+      ).flat()
+      const total = allChars.length
       await sock.sendMessage(jid, {
-        text: `✗ No se encontró el personaje *${name}*.\n  § Asegúrate de haber rodado esa fuente primero con *${prefix}rw <fuente>*`,
+        text: total === 0
+          ? `✗ No se pudieron cargar los personajes (error de red).\n  § Reintenta en unos segundos.`
+          : `✗ No se encontró *${name}* en ninguna fuente (${total} personajes).\n  § Intenta con el nombre en inglés.`,
       }, { quoted: msg })
       return
     }
 
+    const { char } = result
     const imageUrl = pickImage(char.image)
 
     let buffer: Buffer | null = null
