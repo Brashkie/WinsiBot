@@ -40,7 +40,7 @@ Closes #<!-- número de issue, si aplica -->
 
 > Pasos exactos para verificar que los cambios funcionan correctamente.
 
-1. `npm run start:all`
+1. `npm run start`
 2. En WhatsApp: enviar `!...`
 3. Verificar que ...
 

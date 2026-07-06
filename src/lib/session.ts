@@ -134,8 +134,8 @@ export class SessionClient {
         method: 'POST',
         body:   JSON.stringify({ sessionId: this.sessionId, data }),
       })
-    } catch {
-      // Rust no disponible — fallo silencioso
+    } catch (err) {
+      logger.warn({ err }, `[session:${this.sessionId}] fallo al respaldar sesión en Rust`)
     }
   }
 

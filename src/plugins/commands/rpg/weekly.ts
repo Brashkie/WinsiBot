@@ -2,12 +2,11 @@ import type { Command } from '../../../types/index.js'
 import {
   getUserData, patchUserData,
   isOnCooldown, setCooldown, getCooldownLeft, fmtCooldown,
-  checkLevelUp,
+  checkLevelUp, levelUpLine,
 } from '@core/events.js'
+import { randomChoice as pick } from '@lib/utils.js'
 
 const CD = 3 * 24 * 60 * 60_000
-
-const pick = <T>(arr: T[]): T => arr[Math.floor(Math.random() * arr.length)]!
 
 const command: Command = {
   name: 'weekly',
@@ -44,17 +43,10 @@ const command: Command = {
     setCooldown(sender, 'lastWeekly')
 
     const leveled = checkLevelUp(sender)
-    const lvlLine = leveled > 0 ? `\n> ◆ *¡Subiste ${leveled} nivel(es)!*` : ''
+    const lvlLine = levelUpLine(leveled)
 
     await sock.sendMessage(jid, {
-      text: `*RECOMPENSA SEMANAL* ${isPrem ? '★' : ''}
-
-> +${exp} XP
-> +¥${money} BrasCoins
-> +${diamonds} Diamantes
-> +${sword} Espadas  · +${sp} Magia${lvlLine}
-
-_Próxima recompensa en 3 días_`,
+      text: `> +${exp} XP  ·  +¥${money.toLocaleString()} BrasCoins\n> +${diamonds} 💎  ·  +${sword} ⚔️  ·  +${sp} ✨${lvlLine}\n\n_Próxima recompensa en 3 días_`,
     }, { quoted: msg })
   },
 }

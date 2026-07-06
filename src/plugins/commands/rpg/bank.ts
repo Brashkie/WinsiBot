@@ -3,7 +3,7 @@ import { getUserData, patchUserData } from '@core/events.js'
 
 const command: Command = {
   name: 'depositar',
-  aliases: ['dep', 'retirar', 'withdraw', 'banco'],
+  aliases: ['dep', 'deposit', 'retirar', 'withdraw', 'banco'],
   description: 'Deposita o retira BrasCoins del banco',
   category: 'rpg',
   register: true,

@@ -1,6 +1,7 @@
 import type { WASocket } from '@whiskeysockets/baileys'
 import { config }        from '../config.js'
 import { logMessage }    from './pythonBridge.js'
+import { getGroupMetadata } from '@core/groupCache.js'
 
 // ─────────────────────────────────────────────────────────────────────────────
 //  WinsiBot — NOTIFICATIONS
@@ -58,7 +59,7 @@ export async function notifyAdmins(
   text:     string,
   opts:     SendOpts = {},
 ): Promise<void> {
-  const meta = await sock.groupMetadata(groupJid).catch(() => null)
+  const meta = await getGroupMetadata(sock, groupJid)
   if (!meta) return
   const admins = meta.participants.filter(
     p => p.admin === 'admin' || p.admin === 'superadmin',

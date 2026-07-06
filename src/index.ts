@@ -2,17 +2,50 @@ import 'dotenv/config'
 import readline from 'readline'
 import { spawn, type ChildProcess } from 'child_process'
 import { join } from 'path'
-import { existsSync } from 'fs'
+import { existsSync, readFileSync } from 'fs'
+import { createConnection } from 'net'
 import { WinsiSocket } from '@core/socket.js'
-import { handleMessage } from '@core/handler.js'
+import { handleMessage, getActiveHandlerCount } from '@core/handler.js'
 import { loadCommands } from '@plugins/commands/index.js'
 import { logger } from '@core/logger.js'
 import { config } from '@config'
 import { loadAll, saveAll, startAutoSave } from '@core/persistence.js'
-import { color, gradient, loader, ascii, themes, configure } from 'ansimax'
+import { color, gradient, loader, ascii, themes, configure, components, BG } from 'ansimax'
 
 themes.use('dracula')
 configure({ animationSpeed: 'fast', reducedMotion: false })
+
+// ─── Silenciar logs internos de libsignal (dependencia de Baileys) ──────────
+// libsignal llama a console.info/warn/error directo con el objeto de sesión
+// completo (o el stack del error) cada vez que una sesión Signal rota o un
+// mensaje no se puede descifrar con ninguna sesión conocida — es ruido normal
+// del protocolo (sesiones desincronizadas tras reconexiones, mensajes fuera de
+// orden, etc.), ya tratado como no-fatal más abajo (unhandledRejection /
+// uncaughtException), y no hay flag para desactivarlo desde fuera del paquete.
+const NOISY_CONSOLE = [
+  'Closing session:',
+  'Decrypted message with closed session.',
+  'Closing open session in favor of incoming prekey bundle',
+]
+const NOISY_ERRORS  = ['Failed to decrypt message with any known session', 'Session error:']
+
+const _origConsoleInfo = console.info.bind(console)
+console.info = (...args: unknown[]) => {
+  if (typeof args[0] === 'string' && NOISY_CONSOLE.some(p => (args[0] as string).startsWith(p))) return
+  _origConsoleInfo(...args)
+}
+
+const _origConsoleWarn = console.warn.bind(console)
+console.warn = (...args: unknown[]) => {
+  if (typeof args[0] === 'string' && NOISY_CONSOLE.some(p => (args[0] as string).startsWith(p))) return
+  _origConsoleWarn(...args)
+}
+
+const _origConsoleError = console.error.bind(console)
+console.error = (...args: unknown[]) => {
+  if (typeof args[0] === 'string' && NOISY_ERRORS.some(p => (args[0] as string).startsWith(p))) return
+  _origConsoleError(...args)
+}
 
 // ─── Suprimir errores conocidos de decrypt ────────────────────────────────────
 process.on('unhandledRejection', (reason: any) => {
@@ -23,7 +56,13 @@ process.on('unhandledRejection', (reason: any) => {
     msg.includes('Session error') ||
     msg.includes('Failed to decrypt') ||
     msg.includes('Connection Closed') ||
-    msg.includes('Connection Lost')
+    msg.includes('Connection Lost') ||
+    // sub-bot noise — never crash the main process
+    msg.includes('SubBot') ||
+    msg.includes('subbot') ||
+    msg.includes('serbot') ||
+    msg.includes('requestPairingCode') ||
+    msg.includes('Cannot read properties of null')
   ) return
   logger.error({ reason }, 'Unhandled rejection')
 })
@@ -35,6 +74,9 @@ process.on('uncaughtException', (err) => {
     'ECONNRESET', 'ECONNREFUSED', 'ECONNABORTED', 'ETIMEDOUT', 'ENOTFOUND',
     'EPIPE', 'ENETUNREACH', 'EHOSTUNREACH', 'socket hang up', 'read ECONNRESET',
     'write EPIPE', 'Stream Errored', 'network timeout',
+    // sub-bot reconnect failures — isolated per bot, never fatal
+    'reconexión falló', 'startSubBot error', 'restore falló',
+    'requestPairingCode', 'Cannot read properties of null',
   ]
   if (NON_FATAL.some(e => msg.includes(e))) {
     logger.warn({ msg }, 'Error de red ignorado (no fatal)')
@@ -44,11 +86,29 @@ process.on('uncaughtException', (err) => {
   process.exit(1)
 })
 
+// ─── Procesos hijos auto-gestionados (Redis/Celery/Rust/Python) ──────────────
+// El bot levanta sus propias dependencias igual que ya hacía con Python — un
+// solo árbol de procesos, un solo lugar donde se limpia todo al salir.
+const spawnedChildren: ChildProcess[] = []
+
+// Evita que el reinicio automático de Redis/Celery/Rust dispare un respawn
+// espurio cuando la muerte del proceso fue provocada por nosotros al apagar.
+let _shuttingDown = false
+
+function killSpawnedChildren(): void {
+  _shuttingDown = true
+  for (const child of spawnedChildren) {
+    try { child.kill() } catch {}
+  }
+}
+
 // ─── Graceful shutdown ────────────────────────────────────────────────────────
 function shutdownCleanly(): void {
   console.log()
   console.log(`  ${themes.warning('◆')} ${color.bold(themes.warning('WinsiBot detenido por el usuario'))}`)
   console.log(`  ${color.dim('Guardando datos...')}`)
+
+  killSpawnedChildren()
 
   saveAll()
     .catch(() => {})
@@ -108,6 +168,7 @@ process.on('SIGTERM', () => {
   console.log()
   console.log(`  ${themes.warning('◆')} ${color.bold(themes.warning('WinsiBot detenido (SIGTERM)'))}`)
   try { process.stdin.setRawMode(false) } catch {}
+  killSpawnedChildren()
   saveAll().catch(() => {}).finally(() => process.exit(0))
 })
 
@@ -180,7 +241,162 @@ async function ensurePythonApi(): Promise<void> {
   }
 }
 
+// ─── Redis auto-arranque (opcional — sin caché distribuida si no está) ───────
+
+function isPortOpen(port: number, host = '127.0.0.1', timeoutMs = 2_000): Promise<boolean> {
+  return new Promise((resolve) => {
+    const sock = createConnection({ port, host })
+    const done = (ok: boolean) => { sock.destroy(); resolve(ok) }
+    sock.once('connect', () => done(true))
+    sock.once('error',   () => done(false))
+    sock.setTimeout(timeoutMs, () => done(false))
+  })
+}
+
+function urlPort(url: string, fallback: number): number {
+  try { return Number(new URL(url).port) || fallback } catch { return fallback }
+}
+
+const REDIS_PORT = urlPort(process.env.REDIS_URL ?? '', 6379)
+
+async function ensureRedis(): Promise<void> {
+  if (await isPortOpen(REDIS_PORT)) return
+
+  const stopSpin = loader.spin('Iniciando Redis...')
+
+  const proc = spawn('redis-server', [], { stdio: ['ignore', 'ignore', 'ignore'] })
+  spawnedChildren.push(proc)
+
+  proc.on('error', () => {
+    stopSpin('Redis no está instalado — se sigue sin caché distribuida', false)
+  })
+
+  // Reiniciar Redis si muere inesperadamente (exit code != 0), salvo que
+  // el propio bot esté apagándose (killSpawnedChildren ya lo mató a propósito).
+  proc.on('exit', (code) => {
+    if (!_shuttingDown && code !== 0 && code !== null) {
+      logger.warn(`Redis terminó con código ${code} — reiniciando en 3s`)
+      setTimeout(() => ensureRedis().catch(() => {}), 3_000)
+    }
+  })
+
+  const deadline = Date.now() + 4_000
+  let up = false
+  while (Date.now() < deadline) {
+    if (await isPortOpen(REDIS_PORT, '127.0.0.1', 500)) { up = true; break }
+    await new Promise(r => setTimeout(r, 300))
+  }
+  if (up) stopSpin('Redis listo', true)
+  else    stopSpin('Redis no disponible — se sigue sin caché distribuida', false)
+}
+
+// ─── Celery auto-arranque (worker de tareas en background de Python) ────────
+
+async function ensureCelery(): Promise<void> {
+  const venvPython = join(process.cwd(), 'python', 'venv', 'Scripts', 'python.exe')
+  const sysPython  = process.platform === 'win32' ? 'python' : 'python3'
+  const python     = existsSync(venvPython) ? venvPython : sysPython
+
+  // Pool "prefork" usa multiprocessing al estilo POSIX que Windows maneja mal
+  // (WinError 5/6 al azar) — "solo" evita ese bug por completo en Windows.
+  const poolArgs = process.platform === 'win32' ? ['--pool=solo'] : ['--concurrency=2']
+
+  const stopSpin = loader.spin('Iniciando Celery...')
+
+  const proc = spawn(python, [
+    '-m', 'celery', '-A', 'api.celery_app', 'worker',
+    '--loglevel=warning', ...poolArgs,
+  ], {
+    cwd:   join(process.cwd(), 'python'),
+    stdio: ['ignore', 'ignore', 'ignore'],
+  })
+  spawnedChildren.push(proc)
+
+  let exited = false
+  proc.on('error', (err) => {
+    exited = true
+    stopSpin(`Celery no pudo iniciar: ${err.message}`, false)
+  })
+  proc.on('exit', (code) => {
+    if (!exited && !_shuttingDown && code !== 0 && code !== null) {
+      logger.warn(`Celery terminó con código ${code} — reiniciando en 3s`)
+      setTimeout(() => ensureCelery().catch(() => {}), 3_000)
+    }
+    exited = true
+  })
+
+  await new Promise(r => setTimeout(r, 3_000))
+  if (!exited) stopSpin('Celery listo', true)
+}
+
+// ─── Rust Session API auto-arranque ──────────────────────────────────────────
+
+const RUST_URL_FOR_BOOT = process.env.SESSION_API_URL ?? 'http://127.0.0.1:3001'
+
+async function isRustApiUp(): Promise<boolean> {
+  try {
+    const res = await fetch(`${RUST_URL_FOR_BOOT}/health/live`, { signal: AbortSignal.timeout(2_000) })
+    return res.ok
+  } catch {
+    return false
+  }
+}
+
+async function ensureRust(): Promise<void> {
+  if (await isRustApiUp()) return
+
+  const exeExt    = process.platform === 'win32' ? '.exe' : ''
+  const rustDir   = join(process.cwd(), 'rust')
+  const exe       = join(rustDir, 'target', 'release', `winsibot-session-api${exeExt}`)
+  const hasBinary = existsSync(exe)
+
+  const stopSpin = loader.spin('Iniciando Rust Session API...')
+
+  const proc = hasBinary
+    ? spawn(exe, [], { cwd: rustDir, stdio: ['ignore', 'ignore', 'ignore'] })
+    : spawn('cargo', ['run', '--release'], { cwd: rustDir, stdio: ['ignore', 'ignore', 'ignore'], shell: process.platform === 'win32' })
+  spawnedChildren.push(proc)
+
+  proc.on('error', (err) => {
+    stopSpin(`Rust no pudo iniciar: ${err.message}`, false)
+  })
+
+  // Reiniciar Rust si muere inesperadamente (exit code != 0), salvo apagado voluntario.
+  proc.on('exit', (code) => {
+    if (!_shuttingDown && code !== 0 && code !== null) {
+      logger.warn(`Rust Session API terminó con código ${code} — reiniciando en 3s`)
+      setTimeout(() => ensureRust().catch(() => {}), 3_000)
+    }
+  })
+
+  // Sin binario compilado, la primera vez puede tardar varios minutos.
+  const deadline = Date.now() + (hasBinary ? 15_000 : 180_000)
+  let up = false
+  while (Date.now() < deadline) {
+    if (await isRustApiUp()) { up = true; break }
+    await new Promise(r => setTimeout(r, 500))
+  }
+  if (up) stopSpin('Rust Session API lista', true)
+  else    stopSpin('Rust no respondió a tiempo — continuando sin él', false)
+}
+
 // ─── Banner ───────────────────────────────────────────────────────────────────
+function getBotVersion(): string {
+  try {
+    const pkg = JSON.parse(readFileSync(join(process.cwd(), 'package.json'), 'utf8'))
+    return pkg.version ?? '?'
+  } catch {
+    return '?'
+  }
+}
+
+function platformLabel(): string {
+  return process.platform === 'win32'  ? 'Windows'
+       : process.platform === 'linux'  ? 'Linux'
+       : process.platform === 'darwin' ? 'macOS'
+       : process.platform
+}
+
 async function printBanner() {
   console.clear()
   console.log()
@@ -199,9 +415,13 @@ async function printBanner() {
   console.log(`  ${color.dim('by Hepein Oficial')}`)
   console.log()
 
-  console.log(`  ${color.dim('prefix')}   ${themes.warning(config.prefix.join(' '))}`)
-  console.log(`  ${color.dim('env')}      ${config.isDev ? themes.success('development') : themes.error('production')}`)
-  console.log(`  ${color.dim('github')}   ${color.blue('github.com/Brashkie')}`)
+  const badges = [
+    components.badge('version',  getBotVersion(),  { labelBg: BG.blue,  valueBg: BG.magenta }),
+    components.badge('node',     process.version,  { labelBg: BG.black, valueBg: BG.green }),
+    components.badge('platform', platformLabel(),  { labelBg: BG.blue,  valueBg: BG.cyan }),
+    components.badge('github',   'Brashkie',        { labelBg: BG.black, valueBg: BG.blue }),
+  ].join(' ')
+  console.log(`  ${badges}`)
   console.log()
   console.log(`  ${ascii.divider({ width: 30 })}`)
   console.log()
@@ -215,12 +435,17 @@ async function printConnected(jid: string, cmdCount: number) {
   const number = jid.replace('@s.whatsapp.net', '').replace(':0', '').replace(/:.*/, '')
 
   console.log()
-  console.log(`  ${themes.success('◆')} ${color.bold('Conectado')}`)
-  console.log(`  ${color.dim('numero')}    ${color.cyan('+' + number)}`)
-  console.log(`  ${color.dim('comandos')}  ${themes.warning(String(cmdCount) + ' cargados')}`)
-  console.log(`  ${color.dim('hora')}      ${new Date().toLocaleTimeString('es-PE')}`)
-  console.log()
-  console.log(`  ${ascii.divider({ width: 30 })}`)
+  const connectedBody = [
+    `${color.dim('numero')}    ${color.cyan('+' + number)}`,
+    `${color.dim('comandos')}  ${themes.warning(String(cmdCount) + ' cargados')}`,
+    `${color.dim('hora')}      ${new Date().toLocaleTimeString('es-PE')}`,
+  ].join('\n')
+  console.log(ascii.box(connectedBody, {
+    title:       `${themes.success('◆')} Conectado`,
+    titleAlign:  'center',
+    borderStyle: 'rounded',
+    padding:     1,
+  }))
   console.log()
 
   const { getPendingCount, getPendingMessages, markPendingProcessed } = await import('@lib/pythonBridge.js')
@@ -253,6 +478,12 @@ async function printConnected(jid: string, cmdCount: number) {
 async function main() {
   await printBanner()
 
+  // Redis → Celery → Rust → Python, en ese orden porque Celery depende de
+  // Redis como broker. El bot levanta sus propias dependencias igual para
+  // las cuatro — un solo árbol de procesos, un solo lugar donde se limpian.
+  await ensureRedis()
+  await ensureCelery()
+  await ensureRust()
   await ensurePythonApi()
 
   const stopData = loader.spin('Cargando datos guardados...')
@@ -287,6 +518,11 @@ async function main() {
       const { restoreSubBots } = await import('@plugins/commands/jadibot/serbot.js')
       await restoreSubBots(sock)
     } catch {}
+
+    try {
+      const { setupBirthdayChecker } = await import('@plugins/commands/general/birthday.js')
+      setupBirthdayChecker(sock)
+    } catch {}
   })
 
   winsi.on('closed', () => {
@@ -306,6 +542,33 @@ async function main() {
     stopConn('Error al conectar', false)
     throw err
   }
+}
+
+// ─── Heartbeat diagnóstico — RAM + event-loop lag cada 60s ───────────────────
+// Si el bot deja de responder pero el proceso sigue abierto, este log es la
+// forma de distinguir "event loop bloqueado" (lag alto o el log deja de salir)
+// de "Baileys perdió la conexión" (el log sigue saliendo normal, lag bajo).
+function startHeartbeatLogger(): void {
+  const INTERVAL_MS  = 60_000
+  const LAG_WARN_MS  = 1_000   // drift > 1s sobre lo esperado = event loop bajo presión
+  let expected = Date.now() + INTERVAL_MS
+
+  setInterval(() => {
+    const now = Date.now()
+    const lag = Math.max(0, now - expected)
+    expected  = now + INTERVAL_MS
+
+    const mem = process.memoryUsage()
+    const rssMB  = +(mem.rss      / 1024 / 1024).toFixed(1)
+    const heapMB = +(mem.heapUsed / 1024 / 1024).toFixed(1)
+    const activeHandlers = getActiveHandlerCount()
+
+    if (lag > LAG_WARN_MS) {
+      logger.warn({ rssMB, heapMB, lagMs: lag, activeHandlers }, 'Heartbeat — event loop con lag alto')
+    } else {
+      logger.info({ rssMB, heapMB, lagMs: lag, activeHandlers }, 'Heartbeat — proceso vivo')
+    }
+  }, INTERVAL_MS).unref()
 }
 
 // ─── Watchdog heartbeat — ping a Rust cada 20s ───────────────────────────────
@@ -332,3 +595,4 @@ main().catch(err => {
 })
 
 startWatchdogPing()
+startHeartbeatLogger()

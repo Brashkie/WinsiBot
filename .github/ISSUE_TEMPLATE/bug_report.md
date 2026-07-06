@@ -20,7 +20,7 @@ assignees: Brashkie
 
 > Pasos mínimos y exactos para que el bug ocurra consistentemente.
 
-1. Iniciar el bot con `npm run start:all`
+1. Iniciar el bot con `npm run start`
 2. En el grupo/privado: enviar el comando `!...`
 3. Observar que ...
 

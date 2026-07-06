@@ -20,8 +20,13 @@ const rustClient: AxiosInstance = axios.create({
   headers: { 'Content-Type': 'application/json', 'x-api-key': process.env.RUST_API_KEY ?? '' },
 })
 
+// 1 solo reintento — este cliente está en el camino crítico de cada mensaje
+// (vía hepein.respond, etc.). Con 3 reintentos + backoff exponencial, una
+// Python lenta/degradada podía tardar 20-30s en fallar definitivamente,
+// dejando ocupado un slot del semáforo de concurrencia de handler.ts todo
+// ese tiempo. Mejor fallar rápido — el bot ya maneja Python no disponible.
 axiosRetry(client, {
-  retries:        3,
+  retries:        1,
   retryDelay:     axiosRetry.exponentialDelay,
   retryCondition: (err) => axiosRetry.isNetworkOrIdempotentRequestError(err),
 })

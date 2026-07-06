@@ -10,7 +10,7 @@ const ROOT = process.cwd()
 
 const SERVICES = [
   { name: 'Redis',  port: 6379, health: null },
-  { name: 'Flask',  port: 5000, health: 'http://127.0.0.1:5000/health' },
+  { name: 'FastAPI', port: 5000, health: 'http://127.0.0.1:5000/health' },
   { name: 'Rust',   port: 3001, health: 'http://127.0.0.1:3001/health/live' },
   { name: 'Celery', port: null, health: null },
 ]

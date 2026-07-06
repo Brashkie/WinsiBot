@@ -26,9 +26,12 @@ export interface PetFullData {
   hunger:      number    // 0-100 (100=lleno)
   happiness:   number    // 0-100
   energy:      number    // 0-100
-  lastFed:     number
-  lastPlayed:  number
-  lastSlept:   number
+  lastFed:       number
+  lastPlayed:    number
+  lastSlept:     number
+  lastCleaned?:  number
+  lastExplored?: number
+  lastAdventure?: number
   accessories: string[]
   wins:        number
   losses:      number

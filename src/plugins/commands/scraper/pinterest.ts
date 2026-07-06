@@ -4,32 +4,52 @@ import axios from 'axios'
 
 const UA = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36'
 
-// ─── Scrape Pinterest search HTML para extraer imágenes ───────────────────────
+interface PinterestImage { url?: string }
+interface PinterestResult { images?: Record<string, PinterestImage> }
+interface PinterestApiResponse {
+  resource_response?: { data?: { results?: PinterestResult[] } }
+}
+
+// ─── API interna de búsqueda de Pinterest (la que usa su propia SPA) ────────
+// El HTML inicial de /search/pins/ no trae los resultados reales — Pinterest
+// los carga después vía JS llamando a este mismo endpoint. Por eso scrapear
+// el HTML estático solo encuentra placeholders/blur-thumbnails, nunca fotos
+// reales (ese degradado morado-rosa-naranja es justo eso: un placeholder).
 async function pinterestSearch(query: string, limit = 6): Promise<string[]> {
-  const res = await axios.get<string>('https://www.pinterest.com/search/pins/', {
-    params:  { q: query, rs: 'typed' },
-    headers: {
-      'User-Agent':      UA,
-      'Accept':          'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
-      'Accept-Language': 'en-US,en;q=0.9',
-    },
-    timeout: 14_000,
+  const data = JSON.stringify({
+    options: { query, scope: 'pins', page_size: Math.max(limit * 3, 20) },
+    context: {},
   })
 
-  const html = res.data
+  const res = await axios.get<PinterestApiResponse>(
+    'https://www.pinterest.com/resource/BaseSearchResource/get/',
+    {
+      params: {
+        source_url: `/search/pins/?q=${encodeURIComponent(query)}`,
+        data,
+      },
+      headers: {
+        'User-Agent':              UA,
+        'Accept':                  'application/json, text/javascript, */*, q=0.01',
+        'Accept-Language':         'en-US,en;q=0.9',
+        'X-Requested-With':        'XMLHttpRequest',
+        'X-Pinterest-PWS-Handler': 'www/search/[scope].js',
+        'Referer':                 `https://www.pinterest.com/search/pins/?q=${encodeURIComponent(query)}`,
+      },
+      timeout: 14_000,
+    },
+  )
 
-  // Pinterest incrusta URLs de sus CDN i.pinimg.com en el HTML
-  // Preferir tamaño 736x (buena calidad, no demasiado pesado)
-  const raw = [...html.matchAll(/https:\/\/i\.pinimg\.com\/[\w/.-]+\.(?:jpg|jpeg|png|webp)/gi)]
-    .map(m => m[0])
-    // normalizar a 736x para calidad consistente
-    .map(u => u.replace(/\/\d+x\//, '/736x/'))
-    // únicos
-    .filter((u, i, arr) => arr.indexOf(u) === i)
-    // filtrar miniaturas muy pequeñas (proxies, perfiles, etc.)
-    .filter(u => !u.includes('/75x/') && !u.includes('/30x/'))
+  const results = res.data?.resource_response?.data?.results ?? []
+  const sizeKeys = ['736x', 'orig', '474x', '170x']
 
-  return raw.slice(0, limit)
+  const urls: string[] = []
+  for (const item of results) {
+    const url = sizeKeys.map(k => item.images?.[k]?.url).find(Boolean)
+    if (url) urls.push(url)
+    if (urls.length >= limit) break
+  }
+  return urls
 }
 
 const command: Command = {

@@ -9,7 +9,7 @@ type BoolKey =
   | 'antitelegram' | 'antidiscord' | 'antitiktok' | 'antiyoutube'
   | 'welcome'  | 'detect'   | 'modoadmin' | 'nsfw'  | 'muted'
   | 'anticall' | 'hepein'   | 'game'      | 'rpg'
-  | 'reaction' | 'autosticker' | 'viewonce' | 'audios'
+  | 'reaction' | 'autosticker' | 'viewonce' | 'audios' | 'autolevelup'
   | 'autoresponder' | 'autoAccept' | 'autoReject'
 
 interface Opt {
@@ -24,7 +24,7 @@ const GROUPS: Array<{ label: string; keys: string[] }> = [
   { label: '🛡️  Moderación',     keys: ['antilink','antilink2','antispam','antiflood','antifake','antibot','antidelete','antitoxic','antitraba'] },
   { label: '🚫  Anti-plataformas', keys: ['antitelegram','antidiscord','antitiktok','antiyoutube'] },
   { label: '📢  Bienvenida',       keys: ['welcome','detect'] },
-  { label: '⚙️  Funciones',        keys: ['modoadmin','nsfw','muted','hepein','game','rpg','reaction','autosticker','viewonce','audios','autoresponder','autoAccept','autoReject'] },
+  { label: '⚙️  Funciones',        keys: ['modoadmin','nsfw','muted','hepein','game','rpg','reaction','autosticker','viewonce','audios','autolevelup','autoresponder','autoAccept','autoReject'] },
   { label: '📵  Global (owner)',    keys: ['anticall'] },
 ]
 
@@ -58,6 +58,7 @@ const OPTIONS: Record<string, Opt> = {
   autosticker:  { key: 'autosticker',  description: 'Convierte imágenes a sticker automáticamente',  adminOnly: true,  ownerOnly: false },
   viewonce:     { key: 'viewonce',     description: 'Reenvía mensajes de ver-una-vez',                adminOnly: true,  ownerOnly: false },
   audios:       { key: 'audios',       description: 'Comandos de audio permitidos',                   adminOnly: true,  ownerOnly: false },
+  autolevelup:  { key: 'autolevelup',  description: 'Anuncia en el chat cuando alguien sube de nivel', adminOnly: true,  ownerOnly: false },
   autoresponder:{ key: 'autoresponder',description: 'Respuestas automáticas activas',                 adminOnly: true,  ownerOnly: false },
   autoaccept:   { key: 'autoAccept',   description: 'Acepta solicitudes de unirse automáticamente',   adminOnly: true,  ownerOnly: false },
   autoreject:   { key: 'autoReject',   description: 'Rechaza solicitudes automáticamente',            adminOnly: true,  ownerOnly: false },
@@ -101,6 +102,9 @@ const ALIASES: Record<string, string> = {
   'rechazar':       'autoreject',
   'antitraba':      'antitraba',
   'antilag':        'antitraba',
+  'levelup':        'autolevelup',
+  'subirnivel':     'autolevelup',
+  'avisonivel':     'autolevelup',
 }
 
 // ─── Helper: panel completo ───────────────────────────────────────────────────

@@ -2,18 +2,17 @@ import type { Command } from '../../../types/index.js'
 import {
   getUserData, patchUserData,
   isOnCooldown, setCooldown, getCooldownLeft, fmtCooldown,
-  checkLevelUp,
+  checkLevelUp, levelUpLine,
 } from '@core/events.js'
+import { randomNumber as rand } from '@lib/utils.js'
+import { LevelingManager } from '@lib/leveling.js'
 
 const CD = 2 * 60 * 60_000
-
-const rand = (min: number, max: number) => Math.floor(Math.random() * (max - min + 1)) + min
-const pick = <T>(arr: T[]): T => arr[Math.floor(Math.random() * arr.length)]!
 
 const command: Command = {
   name: 'daily',
   aliases: ['claim', 'reclamar', 'reclamo', 'regalo'],
-  description: 'Reclama tu recompensa cada 2 horas',
+  description: 'Reclama tu recompensa cada 2 horas — sube con tu racha de días',
   category: 'rpg',
   cooldown: 0,
 
@@ -29,31 +28,48 @@ const command: Command = {
     const user   = getUserData(sender, pushName)
     const isPrem = user.premium
 
-    const exp      = isPrem ? pick([1000,1500,1800,2100,2500,3600,4500]) : pick([500,600,700,800,999,1300,1800])
-    const money    = isPrem ? pick([800,1300,1600,1900,2500,3000,3500])  : pick([300,500,700,900,1100,1500])
-    const diamonds = isPrem ? rand(4, 12) : rand(1, 5)
-    const pc       = isPrem ? rand(2, 6)  : rand(1, 3)
+    // Racha de días consecutivos — comparte el mismo sistema que #prestige racha,
+    // solo que ahora avanza automáticamente cada vez que reclamas el diario.
+    const meta    = user.levelingMeta ?? LevelingManager.defaultMeta()
+    const { broken } = LevelingManager.updateStreak(meta)
+    const mult    = LevelingManager.getXpMultiplier(meta, isPrem)
+
+    const baseExp   = isPrem ? rand(1000, 4500) : rand(500, 1800)
+    const baseMoney = isPrem ? rand(800, 3500)  : rand(300, 1500)
+    const exp       = Math.floor(baseExp * mult)
+    const money     = Math.floor(baseMoney * mult)
+    const diamonds  = isPrem ? rand(4, 12) : rand(1, 5)
+    const pc        = isPrem ? rand(2, 6)  : rand(1, 3)
 
     patchUserData(sender, {
-      exp:      user.exp + exp,
-      money:    user.money + money,
-      diamonds: user.diamonds + diamonds,
-      items:    { ...user.items, pc: user.items.pc + pc },
+      exp:          user.exp + exp,
+      money:        user.money + money,
+      diamonds:     user.diamonds + diamonds,
+      items:        { ...user.items, pc: user.items.pc + pc },
+      levelingMeta: meta,
     })
     setCooldown(sender, 'lastClaim')
 
-    const leveled = checkLevelUp(sender)
-    const lvlLine = leveled > 0 ? `\n> ◆ *¡Subiste ${leveled} nivel(es)!*` : ''
+    const leveled  = checkLevelUp(sender)
+    const lvlLine  = levelUpLine(leveled)
+    const brokeLine = broken ? '\n> 💔 Perdiste tu racha anterior — empezando de nuevo' : ''
+
+    // Vista previa del bono de mañana — incentiva volver al día siguiente
+    const nextMult = LevelingManager.getXpMultiplier(
+      { ...meta, streak: { ...meta.streak, days: meta.streak.days + 1 } },
+      isPrem,
+    )
 
     await sock.sendMessage(jid, {
-      text: `*RECOMPENSA DIARIA* ${isPrem ? '★' : ''}
-
-> +${exp} XP
-> +¥${money} BrasCoins
-> +${diamonds} Diamantes
-> +${pc} Pociones${lvlLine}
-
-_Próximo reclamo en 2h_`,
+      text: [
+        `「🎴」Reclamaste tu recompensa diaria — *Día ${meta.streak.days}* 🔥${brokeLine}`,
+        ``,
+        `> +¥${money.toLocaleString()} BrasCoins  ·  +${exp} XP`,
+        `> +${diamonds} 💎  ·  +${pc} 🧪${lvlLine}`,
+        `> Bono de racha: ×${mult.toFixed(2)}`,
+        ``,
+        `_Día ${meta.streak.days + 1} → ×${nextMult.toFixed(2)} · vuelve en 2h_`,
+      ].join('\n'),
     }, { quoted: msg })
   },
 }

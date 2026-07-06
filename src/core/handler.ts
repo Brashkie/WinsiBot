@@ -16,10 +16,12 @@ import {
   getGroupConfig,
   getUserData,
   setUserData,
+  checkLevelUp,
 } from '@core/events.js'
 import { hasPendingCaptcha, verifyCaptchaAnswer } from '@core/events/captcha.js'
 import { handleDrawGuessMessage, handleQuizMessage } from '@core/events/gameHandlers.js'
 import { sessionClient } from '@lib/session.js'
+import { getGroupParticipants } from '@core/groupCache.js'
 
 // ─── Bots conocidos a ignorar ─────────────────────────────────────────────────
 const KNOWN_BOTS = new Set([
@@ -30,55 +32,9 @@ const KNOWN_BOTS = new Set([
 // ─── Semáforo de concurrencia ─────────────────────────────────────────────────
 // Sin esto, en grupos muy activos se crean 100+ Promises concurrentes haciendo
 // HTTP calls a Rust/Python, agotando el event loop y causando timeouts en cascada.
-const MAX_CONCURRENT = 25
-let _activeHandlers  = 0
-
-// ─── Cache de groupMetadata en RAM con límite LRU ────────────────────────────
-const GROUP_META_TTL = 5 * 60 * 1000
-const GROUP_META_MAX = 500
-
-const groupMetaCache = new Map<string, {
-  participants: any[]
-  ts:           number
-}>()
-
-function pruneGroupMetaCache(): void {
-  const now = Date.now()
-  for (const [jid, entry] of groupMetaCache) {
-    if (now - entry.ts > GROUP_META_TTL) groupMetaCache.delete(jid)
-  }
-  if (groupMetaCache.size > GROUP_META_MAX) {
-    let excess = groupMetaCache.size - GROUP_META_MAX
-    for (const key of groupMetaCache.keys()) {
-      if (excess-- <= 0) break
-      groupMetaCache.delete(key)
-    }
-  }
-}
-
-setInterval(pruneGroupMetaCache, GROUP_META_TTL).unref()
-
-async function getGroupMetaCached(sock: WASocket, jid: string): Promise<any[]> {
-  const cached = groupMetaCache.get(jid)
-  if (cached && Date.now() - cached.ts < GROUP_META_TTL) {
-    return cached.participants
-  }
-  try {
-    const metadata = await sock.groupMetadata(jid)
-    groupMetaCache.set(jid, {
-      participants: metadata.participants,
-      ts:           Date.now(),
-    })
-    if (groupMetaCache.size > GROUP_META_MAX) pruneGroupMetaCache()
-    return metadata.participants
-  } catch {
-    return cached?.participants ?? []
-  }
-}
-
-export function invalidateGroupCache(jid: string): void {
-  groupMetaCache.delete(jid)
-}
+const MAX_CONCURRENT    = 25
+const MAX_QUEUE_WAIT_MS = 3_000 // espera acotada por un cupo antes de descartar
+let _activeHandlers     = 0
 
 // ─── Extraer texto del mensaje ────────────────────────────────────────────────
 function extractText(msg: WAMessage): string {
@@ -160,7 +116,7 @@ async function resolveGroupRoles(
   sender: string,
 ): Promise<{ isAdmin: boolean; isBotAdmin: boolean }> {
   try {
-    const participants = await getGroupMetaCached(sock, jid)
+    const participants = await getGroupParticipants(sock, jid)
 
     const senderP = participants.find((p: any) =>
       p.id === sender || (p as any).lid === sender
@@ -296,11 +252,37 @@ async function handleAIResponse(
 
 // ─── Handler principal ────────────────────────────────────────────────────────
 export async function handleMessage(msg: WAMessage, sock: WASocket): Promise<void> {
-  // Semáforo — si hay demasiados mensajes procesándose en paralelo, descartar.
-  // Rust ya tiene rate limiting — si llegamos aquí con +25 activos es un burst anormal.
-  if (_activeHandlers >= MAX_CONCURRENT) return
+  // Semáforo — si hay demasiados mensajes procesándose en paralelo, esperar un
+  // cupo corto (absorbe picos de un par de segundos) antes de descartar.
+  // Rust ya tiene rate limiting — si seguimos llenos tras la espera es
+  // sobrecarga sostenida, no un pico, y ahí sí se descarta.
+  if (_activeHandlers >= MAX_CONCURRENT) {
+    const waitDeadline = Date.now() + MAX_QUEUE_WAIT_MS
+    while (_activeHandlers >= MAX_CONCURRENT && Date.now() < waitDeadline) {
+      await new Promise(r => setTimeout(r, 100))
+    }
+    if (_activeHandlers >= MAX_CONCURRENT) {
+      logger.warn({ id: msg.key.id, active: _activeHandlers }, 'handleMessage DROPPED — semáforo lleno tras esperar')
+      return
+    }
+  }
   _activeHandlers++
+
+  const _startedAt = Date.now()
+  logger.info({ id: msg.key.id, active: _activeHandlers }, 'handleMessage START')
+
+  // Techo duro por mensaje — sin esto, una llamada externa lenta (Python con
+  // reintentos/backoff puede tardar 20-30s en fallar) deja el slot del
+  // semáforo ocupado todo ese tiempo. Si se acumulan 25 mensajes así, el bot
+  // empieza a descartar TODO en silencio hasta que algo libere espacio.
+  // El timeout no cancela la llamada de fondo (sigue corriendo y su resultado
+  // se descarta), solo garantiza que el semáforo se libere a tiempo.
+  const HANDLER_TIMEOUT_MS = 20_000
+  let timedOut = false
+
   try {
+    await Promise.race([
+      (async () => {
     const jidEarly = msg.key.remoteJid ?? ''
     const textEarly = (
       msg.message?.conversation ??
@@ -570,13 +552,44 @@ export async function handleMessage(msg: WAMessage, sock: WASocket): Promise<voi
     await command.execute(ctx)
 
     // ─── Post-ejecucion ───────────────────────────────────────────────────────
-    const xpGain = command.exp ?? 10
-    setUserData(ctx.sender, {
-      exp:      user.exp + xpGain,
-      diamonds: command.limit ? user.diamonds - command.limit : user.diamonds,
-      money:    command.money ? user.money    - command.money : user.money,
-    })
+    // IMPORTANTE: leer DESPUÉS de que el comando ejecutó para no pisar cambios
+    // que el propio comando hizo en money/exp/diamonds.
+    const xpGain  = command.exp ?? 10
+    const postUser = getUserData(ctx.sender)
+    const postPatch: Partial<import('./events/index.js').UserData> = {
+      exp: postUser.exp + xpGain,
+    }
+    if (command.limit) postPatch.diamonds = postUser.diamonds - command.limit
+    if (command.money) postPatch.money    = postUser.money    - command.money
+    setUserData(ctx.sender, postPatch)
 
+    // ─── Anuncio de subida de nivel ────────────────────────────────────────────
+    // Centralizado aquí (no en cada comando) porque el xpGain de arriba puede
+    // por sí solo cruzar el umbral de nivel, incluso si el propio comando ya
+    // chequeó subida de nivel con su exp particular.
+    const leveledUp = checkLevelUp(ctx.sender)
+    if (leveledUp > 0) {
+      const groupCfg = ctx.isGroup ? getGroupConfig(ctx.jid) : null
+      if (groupCfg === null || groupCfg.autolevelup) {
+        const newLevel = getUserData(ctx.sender).level
+        const name      = ctx.pushName || ctx.sender.split('@')[0]
+        await safeSend(() => sock.sendMessage(ctx.jid, {
+          text: `🎉 ¡*${name}* subió ${leveledUp > 1 ? `${leveledUp} niveles` : 'de nivel'} y ahora es nivel *${newLevel}*!`,
+          mentions: [ctx.sender],
+        })).catch(() => {})
+      }
+    }
+      })(),
+      new Promise<void>((resolve) =>
+        setTimeout(() => { timedOut = true; resolve() }, HANDLER_TIMEOUT_MS)),
+    ])
+
+    if (timedOut) {
+      logger.warn(
+        { jid: msg.key.remoteJid },
+        `handleMessage excedió ${HANDLER_TIMEOUT_MS / 1000}s — abandonado para liberar el semáforo`
+      )
+    }
   } catch (err: any) {
     const msg_ = err?.message ?? ''
     if (msg_.includes('Connection Closed') || msg_.includes('Connection Lost')) {
@@ -586,5 +599,15 @@ export async function handleMessage(msg: WAMessage, sock: WASocket): Promise<voi
     logger.error({ err }, 'Error en handleMessage')
   } finally {
     _activeHandlers--
+    logger.info(
+      { id: msg.key.id, active: _activeHandlers, ms: Date.now() - _startedAt, timedOut },
+      'handleMessage END'
+    )
   }
+}
+
+// Para exponer el estado del semáforo en el heartbeat (src/index.ts) — así se
+// ve en el mismo log que ya se vigila si el semáforo se está llenando.
+export function getActiveHandlerCount(): number {
+  return _activeHandlers
 }

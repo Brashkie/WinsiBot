@@ -1,10 +1,10 @@
 <div align="center">
 
-# 📖 Command Reference — WinsiBot v8.2.1
+# 📖 Command Reference — WinsiBot v8.3.0
 
-[![Commands](https://img.shields.io/badge/Commands-110%2B-6C63FF?style=for-the-badge)](.)
+[![Commands](https://img.shields.io/badge/Commands-125%2B-6C63FF?style=for-the-badge)](.)
 [![Categories](https://img.shields.io/badge/Categories-19-00C9FF?style=for-the-badge)](.)
-[![Version](https://img.shields.io/badge/Version-8.2.1-brightgreen?style=flat-square)](../README.en.md)
+[![Version](https://img.shields.io/badge/Version-8.3.0-brightgreen?style=flat-square)](../README.en.md)
 
 [🇪🇸 Versión en español →](commands.md) &nbsp;·&nbsp; [← Back to README](../README.en.md)
 
@@ -40,21 +40,21 @@
 |---|----------|:--------:|
 | 1 | [🛠️ General](#%EF%B8%8F-general) | 7 |
 | 2 | [🤖 AI / ChatGPT](#-ai--chatgpt) | 4 |
-| 3 | [🎮 RPG / Economy](#-rpg--economy) | 16 |
-| 4 | [🎴 Gacha / Characters](#-gacha--characters) | 5 |
+| 3 | [🎮 RPG / Economy](#-rpg--economy) | 20 |
+| 4 | [🎴 Gacha / Characters](#-gacha--characters) | 6 |
 | 5 | [💑 Couples](#-couples) | 5 |
-| 6 | [🎭 Roleplay](#-roleplay) | 4 |
+| 6 | [🎭 Roleplay](#-roleplay) | 9 |
 | 7 | [🎉 Fun](#-fun) | 9 |
 | 8 | [🕹️ Games](#%EF%B8%8F-games) | 3 |
 | 9 | [🎁 Gifts](#-gifts) | 1 |
 | 10 | [🖼️ Media & Stickers](#%EF%B8%8F-media--stickers) | 5 |
-| 11 | [🔽 Downloads](#-downloads) | 6 |
+| 11 | [🔽 Downloads](#-downloads) | 7 |
 | 12 | [🔍 Scrapers / Search](#-scrapers--search) | 4 |
 | 13 | [🎵 Music](#-music) | 1 |
-| 14 | [🔞 NSFW](#-nsfw) | 1 |
+| 14 | [🔞 NSFW](#-nsfw) | 5 |
 | 15 | [🔑 Group Admin](#-group-admin) | 13 |
 | 16 | [🤖 JadiBot](#-jadibot) | 2 |
-| 17 | [ℹ️ Info](#%EF%B8%8F-info) | 1 |
+| 17 | [ℹ️ Info](#%EF%B8%8F-info) | 2 |
 | 18 | [👑 Owner / System](#-owner--system) | 23 |
 
 ---
@@ -110,7 +110,7 @@
 | `xp` | `exp`, `experiencia`, `stats`, `nivel` | 5s | 👤 | Detailed RPG statistics |
 | `rangos` | `roles`, `rango`, `rol`, `ranks` | 10s | 👤 | Server rank table |
 | `work` | `trabajar`, `trabajo`, `w` | 10min | 👤 | Work to earn BrasCoins (every 10 min) |
-| `daily` | `claim`, `reclamar`, `regalo` | 2h | 👤 | Daily reward (every 2 hours) |
+| `daily` | `claim`, `reclamar`, `regalo` | 2h | 👤 | Daily reward — scales with your consecutive-day streak (×1.00–×1.20+ bonus combining streak, weekend, premium and prestige) |
 | `weekly` | `semana`, `semanal`, `cadasemana` | 3d | 👤 | Weekly reward (every 3 days) |
 | `monthly` | `mes`, `mensual`, `cadames` | 5d | 👤 | Monthly reward (every 5 days) |
 | `minar` | `mine`, `minarxp`, `mining` | 10min | 👤 | Mine resources for XP and materials |
@@ -118,9 +118,13 @@
 | `crime` | `crimen`, `delito` | 1h | 👤 | Commit a crime — win or lose coins |
 | `rob` | `robar` | variable | 👤 | Steal BrasCoins from another user (`@mention`) |
 | `transfer` | `transferir`, `dar`, `enviar` | 5s | 👤 | Transfer BrasCoins or XP to another user |
-| `depositar` | `dep`, `retirar`, `withdraw`, `banco` | 3s | 👤 | Deposit or withdraw coins from the bank |
+| `bal` | `balance`, `billetera`, `wallet`, `dinero`, `coins` | 3s | 👤 | View your balance (wallet + bank), with BrasCoins icon |
+| `baltop` | `balancetop`, `richtop`, `richlist`, `topbal`, `tbal` | 10s | 👤 | Top users by CodPoints |
+| `leveltop` | `toplevel`, `topnivel`, `niveltop`, `levelrank` | 10s | 👤 | Top users by level |
+| `depositar` | `dep`, `deposit`, `retirar`, `withdraw`, `banco` | 3s | 👤 | Deposit or withdraw coins from the bank |
 | `prestige` | `prestigio`, `ascender` | — | 👤 | Reset progress in exchange for exclusive prestige rewards |
 | `mascota` | `pet`, `mipet` | 5s | 👤 | Manage your pet: feed, train, evolve, send on adventure |
+| `harem` | `waifus`, `claims`, `coleccion` | 5s | 👤 | View characters claimed with `!rw`, sorted by value |
 | `regalo` | `gift`, `dar`, `regalar` | 10s | 👤 | Gift coins, XP or items to another user |
 
 ```
@@ -131,10 +135,15 @@
 !minar
 !rob @user
 !transfer @user 500
+!bal
+!baltop
+!leveltop
 !depositar 1000
 !retirar 500
 !prestige
 !mascota feed
+!harem
+!harem @user 2
 !regalo @user 500 coins
 ```
 
@@ -216,14 +225,24 @@
 |---------|---------|:--------:|:----------:|-------------|
 | `hug` | `abrazar`, `abrazo`, `hug1` | 5s | 👤 | Hug someone (`@mention`) |
 | `kiss` | `beso`, `kiss1` | 5s | 👤 | Kiss someone (`@mention`) |
+| `kisscheeks` | `besomejilla`, `mejilla`, `kisscheek` | 5s | 👤 | Kiss someone's cheek (`@mention`) |
 | `pat` | `acariciar`, `pat1` | 5s | 👤 | Pat someone (`@mention`) |
 | `kill` | `matar`, `kill1` | 5s | 👤 | Kill someone (roleplay) (`@mention`) |
+| `punch` | `golpear`, `puñetazo`, `puñete` | 5s | 👤 | Punch someone (`@mention`) |
+| `laugh` | `reir`, `jaja`, `lol` | 5s | 👤 | Laugh (or laugh at someone) |
+| `sad` | `triste` | 5s | 👤 | Show sadness (or make someone sad) |
+| `sleep` | `dormir`, `duerme` | 5s | 👤 | Fall asleep (or put someone to sleep) |
 
 ```
 !hug @user
 !kiss @user
+!kisscheeks @user
 !pat @user
 !kill @user
+!punch @user
+!laugh
+!sad
+!sleep
 ```
 
 ---
@@ -276,7 +295,8 @@
 
 | Command | Aliases | Cooldown | Permission | Description |
 |---------|---------|:--------:|:----------:|-------------|
-| `ytmp3` | `yt`, `youtube`, `ytaudio` | 15s | 👤 | Download YouTube audio as MP3 |
+| `ytmp3` | `yt`, `youtube`, `ytaudio` | 15s | 👤 | Download YouTube audio as MP3 — card with channel, duration, views, upload date and link |
+| `ytmp4` | `play2`, `mp4`, `ytvideo`, `playvideo` | 15s | 👤 | Download YouTube video (360p) — same card plus quality and size |
 | `tiktok` | `tt`, `tik` | 10s | 👤 | Download TikTok video without watermark |
 | `ttsearch` | `vitiktok`, `tiktoksearch`, `ttsb` | 15s | 👤 | Search TikTok videos, shows carousel with download buttons |
 | `ig` | `instagram`, `insta` | — | 👤 | Download photo/video from Instagram |
@@ -286,6 +306,7 @@
 ```
 !ytmp3 https://youtube.com/watch?v=...
 !ytmp3 Shape of You Ed Sheeran
+!ytmp4 Shape of You Ed Sheeran
 !tiktok https://vm.tiktok.com/...
 !ttsearch funny cats
 !ig https://www.instagram.com/p/...
@@ -332,6 +353,17 @@
 | Command | Aliases | Cooldown | Permission | Description |
 |---------|---------|:--------:|:----------:|-------------|
 | `porn` | `porngif` | 10s | 👤 | Adult video (only if NSFW is enabled) |
+| `rule34` | `r34` | 10s | 👤 | Search an image on Rule34 by tag |
+| `rule34video` | `r34video`, `r34v`, `rvideo34` | 15s | 👤 | Search a video on Rule34 by tag |
+| `sexyimg` | `imgsexy`, `randomsexy` | 8s | 👤 | Random +18 image |
+| `stickerporn` | `stickernsfw`, `sticker18` | 10s | 👤 | Random +18 sticker |
+
+```
+!rule34 hinata
+!rule34video hinata
+!sexyimg
+!stickerporn
+```
 
 ---
 
@@ -369,6 +401,7 @@
 | `nsfw` | Enable +18 commands | 🔑 |
 | `muted` | Bot does not respond in this group | 🔑 |
 | `hepein` | AI responds when mentioned | 🔑 |
+| `autolevelup` | Announce in chat when someone levels up (enabled by default) | 🔑 |
 | `anticall` | Automatically reject calls | 👑 |
 
 ```
@@ -404,6 +437,12 @@
 | Command | Aliases | Cooldown | Permission | Description |
 |---------|---------|:--------:|:----------:|-------------|
 | `creator` | `info`, `about`, `botinfo`, `creador` | — | 👤 | Bot and creator information |
+| `infobot` | `botstatus`, `enterprise` | — | 👤 | Bot identity card — version, command count, uptime, features |
+
+```
+!creator
+!infobot
+```
 
 ---
 
@@ -454,6 +493,6 @@
 
 **[← Back to README](../README.en.md)** &nbsp;·&nbsp; **[🇪🇸 Versión en español →](commands.md)**
 
-*WinsiBot v8.2.1 — Developed by [Brashkie](https://github.com/Brashkie)*
+*WinsiBot v8.3.0 — Developed by [Brashkie](https://github.com/Brashkie)*
 
 </div>

@@ -2,13 +2,11 @@ import type { Command } from '../../../types/index.js'
 import {
   getUserData, patchUserData,
   isOnCooldown, setCooldown, getCooldownLeft, fmtCooldown,
-  checkLevelUp,
+  checkLevelUp, levelUpLine,
 } from '@core/events.js'
+import { randomNumber as rand, randomChoice as pick } from '@lib/utils.js'
 
 const CD = 5 * 24 * 60 * 60_000
-
-const pick = <T>(arr: T[]): T => arr[Math.floor(Math.random() * arr.length)]!
-const rand = (min: number, max: number) => Math.floor(Math.random() * (max - min + 1)) + min
 
 const command: Command = {
   name: 'monthly',
@@ -46,7 +44,7 @@ const command: Command = {
     setCooldown(sender, 'lastMonthly')
 
     const leveled = checkLevelUp(sender)
-    const lvlLine = leveled > 0 ? `\n> ◆ *¡Subiste ${leveled} nivel(es)!*` : ''
+    const lvlLine = levelUpLine(leveled)
 
     await sock.sendMessage(jid, {
       text: `*RECOMPENSA MENSUAL* ${isPrem ? '★' : ''}

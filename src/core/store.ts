@@ -4,6 +4,7 @@ import type { WASocket, Contact } from '@whiskeysockets/baileys'
 import { writeFile, readFile, mkdir, rename } from 'fs/promises'
 import { existsSync } from 'fs'
 import { logger } from './logger.js'
+import { setGroupMetadata } from './groupCache.js'
 
 // ─── Tipos ────────────────────────────────────────────────────────────────────
 export interface StoreContact {
@@ -46,6 +47,12 @@ class WinsiStore {
 
   private lidMap  = new Map<string, string>()
   private nameMap = new Map<string, string>()
+
+  // Coalescing + debounce para preloadGroup: una ráfaga de eventos del mismo
+  // grupo (p. ej. varios group-participants.update seguidos) colapsa en un
+  // solo fetch de groupMetadata en vez de uno por evento.
+  private preloadTimers   = new Map<string, ReturnType<typeof setTimeout>>()
+  private preloadInFlight = new Map<string, Promise<void>>()
 
   private dirty        = false
   private writing      = false
@@ -146,14 +153,37 @@ class WinsiStore {
     }
   }
 
-  // ─── Precargar grupo con request ────────────────────────────────────────────
+  // ─── Precargar grupo con request (coalescing) ──────────────────────────────
   async preloadGroup(sock: WASocket, groupJid: string): Promise<void> {
-    try {
-      const metadata = await sock.groupMetadata(groupJid)
-      this.preloadFromData(groupJid, metadata)
-    } catch (err) {
-      logger.debug({ err }, 'Store: no se pudo precargar grupo')
-    }
+    const inFlight = this.preloadInFlight.get(groupJid)
+    if (inFlight) return inFlight
+
+    const run = (async () => {
+      try {
+        const metadata = await sock.groupMetadata(groupJid)
+        this.preloadFromData(groupJid, metadata)
+        setGroupMetadata(groupJid, metadata)
+      } catch (err) {
+        logger.debug({ err }, 'Store: no se pudo precargar grupo')
+      } finally {
+        this.preloadInFlight.delete(groupJid)
+      }
+    })()
+
+    this.preloadInFlight.set(groupJid, run)
+    return run
+  }
+
+  /** Debounce ~2s — colapsa ráfagas de eventos del mismo grupo en un solo fetch. */
+  schedulePreloadGroup(sock: WASocket, groupJid: string): void {
+    const existing = this.preloadTimers.get(groupJid)
+    if (existing) clearTimeout(existing)
+    const timer = setTimeout(() => {
+      this.preloadTimers.delete(groupJid)
+      void this.preloadGroup(sock, groupJid)
+    }, 2_000)
+    timer.unref()
+    this.preloadTimers.set(groupJid, timer)
   }
 
   // ─── Bind a eventos de Baileys ──────────────────────────────────────────────
@@ -215,14 +245,14 @@ class WinsiStore {
       }
     })
 
-    sock.ev.on('groups.update', async (updates) => {
+    sock.ev.on('groups.update', (updates) => {
       for (const update of updates) {
-        if (update.id) await this.preloadGroup(sock, update.id)
+        if (update.id) this.schedulePreloadGroup(sock, update.id)
       }
     })
 
-    sock.ev.on('group-participants.update', async ({ id }) => {
-      await this.preloadGroup(sock, id)
+    sock.ev.on('group-participants.update', ({ id }) => {
+      this.schedulePreloadGroup(sock, id)
     })
 
     if (this.saveInterval) clearInterval(this.saveInterval)

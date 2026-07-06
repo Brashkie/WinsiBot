@@ -1,6 +1,6 @@
 <div align="center">
 
-<img src="https://capsule-render.vercel.app/api?type=waving&color=0:6C63FF,100:00C9FF&height=180&section=header&text=WinsiBot&fontSize=62&fontColor=ffffff&fontAlignY=38&desc=v8.2.1%20%E2%80%94%20Enterprise%20WhatsApp%20Bot&descAlignY=58&descSize=18" width="100%"/>
+<img src="https://capsule-render.vercel.app/api?type=waving&color=0:6C63FF,100:00C9FF&height=180&section=header&text=WinsiBot&fontSize=62&fontColor=ffffff&fontAlignY=38&desc=v8.4.0%20%E2%80%94%20Enterprise%20WhatsApp%20Bot&descAlignY=58&descSize=18" width="100%"/>
 
 <br/>
 
@@ -10,7 +10,7 @@
 [![Rust](https://img.shields.io/badge/Rust-1.75%2B-CE422B?style=for-the-badge&logo=rust&logoColor=white)](https://rust-lang.org)
 
 [![License](https://img.shields.io/badge/License-GPL--3.0-blue?style=flat-square)](LICENSE)
-[![Version](https://img.shields.io/badge/Version-8.2.1-6C63FF?style=flat-square)](CHANGELOG.md)
+[![Version](https://img.shields.io/badge/Version-8.4.0-6C63FF?style=flat-square)](CHANGELOG.md)
 [![Platform](https://img.shields.io/badge/Platform-Windows%20%7C%20Linux-lightgrey?style=flat-square)](https://github.com/Brashkie/WinsiBot)
 [![PRs Welcome](https://img.shields.io/badge/PRs-welcome-brightgreen?style=flat-square)](https://github.com/Brashkie/WinsiBot/pulls)
 
@@ -18,7 +18,7 @@
 
 > High-performance WhatsApp bot with a three-layer multi-language architecture.<br/>
 > Designed for **10,000+ simultaneous groups**, thousands of messages per hour, and multiple instances.<br/>
-> v8.2.1 — Cryptographic session integrity, QR-free recovery, per-group Bad MAC isolation, Ollama local AI, and full stability hardening.
+> v8.4.0 — Self-healing process supervisor, Bad MAC with escalating cooldown and DuckDB/SQLite persistence, unified group cache, and reinforced flood control to run for months without manual intervention.
 
 <br/>
 
@@ -65,6 +65,38 @@
 | 🟦 **Core** | TypeScript / Node.js | WhatsApp protocol, command dispatcher, RPG, AI chat |
 | 🐍 **Services** | Python / FastAPI / Celery | Advanced AI (Ollama + GPT + Claude + Gemini), watchdog, health checks |
 | ⚙️ **Session** | Rust / Axum | Atomic creds write, 10 rotating snapshots, Bad MAC tracker, rate limiter, delivery SQLite |
+
+### What's new in v8.4.0
+
+| Area | Change |
+|------|--------|
+| **Process supervisor** | New `src/supervisor.ts` — restarts the bot with backoff if it crashes, and forces a restart if it detects the event loop hung without crashing (no heartbeat to the Rust watchdog). `npm start` now runs through it; `npm run start:unsupervised` starts the bot directly without the extra layer |
+| **Auto-restart for Redis/Celery/Rust** | Same as Python already did — if Redis, Celery, or the Rust Session API crash, they restart themselves after 3s, guarded so a voluntary shutdown (Ctrl+C / SIGTERM) never triggers a spurious restart |
+| **Bad MAC with escalating cooldown** | The cooldown between clears for the same group is no longer fixed at 10s — it now escalates 10s → 30s → 90s... up to 10 min for groups that keep reoffending. Persisted to DuckDB (`bad_mac_events`) + SQLite `audit_log`, with Parquet export (`POST /badmac/export`), and hydrated on Rust restart from the last 24h of history |
+| **Unified group cache** | `src/core/groupCache.ts` replaces 3 independent `groupMetadata` caches (one in `handler.ts`, another in `lid_mapper.ts`, and an uncached refetch in `store.ts`) with a single TTL + debounce/coalescing cache — fewer redundant calls to the WhatsApp API in large or highly active groups |
+| **Flood control** | Antispam is now keyed per group+user (previously shared across every group a user was in); `safeSend` now respects the global outbound send ceiling; downloads (`yt-dlp`) capped at 3 concurrent; the 25-concurrent-handler semaphore waits up to 3s for a free slot before dropping a message |
+| **Persistence alerts** | Alert webhook (reuses `alerts.rs`) if a session write fails on Rust, plus a visible Node warning if the Rust backup write fails |
+| **Sturdier WebSocket** | Explicit timeouts (`connectTimeoutMs`, `keepAliveIntervalMs`, `defaultQueryTimeoutMs`) + jitter on reconnect backoff (main bot and subbots) — avoids simultaneous reconnects after a shared network blip |
+| **Startup banner** | No longer shows `prefix`/`env` as vertical lines — now a row of horizontal badges (version, Node, platform, GitHub), matching this README's own badge style |
+| **Dependencies** | `@brashkie/signalis-core` 0.2.0 → 0.3.1 (adds ChaCha20-Poly1305), `ansimax` 1.4.2 → 1.4.5 (adds `panels.gridAreas`, syntax highlighting) |
+
+### What's new in v8.3.0
+
+| Area | Change |
+|------|--------|
+| **Rust Session API v5.1.0** | New modules: `metrics` (atomic counters), `tasks` (auto-snapshot + periodic cleanup), `analytics` (aggregated dashboard), `alerts` (Discord-compatible webhooks on watchdog death/recovery) |
+| **Persistent audit log** | New `audit_log` SQLite table — tracks subbot registration/state changes and watchdog events, queryable via `GET /audit` |
+| **Config hot-reload** | `GET`/`PATCH /subbots/config` adjusts subbot limits (global max, per-user max, cooldown) without restarting the process |
+| **Graceful shutdown** | Ctrl+C now takes a final snapshot of all active sessions before exiting, instead of killing the process outright |
+| **Race condition fix** | Subbot `register()` had a TOCTOU race on concurrent registrations from the same owner — fixed with a serializing mutex |
+| **Data corruption fix (Python)** | `parquet_store.py` read/wrote `users.parquet` with no locking — on Windows this caused `ERROR_USER_MAPPED_FILE` and silent loss of user records under concurrent load |
+| **Generic Cache Manager** | `@lib/cacheManager.ts` with automatic TTL, hit/miss stats, and LFU eviction — replaces two duplicated hand-rolled cache implementations (`groupMetaCache`, `charCache`) |
+| **Fixed leveling curve** | The per-level XP formula was pure exponential growth (`100 × 1.5^level`) — past level ~22 it became mathematically unreachable, despite ranks being defined up to level 400 |
+| **Daily streak bonus** | Wired up the prestige/streak system from `@lib/leveling.ts` (already existed but was never used outside `#prestige streak`) — progressive bonus (×1.00–×1.20+) for consecutive daily claims |
+| **Dependency cleanup** | 31 unused npm packages removed from the bundle (~420 transitive packages) after auditing every import — the bot already uses local `yt-dlp` instead of the scraping libs that were still listed |
+| **10+ new commands** | NSFW: `rule34`, `rule34video`, `sexyimg`, `stickerporn` · Roleplay: `kisscheeks`, `laugh`, `punch`, `sad`, `sleep` · RPG: `harem`, `leveltop` · Downloads: `ytmp4` · Info: `infobot` |
+| **Pinterest fix** | The `pinterest`/`pin` command was scraping the static search HTML (only blurred placeholders) — now uses the internal search API that Pinterest's own SPA consumes |
+| **`#sticker` quote fix** | Quoting an image/video and using `#sticker` failed with *"not a media message"* — it was substituting the quoted message incorrectly before downloading it |
 
 ### What's new in v8.2.1
 
@@ -137,8 +169,10 @@
 
 ### 🎮 RPG & Economy
 - XP / levels / prestige system (10 ranks) + medals
+- Non-exponential leveling curve — reachable up to level 400
+- Daily streak with progressive bonus (`#daily`, ×1.00–×1.20+)
 - Own currency (BrasCoins) + bank
-- Gacha (rollwaifu / pokédex / marvel)
+- Gacha (rollwaifu / pokédex / marvel) + collection (`#harem`)
 - **Advanced Clans**: territories, 24h wars, alliances, treasury
 - Missions: work, mining, chest, crime, theft
 - **Gift System**: 30+ item catalog, mailbox, wishlist, trades
@@ -192,7 +226,7 @@
 
 ```
 ╔══════════════════════════════════════════════════════════════════════════════╗
-║                           WinsiBot v8.2.1                                    ║
+║                           WinsiBot v8.4.0                                    ║
 ╠════════════════════╦═══════════════════════╦═══════════════════════════════╣
 ║   TypeScript        ║       Python           ║           Rust                ║
 ║   Node.js :4001     ║                        ║                               ║
@@ -203,7 +237,7 @@
 ║  │   Handler     │◄─╬─►│  Ollama client   │  ║  │  ● snapshots ×10      │   ║
 ║  │  (semaphore)  │  ║  │  GPT/Claude/     │  ║  │  ● bad_mac tracker    │   ║
 ║  ├───────────────┤  ║  │  Gemini fallback │  ║  │  ● rate_limiter       │   ║
-║  │  75+ Cmds     │  ║  ├──────────────────┤  ║  │  ● watchdog heartbeat │   ║
+║  │  125+ Cmds    │  ║  ├──────────────────┤  ║  │  ● watchdog heartbeat │   ║
 ║  ├───────────────┤  ║  │  Monitor         │  ║  │  ● delivery SQLite    │   ║
 ║  │  lib/db.ts    │  ║  │  Watchdog        │  ║  │  ● /sessions/backup   │   ║
 ║  │  (SQLite)     │  ║  └──────────────────┘  ║  └───────────────────────┘   ║
@@ -276,7 +310,7 @@ copy rust\.env.example rust\.env
 # 6 — Edit .env with your values (see Configuration)
 
 # 7 — Start everything
-npm run start:all
+npm run start
 ```
 
 > **First run:** If no session is saved, a **QR code** will appear in the terminal.  
@@ -358,20 +392,24 @@ RUST_LOG=winsibot_session_api=info
 
 ## Running the Bot
 
-### All-in-one *(recommended for production)*
+### All-in-one *(recommended)*
 
 ```bash
-npm run start:all
+npm run start
 ```
 
-Starts in parallel: Rust Session API · Python Monitor (which in turn starts Node.js + FastAPI + Celery)
+Builds and starts the bot **behind a lightweight supervisor** (`src/supervisor.ts`)
+that restarts it if it crashes or hangs without a heartbeat. The bot, in turn,
+brings up its own dependencies (Redis, Celery, Rust Session API, Python/FastAPI)
+if they aren't already running, and each one restarts itself if it crashes —
+each with its own status indicator, and a single Ctrl+C to shut everything down together.
 
 ### By component *(for development)*
 
 ```bash
-npm run rust:start      # Rust Session API only
-npm run monitor         # Python monitor + Node.js + services
-npm run dev             # Node.js only (no monitor, direct QR)
+npm run rust:start      # Rust Session API only, standalone
+npm run dev             # Node.js only, no build step — fast iteration / QR scan
+npm run monitor         # Python monitor with auto-restart and dashboard
 ```
 
 <details>
@@ -379,7 +417,8 @@ npm run dev             # Node.js only (no monitor, direct QR)
 
 | Script | Description |
 |--------|-------------|
-| `start:all` | Start everything in parallel |
+| `start` | Build and start the bot **via the supervisor** — restarts it if it crashes or hangs, and brings up Redis/Celery/Rust/Python on its own (each with its own auto-restart) |
+| `start:unsupervised` | Same as `start` but without the supervisor layer — runs `dist/index.js` directly |
 | `monitor` | Python monitor with auto-restart |
 | `dev` | Node.js direct — development / QR scan |
 | `build` | Compile TypeScript → `dist/` |
@@ -404,7 +443,7 @@ npm run dev             # Node.js only (no monitor, direct QR)
 
 ## Commands
 
-The bot has **75+ commands** across **17 categories**.
+The bot has **125+ commands** across **19 categories**.
 
 → **[📖 Full command reference](docs/commands.en.md)**
 
@@ -414,21 +453,21 @@ The bot has **75+ commands** across **17 categories**.
 | Category | Notable commands | Description |
 |----------|-----------------|-------------|
 | 🤖 AI | `!gpt` `!claude` `!imagine` `!translate` | Multi-model chat, images, translations |
-| 💰 RPG | `!work` `!daily` `!perfil` `!rw` `!clan` `!prestige` | Economy, gacha, levels, clans, prestige |
+| 💰 RPG | `!work` `!daily` `!perfil` `!rw` `!clan` `!prestige` `!harem` `!leveltop` | Economy, gacha, levels (daily streak), clans, prestige |
 | 🎮 Games | `!arena` `!quiz` `!adivinar` `!mascota` | PvP Arena, Coding Quiz, Draw & Guess, pets |
 | 🎁 Social | `!regalo` | Gift system, mailbox, wishlist, trades |
 | 🛡️ Admin | `!ban` `!kick` `!antilink` `!warn` | Group moderation |
 | 👑 Owner | `!exec` `!broadcast` `!premium` `!boost` | Full bot control |
-| ⬇️ Downloads | `!yt` `!tiktok` `!ttsearch` `!ig` `!spotify` `!apk` | Media downloaders + carousel search |
+| ⬇️ Downloads | `!yt` `!ytmp4` `!tiktok` `!ttsearch` `!ig` `!spotify` `!apk` | Media downloaders + carousel search |
 | 🎨 Stickers | `!sticker` `!toimg` `!emojimix` `!stickerpack` | Create, convert, and pack stickers |
 | 🎮 Fun | `!meme` `!sega` `!giphy` `!top` | Entertainment |
-| 💞 Roleplay | `!hug` `!kiss` `!pat` `!kill` | Interactive anime GIFs |
+| 💞 Roleplay | `!hug` `!kiss` `!pat` `!kill` `!punch` `!laugh` `!sad` `!sleep` | Interactive anime GIFs |
 | 🎵 Music | `!play` `!lyrics` `!spotify` | Audio and lyrics |
 | 🌐 Media | `!anime` `!removebg` `!wimage` | Anime images, background removal, characters |
 | 🔧 Util | `!clima` `!imagen` | Weather, image generation |
-| ℹ️ Info | `!ping` `!creator` `!menu` | Bot information |
+| ℹ️ Info | `!ping` `!creator` `!infobot` `!menu` | Bot information |
 | 🤝 Jadibot | `!jadibot` `!stopbot` | Linked sub-bots |
-| 🔞 NSFW | `!porngif` | Groups with NSFW enabled only |
+| 🔞 NSFW | `!porngif` `!rule34` `!sexyimg` `!stickerporn` | Groups with NSFW enabled only |
 
 </details>
 
@@ -586,9 +625,10 @@ curl -H "x-api-key: YOUR_KEY" http://127.0.0.1:3001/messages/stats
 | `GET` | `/sessions` | List active session IDs |
 | `POST` | `/sessions/signal/clear` | Delete Signal session files (Bad MAC fix) |
 | `GET` | `/sessions/backup` | Return best valid creds for QR-free restore |
-| `POST` | `/badmac/report` | Report a Bad MAC event for a group JID |
+| `POST` | `/badmac/report` | Report a Bad MAC event for a group JID (escalating cooldown) |
 | `POST` | `/badmac/reset` | Reset Bad MAC counter for a group JID |
-| `GET` | `/badmac/stats` | All group counters + last trigger times |
+| `GET` | `/badmac/stats` | All group counters, recidivism, and current cooldown |
+| `POST` | `/badmac/export` | Export Bad MAC history to Parquet (DuckDB) |
 | `POST` | `/rate/check` | Check if sender is within rate limit |
 | `GET` | `/rate/stats` | All sender buckets + usage |
 | `POST` | `/watchdog/ping` | Node.js heartbeat ping |
@@ -626,11 +666,13 @@ WinsiBot/
 ├── src/                              # TypeScript — main bot
 │   ├── config.ts                     # Environment variables + Zod validation
 │   ├── index.ts                      # Entry point
+│   ├── supervisor.ts                 # Restarts the bot if it crashes or hangs (external watchdog)
 │   ├── types/
 │   │   └── index.d.ts                # Global types (Command, UserData, etc.)
 │   ├── core/
 │   │   ├── socket.ts                 # WhatsApp WebSocket connection
-│   │   ├── handler.ts                # Message dispatcher → commands (semaphore)
+│   │   ├── handler.ts                # Message dispatcher → commands (semaphore with bounded wait)
+│   │   ├── groupCache.ts             # Canonical groupMetadata cache (TTL + debounce/coalescing)
 │   │   ├── store.ts                  # Contacts/chats cache (atomic write)
 │   │   ├── logger.ts                 # Pino logger
 │   │   ├── queue.ts                  # Priority message queue
@@ -656,7 +698,10 @@ WinsiBot/
 │   │   ├── leveling.ts               # Prestige (10 ranks), streaks, medals, multipliers
 │   │   ├── petAdvanced.ts            # Advanced Pets (25 species, evolution, battles)
 │   │   ├── clan.ts                   # Extended Clans (territories, 24h wars, alliances)
-│   │   ├── downloader.ts             # yt-dlp wrapper (YouTube, TikTok, Instagram)
+│   │   ├── downloader.ts             # yt-dlp wrapper (YouTube audio/video, TikTok, Instagram) — max 3 concurrent
+│   │   ├── queue.ts                  # Generic queue with configurable concurrency (used by downloader.ts)
+│   │   ├── rule34.ts                 # Rule34 JSON API client (images/videos by tag)
+│   │   ├── cacheManager.ts           # Generic TTL cache, hit/miss stats, LFU eviction
 │   │   ├── media.ts                  # Media processing
 │   │   ├── media_sender.ts           # safeSend / enqueueSend / broadcastSend
 │   │   ├── rateLimiter.ts            # Token bucket rate limiter (TypeScript)
@@ -666,7 +711,7 @@ WinsiBot/
 │   │   ├── jid_utils.ts              # JID utilities
 │   │   └── utils.ts                  # General helpers
 │   └── plugins/
-│       ├── commands/                 # 75+ commands organized by category
+│       ├── commands/                 # 125+ commands organized by category
 │       ├── middlewares/              # Auth, anti-spam, cooldown, rate limit
 │       ├── scheduler/                # Scheduled jobs (node-cron)
 │       └── webhooks/                 # HTTP receiver
@@ -681,18 +726,23 @@ WinsiBot/
 │   └── terminal/
 │       ├── monitor.py                # Main watchdog with auto-restart
 │       └── manage.py                 # Interactive maintenance CLI
-├── rust/                             # Rust — Session API
+├── rust/                             # Rust — Session API v5.1.0
 │   ├── build.rs                      # Windows linker fix (rstrtmgr.lib for DuckDB)
 │   └── src/
-│       ├── main.rs                   # Entry point (Axum)
+│       ├── main.rs                   # Entry point (Axum) — graceful shutdown + gzip compression
 │       ├── routes.rs                 # HTTP handlers + AppState
-│       ├── bad_mac.rs                # Per-group Bad MAC sliding window tracker
+│       ├── bad_mac.rs                # Per-group Bad MAC tracker — escalating cooldown + DuckDB/SQLite persistence
 │       ├── rate_limiter.rs           # Per-sender rate limiter (15 msgs / 10s)
-│       ├── watchdog.rs               # Node.js heartbeat (90s dead threshold)
+│       ├── watchdog.rs               # Node.js heartbeat — death/recovery tracking
 │       ├── snapshot.rs               # 10 rotating snapshots + read_best_valid()
-│       ├── db.rs                     # SQLite delivery tracker
+│       ├── db.rs                     # SQLite delivery tracker + audit_log
 │       ├── atomic.rs                 # Atomic file write (tmp → fsync → rename)
-│       └── nlp.rs                    # Rust-side NLP fast-path
+│       ├── nlp.rs                    # Rust-side NLP fast-path
+│       ├── subbots.rs                # SubBot Manager — quotas, state, config hot-reload
+│       ├── metrics.rs                # Atomic counters (writes/reads/bytes/snapshots)
+│       ├── tasks.rs                  # Background tasks: auto-snapshot, periodic cleanup
+│       ├── analytics.rs              # Aggregated dashboard (GET /analytics)
+│       └── alerts.rs                 # Discord-compatible webhooks on watchdog events
 ├── php/                              # Optional web panel
 ├── docs/
 │   ├── commands.md                   # Full command reference (ES)
@@ -745,7 +795,9 @@ npm run manage:reset-qr
 <details>
 <summary><b>Bot restarts every few hours</b></summary>
 
-Check `HANG_TIMEOUT` in `python/terminal/monitor.py`. Default is 15 minutes. The Rust watchdog also monitors the Node.js heartbeat (`GET /watchdog/status`) — inspect it to see the last ping time.
+Since v8.4.0 this may be the **supervisor** (`src/supervisor.ts`) working as intended: it restarts the bot if it crashes (non-zero exit code) or if `GET /watchdog/status` shows the event loop hung without a heartbeat for a while. This is intentional — it lets the bot self-heal without manual intervention.
+
+If the restart doesn't seem justified, check `HANG_TIMEOUT` in `python/terminal/monitor.py` (default 15 min) and the watchdog state via `GET /watchdog/status`. To rule out the supervisor, start without it using `npm run start:unsupervised`.
 
 </details>
 

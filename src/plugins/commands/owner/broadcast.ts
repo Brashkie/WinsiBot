@@ -1,6 +1,7 @@
 import type { Command } from '../../../types/index.js'
 import { userData } from '@core/events/index.js'
 import { safeSend } from '@lib/media_sender.js'
+import { winsiStore } from '@core/store.js'
 
 // !bc <mensaje>          → grupos + privado
 // !bcgroup <mensaje>     → solo grupos
@@ -36,7 +37,7 @@ const command: Command = {
     let failed = 0
 
     if (toGroups) {
-      const groups = Object.keys(await sock.groupFetchAllParticipating().catch(() => ({})))
+      const groups = Object.keys(winsiStore.chats).filter(j => j.endsWith('@g.us'))
       for (const groupJid of groups) {
         try {
           await safeSend(() => sock.sendMessage(groupJid, { text: content }))

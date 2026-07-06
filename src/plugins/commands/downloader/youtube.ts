@@ -1,18 +1,5 @@
 import type { Command } from '../../../types/index.js'
-import { downloadYoutubeAudio, getYoutubeInfo, downloadBuffer } from '@lib/downloader.js'
-
-const sleep = (ms: number) => new Promise(r => setTimeout(r, ms))
-
-function formatDuration(seconds: number): string {
-  const m = Math.floor(seconds / 60)
-  const s = seconds % 60
-  return `${m} minutos ${s} segundos`
-}
-
-function formatSize(bytes: number): string {
-  const mb = bytes / (1024 * 1024)
-  return `${mb.toFixed(2)}MB`
-}
+import { downloadYoutubeAudio, getYoutubeInfo, downloadBuffer, formatDuration } from '@lib/downloader.js'
 
 const command: Command = {
   name: 'ytmp3',
@@ -31,62 +18,40 @@ const command: Command = {
       return
     }
 
-    // animacion de busqueda
-    const sent = await sock.sendMessage(jid, {
-      text: '◈ Buscando en YouTube...',
-    }, { quoted: msg })
-    const key = sent?.key
+    // Lanzar info + descarga AL MISMO TIEMPO (ambas corren en paralelo, ninguna
+    // espera a la otra), pero solo esperamos a `info` antes de mandar la tarjeta
+    // — así la tarjeta aparece apenas esté lista la metadata (rápido), sin
+    // quedar bloqueada por la descarga del audio (que tarda más). El audio ya
+    // viene corriendo en segundo plano desde antes, así que no se pierde nada
+    // de la mejora de velocidad anterior.
+    const infoPromise  = getYoutubeInfo(query).catch(() => null)
+    const audioPromise = downloadYoutubeAudio(query)
 
-    const frames = [
-      '◈◈ Encontrado...',
-      '◈◈◈ Descargando audio...',
-      '◈◈ Convirtiendo a MP3...',
-    ]
+    const info = await infoPromise
 
-    // obtener info y animar en paralelo
-    const [info] = await Promise.all([
-      getYoutubeInfo(query).catch(() => null),
-      (async () => {
-        for (const frame of frames) {
-          await sleep(600)
-          await sock.sendMessage(jid, { text: frame, edit: key } as any)
-        }
-      })(),
-    ])
-
-    // descargar audio
-    const result = await downloadYoutubeAudio(query)
-    const size   = formatSize(result.buffer.length)
-
-    await sock.sendMessage(jid, { text: '✔ Listo', edit: key } as any)
-    await sleep(200)
-
-    // enviar miniatura con info
     if (info) {
-      try {
-        const thumb = await downloadBuffer(info.thumbnail)
-        const caption = [
-          `𒉺═══「 << ❙◀ ⟳ ▷ ▶❙ >> 」═══𒉺`,
-          ``,
-          ` 𒁈 Descargando *<${info.title}>*`,
-          ``,
-          `> ➽ Canal » ${info.uploader}`,
-          `> ⴵ Duracion » ${formatDuration(info.duration)}`,
-          `> ☆ Calidad » 128 kbps`,
-          `> □ Tamaño » ${size}`,
-          `> 🜸 Link » https://youtu.be/${info.url.split('v=')[1] ?? info.url.split('/').pop()}`,
-        ].join('\n')
+      let thumbnail: Buffer | null = null
+      try { thumbnail = await downloadBuffer(info.thumbnail) } catch {}
 
-        await sock.sendMessage(jid, {
-          image:   thumb,
-          caption,
-        }, { quoted: msg })
+      const caption = [
+        `*${info.title}*`,
+        ``,
+        `> ❖ Canal › *${info.uploader}*`,
+        `> ⴵ Duración › *${formatDuration(info.duration)}*`,
+        `> ❀ Vistas › *${info.views.toLocaleString()}*`,
+        `> ✩ Publicado › *${info.uploadedAt}*`,
+        `> ❒ Enlace › *${info.url}*`,
+      ].join('\n')
 
-        await sleep(300)
-      } catch {}
+      if (thumbnail) {
+        await sock.sendMessage(jid, { image: thumbnail, caption }, { quoted: msg })
+      } else {
+        await sock.sendMessage(jid, { text: caption }, { quoted: msg })
+      }
     }
 
-    // enviar audio
+    const result = await audioPromise
+
     await sock.sendMessage(jid, {
       audio:    result.buffer,
       mimetype: 'audio/mpeg',

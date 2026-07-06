@@ -2,10 +2,7 @@
 
 import type { WASocket } from '@whiskeysockets/baileys'
 import { winsiStore } from './store.js'
-
-// ─── Cache de metadatos de grupo ──────────────────────────────────────────────
-const groupCache = new Map<string, { participants: any[], ts: number }>()
-const GROUP_CACHE_TTL = 5 * 60 * 1000 // 5 minutos
+import { getGroupParticipants } from './groupCache.js'
 
 // ─── Registrar mensaje ────────────────────────────────────────────────────────
 export function registerMessage(
@@ -23,42 +20,28 @@ export function registerMessage(
     ((winsiStore as any).data.contacts[sender] = { ...existing, notify: pushName })
 }
 
-// ─── Cache de grupo con TTL ───────────────────────────────────────────────────
+// ─── Grupo vía cache canónico (groupCache.ts) ─────────────────────────────────
 export async function getGroupCached(
   sock:     WASocket,
   groupJid: string,
 ): Promise<any[]> {
-  const cached = groupCache.get(groupJid)
-  if (cached && Date.now() - cached.ts < GROUP_CACHE_TTL) {
-    return cached.participants
-  }
+  const participants = await getGroupParticipants(sock, groupJid)
 
-  try {
-    const metadata = await sock.groupMetadata(groupJid)
-    groupCache.set(groupJid, {
-      participants: metadata.participants,
-      ts:           Date.now(),
-    })
-
-    // alimentar store con datos del grupo
-    for (const p of metadata.participants) {
-      const lid = (p as any).lid
-      if (lid) {
-        // registrar mapeo lid → jid en el store
-        const contacts = (winsiStore as any).data?.contacts
-        if (contacts) {
-          const existing = contacts[p.id] ?? { id: p.id }
-          contacts[p.id] = { ...existing, lid }
-          const lidContacts = contacts[lid] ?? { id: lid }
-          contacts[lid] = { ...lidContacts, id: p.id }
-        }
+  // alimentar store con datos del grupo (mapeo lid → jid)
+  for (const p of participants) {
+    const lid = (p as any).lid
+    if (lid) {
+      const contacts = (winsiStore as any).data?.contacts
+      if (contacts) {
+        const existing = contacts[p.id] ?? { id: p.id }
+        contacts[p.id] = { ...existing, lid }
+        const lidContacts = contacts[lid] ?? { id: lid }
+        contacts[lid] = { ...lidContacts, id: p.id }
       }
     }
-
-    return metadata.participants
-  } catch {
-    return cached?.participants ?? []
   }
+
+  return participants
 }
 
 // ─── Resolver JID completo ────────────────────────────────────────────────────
@@ -103,13 +86,3 @@ export async function resolveJidFull(
   // 3. fallback desde store
   return fromStore
 }
-
-// ─── Limpiar cache viejo ──────────────────────────────────────────────────────
-export function clearOldCache(): void {
-  const now = Date.now()
-  for (const [key, val] of groupCache.entries()) {
-    if (now - val.ts > GROUP_CACHE_TTL * 2) groupCache.delete(key)
-  }
-}
-
-setInterval(clearOldCache, 10 * 60 * 1000)

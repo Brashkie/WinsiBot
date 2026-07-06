@@ -20,7 +20,9 @@ const sleep = (ms: number) => new Promise<void>(r => setTimeout(r, ms))
 export async function safeSend(fn: () => Promise<any>): Promise<any> {
   for (let attempt = 0; attempt < MAX_RETRIES; attempt++) {
     try {
-      return await fn()
+      // Solo el bucket global (sin cola ni límite por-JID) — protege el techo
+      // de envíos salientes sin agregar latencia perceptible a una respuesta.
+      return await rateLimiter.direct(fn)
     } catch (err: any) {
       const msg = String(err?.message ?? err ?? '')
       if (!RETRYABLE.some(e => msg.includes(e)) || attempt === MAX_RETRIES - 1) throw err
@@ -97,7 +99,7 @@ export async function broadcastSend(
 type MediaType = 'video' | 'image' | 'gif' | null
 interface MediaResult { type: MediaType; buffer: Buffer | null }
 
-async function findMedia(name: string): Promise<MediaResult> {
+export async function findMedia(name: string): Promise<MediaResult> {
   const exts: Array<[string, Exclude<MediaType, null>]> = [
     [`${name}.mp4`,  'video'],
     [`${name}.gif`,  'gif'],
@@ -116,7 +118,7 @@ async function findMedia(name: string): Promise<MediaResult> {
   return { type: null, buffer: null }
 }
 
-async function findMediaRandom(name: string): Promise<MediaResult> {
+export async function findMediaRandom(name: string): Promise<MediaResult> {
   try {
     const files   = await readdir(MEDIA_DIR)
     const pattern = new RegExp(`^${name}\\d*$`)

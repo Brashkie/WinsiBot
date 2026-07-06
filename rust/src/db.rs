@@ -41,6 +41,16 @@ pub fn open(path: &str) -> Result<Db, rusqlite::Error> {
          );
          CREATE INDEX IF NOT EXISTS idx_outbox_status_sent ON outbox (status, sent_at);
          CREATE INDEX IF NOT EXISTS idx_outbox_jid         ON outbox (jid);
+
+         CREATE TABLE IF NOT EXISTS audit_log (
+             id       INTEGER PRIMARY KEY AUTOINCREMENT,
+             ts       INTEGER NOT NULL,
+             category TEXT    NOT NULL,
+             event    TEXT    NOT NULL,
+             detail   TEXT
+         );
+         CREATE INDEX IF NOT EXISTS idx_audit_ts       ON audit_log (ts);
+         CREATE INDEX IF NOT EXISTS idx_audit_category ON audit_log (category);
         ",
     )?;
 
@@ -192,4 +202,69 @@ pub fn cleanup(db: &Db, days: i64) -> Result<usize, rusqlite::Error> {
     let n = conn.execute("DELETE FROM outbox WHERE sent_at < ?1", params![cutoff])?;
     tracing::info!(n, days, "outbox: registros eliminados");
     Ok(n)
+}
+
+// ─── Audit log — rastro forense de eventos del sistema ────────────────────────
+// category: "subbot" | "watchdog" | "session" — event: texto libre corto.
+// detail: JSON serializado opcional con contexto adicional.
+
+#[derive(Debug, serde::Serialize)]
+pub struct AuditEntry {
+    pub id:       i64,
+    pub ts:       i64,
+    pub category: String,
+    pub event:    String,
+    pub detail:   Option<String>,
+}
+
+pub fn audit_log(
+    db:       &Db,
+    category: &str,
+    event:    &str,
+    detail:   Option<&str>,
+) -> Result<(), rusqlite::Error> {
+    let conn = db.lock().unwrap();
+    conn.execute(
+        "INSERT INTO audit_log (ts, category, event, detail) VALUES (?1, ?2, ?3, ?4)",
+        params![Utc::now().timestamp(), category, event, detail],
+    )?;
+    Ok(())
+}
+
+/// Últimos `limit` eventos, los más recientes primero. `category` filtra si se indica.
+pub fn get_audit(
+    db:       &Db,
+    limit:    i64,
+    category: Option<&str>,
+) -> Result<Vec<AuditEntry>, rusqlite::Error> {
+    let conn = db.lock().unwrap();
+
+    let mut stmt = if category.is_some() {
+        conn.prepare(
+            "SELECT id, ts, category, event, detail FROM audit_log
+             WHERE category = ?2 ORDER BY id DESC LIMIT ?1",
+        )?
+    } else {
+        conn.prepare(
+            "SELECT id, ts, category, event, detail FROM audit_log
+             ORDER BY id DESC LIMIT ?1",
+        )?
+    };
+
+    let map_row = |row: &rusqlite::Row| -> rusqlite::Result<AuditEntry> {
+        Ok(AuditEntry {
+            id:       row.get(0)?,
+            ts:       row.get(1)?,
+            category: row.get(2)?,
+            event:    row.get(3)?,
+            detail:   row.get(4)?,
+        })
+    };
+
+    let rows: Vec<_> = if let Some(cat) = category {
+        stmt.query_map(params![limit, cat], map_row)?.collect()
+    } else {
+        stmt.query_map(params![limit], map_row)?.collect()
+    };
+    rows.into_iter().collect()
 }

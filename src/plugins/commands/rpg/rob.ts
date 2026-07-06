@@ -3,11 +3,10 @@ import {
   getUserData, patchUserData,
   isOnCooldown, setCooldown, getCooldownLeft, fmtCooldown,
 } from '@core/events.js'
+import { randomNumber as rand } from '@lib/utils.js'
 
 const CD      = 2 * 60 * 60_000
 const MAX_ROB = 4_000
-
-const rand = (min: number, max: number) => Math.floor(Math.random() * (max - min + 1)) + min
 
 const command: Command = {
   name: 'rob',

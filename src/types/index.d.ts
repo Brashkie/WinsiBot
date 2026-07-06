@@ -105,6 +105,8 @@ export interface BotConfig {
   spotifyClientSecret?: string
   databaseUrl?:         string
   redisUrl?:            string
+  rule34ApiKey?:        string
+  rule34UserId?:        string
   logLevel:             string
   isDev:                boolean
 }

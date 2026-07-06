@@ -2,12 +2,13 @@ use std::env;
 
 #[derive(Clone, Debug)]
 pub struct Config {
-    pub port:          u16,
-    pub api_key:       String,
-    pub sessions_dir:  String,
-    pub auth_dir:      String,
-    pub db_path:       String,
-    pub conv_db_path:  String,
+    pub port:              u16,
+    pub api_key:           String,
+    pub sessions_dir:      String,
+    pub auth_dir:          String,
+    pub db_path:           String,
+    pub conv_db_path:      String,
+    pub alert_webhook_url: Option<String>,
 }
 
 impl Config {
@@ -42,6 +43,9 @@ impl Config {
         let conv_db_path = env::var("CONV_DB_PATH")
             .unwrap_or_else(|_| "./data/ai_conversations.duckdb".into());
 
-        Config { port, api_key, sessions_dir, auth_dir, db_path, conv_db_path }
+        // Webhook opcional (Discord-compatible) para alertas de watchdog muerto/recuperado
+        let alert_webhook_url = env::var("ALERT_WEBHOOK_URL").ok().filter(|s| !s.is_empty());
+
+        Config { port, api_key, sessions_dir, auth_dir, db_path, conv_db_path, alert_webhook_url }
     }
 }

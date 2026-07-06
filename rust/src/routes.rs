@@ -13,11 +13,12 @@ use base64::{engine::general_purpose::STANDARD as B64, Engine as _};
 use chrono::Utc;
 use serde::{Deserialize, Serialize};
 
-use crate::{atomic, bad_mac, db, rate_limiter, session_id, snapshot, watchdog};
+use crate::{alerts, atomic, bad_mac, db, metrics, rate_limiter, session_id, snapshot, subbots, watchdog};
 
 // ── AppState ──────────────────────────────────────────────────────────────────
 
 use crate::lock_manager::LockManager;
+use std::sync::Arc;
 
 #[derive(Clone)]
 pub struct AppState {
@@ -29,6 +30,9 @@ pub struct AppState {
     pub bad_mac:       bad_mac::BadMacTracker,
     pub rate_limiter:  rate_limiter::RateLimiter,
     pub watchdog:      watchdog::WatchdogState,
+    pub subbots:       Arc<subbots::SubBotManager>,
+    pub metrics:       metrics::Metrics,
+    pub alert_webhook_url: Option<String>,
 }
 
 // ── Límites de seguridad ──────────────────────────────────────────────────────
@@ -141,9 +145,15 @@ pub async fn write(
     let _ = snapshot::create(&path);
 
     // Escritura atómica
-    atomic::atomic_write(&path, &bytes)
-        .map_err(|e| err(StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
+    if let Err(e) = atomic::atomic_write(&path, &bytes) {
+        alerts::fire(
+            &state,
+            &format!("🔴 WinsiBot: fallo al escribir sesión '{}': {e}", body.session_id),
+        ).await;
+        return Err(err(StatusCode::INTERNAL_SERVER_ERROR, e.to_string()));
+    }
 
+    state.metrics.inc_write(bytes.len());
     tracing::info!(session = %body.session_id, bytes = bytes.len(), "sesión guardada");
     Ok(ok(format!("sesión '{}' guardada ({} bytes)", body.session_id, bytes.len())))
 }
@@ -178,6 +188,7 @@ pub async fn read(
     })?;
 
     let healthy = serde_json::from_slice::<serde_json::Value>(&bytes).is_ok();
+    state.metrics.inc_read(bytes.len());
     tracing::info!(session = %q.session_id, healthy, "sesión leída");
 
     Ok(Json(ReadResponse {
@@ -206,6 +217,7 @@ pub async fn snapshot_route(
     snapshot::create(&path)
         .map_err(|e| err(StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
 
+    state.metrics.inc_snapshot_manual();
     tracing::info!(session = %body.session_id, "snapshot manual creado");
     Ok(ok(format!("snapshot creado para '{}'", body.session_id)))
 }
@@ -220,6 +232,7 @@ pub async fn recover(
 
     match snapshot::recover(&path) {
         Some(msg) => {
+            state.metrics.inc_recovery();
             tracing::info!(session = %body.session_id, from = %msg, "sesión recuperada");
             Ok(ok(format!("'{}' recuperado desde {msg}", body.session_id)))
         }
@@ -542,6 +555,35 @@ pub async fn messages_cleanup(
     let db   = state.db.clone();
     match tokio::task::spawn_blocking(move || db::cleanup(&db, days)).await {
         Ok(Ok(n)) => (StatusCode::OK, Json(serde_json::json!({ "ok": true, "deleted": n, "days": days, "ts": Utc::now() }))),
+        Ok(Err(e)) => (StatusCode::INTERNAL_SERVER_ERROR, Json(serde_json::json!({ "ok": false, "error": e.to_string() }))),
+        Err(e)     => (StatusCode::INTERNAL_SERVER_ERROR, Json(serde_json::json!({ "ok": false, "error": e.to_string() }))),
+    }
+}
+
+// ── GET /audit?limit=100&category=subbot ─────────────────────────────────────
+
+#[derive(Deserialize)]
+pub struct AuditQuery {
+    #[serde(default = "default_audit_limit")]
+    limit:    i64,
+    category: Option<String>,
+}
+fn default_audit_limit() -> i64 { 100 }
+
+pub async fn get_audit(
+    State(state): State<AppState>,
+    Query(q): Query<AuditQuery>,
+) -> (StatusCode, Json<serde_json::Value>) {
+    let limit = q.limit.clamp(1, 1_000);
+    let db    = state.db.clone();
+    let cat   = q.category.clone();
+    match tokio::task::spawn_blocking(move || db::get_audit(&db, limit, cat.as_deref())).await {
+        Ok(Ok(list)) => (StatusCode::OK, Json(serde_json::json!({
+            "ok":      true,
+            "count":   list.len(),
+            "entries": list,
+            "ts":      Utc::now(),
+        }))),
         Ok(Err(e)) => (StatusCode::INTERNAL_SERVER_ERROR, Json(serde_json::json!({ "ok": false, "error": e.to_string() }))),
         Err(e)     => (StatusCode::INTERNAL_SERVER_ERROR, Json(serde_json::json!({ "ok": false, "error": e.to_string() }))),
     }

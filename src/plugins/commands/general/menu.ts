@@ -1,7 +1,9 @@
 import type { Command } from '../../../types/index.js'
 import { commandRegistry } from '../index.js'
 import { config } from '@config'
-import { sendWithMedia } from '@lib/media_sender.js'
+import { findMediaRandom, safeSend } from '@lib/media_sender.js'
+import { sendReply } from '@lib/interactive.js'
+import { generateWAMessageFromContent, prepareWAMessageMedia } from '@whiskeysockets/baileys'
 
 const CATEGORY_SYMBOLS: Record<string, string> = {
   general:    '◈',
@@ -55,8 +57,46 @@ const command: Command = {
     text += `\n───────────────────────`
     text += `\n  Prefix: *${config.prefix.join('  ')}*`
 
-    // random: true — elige aleatoriamente entre menu.mp4, menu1.mp4, menu2.mp4...
-    await sendWithMedia(sock, jid, text, 'menu', msg, true)
+    // Intentar con media (video/gif/imagen) + newsletter context → "Ver canal"
+    const media = await findMediaRandom('menu')
+    const NL_JID  = '120363197223158904@newsletter'
+    const nlCtx   = {
+      isForwarded: true,
+      forwardingScore: 1,
+      forwardedNewsletterMessageInfo: {
+        newsletterJid:   NL_JID,
+        newsletterName:  config.botName,
+        serverMessageId: Math.floor(Math.random() * 900) + 100,
+      },
+    }
+    const genOpts = msg
+      ? { userJid: sock.user?.id ?? '', quoted: msg }
+      : { userJid: sock.user?.id ?? '' }
+
+    if (media.buffer && (media.type === 'video' || media.type === 'image')) {
+      try {
+        const mediaKey  = media.type === 'video' ? 'video' : 'image'
+        const prepared  = await prepareWAMessageMedia(
+          { [mediaKey]: media.buffer! } as any,
+          { upload: sock.waUploadToServer },
+        )
+        const msgKey    = media.type === 'video' ? 'videoMessage' : 'imageMessage'
+        const waMsg     = generateWAMessageFromContent(jid, {
+          [msgKey]: {
+            ...(prepared as any)[msgKey],
+            caption:     text,
+            contextInfo: nlCtx,
+          },
+        } as any, genOpts)
+        await safeSend(() => sock.relayMessage(jid, waMsg.message!, { messageId: waMsg.key.id! }))
+        return
+      } catch {
+        // Si falla la preparación de media, caer al texto
+      }
+    }
+
+    // Sin media o fallo: texto con "Ver canal" vía sendReply
+    await sendReply(sock, jid, text, msg)
   },
 }
 

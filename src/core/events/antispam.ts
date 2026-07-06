@@ -28,12 +28,12 @@ setInterval(() => {
   }
 }, 2 * 60_000).unref()
 
-function tick(sender: string): { isSpam: boolean; strikes: number } {
+function tick(key: string): { isSpam: boolean; strikes: number } {
   const now  = Date.now()
-  const data = spamMap.get(sender)
+  const data = spamMap.get(key)
 
   if (!data || now - data.first > SPAM_WINDOW) {
-    spamMap.set(sender, { count: 1, first: now, strikes: data?.strikes ?? 0 })
+    spamMap.set(key, { count: 1, first: now, strikes: data?.strikes ?? 0 })
     return { isSpam: false, strikes: data?.strikes ?? 0 }
   }
 
@@ -47,8 +47,8 @@ function tick(sender: string): { isSpam: boolean; strikes: number } {
   return { isSpam: false, strikes: data.strikes }
 }
 
-function resetStrikes(sender: string): void {
-  spamMap.delete(sender)
+function resetStrikes(key: string): void {
+  spamMap.delete(key)
 }
 
 // Detecta spam de contenido (chars repetidos, junk) via Rust NLP
@@ -78,8 +78,10 @@ export async function handleSpam(
   // Verificar spam de contenido vía Rust (contenido junk, chars repetidos)
   const contentSpam = await isContentSpam(text)
 
-  // Verificar spam por tasa de mensajes (ventana deslizante)
-  const { isSpam, strikes } = tick(sender)
+  // Verificar spam por tasa de mensajes (ventana deslizante) — key por grupo+sender
+  // para que el contador no se comparta entre todos los grupos donde está el usuario.
+  const key = `${jid}:${sender}`
+  const { isSpam, strikes } = tick(key)
 
   if (!contentSpam && !isSpam) return
 
@@ -102,7 +104,7 @@ export async function handleSpam(
     }).catch(() => {})
   } else {
     // 3er strike+: kick
-    resetStrikes(sender)
+    resetStrikes(key)
     await sock.sendMessage(jid, {
       text:     `🚫 @${num} ha sido *expulsado* por spam reiterado.`,
       mentions: [sender],
@@ -115,6 +117,6 @@ export async function handleSpam(
 export function checkSpam(sender: string, groupJid: string): boolean {
   const config = getGroupConfig(groupJid)
   if (!config.antispam) return false
-  const { isSpam } = tick(sender)
+  const { isSpam } = tick(`${groupJid}:${sender}`)
   return isSpam
 }

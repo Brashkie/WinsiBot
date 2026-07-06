@@ -1,13 +1,24 @@
-//! bad_mac.rs — Per-group Bad MAC sliding-window counter.
+//! bad_mac.rs — Per-group Bad MAC sliding-window counter, con cooldown
+//! escalonado y persistencia en DuckDB/SQLite.
 //!
 //! Cada grupo tiene su propio contador independiente.
 //! Un grupo con flood NO afecta a los demás.
 //! Umbral: BAD_MAC_THRESHOLD eventos en BAD_MAC_WINDOW_SECS → shouldClear = true.
-//! Después de triggear, el grupo tiene un cooldown de COOLDOWN_SECS antes de
-//! volver a triggear — evita bucles de clear infinitos.
+//! Después de triggear, el grupo tiene un cooldown antes de volver a triggear
+//! — evita bucles de clear infinitos. El cooldown escala con la cantidad de
+//! veces que el grupo ya reincidió (lifetime_clears): 10s → 30s → 90s → ...
+//! hasta un tope, en vez de repetir siempre el mismo ciclo corto para un
+//! grupo crónicamente problemático.
+//!
+//! Cada clear se persiste en DuckDB (bad_mac_events, mismo archivo que usa
+//! conversations.rs) y en el audit_log de SQLite (mismo patrón que usa el
+//! watchdog en tasks.rs) — así el historial sobrevive un reinicio de Rust,
+//! y al arrancar (main.rs) se hidrata lifetime_clears desde ese historial
+//! para no perder la escalada de cooldown de un grupo problemático.
 
 use axum::{extract::State, http::StatusCode, response::Json};
 use chrono::Utc;
+use duckdb::{params, Connection};
 use serde::Deserialize;
 use std::{
     collections::HashMap,
@@ -15,27 +26,37 @@ use std::{
     time::{Duration, Instant},
 };
 
-use crate::routes::AppState;
+use crate::{alerts, db, routes::AppState};
 
 // ── Configuración ─────────────────────────────────────────────────────────────
-const BAD_MAC_THRESHOLD:   u32 = 5;   // eventos por grupo antes de shouldClear
-const BAD_MAC_WINDOW_SECS: u64 = 30;  // ventana deslizante (segundos)
-const COOLDOWN_SECS:       u64 = 10;  // cooldown mínimo entre clears del mismo grupo
+const BAD_MAC_THRESHOLD:    u32 = 5;   // eventos por grupo antes de shouldClear
+const BAD_MAC_WINDOW_SECS:  u64 = 30;  // ventana deslizante (segundos)
+const COOLDOWN_BASE_SECS:   u64 = 10;  // cooldown tras el primer clear
+const COOLDOWN_MAX_SECS:    u64 = 600; // tope — 10 min
+
+/// Cooldown escalonado según cuántas veces ya reincidió el grupo: 10s → 30s
+/// → 90s → 270s → ... capado en COOLDOWN_MAX_SECS.
+fn cooldown_for(lifetime_clears: u32) -> u64 {
+    let exp = lifetime_clears.min(6); // 3^6 * 10 ya excede el tope, no hace falta más
+    COOLDOWN_BASE_SECS.saturating_mul(3u64.saturating_pow(exp)).min(COOLDOWN_MAX_SECS)
+}
 
 // ── Estado por grupo ──────────────────────────────────────────────────────────
 #[derive(Debug)]
 struct GroupState {
-    count:        u32,
-    window_start: Instant,
-    cleared_at:   Option<Instant>,
+    count:           u32,
+    window_start:    Instant,
+    cleared_at:      Option<Instant>,
+    lifetime_clears: u32,
 }
 
 impl GroupState {
     fn new() -> Self {
         Self {
-            count:        0,
-            window_start: Instant::now(),
-            cleared_at:   None,
+            count:           0,
+            window_start:    Instant::now(),
+            cleared_at:      None,
+            lifetime_clears: 0,
         }
     }
 }
@@ -53,16 +74,17 @@ impl BadMacTracker {
         }
     }
 
-    /// Registra un Bad MAC para `jid`. Devuelve (count, should_clear).
-    pub fn report(&self, jid: &str) -> (u32, bool) {
+    /// Registra un Bad MAC para `jid`. Devuelve (count, should_clear, lifetime_clears).
+    pub fn report(&self, jid: &str) -> (u32, bool, u32) {
         let mut map = self.inner.lock().unwrap();
         let entry   = map.entry(jid.to_string()).or_insert_with(GroupState::new);
         let now     = Instant::now();
 
-        // Si el último clear fue hace menos de COOLDOWN_SECS, suprimir
+        // Si el último clear fue hace menos que el cooldown (escalonado), suprimir
         if let Some(cleared) = entry.cleared_at {
-            if now.duration_since(cleared) < Duration::from_secs(COOLDOWN_SECS) {
-                return (entry.count, false);
+            let cooldown = cooldown_for(entry.lifetime_clears);
+            if now.duration_since(cleared) < Duration::from_secs(cooldown) {
+                return (entry.count, false, entry.lifetime_clears);
             }
         }
 
@@ -77,17 +99,20 @@ impl BadMacTracker {
 
         let should_clear = count >= BAD_MAC_THRESHOLD;
         if should_clear {
+            entry.lifetime_clears += 1;
             tracing::warn!(
-                jid      = %jid,
-                count    = count,
-                threshold = BAD_MAC_THRESHOLD,
+                jid             = %jid,
+                count           = count,
+                threshold       = BAD_MAC_THRESHOLD,
+                lifetime_clears = entry.lifetime_clears,
+                cooldown_s      = cooldown_for(entry.lifetime_clears),
                 "Bad MAC threshold — señalando clear para este grupo"
             );
             entry.count      = 0;
             entry.cleared_at = Some(now);
         }
 
-        (count, should_clear)
+        (count, should_clear, entry.lifetime_clears)
     }
 
     /// Resetea manualmente el contador de un grupo (p. ej. tras clear manual).
@@ -96,18 +121,98 @@ impl BadMacTracker {
         map.remove(jid);
     }
 
-    /// Devuelve stats de todos los grupos con contadores activos.
+    /// Hidrata lifetime_clears de un grupo al arrancar, desde el historial
+    /// persistido en DuckDB — así un reinicio de Rust no resetea la escalada
+    /// de cooldown de un grupo problemático (ver main.rs).
+    pub fn seed(&self, jid: &str, lifetime_clears: u32) {
+        let mut map = self.inner.lock().unwrap();
+        let entry = map.entry(jid.to_string()).or_insert_with(GroupState::new);
+        entry.lifetime_clears = lifetime_clears;
+    }
+
+    /// Devuelve stats de todos los grupos con contadores o historial activos.
     pub fn stats(&self) -> Vec<serde_json::Value> {
         let map = self.inner.lock().unwrap();
         map.iter()
-            .filter(|(_, v)| v.count > 0)
+            .filter(|(_, v)| v.count > 0 || v.lifetime_clears > 0)
             .map(|(jid, v)| {
                 serde_json::json!({
-                    "jid":   jid,
-                    "count": v.count,
+                    "jid":              jid,
+                    "count":            v.count,
+                    "lifetimeClears":   v.lifetime_clears,
+                    "currentCooldownS": cooldown_for(v.lifetime_clears),
                 })
             })
             .collect()
+    }
+}
+
+// ── Persistencia DuckDB — historial de clears, sobrevive reinicios de Rust ───
+
+pub fn init_schema(path: &str) {
+    match Connection::open(path) {
+        Ok(conn) => {
+            let r = conn.execute_batch(
+                "CREATE TABLE IF NOT EXISTS bad_mac_events (
+                    id              VARCHAR DEFAULT gen_random_uuid(),
+                    jid             VARCHAR NOT NULL,
+                    ts              BIGINT  NOT NULL,
+                    count           INTEGER NOT NULL,
+                    lifetime_clears INTEGER NOT NULL,
+                    cooldown_secs   BIGINT  NOT NULL
+                );",
+            );
+            if let Err(e) = r {
+                tracing::warn!("DuckDB bad_mac_events schema init error: {}", e);
+            }
+        }
+        Err(e) => tracing::warn!("DuckDB open error (bad_mac): {}", e),
+    }
+}
+
+fn record_clear(
+    path:            &str,
+    jid:             &str,
+    count:           u32,
+    lifetime_clears: u32,
+    cooldown_secs:   u64,
+) -> Result<(), String> {
+    let conn = Connection::open(path).map_err(|e| e.to_string())?;
+    let ts   = Utc::now().timestamp_millis();
+    conn.execute(
+        "INSERT INTO bad_mac_events (jid, ts, count, lifetime_clears, cooldown_secs)
+         VALUES (?, ?, ?, ?, ?)",
+        params![jid, ts, count, lifetime_clears, cooldown_secs as i64],
+    ).map_err(|e| e.to_string())?;
+    Ok(())
+}
+
+/// Cuenta clears por grupo en las últimas `hours` horas — usado al arrancar
+/// para hidratar el tracker en memoria (ver main.rs).
+pub fn recent_clear_counts(path: &str, hours: i64) -> Vec<(String, u32)> {
+    let conn = match Connection::open(path) {
+        Ok(c)  => c,
+        Err(e) => { tracing::warn!("DuckDB open error (bad_mac hydrate): {}", e); return Vec::new() }
+    };
+
+    let since = Utc::now().timestamp_millis() - hours * 3_600_000;
+
+    let mut stmt = match conn.prepare(
+        "SELECT jid, COUNT(*) FROM bad_mac_events WHERE ts > ? GROUP BY jid",
+    ) {
+        Ok(s)  => s,
+        Err(e) => { tracing::warn!("DuckDB prepare error (bad_mac hydrate): {}", e); return Vec::new() }
+    };
+
+    let rows = stmt.query_map(params![since], |row| {
+        let jid:   String = row.get(0)?;
+        let count: i64     = row.get(1)?;
+        Ok((jid, count as u32))
+    });
+
+    match rows {
+        Ok(iter) => iter.filter_map(|r| r.ok()).collect(),
+        Err(e)   => { tracing::warn!("DuckDB query error (bad_mac hydrate): {}", e); Vec::new() }
     }
 }
 
@@ -129,17 +234,49 @@ pub async fn report_bad_mac(
         );
     }
 
-    let (count, should_clear) = state.bad_mac.report(&body.jid);
+    let (count, should_clear, lifetime_clears) = state.bad_mac.report(&body.jid);
+
+    if should_clear {
+        let cooldown = cooldown_for(lifetime_clears);
+
+        alerts::fire(
+            &state,
+            &format!(
+                "🟠 WinsiBot: Bad MAC threshold en grupo {} ({count} eventos, reincidencia #{lifetime_clears}) — limpiando sesiones Signal (cooldown {cooldown}s)",
+                body.jid
+            ),
+        ).await;
+
+        // Persistencia — fire-and-forget, no bloquea la respuesta ni afecta
+        // la decisión en caliente (que ya se tomó arriba, en memoria).
+        let db_path = state.conv_db_path.clone();
+        let jid_c   = body.jid.clone();
+        tokio::task::spawn_blocking(move || {
+            if let Err(e) = record_clear(&db_path, &jid_c, count, lifetime_clears, cooldown) {
+                tracing::warn!(error = %e, "bad_mac: fallo al persistir evento en DuckDB");
+            }
+        });
+
+        let audit_db = state.db.clone();
+        let detail = serde_json::json!({
+            "jid": body.jid, "count": count,
+            "lifetimeClears": lifetime_clears, "cooldownSecs": cooldown,
+        }).to_string();
+        tokio::task::spawn_blocking(move || {
+            let _ = db::audit_log(&audit_db, "bad_mac", "clear", Some(&detail));
+        });
+    }
 
     (
         StatusCode::OK,
         Json(serde_json::json!({
-            "ok":          true,
-            "jid":         body.jid,
-            "count":       count,
-            "threshold":   BAD_MAC_THRESHOLD,
-            "shouldClear": should_clear,
-            "ts":          Utc::now(),
+            "ok":             true,
+            "jid":            body.jid,
+            "count":          count,
+            "threshold":      BAD_MAC_THRESHOLD,
+            "shouldClear":    should_clear,
+            "lifetimeClears": lifetime_clears,
+            "ts":             Utc::now(),
         })),
     )
 }
@@ -165,4 +302,24 @@ pub async fn bad_mac_stats(
         "groups":    groups,
         "ts":        Utc::now(),
     }))
+}
+
+// ── POST /badmac/export — vuelca bad_mac_events a Parquet (analítica) ────────
+pub async fn export_bad_mac(State(state): State<AppState>) -> Json<serde_json::Value> {
+    let path = state.conv_db_path.clone();
+
+    let res = tokio::task::spawn_blocking(move || -> Result<String, String> {
+        let conn = Connection::open(&path).map_err(|e| e.to_string())?;
+        let out  = path.replace(".duckdb", "_bad_mac.parquet").replace('\\', "/");
+        conn.execute_batch(&format!(
+            "COPY bad_mac_events TO '{out}' (FORMAT PARQUET, COMPRESSION ZSTD)"
+        )).map_err(|e| e.to_string())?;
+        Ok(out)
+    }).await;
+
+    match res {
+        Ok(Ok(p))  => Json(serde_json::json!({ "ok": true,  "path": p })),
+        Ok(Err(e)) => Json(serde_json::json!({ "ok": false, "error": e })),
+        Err(e)     => Json(serde_json::json!({ "ok": false, "error": e.to_string() })),
+    }
 }

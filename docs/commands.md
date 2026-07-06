@@ -1,10 +1,10 @@
 <div align="center">
 
-# 📖 Referencia de Comandos — WinsiBot v8.2.1
+# 📖 Referencia de Comandos — WinsiBot v8.3.0
 
-[![Comandos](https://img.shields.io/badge/Comandos-110%2B-6C63FF?style=for-the-badge)](.)
+[![Comandos](https://img.shields.io/badge/Comandos-125%2B-6C63FF?style=for-the-badge)](.)
 [![Categorías](https://img.shields.io/badge/Categorías-19-00C9FF?style=for-the-badge)](.)
-[![Versión](https://img.shields.io/badge/Versión-8.2.1-brightgreen?style=flat-square)](../README.md)
+[![Versión](https://img.shields.io/badge/Versión-8.3.0-brightgreen?style=flat-square)](../README.md)
 
 [🇬🇧 English version →](commands.en.md) &nbsp;·&nbsp; [← Volver al README](../README.md)
 
@@ -40,21 +40,21 @@
 |---|-----------|:--------:|
 | 1 | [🛠️ General](#%EF%B8%8F-general) | 7 |
 | 2 | [🤖 IA / ChatGPT](#-ia--chatgpt) | 4 |
-| 3 | [🎮 RPG / Economía](#-rpg--economía) | 16 |
-| 4 | [🎴 Gacha / Personajes](#-gacha--personajes) | 5 |
+| 3 | [🎮 RPG / Economía](#-rpg--economía) | 20 |
+| 4 | [🎴 Gacha / Personajes](#-gacha--personajes) | 6 |
 | 5 | [💑 Parejas](#-parejas) | 5 |
-| 6 | [🎭 Roleplay](#-roleplay) | 4 |
+| 6 | [🎭 Roleplay](#-roleplay) | 9 |
 | 7 | [🎉 Diversión](#-diversión) | 9 |
 | 8 | [🕹️ Juegos](#%EF%B8%8F-juegos) | 3 |
 | 9 | [🎁 Regalos](#-regalos) | 1 |
 | 10 | [🖼️ Media & Stickers](#%EF%B8%8F-media--stickers) | 5 |
-| 11 | [🔽 Descargas](#-descargas) | 6 |
+| 11 | [🔽 Descargas](#-descargas) | 7 |
 | 12 | [🔍 Scrapers / Búsqueda](#-scrapers--búsqueda) | 4 |
 | 13 | [🎵 Música](#-música) | 1 |
-| 14 | [🔞 NSFW](#-nsfw) | 1 |
+| 14 | [🔞 NSFW](#-nsfw) | 5 |
 | 15 | [🔑 Admin del grupo](#-admin-del-grupo) | 13 |
 | 16 | [🤖 JadiBot](#-jadibot) | 2 |
-| 17 | [ℹ️ Info](#%EF%B8%8F-info) | 1 |
+| 17 | [ℹ️ Info](#%EF%B8%8F-info) | 2 |
 | 18 | [👑 Owner / Sistema](#-owner--sistema) | 23 |
 
 ---
@@ -110,7 +110,7 @@
 | `xp` | `exp`, `experiencia`, `stats`, `nivel` | 5s | 👤 | Estadísticas RPG detalladas |
 | `rangos` | `roles`, `rango`, `rol`, `ranks` | 10s | 👤 | Tabla de rangos del servidor |
 | `work` | `trabajar`, `trabajo`, `w` | 10min | 👤 | Trabaja para ganar BrasCoins (cada 10 min) |
-| `daily` | `claim`, `reclamar`, `regalo` | 2h | 👤 | Recompensa diaria (cada 2 horas) |
+| `daily` | `claim`, `reclamar`, `regalo` | 2h | 👤 | Recompensa diaria — sube con tu racha de días consecutivos (bono ×1.00–×1.20+, combina racha, fin de semana, premium y prestigio) |
 | `weekly` | `semana`, `semanal`, `cadasemana` | 3d | 👤 | Recompensa semanal (cada 3 días) |
 | `monthly` | `mes`, `mensual`, `cadames` | 5d | 👤 | Recompensa mensual (cada 5 días) |
 | `minar` | `mine`, `minarxp`, `mining` | 10min | 👤 | Mina recursos para ganar XP y materiales |
@@ -118,9 +118,13 @@
 | `crime` | `crimen`, `delito` | 1h | 👤 | Comete un crimen — gana o pierde monedas |
 | `rob` | `robar` | variable | 👤 | Roba BrasCoins a otro usuario (`@mención`) |
 | `transfer` | `transferir`, `dar`, `enviar` | 5s | 👤 | Transfiere BrasCoins o XP a otro usuario |
-| `depositar` | `dep`, `retirar`, `withdraw`, `banco` | 3s | 👤 | Deposita o retira monedas del banco |
+| `bal` | `balance`, `billetera`, `wallet`, `dinero`, `coins` | 3s | 👤 | Ver tu balance (billetera + banco), con ícono de BrasCoins |
+| `baltop` | `balancetop`, `richtop`, `richlist`, `topbal`, `tbal` | 10s | 👤 | Top de usuarios con más CodPoints |
+| `leveltop` | `toplevel`, `topnivel`, `niveltop`, `levelrank` | 10s | 👤 | Top de usuarios con más nivel |
+| `depositar` | `dep`, `deposit`, `retirar`, `withdraw`, `banco` | 3s | 👤 | Deposita o retira monedas del banco |
 | `prestige` | `prestigio`, `ascender` | — | 👤 | Reinicia progreso a cambio de recompensas exclusivas |
 | `mascota` | `pet`, `mimasocta`, `mipet` | 5s | 👤 | Gestiona tu mascota: alimentar, entrenar, evolucionar |
+| `harem` | `waifus`, `claims`, `coleccion` | 5s | 👤 | Ver los personajes reclamados con `!rw`, ordenados por valor |
 | `regalo` | `gift`, `dar`, `regalar` | 10s | 👤 | Regala monedas, XP o ítems a otro usuario |
 
 ```
@@ -131,10 +135,15 @@
 !minar
 !rob @usuario
 !transfer @usuario 500
+!bal
+!baltop
+!leveltop
 !depositar 1000
 !retirar 500
 !prestige
 !mascota alimentar
+!harem
+!harem @usuario 2
 !regalo @usuario 500 coins
 ```
 
@@ -216,14 +225,24 @@
 |---------|---------|:--------:|:-------:|-------------|
 | `hug` | `abrazar`, `abrazo`, `hug1` | 5s | 👤 | Abraza a alguien (`@mención`) |
 | `kiss` | `beso`, `kiss1` | 5s | 👤 | Besa a alguien (`@mención`) |
+| `kisscheeks` | `besomejilla`, `mejilla`, `kisscheek` | 5s | 👤 | Besa la mejilla de alguien (`@mención`) |
 | `pat` | `acariciar`, `pat1` | 5s | 👤 | Acaricia a alguien (`@mención`) |
 | `kill` | `matar`, `kill1` | 5s | 👤 | Mata a alguien en roleplay (`@mención`) |
+| `punch` | `golpear`, `puñetazo`, `puñete` | 5s | 👤 | Golpea a alguien (`@mención`) |
+| `laugh` | `reir`, `jaja`, `lol` | 5s | 👤 | Ríe (o se ríe de alguien) |
+| `sad` | `triste` | 5s | 👤 | Muestra tristeza (o pone triste a alguien) |
+| `sleep` | `dormir`, `duerme` | 5s | 👤 | Se queda dormido (o hace dormir a alguien) |
 
 ```
 !hug @usuario
 !kiss @usuario
+!kisscheeks @usuario
 !pat @usuario
 !kill @usuario
+!punch @usuario
+!laugh
+!sad
+!sleep
 ```
 
 ---
@@ -276,7 +295,8 @@
 
 | Comando | Aliases | Cooldown | Permiso | Descripción |
 |---------|---------|:--------:|:-------:|-------------|
-| `ytmp3` | `yt`, `youtube`, `ytaudio` | 15s | 👤 | Descarga audio de YouTube como MP3 |
+| `ytmp3` | `yt`, `youtube`, `ytaudio` | 15s | 👤 | Descarga audio de YouTube como MP3 — tarjeta con canal, duración, vistas, fecha y enlace |
+| `ytmp4` | `play2`, `mp4`, `ytvideo`, `playvideo` | 15s | 👤 | Descarga video de YouTube (360p) — misma tarjeta + calidad y tamaño |
 | `tiktok` | `tt`, `tik` | 10s | 👤 | Descarga video de TikTok sin marca de agua |
 | `ttsearch` | `vitiktok`, `tiktoksearch`, `ttsb` | 15s | 👤 | Busca videos en TikTok y muestra carrusel con botones de descarga |
 | `ig` | `instagram`, `insta` | — | 👤 | Descarga foto/video de Instagram |
@@ -286,6 +306,7 @@
 ```
 !ytmp3 https://youtube.com/watch?v=...
 !ytmp3 Shape of You Ed Sheeran
+!ytmp4 Shape of You Ed Sheeran
 !tiktok https://vm.tiktok.com/...
 !ttsearch gatos graciosos
 !ig https://www.instagram.com/p/...
@@ -332,6 +353,17 @@
 | Comando | Aliases | Cooldown | Permiso | Descripción |
 |---------|---------|:--------:|:-------:|-------------|
 | `porn` | `porngif` | 10s | 👤 | Video para adultos (solo si NSFW está activado) |
+| `rule34` | `r34` | 10s | 👤 | Busca una imagen en Rule34 por tag |
+| `rule34video` | `r34video`, `r34v`, `rvideo34` | 15s | 👤 | Busca un video en Rule34 por tag |
+| `sexyimg` | `imgsexy`, `randomsexy` | 8s | 👤 | Imagen +18 aleatoria |
+| `stickerporn` | `stickernsfw`, `sticker18` | 10s | 👤 | Sticker +18 aleatorio |
+
+```
+!rule34 hinata
+!rule34video hinata
+!sexyimg
+!stickerporn
+```
 
 ---
 
@@ -369,6 +401,7 @@
 | `nsfw` | Activa comandos +18 | 🔑 |
 | `muted` | Bot no responde en este grupo | 🔑 |
 | `hepein` | IA responde cuando la mencionan | 🔑 |
+| `autolevelup` | Anuncia en el chat cuando alguien sube de nivel (activado por defecto) | 🔑 |
 | `anticall` | Rechaza llamadas automáticamente | 👑 |
 
 ```
@@ -404,6 +437,12 @@
 | Comando | Aliases | Cooldown | Permiso | Descripción |
 |---------|---------|:--------:|:-------:|-------------|
 | `creator` | `info`, `about`, `botinfo`, `creador` | — | 👤 | Información del bot y su creador |
+| `infobot` | `botstatus`, `enterprise` | — | 👤 | Tarjeta de identidad del bot — versión, comandos, uptime, características |
+
+```
+!creator
+!infobot
+```
 
 ---
 
@@ -454,6 +493,6 @@
 
 **[← Volver al README](../README.md)** &nbsp;·&nbsp; **[🇬🇧 English version →](commands.en.md)**
 
-*WinsiBot v8.2.1 — Desarrollado por [Brashkie](https://github.com/Brashkie)*
+*WinsiBot v8.3.0 — Desarrollado por [Brashkie](https://github.com/Brashkie)*
 
 </div>

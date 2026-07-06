@@ -38,18 +38,22 @@ export async function loggerMiddleware(ctx: BotContext): Promise<boolean> {
   const time  = moment().tz('America/Lima').format('HH:mm:ss')
   const isCmd = config.prefix.some(p => ctx.text.startsWith(p))
   const type  = getMsgTypeLabel(ctx)
-  const line  = ascii.divider({ width: 50 })
 
-  const header = `
-${line}
- ${color.bold(color.cyan('(つ▀¯▀)つ'))} ${color.bold('WINSIBOT v8')} ${color.bold(color.cyan('(つ▀¯▀)つ'))}
- ${color.dim('❖')} ${color.bold('Hora:')}     ${themes.success(` ${time} `)}
- ${color.dim('❖')} ${color.bold('Usuario:')} ${color.cyan(ctx.pushName)} ${color.dim('(' + formatJid(ctx.sender) + ')')}
- ${color.dim('❖')} ${color.bold('Chat:')}     ${ctx.isGroup ? color.magenta('Grupo') : themes.warning('Privado')} ${color.dim(formatJid(ctx.jid))}
- ${color.dim('❖')} ${color.bold('Texto:')}    ${ctx.text.slice(0, 60)}${ctx.text.length > 60 ? color.dim('...') : ''}
- ${color.dim('❖')} ${color.bold('Tipo:')}     ${getTypeColor(type)} ${isCmd ? color.bold(color.magenta(` CMD: ${ctx.command} `)) : ''}
- ${color.dim('❖')} ${color.bold('Owner:')}    ${ctx.isOwner ? themes.success('✔ Si') : themes.error('✗ No')}
-${line}`
+  const body = [
+    `${color.dim('❖')} ${color.bold('Hora')}      ${themes.success(time)}`,
+    `${color.dim('❖')} ${color.bold('Usuario')}   ${color.cyan(ctx.pushName)} ${color.dim('(' + formatJid(ctx.sender) + ')')}`,
+    `${color.dim('❖')} ${color.bold('Chat')}      ${ctx.isGroup ? color.magenta('Grupo') : themes.warning('Privado')} ${color.dim(formatJid(ctx.jid))}`,
+    `${color.dim('❖')} ${color.bold('Texto')}     ${ctx.text.slice(0, 60)}${ctx.text.length > 60 ? color.dim('...') : ''}`,
+    `${color.dim('❖')} ${color.bold('Tipo')}      ${getTypeColor(type)}${isCmd ? ' ' + color.bold(color.magenta(`CMD: ${ctx.command}`)) : ''}`,
+    `${color.dim('❖')} ${color.bold('Owner')}     ${ctx.isOwner ? themes.success('✔ Si') : themes.error('✗ No')}`,
+  ].join('\n')
+
+  const header = ascii.box(body, {
+    title:       'WinsiBot',
+    titleAlign:  'center',
+    borderStyle: 'rounded',
+    padding:     1,
+  })
 
   console.log(header)
 

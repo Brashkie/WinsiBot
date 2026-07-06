@@ -2,8 +2,6 @@ import type { Command } from '../../../types/index.js'
 import { downloadTikTok, downloadBuffer } from '@lib/downloader.js'
 import axios from 'axios'
 
-const sleep = (ms: number) => new Promise(r => setTimeout(r, ms))
-
 interface TikTokData {
   title?:  string
   author?: { name?: string }
@@ -41,28 +39,7 @@ const command: Command = {
       return
     }
 
-    // animacion
-    const sent = await sock.sendMessage(jid, {
-      text: '◈ Obteniendo TikTok...',
-    }, { quoted: msg })
-    const key = sent?.key
-
-    const frames = [
-      '◈◈ Analizando url...',
-      '◈◈◈ Descargando video...',
-      '◈◈ Sin marca de agua...',
-    ]
-
-    // obtener info y animar en paralelo
-    const [data] = await Promise.all([
-      getTikTokInfo(url),
-      (async () => {
-        for (const frame of frames) {
-          await sleep(500)
-          await sock.sendMessage(jid, { text: frame, edit: key } as any)
-        }
-      })(),
-    ])
+    const data = await getTikTokInfo(url)
 
     // intentar con API primero
     const videoUrl = data?.video?.noWatermark ?? data?.video?.watermark
@@ -80,23 +57,15 @@ const command: Command = {
     // fallback — usar yt-dlp si la API falla
     if (!buffer) {
       try {
-        await sock.sendMessage(jid, {
-          text: '◈ Usando metodo alternativo...',
-          edit: key,
-        } as any)
         const result = await downloadTikTok(url)
         buffer = result.buffer
       } catch {
         await sock.sendMessage(jid, {
           text: '✗ No se pudo descargar el video.',
-          edit: key,
-        } as any)
+        }, { quoted: msg })
         return
       }
     }
-
-    await sock.sendMessage(jid, { text: '✔ Listo', edit: key } as any)
-    await sleep(200)
 
     // construir caption
     const title   = data?.title?.slice(0, 80)  ?? ''

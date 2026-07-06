@@ -1,8 +1,8 @@
 import type { Command } from '../../../types/index.js'
 import { getUserData, patchUserData, getNumber } from '@core/events.js'
+import { randomChoice as pick } from '@lib/utils.js'
 
-const n    = (jid: string) => jid.split('@')[0]!
-const pick = <T>(arr: T[]): T => arr[Math.floor(Math.random() * arr.length)]!
+const n = (jid: string) => jid.split('@')[0]!
 
 function getTarget(msg: any): string | undefined {
   return (msg.message?.extendedTextMessage?.contextInfo?.mentionedJid ?? [])[0]

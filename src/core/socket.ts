@@ -3,6 +3,7 @@ import makeWASocket, {
   useMultiFileAuthState,
   makeCacheableSignalKeyStore,
   fetchLatestBaileysVersion,
+  S_WHATSAPP_NET,
   type WASocket,
 } from '@whiskeysockets/baileys'
 import { Boom } from '@hapi/boom'
@@ -50,6 +51,18 @@ export class WinsiSocket extends EventEmitter3<WinsiEvents> {
   // Sin límite de reintentos — el bot no muere nunca por desconexión.
   // Solo 'loggedOut' (401) o kick de otra sesión (440) detienen el loop.
 
+  // ─── Watchdog de conexión zombie ────────────────────────────────────────
+  // Baileys detecta sockets muertos por su propio ping/pong, pero a veces
+  // WhatsApp deja la conexión "abierta" a nivel de transporte sin entregar
+  // mensajes nuevos a este dispositivo — ni 'close' ni error, solo silencio,
+  // y puede pasar a los pocos minutos de conectar. Por eso el sondeo corre
+  // en un intervalo fijo (no espera un período de silencio) y usa sock.query
+  // (un IQ real que SÍ espera respuesta del servidor) — sendPresenceUpdate
+  // no sirve para esto: solo escribe al socket local, nunca falla.
+  private zombieCheckTimer: ReturnType<typeof setInterval> | null = null
+  private readonly ZOMBIE_CHECK_INTERVAL_MS = 90_000
+  private readonly ZOMBIE_PROBE_TIMEOUT_MS  = 10_000
+
   // Per-group Bad MAC tracking (fallback local cuando Rust no responde)
   private badMacByGroup = new Map<string, { count: number; windowStart: number; clearedAt: number }>()
   // Grupos que están en proceso de clear
@@ -59,6 +72,10 @@ export class WinsiSocket extends EventEmitter3<WinsiEvents> {
     if (this.retryTimer) {
       clearTimeout(this.retryTimer)
       this.retryTimer = null
+    }
+    if (this.zombieCheckTimer) {
+      clearInterval(this.zombieCheckTimer)
+      this.zombieCheckTimer = null
     }
     if (this.sock) {
       try {
@@ -80,8 +97,11 @@ export class WinsiSocket extends EventEmitter3<WinsiEvents> {
     if (this.isReconnecting) return
     this.isReconnecting = true
     this.retryCount++
-    // Backoff exponencial: 2s → 4s → 8s → … máx 60s — sin límite de intentos
+    // Backoff exponencial: 2s → 4s → 8s → … máx 60s — sin límite de intentos.
+    // + jitter (hasta 1s) para no reconectar exactamente al mismo tiempo que
+    // otros sockets (subbots) tras un corte de red compartido.
     const delay = Math.min(1000 * 2 ** Math.min(this.retryCount, 6), 60_000)
+      + Math.floor(Math.random() * 1000)
     logger.info(`Reconectando en ${Math.round(delay / 1000)}s (intento #${this.retryCount})`)
     this.retryTimer = setTimeout(async () => {
       this.isReconnecting = false
@@ -117,6 +137,9 @@ export class WinsiSocket extends EventEmitter3<WinsiEvents> {
       generateHighQualityLinkPreview: true,
       markOnlineOnConnect:            false,
       retryRequestDelayMs:            2000,
+      connectTimeoutMs:               30_000,
+      keepAliveIntervalMs:            25_000,
+      defaultQueryTimeoutMs:          60_000,
     })
 
     winsiStore.bind(this.sock)
@@ -200,6 +223,7 @@ export class WinsiSocket extends EventEmitter3<WinsiEvents> {
       if (connection === 'open') {
         this.retryCount     = 0
         this.isReconnecting = false
+        this._startZombieWatchdog()
         logger.info('WinsiBot conectado')
         this.emit('ready', this.sock!)
 
@@ -223,6 +247,12 @@ export class WinsiSocket extends EventEmitter3<WinsiEvents> {
 
     // ─── mensajes entrantes ───────────────────────────────────────────────────
     this.sock.ev.on('messages.upsert', ({ messages, type }) => {
+      // Log incondicional ANTES de cualquier filtro — si esto deja de aparecer
+      // durante un "colgado", el problema es que Baileys dejó de emitir el
+      // evento (socket realmente zombie). Si SÍ aparece pero no hay log de
+      // "Handler" después, el mensaje se está filtrando o el semáforo está lleno.
+      logger.info({ count: messages.length, type }, 'messages.upsert')
+
       // 'notify' = mensaje nuevo normal
       // 'append' = Baileys entrega mensajes recientes post-sync — aceptar si son del último minuto
       if (type !== 'notify' && type !== 'append') return
@@ -263,6 +293,40 @@ export class WinsiSocket extends EventEmitter3<WinsiEvents> {
   }
 
   getSocket(): WASocket | null { return this.sock  }
+
+  // ─── Watchdog de conexión zombie ────────────────────────────────────────
+  // Cada ZOMBIE_CHECK_INTERVAL_MS manda un IQ de ping real (el mismo que usa
+  // Baileys internamente) y espera la respuesta del servidor — no asume que
+  // "sin error al escribir" signifique "WhatsApp está escuchando". Si no hay
+  // respuesta a tiempo, fuerza una reconexión completa. Corre siempre, sin
+  // esperar un período de silencio primero, porque la conexión puede quedar
+  // zombie a los pocos minutos de conectar.
+  private _startZombieWatchdog(): void {
+    if (this.zombieCheckTimer) clearInterval(this.zombieCheckTimer)
+
+    this.zombieCheckTimer = setInterval(async () => {
+      if (!this.sock) return
+
+      try {
+        await this.sock.query(
+          {
+            tag: 'iq',
+            attrs: { to: S_WHATSAPP_NET, type: 'get', xmlns: 'w:p' },
+            content: [{ tag: 'ping', attrs: {} }],
+          },
+          this.ZOMBIE_PROBE_TIMEOUT_MS,
+        )
+      } catch (err) {
+        logger.warn({ err }, 'Conexión zombie detectada (sin respuesta al ping) — forzando reconexión')
+        if (this.zombieCheckTimer) {
+          clearInterval(this.zombieCheckTimer)
+          this.zombieCheckTimer = null
+        }
+        this.cleanup()
+        this.scheduleReconnect()
+      }
+    }, this.ZOMBIE_CHECK_INTERVAL_MS).unref()
+  }
 
   // ─── Limpieza periódica de mapas en memoria ────────────────────────────────
   // Previene leak de memoria en bots con miles de grupos activos.

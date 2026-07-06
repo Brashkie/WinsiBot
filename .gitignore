@@ -2,6 +2,7 @@
 auth/
 data/session_backups/
 data/emergency_*/
+rust/sessions/
 
 # ─── Node.js ──────────────────────────────────────────────────────────────────
 node_modules/

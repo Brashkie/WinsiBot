@@ -1,6 +1,7 @@
 import type { Command, RollCharacter, RollData } from '../../../types/index.js'
 import axios from 'axios'
 import { downloadBuffer } from '@lib/downloader.js'
+import { createCache, registerCache } from '@lib/cacheManager.js'
 
 // ─── Fuentes ──────────────────────────────────────────────────────────────────
 export const SOURCES: Record<string, string> = {
@@ -8,9 +9,10 @@ export const SOURCES: Record<string, string> = {
   pokedex: 'https://raw.githubusercontent.com/Brashkie/module/main/rollimage/pokedex.json',
 }
 
-// ─── Cache ────────────────────────────────────────────────────────────────────
-export const charCache = new Map<string, RollCharacter[]>()
-const sleep            = (ms: number) => new Promise(r => setTimeout(r, ms))
+// ─── Cache — 1h de TTL en vez de "para siempre" (las listas rara vez cambian,
+// pero así una actualización del JSON en GitHub se refleja sin reiniciar) ────
+export const charCache = registerCache('rwCharacters', createCache<RollCharacter[]>({ ttl: 60 * 60_000 }))
+const sleep = (ms: number) => new Promise(r => setTimeout(r, ms))
 
 // ─── Cooldowns ────────────────────────────────────────────────────────────────
 const RW_COOLDOWN = 29 * 60 * 1000
@@ -90,7 +92,8 @@ const command: Command = {
   groupOnly: true,
 
   async execute({ sock, jid, msg, args, sender, prefix }) {
-    const source = args[0]?.toLowerCase() ?? 'marvel'
+    // Sin argumento → ruleta entre todas las fuentes (no solo Marvel)
+    const source = args[0]?.toLowerCase() ?? pickRandom(Object.keys(SOURCES))
 
     if (!SOURCES[source]) {
       await sock.sendMessage(jid, {

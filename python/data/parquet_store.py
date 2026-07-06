@@ -12,6 +12,25 @@ from .schemas import (
 DATA_DIR    = Path("data/parquet")
 ARCHIVE_DIR = Path("data/parquet/archive")
 
+# ─── Locks por tabla ──────────────────────────────────────────────────────────
+# FastAPI corre cada request en un hilo distinto (asyncio.to_thread). Sin esto,
+# dos requests concurrentes que tocan el mismo .parquet (p. ej. dos "addExp"
+# seguidos) pueden colisionar: un hilo todavía tiene el archivo mapeado en
+# memoria (read_parquet) justo cuando otro intenta sobreescribirlo, lo que en
+# Windows lanza el error 1224 (ERROR_USER_MAPPED_FILE) — y aun sin ese error,
+# sin lock se pierde la escritura del hilo perdedor (lost update).
+# RLock porque append_row/upsert_row llaman a load_df/save_df, que también
+# toman el lock — con un Lock normal eso sería un deadlock del mismo hilo.
+_locks_guard: threading.Lock = threading.Lock()
+_table_locks: dict[str, threading.RLock] = {}
+
+def _lock_for(name: str) -> threading.RLock:
+    lock = _table_locks.get(name)
+    if lock is None:
+        with _locks_guard:
+            lock = _table_locks.setdefault(name, threading.RLock())
+    return lock
+
 # ─── Base ─────────────────────────────────────────────────────────────────────
 
 def _path(name: str) -> Path:
@@ -26,30 +45,36 @@ def _ensure_dir():
     DATA_DIR.mkdir(parents=True, exist_ok=True)
 
 def save_df(df: pl.DataFrame, name: str) -> None:
-    _ensure_dir()
-    df.write_parquet(_path(name), compression="snappy")
+    with _lock_for(name):
+        _ensure_dir()
+        df.write_parquet(_path(name), compression="snappy")
 
 def load_df(name: str, schema: Optional[pl.Schema] = None) -> pl.DataFrame:
-    path = _path(name)
-    if not path.exists():
-        return pl.DataFrame(schema=schema) if schema else pl.DataFrame()
-    return pl.read_parquet(path)
+    with _lock_for(name):
+        path = _path(name)
+        if not path.exists():
+            return pl.DataFrame(schema=schema) if schema else pl.DataFrame()
+        # memory_map=False: evita dejar el archivo mapeado tras leerlo (causa
+        # del error 1224 en Windows si otro hilo escribe justo después).
+        return pl.read_parquet(path, memory_map=False)
 
 def append_row(record: dict, name: str, schema: Optional[pl.Schema] = None) -> None:
-    existing = load_df(name, schema)
-    new_row  = pl.DataFrame([record], schema=schema)
-    combined = pl.concat([existing, new_row], how="diagonal") if len(existing) > 0 else new_row
-    save_df(combined, name)
+    with _lock_for(name):
+        existing = load_df(name, schema)
+        new_row  = pl.DataFrame([record], schema=schema)
+        combined = pl.concat([existing, new_row], how="diagonal") if len(existing) > 0 else new_row
+        save_df(combined, name)
 
 def upsert_row(record: dict, key_col: str, name: str, schema: Optional[pl.Schema] = None) -> None:
-    existing = load_df(name, schema)
-    new_row  = pl.DataFrame([record], schema=schema)
-    if len(existing) == 0:
-        save_df(new_row, name)
-        return
-    filtered = existing.filter(pl.col(key_col) != record[key_col])
-    combined = pl.concat([filtered, new_row], how="diagonal")
-    save_df(combined, name)
+    with _lock_for(name):
+        existing = load_df(name, schema)
+        new_row  = pl.DataFrame([record], schema=schema)
+        if len(existing) == 0:
+            save_df(new_row, name)
+            return
+        filtered = existing.filter(pl.col(key_col) != record[key_col])
+        combined = pl.concat([filtered, new_row], how="diagonal")
+        save_df(combined, name)
 
 # ─── Write buffer para mensajes (hot path) ────────────────────────────────────
 _msg_buf:  list[dict]    = []
@@ -64,10 +89,14 @@ def _flush_messages() -> None:
         batch = _msg_buf.copy()
         _msg_buf.clear()
     try:
-        existing = load_df("messages", MESSAGE_SCHEMA)
-        new_rows  = pl.DataFrame(batch, schema=MESSAGE_SCHEMA)
-        combined  = pl.concat([existing, new_rows], how="diagonal") if len(existing) > 0 else new_rows
-        save_df(combined, "messages")
+        # _msg_lock solo protege el buffer en memoria — el archivo en sí
+        # necesita su propio lock porque el flush temprano (al llenarse el
+        # buffer) y el flush periódico pueden dispararse casi al mismo tiempo.
+        with _lock_for("messages"):
+            existing = load_df("messages", MESSAGE_SCHEMA)
+            new_rows  = pl.DataFrame(batch, schema=MESSAGE_SCHEMA)
+            combined  = pl.concat([existing, new_rows], how="diagonal") if len(existing) > 0 else new_rows
+            save_df(combined, "messages")
     except Exception:
         pass
 
@@ -267,43 +296,45 @@ def archive_old_messages(keep_last: int = 5000) -> int:
     Mueve mensajes viejos a archivo diario — mantiene solo keep_last en activo.
     Retorna cuántos se archivaron.
     """
-    df = load_df("messages", MESSAGE_SCHEMA)
-    if len(df) <= keep_last:
-        return 0
+    with _lock_for("messages"):
+        df = load_df("messages", MESSAGE_SCHEMA)
+        if len(df) <= keep_last:
+            return 0
 
-    sorted_df  = df.sort("timestamp", descending=True)
-    active     = sorted_df.head(keep_last)
-    to_archive = sorted_df.tail(len(df) - keep_last)
+        sorted_df  = df.sort("timestamp", descending=True)
+        active     = sorted_df.head(keep_last)
+        to_archive = sorted_df.tail(len(df) - keep_last)
 
-    # guardar archivo
-    archive_path = _archive_path("messages")
-    if archive_path.exists():
-        existing = pl.read_parquet(str(archive_path))
-        to_archive = pl.concat([existing, to_archive], how="diagonal")
-    to_archive.write_parquet(str(archive_path), compression="snappy")
+        # guardar archivo
+        archive_path = _archive_path("messages")
+        if archive_path.exists():
+            existing = pl.read_parquet(str(archive_path), memory_map=False)
+            to_archive = pl.concat([existing, to_archive], how="diagonal")
+        to_archive.write_parquet(str(archive_path), compression="snappy")
 
-    # actualizar activo
-    save_df(active, "messages")
-    return len(df) - keep_last
+        # actualizar activo
+        save_df(active, "messages")
+        return len(df) - keep_last
 
 def archive_old_command_stats(keep_last: int = 10000) -> int:
     """Rota stats de comandos viejos a archivo"""
-    df = load_df("command_stats", COMMAND_STATS_SCHEMA)
-    if len(df) <= keep_last:
-        return 0
+    with _lock_for("command_stats"):
+        df = load_df("command_stats", COMMAND_STATS_SCHEMA)
+        if len(df) <= keep_last:
+            return 0
 
-    sorted_df  = df.sort("timestamp", descending=True)
-    active     = sorted_df.head(keep_last)
-    to_archive = sorted_df.tail(len(df) - keep_last)
+        sorted_df  = df.sort("timestamp", descending=True)
+        active     = sorted_df.head(keep_last)
+        to_archive = sorted_df.tail(len(df) - keep_last)
 
-    archive_path = _archive_path("command_stats")
-    if archive_path.exists():
-        existing = pl.read_parquet(str(archive_path))
-        to_archive = pl.concat([existing, to_archive], how="diagonal")
-    to_archive.write_parquet(str(archive_path), compression="snappy")
+        archive_path = _archive_path("command_stats")
+        if archive_path.exists():
+            existing = pl.read_parquet(str(archive_path), memory_map=False)
+            to_archive = pl.concat([existing, to_archive], how="diagonal")
+        to_archive.write_parquet(str(archive_path), compression="snappy")
 
-    save_df(active, "command_stats")
-    return len(df) - keep_last
+        save_df(active, "command_stats")
+        return len(df) - keep_last
 
 def cleanup_old_archives(keep_days: int = 30) -> int:
     """Elimina archivos de más de keep_days días"""

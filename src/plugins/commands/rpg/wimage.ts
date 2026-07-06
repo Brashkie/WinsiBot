@@ -61,55 +61,68 @@ async function findCharacter(name: string): Promise<{ char: RollCharacter; total
 
 const command: Command = {
   name:        'wimage',
-  aliases:     ['waifuimage', 'wi'],
-  description: 'Muestra una imagen aleatoria de un personaje',
+  aliases:     ['waifuimage', 'wi', 'charimage'],
+  description: 'Imagen de personaje  |  !wi random — aleatorio  |  !wi <nombre>',
   category:    'rpg',
   cooldown:    5,
 
   async execute({ sock, jid, msg, args, prefix }) {
-    const name = args.join(' ').trim()
+    const query = args.join(' ').trim().toLowerCase()
+    const isRandom = !query || query === 'random' || query === 'aleatorio'
 
-    if (!name) {
+    const allChars = (
+      await Promise.all(Object.keys(SOURCES).map(s => getCharacters(s).catch(() => [])))
+    ).flat()
+
+    if (allChars.length === 0) {
       await sock.sendMessage(jid, {
-        text: `§ Escribe el nombre del personaje.\n  Ejemplo: ${prefix}wimage Pikachu`,
+        text: `✗ No se pudieron cargar los personajes (error de red). Reintenta en unos segundos.`,
       }, { quoted: msg })
       return
     }
 
-    const result = await findCharacter(name)
+    let char: typeof allChars[0] | null = null
 
-    if (!result) {
-      // total = 0 → fallo de red, total > 0 → personaje no existe
-      const allChars = (
-        await Promise.all(Object.keys(SOURCES).map(s => getCharacters(s).catch(() => [])))
-      ).flat()
-      const total = allChars.length
-      await sock.sendMessage(jid, {
-        text: total === 0
-          ? `✗ No se pudieron cargar los personajes (error de red).\n  § Reintenta en unos segundos.`
-          : `✗ No se encontró *${name}* en ninguna fuente (${total} personajes).\n  § Intenta con el nombre en inglés.`,
-      }, { quoted: msg })
-      return
+    if (isRandom) {
+      char = allChars[Math.floor(Math.random() * allChars.length)]!
+    } else {
+      const result = await findCharacter(query)
+      if (!result) {
+        await sock.sendMessage(jid, {
+          text: [
+            `✗ No se encontró *${args.join(' ')}* (${allChars.length} personajes disponibles)`,
+            ``,
+            `§ Intenta con el nombre en inglés`,
+            `§ Usa *${prefix}wi random* para uno aleatorio`,
+          ].join('\n'),
+        }, { quoted: msg })
+        return
+      }
+      char = result.char
     }
 
-    const { char } = result
     const imageUrl = pickImage(char.image)
-
     let buffer: Buffer | null = null
-    try {
-      buffer = await downloadBuffer(imageUrl)
-    } catch {}
+    try { buffer = await downloadBuffer(imageUrl) } catch {}
 
     if (!buffer) {
       await sock.sendMessage(jid, {
-        text: `✗ No se pudo descargar la imagen de *${char.name}*.`,
+        text: `✗ No se pudo descargar la imagen de *${char.name}*. Reintenta.`,
       }, { quoted: msg })
       return
     }
 
+    const sourceLabel = char.source
+      ? `_${char.source}_`
+      : `_Fuente desconocida_`
+
     await sock.sendMessage(jid, {
       image:   buffer,
-      caption: `◈ *${char.name}* — ${char.source}`,
+      caption: [
+        `◈ *${char.name}*`,
+        sourceLabel,
+        isRandom ? `_#${allChars.indexOf(char) + 1} de ${allChars.length}_` : '',
+      ].filter(Boolean).join('\n'),
     }, { quoted: msg })
   },
 }

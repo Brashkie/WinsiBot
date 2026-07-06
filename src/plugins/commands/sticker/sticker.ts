@@ -22,10 +22,8 @@ const command: Command = {
       return
     }
 
-    await sock.sendMessage(jid, { text: '⏳ Creando sticker...' }, { quoted: msg })
-
     const buf = await downloadMediaMessage(
-      { ...msg, message: quoted ? { ...msg.message, ...{ extendedTextMessage: undefined } } : msg.message } as any,
+      { ...msg, message: target } as any,
       'buffer',
       {}
     ) as Buffer

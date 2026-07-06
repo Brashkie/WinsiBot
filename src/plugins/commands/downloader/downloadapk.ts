@@ -30,11 +30,6 @@ const command: Command = {
     const downloadUrl = input.slice(0, pipeIdx).trim()
     const fileName    = input.slice(pipeIdx + 1).trim() || 'app.apk'
 
-    const sent = await sock.sendMessage(jid, {
-      text: '◈ Descargando APK...',
-    }, { quoted: msg })
-    const key = sent?.key
-
     let buffer: Buffer
     try {
       const res = await axios.get<ArrayBuffer>(downloadUrl, {
@@ -48,8 +43,7 @@ const command: Command = {
     } catch {
       await sock.sendMessage(jid, {
         text: '✗ No se pudo descargar el APK. La URL puede haber expirado.',
-        edit: key,
-      } as any)
+      }, { quoted: msg })
       return
     }
 
@@ -58,20 +52,16 @@ const command: Command = {
     if (sizeMB > 100) {
       await sock.sendMessage(jid, {
         text: `✗ El archivo es muy grande (${sizeMB.toFixed(1)} MB).\n§ WhatsApp permite máximo 100 MB.`,
-        edit: key,
-      } as any)
+      }, { quoted: msg })
       return
     }
 
     if (sizeMB < 0.01) {
       await sock.sendMessage(jid, {
         text: '✗ El archivo descargado está vacío o es inválido.',
-        edit: key,
-      } as any)
+      }, { quoted: msg })
       return
     }
-
-    await sock.sendMessage(jid, { text: '◈ Enviando...', edit: key } as any)
 
     await sock.sendMessage(jid, {
       document: buffer,

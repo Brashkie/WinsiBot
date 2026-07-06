@@ -147,6 +147,7 @@ export interface GroupConfig {
   autoresponder: boolean   // respuestas automáticas
   sAutoresponder: string   // texto del autoresponder
   audios:        boolean   // comandos de audio permitidos
+  autolevelup:   boolean   // anuncia en el chat cuando alguien sube de nivel
   // ── Solicitudes ────────────────────────────────────────────────────────────
   autoAccept:    boolean   // aceptar solicitudes de unirse automáticamente
   autoReject:    boolean   // rechazar solicitudes automáticamente
@@ -254,7 +255,7 @@ export function defaultUserData(name = ''): UserData {
     name,
     exp:          0,
     level:        0,
-    money:        100,
+    money:        1000,
     bank:         0,
     diamonds:     10,
     health:       100,
@@ -310,6 +311,7 @@ export function defaultGroupConfig(): GroupConfig {
     autoresponder: false,
     sAutoresponder: '',
     audios:        true,
+    autolevelup:   true,
     autoAccept:    false,
     autoReject:    false,
     captcha:       false,
@@ -471,9 +473,14 @@ export function isGroupJid(jid: string): boolean {
   return jid.endsWith('@g.us')
 }
 
-/** EXP necesaria para pasar al siguiente nivel */
+/** EXP necesaria para pasar al siguiente nivel — crece con el nivel pero no explota.
+ *  Antes era 100 * 1.5^nivel: pasado el nivel ~22 se volvía matemáticamente
+ *  imposible (a nivel 100 hacían falta más XP que el que existe en toda la
+ *  economía del bot), pese a que ranks.ts tiene rangos hasta nivel 400.
+ *  Esta curva (80 * (nivel+1)^1.7) sigue siendo más difícil en cada nivel,
+ *  pero nivel 400 sigue siendo alcanzable a largo plazo. */
 export function expForLevel(level: number): number {
-  return Math.floor(100 * Math.pow(1.5, level))
+  return Math.floor(80 * Math.pow(level + 1, 1.7))
 }
 
 /** Sube de nivel si tiene suficiente EXP. Devuelve cuántos niveles subió. */
@@ -486,6 +493,11 @@ export function checkLevelUp(jid: string): number {
     leveled++
   }
   return leveled
+}
+
+/** Línea de "subiste de nivel" para anexar a la respuesta de un comando — '' si leveled es 0. */
+export function levelUpLine(leveled: number): string {
+  return leveled > 0 ? `\n> ◆ *¡Subiste ${leveled} nivel(es)!*` : ''
 }
 
 // ─────────────────────────────────────────────────────────────────────────────

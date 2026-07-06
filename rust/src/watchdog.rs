@@ -8,7 +8,7 @@ use axum::{extract::State, http::StatusCode, response::Json};
 use chrono::Utc;
 use std::{
     sync::{Arc, Mutex},
-    time::{Duration, Instant},
+    time::{Duration, Instant, SystemTime, UNIX_EPOCH},
 };
 
 use crate::routes::AppState;
@@ -23,35 +23,48 @@ pub struct WatchdogState {
 
 #[derive(Debug)]
 struct Inner {
-    last_ping:  Option<Instant>,
-    ping_count: u64,
-    started_at: Instant,
+    last_ping:    Option<Instant>,
+    ping_count:   u64,
+    started_at:   Instant,
+    death_count:  u64,
+    last_died_at: Option<u64>, // unix timestamp de la última muerte detectada
 }
 
 impl WatchdogState {
     pub fn new() -> Self {
         Self {
             inner: Arc::new(Mutex::new(Inner {
-                last_ping:  None,
-                ping_count: 0,
-                started_at: Instant::now(),
+                last_ping:    None,
+                ping_count:   0,
+                started_at:   Instant::now(),
+                death_count:  0,
+                last_died_at: None,
             })),
         }
     }
 
     pub fn ping(&self) {
         let mut s = self.inner.lock().unwrap();
+
+        // Detectar resurrección: el ping anterior ya superaba el umbral de muerte.
+        let was_dead = s
+            .last_ping
+            .map(|t| t.elapsed() >= Duration::from_secs(DEAD_THRESHOLD_SECS))
+            .unwrap_or(false);
+
+        if was_dead {
+            s.death_count += 1;
+            s.last_died_at = Some(
+                SystemTime::now()
+                    .duration_since(UNIX_EPOCH)
+                    .unwrap_or_default()
+                    .as_secs(),
+            );
+            tracing::warn!(deaths = s.death_count, "watchdog: bot resucitado tras muerte detectada");
+        }
+
         s.last_ping  = Some(Instant::now());
         s.ping_count += 1;
-    }
-
-    /// true si el bot envió ping recientemente
-    pub fn is_alive(&self) -> bool {
-        let s = self.inner.lock().unwrap();
-        match s.last_ping {
-            None => false,
-            Some(t) => t.elapsed() < Duration::from_secs(DEAD_THRESHOLD_SECS),
-        }
     }
 
     pub fn status(&self) -> serde_json::Value {
@@ -66,6 +79,8 @@ impl WatchdogState {
             "lastPingSecs":  elapsed_secs,
             "pingCount":     s.ping_count,
             "uptimeSecs":    s.started_at.elapsed().as_secs(),
+            "deathCount":    s.death_count,
+            "lastDiedAt":    s.last_died_at,
             "deadThreshold": DEAD_THRESHOLD_SECS,
         })
     }
