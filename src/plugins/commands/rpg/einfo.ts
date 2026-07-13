@@ -7,7 +7,7 @@ const CDS = [
   { label: 'Work',    key: 'lastWork'  as const, ms: 10 * 60_000       },
   { label: 'Slut',    key: 'lastHunt'  as const, ms: 60 * 60_000       },
   { label: 'Crime',   key: 'lastCrime' as const, ms: 60 * 60_000       },
-  { label: 'Daily',   key: 'lastClaim' as const, ms: 2  * 60 * 60_000  },
+  { label: 'Daily',   key: 'lastClaim' as const, ms: 24 * 60 * 60_000  },
   { label: 'Weekly',  key: 'lastWeekly' as const, ms: 7 * 24 * 60 * 60_000 },
   { label: 'Rob',     key: 'lastRob'   as const, ms: 2  * 60 * 60_000  },
   { label: 'Cofre',   key: 'lastCofre' as const, ms: 4  * 60 * 60_000  },
@@ -33,7 +33,6 @@ const command: Command = {
   description: 'Ver cooldowns de tus comandos de economía',
   category:    'rpg',
   cooldown:    5,
-  register:    true,
 
   async execute({ sock, jid, msg, sender, pushName }) {
     const user  = getUserData(sender, pushName)

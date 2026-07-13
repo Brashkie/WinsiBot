@@ -58,7 +58,6 @@ export interface UserProfile {
   birth:       string     // 'DD/MM'
   marry:       string     // JID del cónyuge
   description: string
-  regTime:     number     // timestamp de registro
   afk:         number     // timestamp (-1 si no está AFK)
   afkReason:   string
   role:        string     // 'Novato' | 'Guerrero' | 'Héroe' | 'Leyenda' ...
@@ -75,6 +74,7 @@ export interface UserData {
   diamonds:     number
   health:       number    // 0-100
   crime:        number    // puntos de criminalidad
+  commandsUsed: number    // total de comandos ejecutados
   // ── Estado ─────────────────────────────────────────────────────────────────
   warns:        number
   banned:       boolean
@@ -82,7 +82,6 @@ export interface UserData {
   muted:        boolean
   premium:      boolean
   premiumTime:  number    // timestamp de expiración (0 = no premium)
-  registered:   boolean
   autoLevelUp:  boolean
   // ── Anti-spam interno ──────────────────────────────────────────────────────
   spam:         number
@@ -243,7 +242,6 @@ export function defaultProfile(_name = ''): UserProfile {
     birth:       '',
     marry:       '',
     description: '',
-    regTime:     -1,
     afk:         -1,
     afkReason:   '',
     role:        'Novato',
@@ -260,13 +258,13 @@ export function defaultUserData(name = ''): UserData {
     diamonds:     10,
     health:       100,
     crime:        0,
+    commandsUsed: 0,
     warns:        0,
     banned:       false,
     banReason:    '',
     muted:        false,
     premium:      false,
     premiumTime:  0,
-    registered:   false,
     autoLevelUp:  true,
     spam:         0,
     lastSpam:     0,

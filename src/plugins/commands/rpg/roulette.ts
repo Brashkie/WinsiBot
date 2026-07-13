@@ -35,7 +35,6 @@ const command: Command = {
   description: 'Apuesta en la ruleta  |  !rt <red|black|0-36> <monto>',
   category:    'rpg',
   cooldown:    0,
-  register:    true,
 
   async execute({ sock, jid, msg, sender, pushName, args, prefix }) {
     if (isOnCooldown(sender, 'lastBet', CD)) {

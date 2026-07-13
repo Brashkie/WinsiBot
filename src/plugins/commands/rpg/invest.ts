@@ -74,7 +74,6 @@ const command: Command = {
   description: 'Apuesta sobre si un activo sube o baja  |  !invertir btc 100 sube 1m',
   category:    'rpg',
   cooldown:    0,
-  register:    true,
 
   async execute({ sock, jid, msg, sender, pushName, args, prefix }) {
 

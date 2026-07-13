@@ -13,7 +13,6 @@ const command: Command = {
   description: 'Lanza una moneda  |  !cf [cara|cruz] <monto>',
   category:    'rpg',
   cooldown:    0,
-  register:    true,
 
   async execute({ sock, jid, msg, sender, pushName, args, prefix }) {
     if (isOnCooldown(sender, 'lastFight', CD)) {

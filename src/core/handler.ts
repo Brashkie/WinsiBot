@@ -197,7 +197,10 @@ async function handleAIResponse(
     const intent = nlp?.primary ?? 'neutral'
     if (intent === 'spam' || intent === 'nsfw') return false
 
-    // 2. Hepein: GPT / Gemini / Claude con perfil aprendido del grupo
+    // 2. Hepein: Ollama / GPT / Gemini / Claude con perfil aprendido del grupo
+    // 14s — por debajo del timeout HTTP de hepein.respond() (15s), así esta
+    // carrera gana primero y cae al fallback local en silencio, en vez de que
+    // axios aborte la request y lo registre como error.
     const hepeinRes = await Promise.race([
       hepein.respond({
         prompt:    ctx.text,
@@ -206,7 +209,7 @@ async function handleAIResponse(
         intent,
         force:     true,   // omitir cooldown interno — ya lo controla handler
       }),
-      new Promise<null>(r => setTimeout(() => r(null), 8_000)),
+      new Promise<null>(r => setTimeout(() => r(null), 14_000)),
     ]).catch(() => null)
 
     let reply: string | null = hepeinRes?.ok ? hepeinRes.text ?? null : null
@@ -367,6 +370,19 @@ export async function handleMessage(msg: WAMessage, sock: WASocket): Promise<voi
       addXP(sock, ctx.jid, ctx.sender, ctx.pushName)
     }
 
+    // ─── Entrenamiento (Hepein) — aprende de cada mensaje real del grupo ──────
+    // Fire-and-forget: no bloquea el handler ni afecta la latencia del mensaje.
+    // trainer.py (vocabulario/estilo) y user_memory.py (reputación) se nutren
+    // acá — antes ninguno de los dos recibía datos.
+    if (ctx.isGroup && ctx.text) {
+      const isReply = !!msg.message?.extendedTextMessage?.contextInfo?.quotedMessage
+      hepein.record({ groupJid: ctx.jid, senderJid: ctx.sender, text: ctx.text, isReply })
+
+      analyzeIntent(ctx.text)
+        .then(nlp => hepein.updateMemory(ctx.sender, ctx.text, nlp?.primary ?? 'neutral', !!ctx.prefix))
+        .catch(() => {})
+    }
+
     // ─── AFK check ────────────────────────────────────────────────────────────
     if (user.profile.afk > -1) {
       const reason = user.profile.afkReason
@@ -427,7 +443,7 @@ export async function handleMessage(msg: WAMessage, sock: WASocket): Promise<voi
       }
 
       if (groupCfg.antispam && ctx.text.length > 10) {
-        const spamResult = await pythonGet<{ is_spam: boolean; confidence: number }>(
+        const spamResult = await pythonPost<{ is_spam: boolean; confidence: number }>(
           '/api/v1/ml/predict/spam', { text: ctx.text }
         ).catch(() => null)
         if (spamResult?.data?.is_spam && (spamResult.data.confidence ?? 0) > 0.85) {
@@ -519,13 +535,6 @@ export async function handleMessage(msg: WAMessage, sock: WASocket): Promise<voi
       return
     }
 
-    if (command.register && !user.registered) {
-      await safeSend(() => sock.sendMessage(ctx.jid, {
-        text: `✗ Necesitas registrarte.\n§ Usa: ${ctx.prefix}registro`,
-      }, { quoted: msg }))
-      return
-    }
-
     if (command.level && user.level < command.level) {
       await safeSend(() => sock.sendMessage(ctx.jid, {
         text: `✗ Necesitas nivel *${command.level}*\n§ Tu nivel: ${user.level}`,
@@ -557,7 +566,8 @@ export async function handleMessage(msg: WAMessage, sock: WASocket): Promise<voi
     const xpGain  = command.exp ?? 10
     const postUser = getUserData(ctx.sender)
     const postPatch: Partial<import('./events/index.js').UserData> = {
-      exp: postUser.exp + xpGain,
+      exp:          postUser.exp + xpGain,
+      commandsUsed: postUser.commandsUsed + 1,
     }
     if (command.limit) postPatch.diamonds = postUser.diamonds - command.limit
     if (command.money) postPatch.money    = postUser.money    - command.money

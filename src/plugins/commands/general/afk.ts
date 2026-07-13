@@ -7,7 +7,6 @@ const command: Command = {
   aliases:     ['ausente'],
   description: 'Activa el modo AFK con una razón',
   category:    'general',
-  register:    true,
   cooldown:    10,
 
   async execute({ sock, jid, msg, sender, pushName, args }) {

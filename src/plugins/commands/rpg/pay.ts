@@ -11,7 +11,6 @@ const command: Command = {
   description: 'Transfiere BrasCoins a otro usuario  |  !pay 1000 @usuario',
   category:    'rpg',
   cooldown:    5,
-  register:    true,
 
   async execute({ sock, jid, msg, sender, pushName, args, prefix }) {
     const amountArg = args[0]

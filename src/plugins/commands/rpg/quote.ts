@@ -83,7 +83,6 @@ const command: Command = {
   description: 'Gráfico de precio  |  comprar/vender activos  |  portafolio',
   category:    'rpg',
   cooldown:    3,
-  register:    true,
 
   async execute({ sock, jid, msg, sender, pushName, args, command: cmd, prefix }) {
 

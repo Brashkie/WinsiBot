@@ -7,12 +7,12 @@ import {
 import { randomNumber as rand } from '@lib/utils.js'
 import { LevelingManager } from '@lib/leveling.js'
 
-const CD = 2 * 60 * 60_000
+const CD = 24 * 60 * 60_000
 
 const command: Command = {
   name: 'daily',
   aliases: ['claim', 'reclamar', 'reclamo', 'regalo'],
-  description: 'Reclama tu recompensa cada 2 horas — sube con tu racha de días',
+  description: 'Reclama tu recompensa cada 24 horas — sube con tu racha de días',
   category: 'rpg',
   cooldown: 0,
 
@@ -68,7 +68,7 @@ const command: Command = {
         `> +${diamonds} 💎  ·  +${pc} 🧪${lvlLine}`,
         `> Bono de racha: ×${mult.toFixed(2)}`,
         ``,
-        `_Día ${meta.streak.days + 1} → ×${nextMult.toFixed(2)} · vuelve en 2h_`,
+        `_Día ${meta.streak.days + 1} → ×${nextMult.toFixed(2)} · vuelve en 24h_`,
       ].join('\n'),
     }, { quoted: msg })
   },

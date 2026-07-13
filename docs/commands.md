@@ -110,7 +110,7 @@
 | `xp` | `exp`, `experiencia`, `stats`, `nivel` | 5s | 👤 | Estadísticas RPG detalladas |
 | `rangos` | `roles`, `rango`, `rol`, `ranks` | 10s | 👤 | Tabla de rangos del servidor |
 | `work` | `trabajar`, `trabajo`, `w` | 10min | 👤 | Trabaja para ganar BrasCoins (cada 10 min) |
-| `daily` | `claim`, `reclamar`, `regalo` | 2h | 👤 | Recompensa diaria — sube con tu racha de días consecutivos (bono ×1.00–×1.20+, combina racha, fin de semana, premium y prestigio) |
+| `daily` | `claim`, `reclamar`, `regalo` | 24h | 👤 | Recompensa diaria — sube con tu racha de días consecutivos (bono ×1.00–×1.20+, combina racha, fin de semana, premium y prestigio) |
 | `weekly` | `semana`, `semanal`, `cadasemana` | 3d | 👤 | Recompensa semanal (cada 3 días) |
 | `monthly` | `mes`, `mensual`, `cadames` | 5d | 👤 | Recompensa mensual (cada 5 días) |
 | `minar` | `mine`, `minarxp`, `mining` | 10min | 👤 | Mina recursos para ganar XP y materiales |

@@ -1,6 +1,6 @@
 <div align="center">
 
-<img src="https://capsule-render.vercel.app/api?type=waving&color=0:6C63FF,100:00C9FF&height=180&section=header&text=WinsiBot&fontSize=62&fontColor=ffffff&fontAlignY=38&desc=v8.4.0%20%E2%80%94%20Enterprise%20WhatsApp%20Bot&descAlignY=58&descSize=18" width="100%"/>
+<img src="https://capsule-render.vercel.app/api?type=waving&color=0:6C63FF,100:00C9FF&height=180&section=header&text=WinsiBot&fontSize=62&fontColor=ffffff&fontAlignY=38&desc=v8.4.1%20%E2%80%94%20Enterprise%20WhatsApp%20Bot&descAlignY=58&descSize=18" width="100%"/>
 
 <br/>
 
@@ -10,7 +10,7 @@
 [![Rust](https://img.shields.io/badge/Rust-1.75%2B-CE422B?style=for-the-badge&logo=rust&logoColor=white)](https://rust-lang.org)
 
 [![License](https://img.shields.io/badge/License-GPL--3.0-blue?style=flat-square)](LICENSE)
-[![Version](https://img.shields.io/badge/Version-8.4.0-6C63FF?style=flat-square)](CHANGELOG.md)
+[![Version](https://img.shields.io/badge/Version-8.4.1-6C63FF?style=flat-square)](CHANGELOG.md)
 [![Platform](https://img.shields.io/badge/Platform-Windows%20%7C%20Linux-lightgrey?style=flat-square)](https://github.com/Brashkie/WinsiBot)
 [![PRs Welcome](https://img.shields.io/badge/PRs-welcome-brightgreen?style=flat-square)](https://github.com/Brashkie/WinsiBot/pulls)
 
@@ -18,7 +18,7 @@
 
 > Bot de WhatsApp de alto rendimiento con arquitectura multi-lenguaje de tres capas.<br/>
 > Diseñado para **10,000+ grupos simultáneos**, miles de mensajes por hora y múltiples instancias.<br/>
-> v8.4.0 — Supervisor de proceso auto-reparable, Bad MAC con cooldown escalonado y persistencia DuckDB/SQLite, cache de grupos unificado y control de carga reforzado para correr meses sin intervención manual.
+> v8.4.1 — Sistema de registro obligatorio eliminado, #profile rediseñado, cooldown de #daily corregido y 5 endpoints Python↔TS desconectados reparados (incluida la moderación por contenido, que estaba silenciosamente apagada).
 
 <br/>
 
@@ -65,6 +65,17 @@
 | 🟦 **Core** | TypeScript / Node.js | Protocolo WhatsApp, dispatcher de comandos, RPG, IA |
 | 🐍 **Services** | Python / FastAPI / Celery | IA avanzada (Ollama + GPT + Claude + Gemini), watchdog, health checks |
 | ⚙️ **Session** | Rust / Axum | Escritura atómica de creds, 10 snapshots rotativos, tracker Bad MAC, rate limiter, delivery SQLite |
+
+### Novedades en v8.4.1
+
+| Área | Cambio |
+|------|--------|
+| **Registro eliminado** | El sistema de registro obligatorio (`!registro`/`!unreg`) se sacó por completo — `crime`, `#profile`, `bank`, `afk`, `transfer`, `invest`, `quote`, `pay`, `einfo`, `coinflip`, `rob` y `roulette` ya no piden registrarte para usarlos |
+| **`#profile` rediseñado** | Ahora envía la foto de perfil de WhatsApp como imagen, muestra cumpleaños (`!birthday`), género, puesto en el ranking global, cantidad y valor del harem (`!rw`), coins totales (billetera + banco) y un contador nuevo de comandos usados |
+| **`#daily` corregido** | El cooldown real era de 2 horas pese a llamarse "diario" — dejaba juntar la recompensa hasta 12 veces al día aunque la racha de días solo avanzaba una vez. Ahora son 24 horas reales (`einfo.ts` y la documentación también corregidos) |
+| **Endpoints Python↔TS reparados** | 5 llamadas de TypeScript a la API de Python apuntaban a rutas que no existían o usaban el método HTTP equivocado — la más grave: la moderación de spam por contenido (`groupCfg.antispam`) usaba `GET` contra un endpoint que solo acepta `POST`, así que estaba **silenciosamente desactivada** en todos los grupos que la tenían prendida. También se arregló la clasificación de intención (`/nlp/intent`), la similitud de texto, y el borrado de perfil por privacidad (`!imitate` → borrar, usaba `POST` en vez de `DELETE`, nunca borraba nada) |
+| **Timeout y logs de IA** | El timeout de 5s para llamadas a Python era muy corto para respuestas de IA vía Ollama (hasta 25s) — subido a 15s. Los errores de la API de Python ya no vuelcan el objeto completo de Axios en los logs (cientos de líneas) — ahora solo `endpoint`, `code`, `status` y `message` |
+| **Ollama documentado** | Variables `OLLAMA_URL`/`OLLAMA_MODEL`/`OLLAMA_TIMEOUT` agregadas a `.env.example` (no existían) y corregido el nombre de variable mal documentado en el README (`OLLAMA_BASE_URL` → `OLLAMA_URL`, que es el que realmente lee el código) |
 
 ### Novedades en v8.4.0
 
@@ -226,7 +237,7 @@
 
 ```
 ╔══════════════════════════════════════════════════════════════════════════════╗
-║                           WinsiBot v8.4.0                                    ║
+║                           WinsiBot v8.4.1                                    ║
 ╠════════════════════╦═══════════════════════╦═══════════════════════════════╣
 ║   TypeScript        ║       Python           ║           Rust                ║
 ║   Node.js :4001     ║                        ║                               ║
@@ -334,8 +345,8 @@ LOG_LEVEL=info                           # silent | info | debug | error
 OPENAI_API_KEY=sk-...                    # GPT-4o-mini / DALL-E 3
 ANTHROPIC_API_KEY=sk-ant-...             # Claude Haiku
 GEMINI_API_KEY=AIza...                   # Gemini 1.5 Flash
-OLLAMA_BASE_URL=http://localhost:11434   # Ollama local (puerto por defecto)
-OLLAMA_MODEL=llama3                      # Modelo a usar con Ollama
+OLLAMA_URL=http://localhost:11434        # Ollama local (puerto por defecto)
+OLLAMA_MODEL=llama3.2:3b                 # Modelo a usar con Ollama
 
 # ─── Session API (Rust) ───────────────────────────────────────────────────────
 SESSION_API_URL=http://127.0.0.1:3001
@@ -382,8 +393,8 @@ RUST_LOG=winsibot_session_api=info
 | `OPENAI_API_KEY` | — | GPT / DALL-E (opcional) |
 | `ANTHROPIC_API_KEY` | — | Claude (opcional) |
 | `GEMINI_API_KEY` | — | Gemini (opcional) |
-| `OLLAMA_BASE_URL` | `http://localhost:11434` | Endpoint local de Ollama (opcional) |
-| `OLLAMA_MODEL` | `llama3` | Nombre del modelo Ollama |
+| `OLLAMA_URL` | `http://localhost:11434` | Endpoint local de Ollama (opcional) |
+| `OLLAMA_MODEL` | `llama3.2:3b` | Nombre del modelo Ollama |
 
 </details>
 

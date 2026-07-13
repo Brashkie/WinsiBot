@@ -1,7 +1,7 @@
 {
   "name": "winsi-bot",
-  "version": "8.4.0",
-  "description": "WinsiBot v8.4.0 — High-performance WhatsApp bot with multi-language architecture (TypeScript + Rust + Python), advanced AI, RPG economy, and long-running resilience (self-healing supervisor, escalating Bad MAC cooldown, unified group cache).",
+  "version": "8.4.1",
+  "description": "WinsiBot v8.4.1 — High-performance WhatsApp bot with multi-language architecture (TypeScript + Rust + Python), advanced AI, RPG economy, and long-running resilience (self-healing supervisor, escalating Bad MAC cooldown, unified group cache).",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
   "type": "module",

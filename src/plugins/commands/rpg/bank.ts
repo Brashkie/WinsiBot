@@ -6,7 +6,6 @@ const command: Command = {
   aliases: ['dep', 'deposit', 'retirar', 'withdraw', 'banco'],
   description: 'Deposita o retira BrasCoins del banco',
   category: 'rpg',
-  register: true,
   cooldown: 3,
 
   async execute({ sock, jid, msg, sender, pushName, command: cmd, args }) {

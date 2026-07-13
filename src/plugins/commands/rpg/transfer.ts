@@ -22,7 +22,6 @@ const command: Command = {
   description: 'Transfiere recursos a otro usuario',
   category: 'rpg',
   cooldown: 5,
-  register: true,
 
   async execute({ sock, jid, msg, sender, pushName, args }) {
     // Confirmacion pendiente

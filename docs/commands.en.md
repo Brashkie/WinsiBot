@@ -110,7 +110,7 @@
 | `xp` | `exp`, `experiencia`, `stats`, `nivel` | 5s | 👤 | Detailed RPG statistics |
 | `rangos` | `roles`, `rango`, `rol`, `ranks` | 10s | 👤 | Server rank table |
 | `work` | `trabajar`, `trabajo`, `w` | 10min | 👤 | Work to earn BrasCoins (every 10 min) |
-| `daily` | `claim`, `reclamar`, `regalo` | 2h | 👤 | Daily reward — scales with your consecutive-day streak (×1.00–×1.20+ bonus combining streak, weekend, premium and prestige) |
+| `daily` | `claim`, `reclamar`, `regalo` | 24h | 👤 | Daily reward — scales with your consecutive-day streak (×1.00–×1.20+ bonus combining streak, weekend, premium and prestige) |
 | `weekly` | `semana`, `semanal`, `cadasemana` | 3d | 👤 | Weekly reward (every 3 days) |
 | `monthly` | `mes`, `mensual`, `cadames` | 5d | 👤 | Monthly reward (every 5 days) |
 | `minar` | `mine`, `minarxp`, `mining` | 10min | 👤 | Mine resources for XP and materials |

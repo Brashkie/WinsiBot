@@ -33,17 +33,26 @@ axiosRetry(client, {
 
 // ─── Base ─────────────────────────────────────────────────────────────────────
 export async function pythonPost<T>(
-  endpoint: string,
-  data:     Record<string, unknown>,
+  endpoint:  string,
+  data:      Record<string, unknown>,
+  timeoutMs?: number,
 ): Promise<PythonApiResponse<T>> {
   try {
-    const res = await client.post<PythonApiResponse<T>>(endpoint, data)
+    const res = await client.post<PythonApiResponse<T>>(
+      endpoint, data,
+      timeoutMs != null ? { timeout: timeoutMs } : undefined,
+    )
     return res.data
   } catch (err: any) {
     if (err?.code === 'ECONNREFUSED' || err?.cause?.code === 'ECONNREFUSED') {
       return { success: false, error: 'Flask offline' }
     }
-    logger.error({ err, endpoint }, 'Error llamando Python API')
+    logger.error({
+      endpoint,
+      code:    err?.code,
+      status:  err?.response?.status,
+      message: err?.message,
+    }, 'Error llamando Python API')
     return { success: false, error: 'Python API no disponible' }
   }
 }
@@ -59,7 +68,32 @@ export async function pythonGet<T>(
     if (err?.code === 'ECONNREFUSED' || err?.cause?.code === 'ECONNREFUSED') {
       return { success: false, error: 'Flask offline' }
     }
-    logger.error({ err, endpoint }, 'Error llamando Python API')
+    logger.error({
+      endpoint,
+      code:    err?.code,
+      status:  err?.response?.status,
+      message: err?.message,
+    }, 'Error llamando Python API')
+    return { success: false, error: 'Python API no disponible' }
+  }
+}
+
+export async function pythonDelete<T>(
+  endpoint: string,
+): Promise<PythonApiResponse<T>> {
+  try {
+    const res = await client.delete<PythonApiResponse<T>>(endpoint)
+    return res.data
+  } catch (err: any) {
+    if (err?.code === 'ECONNREFUSED' || err?.cause?.code === 'ECONNREFUSED') {
+      return { success: false, error: 'Flask offline' }
+    }
+    logger.error({
+      endpoint,
+      code:    err?.code,
+      status:  err?.response?.status,
+      message: err?.message,
+    }, 'Error llamando Python API')
     return { success: false, error: 'Python API no disponible' }
   }
 }
@@ -118,7 +152,7 @@ export async function checkRateLimit(
 }
 
 export async function checkSpamText(text: string): Promise<boolean> {
-  const res = await pythonPost<{ is_spam: boolean }>('/api/v1/ratelimit/spam/check', { text })
+  const res = await pythonPost<{ is_spam: boolean; confidence: number }>('/api/v1/ml/predict/spam', { text })
   return res.data?.is_spam ?? false
 }
 
@@ -257,12 +291,12 @@ export async function analyzeIntent(text: string): Promise<NLPIntent | null> {
     // Rust offline o timeout — cae a Python silenciosamente
   }
 
-  const res = await pythonPost<NLPIntent>('/api/v1/nlp/intent', { text })
+  const res = await pythonPost<NLPIntent>('/api/v1/ml/nlp/intent', { text })
   return res.success ? res.data ?? null : null
 }
 
 export async function analyzeSimilarity(text1: string, text2: string): Promise<number> {
-  const res = await pythonPost<{ similarity: number }>('/api/v1/nlp/similarity', { text1, text2 })
+  const res = await pythonPost<{ similarity: number }>('/api/v1/ml/nlp/similarity', { text1, text2 })
   return res.data?.similarity ?? 0
 }
 

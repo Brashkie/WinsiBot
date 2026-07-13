@@ -28,7 +28,6 @@ export interface Command {
   groupOnly?:   boolean
   ownerOnly?:   boolean
   premiumOnly?: boolean
-  register?:    boolean
   level?:       number
   limit?:       number
   money?:       number

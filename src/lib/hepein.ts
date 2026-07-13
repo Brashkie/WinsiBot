@@ -16,7 +16,7 @@
 //    const res = await hepein.imitate({ prompt, targetJid, groupJid, senderJid })
 // ─────────────────────────────────────────────────────────────────────────────
 
-import { pythonPost, pythonGet } from './pythonBridge.js'
+import { pythonPost, pythonGet, pythonDelete } from './pythonBridge.js'
 import { logger } from '../core/logger.js'
 
 // ─── Tipos ────────────────────────────────────────────────────────────────────
@@ -99,6 +99,19 @@ export const hepein = {
   },
 
   /**
+   * Actualiza la reputación/comportamiento del usuario (user_memory.py).
+   * Fire-and-forget — no bloquea el handler.
+   */
+  updateMemory(jid: string, text: string, intent: string, isCmd = false): void {
+    if (!jid || !text?.trim()) return
+    pythonPost(`/api/v1/ai/memory/${encodeURIComponent(jid)}/update`, {
+      text,
+      intent,
+      is_cmd: isCmd,
+    }).catch(err => logger.debug({ err }, 'user_memory update silenciado'))
+  },
+
+  /**
    * Genera una respuesta contextual usando el estilo aprendido del grupo.
    * Respeta un cooldown de 4 s por grupo para no spamear.
    */
@@ -137,7 +150,7 @@ export const hepein = {
       use_gpt:    useGpt,
       use_humor:  useHumor,
       ...(opts.mode ? { mode: opts.mode } : {}),
-    })
+    }, 15_000) // más generoso que el default (5s) — puede pasar por Ollama antes de GPT/Claude/Gemini
 
     if (!res.success || !res.data?.text) {
       return { ok: false, text: '', mode: '', hasProfile: false, groupMsgs: 0, error: res.error }
@@ -210,7 +223,7 @@ export const hepein = {
    * Elimina todos los datos de mensajes de un usuario (privacidad).
    */
   async deleteProfile(jid: string): Promise<{ deletedRows: number }> {
-    const res = await pythonPost<{ deleted_rows: number }>(`/api/v1/hepein/profile/${encodeURIComponent(jid)}`, {})
+    const res = await pythonDelete<{ deleted_rows: number }>(`/api/v1/hepein/profile/${encodeURIComponent(jid)}`)
     return { deletedRows: res.data?.deleted_rows ?? 0 }
   },
 
@@ -230,49 +243,3 @@ export const hepein = {
   },
 }
 
-// ─── Hook de mensajes ─────────────────────────────────────────────────────────
-//
-//  Añade este hook en src/core/handler.ts (o en events/index.ts) ANTES del
-//  dispatch de comandos, para entrenar con todos los mensajes del grupo:
-//
-//    import { hookHepein } from '@lib/hepein.js'
-//    hookHepein(ctx)  // ctx es el BotContext
-//
-// ─────────────────────────────────────────────────────────────────────────────
-
-import type { BotContext } from '../types/index.js'
-import { groupConfigs }    from '../core/events/index.js'
-
-/**
- * Hook que debe llamarse en el handler por cada mensaje que llega.
- * 1. Registra el mensaje en el trainer (entrenamiento)
- * 2. Si hepein está activo en el grupo y el bot es mencionado → responde
- *
- * Returns: texto de respuesta hepein, o null si no aplica.
- */
-export async function hookHepein(ctx: BotContext): Promise<string | null> {
-  const { jid, sender, msg, isGroup, sock } = ctx
-  const text = (msg.message?.conversation
-    ?? msg.message?.extendedTextMessage?.text
-    ?? '').trim()
-
-  if (!text || !isGroup) return null
-
-  const isReply = !!msg.message?.extendedTextMessage?.contextInfo?.quotedMessage
-  const config  = groupConfigs.get(jid)
-
-  // 1. Entrenar con el mensaje (siempre, aunque hepein esté desactivado)
-  hepein.record({ groupJid: jid, senderJid: sender, text, isReply })
-
-  // 2. Responder solo si hepein está activado en el grupo Y el bot es mencionado
-  if (!config?.hepein) return null
-
-  const botNumber   = sock.user?.id?.split(':')[0] ?? ''
-  const mentioned   = msg.message?.extendedTextMessage?.contextInfo?.mentionedJid ?? []
-  const isMentioned = mentioned.some(m => m.includes(botNumber))
-
-  if (!isMentioned) return null
-
-  const res = await hepein.respond({ prompt: text, groupJid: jid, senderJid: sender })
-  return res.ok ? res.text : null
-}

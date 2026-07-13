@@ -851,29 +851,6 @@ RESPONSES: dict[str, dict[str, list[str]]] = {
     },
 }
 
-# ─── Adaptación de estilo ─────────────────────────────────────────────────────
-_EMOJI_FRIENDLY = re.compile(r'[😊🙏🌟🎉🥳🙌😄🥹]')
-
-def _adapt_response(text: str, context: dict) -> str:
-    uses_slang    = context.get('uses_slang', False)
-    uses_emoji    = context.get('uses_emoji', False)
-    prefers_short = context.get('prefers_short', False)
-    is_toxic      = context.get('is_toxic', False)
-
-    if prefers_short and len(text) > 80:
-        sentences = re.split(r'[.!?]', text)
-        text = sentences[0].strip() if sentences else text
-
-    if uses_slang:
-        text = text.replace('¿Cómo estás?', '¿Cómo andas?')
-        text = text.replace('Bienvenido', 'Eyyy')
-        text = text.replace('¿En qué te puedo ayudar?', '¿Qué necesitas we?')
-
-    if is_toxic:
-        text = _EMOJI_FRIENDLY.sub('', text)
-
-    return text.strip()
-
 # ─── Personality Engine ───────────────────────────────────────────────────────
 class PersonalityEngine:
 
@@ -991,7 +968,7 @@ class PersonalityEngine:
             else:
                 text = re.sub(r'[Bb]uenos?\s*(días)?', 'Buenas noches', text)
 
-        if context.get('uses_slang') and context.get('language_style') == 'slang':
+        if context.get('uses_slang'):
             mirrors = [(' amigo', ' bro'), (' usuario', ' causa'), (' bien', ' chido')]
             for old, new in mirrors:
                 text = text.replace(old, new)
@@ -1074,111 +1051,6 @@ class PersonalityEngine:
             pass
         return self.get_mode(group_jid)
 
-    # ─── Respuesta con GPT/Claude usando personalidad como system prompt ──
-    def generate_response_with_ai(
-        self,
-        intent:     str,
-        text:       str,
-        jid:        str        = '',
-        sender_jid: str        = '',
-        history:    list       = [],
-    ) -> Optional[str]:
-        """
-        Usa GPT/Claude/Gemini con el modo de personalidad como system prompt.
-        Fallback a generate_response() si no hay clave de API.
-        """
-        import os
-        mode = self.get_mode(jid)
-        mode_desc = {
-            'amable':     'amigable, servicial y empático',
-            'alegre':     'muy energético, entusiasta y divertido con muchos emojis',
-            'toxico':     'sarcástico extremo, sin filtro, muy directo',
-            'sarcastico': 'irónico con humor negro suave',
-            'formal':     'profesional, educado y conciso',
-            'misterioso': 'filosófico, críptico y profundo',
-            'peruano':    'usa jerga peruana: causa, pe, bro, oe, chamba, batazo',
-            'gamer':      'habla con términos gaming: GG, lag, noob, meta, buff, OP',
-            'amoroso':    'cariñoso con emojis de corazón y mucho afecto',
-            'chistoso':   'hace chistes y observaciones cómicas sobre todo',
-            'depresivo':  'apático, respuestas cortas, con nihilismo leve',
-            'kawaii':     'habla kawaii: uwu, owo, ~, kyaa, nani, kya',
-        }.get(mode, 'natural y amigable')
-
-        system = (
-            f'Eres Hepein, asistente de WhatsApp. Tu personalidad actual es: {mode_desc}. '
-            f'Responde en español, máximo 2 frases, en modo "{mode}". '
-            f'No menciones que eres una IA. No des explicaciones largas.'
-        )
-
-        prompt = text or intent
-        openai_key  = os.getenv('OPENAI_API_KEY')
-        claude_key  = os.getenv('ANTHROPIC_API_KEY')
-        gemini_key  = os.getenv('GEMINI_API_KEY')
-
-        # ── GPT ──────────────────────────────────────────────────────────
-        if openai_key:
-            try:
-                import openai
-                client = openai.OpenAI(api_key=openai_key)
-                msgs   = [{'role': 'system', 'content': system}]
-                for h in history[-6:]:
-                    if h.get('text') and h.get('reply'):
-                        msgs.append({'role': 'user',      'content': h['text']})
-                        msgs.append({'role': 'assistant', 'content': h['reply']})
-                msgs.append({'role': 'user', 'content': prompt})
-                res = client.chat.completions.create(
-                    model='gpt-4o-mini', messages=msgs,
-                    max_tokens=200, temperature=0.85,
-                )
-                reply = res.choices[0].message.content.strip()
-                if reply:
-                    return reply
-            except Exception:
-                pass
-
-        # ── Gemini ───────────────────────────────────────────────────────
-        if gemini_key:
-            try:
-                import requests as req_lib
-                r = req_lib.post(
-                    f'https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key={gemini_key}',
-                    json={
-                        'contents': [{'parts': [{'text': f'{system}\n\n{prompt}'}]}],
-                        'generationConfig': {'temperature': 0.85, 'maxOutputTokens': 200},
-                    },
-                    timeout=20,
-                )
-                if r.status_code == 200:
-                    t = r.json().get('candidates', [{}])[0].get('content', {}).get('parts', [{}])[0].get('text', '').strip()
-                    if t:
-                        return t
-            except Exception:
-                pass
-
-        # ── Claude ───────────────────────────────────────────────────────
-        if claude_key:
-            try:
-                import requests as req_lib
-                r = req_lib.post(
-                    'https://api.anthropic.com/v1/messages',
-                    headers={'x-api-key': claude_key, 'anthropic-version': '2023-06-01'},
-                    json={
-                        'model': 'claude-haiku-4-5-20251001',
-                        'max_tokens': 200,
-                        'system': system,
-                        'messages': [{'role': 'user', 'content': prompt}],
-                    },
-                    timeout=20,
-                )
-                if r.status_code == 200:
-                    t = r.json().get('content', [{}])[0].get('text', '').strip()
-                    if t:
-                        return t
-            except Exception:
-                pass
-
-        return None
-
     def generate_response(
         self,
         intent:     str,
@@ -1189,7 +1061,6 @@ class PersonalityEngine:
         history:    list            = [],
         user_style: Optional[dict]  = None,
         sender_jid: str             = '',
-        use_ai:     bool            = False,
     ) -> str:
         # 1. modo activo
         mode = self.get_mode(jid)
@@ -1224,10 +1095,6 @@ class PersonalityEngine:
         intensity = self._get_intensity(context)
         response  = self._apply_intensity(response, intensity, mode)
 
-        # 4. adaptar estilo (memoria Python)
-        if context:
-            response = _adapt_response(response, context)
-
         # 5. personalización horaria
         if context:
             response = self._personalize(response, context)
@@ -1254,15 +1121,6 @@ class PersonalityEngine:
                 response = imitate(response, user_style, history)
             except Exception:
                 pass
-
-        # 9. IA generativa (GPT/Claude/Gemini) — sobreescribe respuesta si hay clave
-        if use_ai:
-            ai_reply = self.generate_response_with_ai(
-                intent=intent, text=text,
-                jid=jid, sender_jid=sender_jid, history=history,
-            )
-            if ai_reply:
-                return ai_reply
 
         return response
 

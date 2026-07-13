@@ -44,7 +44,6 @@ const command: Command = {
   category: 'rpg',
   cooldown: 0,
   groupOnly: true,
-  register: true,
 
   async execute({ sock, jid, msg, sender, pushName }) {
     if (isOnCooldown(sender, 'lastCrime', CD)) {

@@ -5,12 +5,10 @@ Aprende cómo habla cada usuario y adapta el comportamiento del bot
 
 import json
 import threading
-import re
 from pathlib import Path
 from datetime import datetime, timedelta
 from dataclasses import dataclass, asdict, field
 from typing import Optional
-from collections import Counter
 
 DATA_DIR  = Path(__file__).parent.parent.parent / 'data' / 'ai' / 'users'
 DATA_DIR.mkdir(parents=True, exist_ok=True)
@@ -19,12 +17,9 @@ DATA_DIR.mkdir(parents=True, exist_ok=True)
 @dataclass
 class UserProfile:
     jid:              str
-    # estilo de habla
-    avg_msg_length:   float = 0.0
-    uses_caps:        bool  = False
-    uses_emoji:       bool  = False
+    # estilo de habla — solo lo que necesita la moderación/personalización;
+    # vocabulario/largo/emojis completos viven en trainer.py (Parquet+DuckDB)
     uses_slang:       bool  = False
-    language_style:   str   = 'neutral'   # formal | casual | slang | mixed
     # comportamiento
     insult_count:     int   = 0
     spam_count:       int   = 0
@@ -33,8 +28,6 @@ class UserProfile:
     msg_count:        int   = 0
     # intenciones frecuentes
     top_intents:      dict  = field(default_factory=dict)
-    # palabras frecuentes
-    top_words:        list  = field(default_factory=list)
     # actividad
     first_seen:       str   = ''
     last_seen:        str   = ''
@@ -42,54 +35,27 @@ class UserProfile:
     # reputación
     reputation:       str   = 'normal'    # trusted | normal | suspicious | toxic
     reputation_score: float = 50.0        # 0-100
-    # preferencias detectadas
-    prefers_short:    bool  = False        # mensajes cortos
+    # preferencia de respuesta (derivada de las intenciones frecuentes, no del estilo)
     response_style:   str   = 'neutral'   # friendly | sarcastic | formal | humor
     # historial comprimido
     recent_intents:   list  = field(default_factory=list)   # últimas 20 intenciones
     updated_at:       str   = ''
 
 # ─── Patrones de estilo ───────────────────────────────────────────────────────
-_EMOJI_RE  = re.compile(
-    r'[\U0001F300-\U0001FFFF'
-    r'\U00002600-\U000026FF'
-    r'\U00002700-\U000027BF]+',
-    re.UNICODE
-)
 _SLANG = {
     'xd', 'jaja', 'jeje', 'lol', 'we', 'wey', 'bro', 'men',
     'oe', 'pe', 'causa', 'pata', 'ctm', 'wtf', 'omg', 'gg',
     'uwu', 'owo', 'sksksk', 'ntp', 'nmms', 'nel', 'simon',
 }
-_FORMAL = {
-    'estimado', 'cordialmente', 'saludos', 'favor', 'podría',
-    'quisiera', 'agradezco', 'disculpe', 'usted',
-}
 
 def _detect_style(text: str) -> dict:
     """Detecta características de estilo en un mensaje"""
     words   = text.lower().split()
-    has_cap = sum(1 for c in text if c.isupper()) > len(text) * 0.3
-    has_emo = bool(_EMOJI_RE.search(text))
     slang_c = sum(1 for w in words if w in _SLANG)
-    form_c  = sum(1 for w in words if w in _FORMAL)
-
-    if form_c > 0:
-        style = 'formal'
-    elif slang_c >= 2:
-        style = 'slang'
-    elif slang_c == 1:
-        style = 'casual'
-    else:
-        style = 'neutral'
 
     return {
-        'has_caps':  has_cap,
-        'has_emoji': has_emo,
         'has_slang': slang_c > 0,
-        'style':     style,
         'words':     words,
-        'length':    len(text),
     }
 
 def _calc_reputation(profile: UserProfile) -> tuple[float, str]:
@@ -146,7 +112,7 @@ def _infer_response_style(profile: UserProfile) -> str:
         return 'friendly'
     if comp_c > joke_c and comp_c > 3:
         return 'formal'
-    if profile.language_style == 'slang':
+    if profile.uses_slang:
         return 'humor'
 
     return 'neutral'
@@ -223,20 +189,8 @@ def update(
         profile.active_hours.append(hour)
         profile.active_hours = sorted(profile.active_hours)
 
-    # ─── estilo de habla (media móvil) ────────────────────────────────────
-    alpha = 0.1  # peso del nuevo mensaje
-    profile.avg_msg_length = (
-        (1 - alpha) * profile.avg_msg_length + alpha * style['length']
-    )
-    if style['has_caps']:  profile.uses_caps  = True
-    if style['has_emoji']: profile.uses_emoji = True
+    # ─── jerga ──────────────────────────────────────────────────────────
     if style['has_slang']: profile.uses_slang = True
-
-    # estilo predominante — actualizar si cambia
-    if style['style'] != 'neutral':
-        profile.language_style = style['style']
-
-    profile.prefers_short = profile.avg_msg_length < 20
 
     # ─── intenciones ──────────────────────────────────────────────────────
     profile.top_intents[intent] = profile.top_intents.get(intent, 0) + 1
@@ -250,17 +204,6 @@ def update(
     if intent == 'spam':    profile.spam_count   += 1
     if intent == 'nsfw':    profile.nsfw_count   += 1
     if is_cmd:              profile.command_count += 1
-
-    # ─── palabras frecuentes ──────────────────────────────────────────────
-    # combinar palabras nuevas con las existentes
-    existing_words = dict(Counter(profile.top_words))
-    for w in style['words']:
-        if len(w) > 3 and w.isalpha():
-            existing_words[w] = existing_words.get(w, 0) + 1
-    # top 20 palabras
-    profile.top_words = [
-        w for w, _ in Counter(existing_words).most_common(20)
-    ]
 
     # ─── reputación ───────────────────────────────────────────────────────
     profile.reputation_score, profile.reputation = _calc_reputation(profile)
@@ -295,10 +238,7 @@ def get_context(jid: str) -> dict:
         'reputation':     p.reputation,
         'rep_score':      p.reputation_score,
         'response_style': p.response_style,
-        'language_style': p.language_style,
-        'uses_emoji':     p.uses_emoji,
         'uses_slang':     p.uses_slang,
-        'prefers_short':  p.prefers_short,
         'top_intents':    p.top_intents,
         'recent_intents': p.recent_intents,
         'msg_count':      p.msg_count,
@@ -315,7 +255,6 @@ def get_summary(jid: str) -> str:
     return (
         f'Mensajes: {p.msg_count} | '
         f'Reputación: {p.reputation} ({p.reputation_score:.0f}) | '
-        f'Estilo: {p.language_style} | '
         f'Respuesta: {p.response_style} | '
         f'Intenciones: {top_str}'
     )
