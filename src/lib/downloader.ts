@@ -7,6 +7,7 @@ import { existsSync } from 'fs'
 import { join } from 'path'
 import { randomUUID } from 'crypto'
 import axios from 'axios'
+import ffmpegStatic from 'ffmpeg-static'
 import { Queue } from './queue.js'
 
 const execAsync = promisify(exec)
@@ -25,11 +26,15 @@ function getYtdlp(): string {
   return 'yt-dlp'
 }
 
-// ─── Path a FFmpeg (Detecta tu carpeta bin) ──────────────────────────────────
+// ─── Path a FFmpeg ────────────────────────────────────────────────────────────
+// Prioridad: carpeta 'bin' manual (si el owner puso su propio build ahí) →
+// binario bundleado de ffmpeg-static (siempre disponible, sin instalación) →
+// vacío (yt-dlp cae al PATH del sistema).
 function getFfmpegDir(): string {
-  // Según tu imagen, los .exe están en la carpeta 'bin' de la raíz del proyecto
   const binDir = join(process.cwd(), 'bin')
-  return existsSync(binDir) ? binDir : ''
+  if (existsSync(binDir)) return binDir
+  if (ffmpegStatic && existsSync(ffmpegStatic)) return ffmpegStatic
+  return ''
 }
 
 // ─── Carpeta temporal ─────────────────────────────────────────────────────────

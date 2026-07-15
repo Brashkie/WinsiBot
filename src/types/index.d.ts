@@ -65,7 +65,6 @@ export interface UserProfile {
   banned:     boolean
   banReason:  string
   premium:    boolean
-  registered: boolean
   spam:       number
   lastSpam:   number
 }
@@ -106,6 +105,7 @@ export interface BotConfig {
   redisUrl?:            string
   rule34ApiKey?:        string
   rule34UserId?:        string
+  xblApiKey?:           string
   logLevel:             string
   isDev:                boolean
 }

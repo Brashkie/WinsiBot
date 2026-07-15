@@ -23,8 +23,9 @@ OLLAMA_MODEL = os.getenv('OLLAMA_MODEL', 'llama3.2:3b')
 TIMEOUT = float(os.getenv('OLLAMA_TIMEOUT', '25'))
 
 
-async def is_available() -> bool:
-    """Verifica si Ollama está corriendo y tiene el modelo."""
+async def is_available(model: Optional[str] = None) -> bool:
+    """Verifica si Ollama está corriendo y tiene el modelo pedido (o el default)."""
+    target = model or OLLAMA_MODEL
     try:
         async with httpx.AsyncClient(timeout=2) as http:
             r = await http.get(f'{OLLAMA_URL}/api/tags')
@@ -32,7 +33,7 @@ async def is_available() -> bool:
                 return False
             models = [m['name'] for m in r.json().get('models', [])]
             # acepta coincidencia parcial: "llama3.2:3b" o "llama3.2"
-            return any(OLLAMA_MODEL.split(':')[0] in m for m in models)
+            return any(target.split(':')[0] in m for m in models)
     except Exception:
         return False
 
@@ -40,19 +41,23 @@ async def is_available() -> bool:
 async def chat(
     prompt:      str,
     system:      str,
+    model:       Optional[str] = None,
     temperature: float = 0.85,
     max_tokens:  int   = 300,
 ) -> Optional[str]:
     """
     Envía un mensaje al modelo local vía Ollama.
+    `model` permite pedir un modelo específico (p. ej. según la palabra
+    disparadora en WhatsApp) — si no se pasa, usa OLLAMA_MODEL.
     Devuelve el texto generado o None si falla.
     """
+    target = model or OLLAMA_MODEL
     try:
         async with httpx.AsyncClient(timeout=TIMEOUT) as http:
             r = await http.post(
                 f'{OLLAMA_URL}/v1/chat/completions',   # endpoint compatible con OpenAI
                 json={
-                    'model':       OLLAMA_MODEL,
+                    'model':       target,
                     'messages':    [
                         {'role': 'system', 'content': system},
                         {'role': 'user',   'content': prompt},
@@ -65,7 +70,7 @@ async def chat(
             if r.status_code == 200:
                 text = r.json()['choices'][0]['message']['content'].strip()
                 if text:
-                    log.debug(f'Ollama ({OLLAMA_MODEL}): {len(text)} chars')
+                    log.debug(f'Ollama ({target}): {len(text)} chars')
                     return text
             else:
                 log.warning(f'Ollama HTTP {r.status_code}: {r.text[:200]}')

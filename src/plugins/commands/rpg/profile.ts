@@ -42,17 +42,28 @@ function getRankPosition(jid: string): number {
 const command: Command = {
   name:        'perfil',
   aliases:     ['profile', 'miperfil', 'yo'],
-  description: 'Ver perfil propio o de otro (@mencionar)',
+  description: 'Ver perfil propio o de otro (@mencionar o respondiendo su mensaje)',
   category:    'rpg',
   cooldown:    5,
 
   async execute({ sock, jid, msg, sender, pushName }) {
-    const target = (msg.message?.extendedTextMessage?.contextInfo?.mentionedJid ?? [])[0] ?? sender
-    const user   = getUserData(target, pushName)
+    // Objetivo: @mención tiene prioridad, si no hay se usa a quién se le
+    // respondió (contextInfo.participant = remitente del mensaje citado),
+    // si no hay ninguno de los dos es el propio remitente.
+    const ctxInfo  = msg.message?.extendedTextMessage?.contextInfo
+    const mentioned = ctxInfo?.mentionedJid?.[0]
+    const repliedTo = ctxInfo?.participant
+    const target    = mentioned ?? repliedTo ?? sender
+    const isSelf    = target === sender
+
+    // pushName es el nombre de WhatsApp de quien ESCRIBIÓ el comando — nunca
+    // debe usarse como fallback del nombre de OTRO usuario (antes, ver perfil
+    // de alguien sin `name` guardado mostraba el nombre de quien preguntaba).
+    const user   = getUserData(target, isSelf ? pushName : '')
     const clan   = getUserClan(target)
     const need   = expForLevel(user.level)
     const num    = target.split('@')[0]
-    const name   = user.name || pushName || num
+    const name   = user.name || (isSelf ? pushName : '') || num
 
     const harem      = getUserInventory(target)
     const haremValue = harem.reduce((sum, c) => sum + (Number(c.value) || 0), 0)

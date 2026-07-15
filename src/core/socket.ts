@@ -38,6 +38,17 @@ const LOCAL_BAD_MAC_THRESHOLD = 5
 const LOCAL_BAD_MAC_WINDOW_MS = 30_000
 const LOCAL_BAD_MAC_COOLDOWN  = 10_000  // evitar clear loop
 
+// Umbral GLOBAL, independiente del conteo por grupo (Rust y el fallback local
+// de arriba son ambos por-grupo). Visto en producción: una sesión Signal
+// corrupta a nivel global puede manifestarse como Bad MAC repartidos entre
+// MUCHOS grupos distintos — 2-3 por grupo, nunca cruzando el umbral de
+// ningún grupo individual — y el bot se queda completamente sordo (ningún
+// mensaje se descifra en ningún lado) sin que la limpieza automática se
+// dispare nunca. Este contador ve el total sin importar de qué grupo vino.
+const GLOBAL_BAD_MAC_THRESHOLD = 8
+const GLOBAL_BAD_MAC_WINDOW_MS = 60_000
+const GLOBAL_BAD_MAC_COOLDOWN  = 30_000  // un clear global es más disruptivo que uno por grupo
+
 export class WinsiSocket extends EventEmitter3<WinsiEvents> {
   constructor() {
     super()
@@ -62,11 +73,29 @@ export class WinsiSocket extends EventEmitter3<WinsiEvents> {
   private zombieCheckTimer: ReturnType<typeof setInterval> | null = null
   private readonly ZOMBIE_CHECK_INTERVAL_MS = 90_000
   private readonly ZOMBIE_PROBE_TIMEOUT_MS  = 10_000
+  // Marca de tiempo del último 'messages.upsert' recibido (se resetea también
+  // al abrir conexión). Con 400+ grupos activos, pasar este tiempo sin NINGÚN
+  // evento — ni uno solo, ni siquiera ruido de Bad MAC — aun cuando el ping sí
+  // responde, indica que WhatsApp dejó de empujar mensajes a este dispositivo
+  // (zombie silencioso post-reconexión).
+  // Punto medio a propósito: 20min dejaba al bot sordo demasiado tiempo sin
+  // que nadie se enterara; 6min se probó y el zombie volvió a los 6 minutos
+  // exactos tras la reconexión — cada reconexión fuerza un refetch completo
+  // de metadatos de los 439 grupos, y sospechamos que reconectar tan seguido
+  // puede ser lo que hace que WhatsApp empiece a limitar la entrega de
+  // mensajes en tiempo real a este dispositivo (círculo vicioso). 10min de
+  // margen para observar sin seguir ajustando a ciegas.
+  private lastMessageEventAt = 0
+  private readonly MESSAGE_STALENESS_LIMIT_MS = 10 * 60_000
 
   // Per-group Bad MAC tracking (fallback local cuando Rust no responde)
   private badMacByGroup = new Map<string, { count: number; windowStart: number; clearedAt: number }>()
   // Grupos que están en proceso de clear
   private clearingGroups = new Set<string>()
+
+  // Bad MAC global — ver comentario de GLOBAL_BAD_MAC_THRESHOLD arriba
+  private globalBadMacEvents: number[] = []   // timestamps dentro de la ventana
+  private globalBadMacClearedAt = 0
 
   private cleanup() {
     if (this.retryTimer) {
@@ -223,6 +252,7 @@ export class WinsiSocket extends EventEmitter3<WinsiEvents> {
       if (connection === 'open') {
         this.retryCount     = 0
         this.isReconnecting = false
+        this.lastMessageEventAt = Date.now()
         this._startZombieWatchdog()
         logger.info('WinsiBot conectado')
         this.emit('ready', this.sock!)
@@ -252,6 +282,7 @@ export class WinsiSocket extends EventEmitter3<WinsiEvents> {
       // evento (socket realmente zombie). Si SÍ aparece pero no hay log de
       // "Handler" después, el mensaje se está filtrando o el semáforo está lleno.
       logger.info({ count: messages.length, type }, 'messages.upsert')
+      this.lastMessageEventAt = Date.now()
 
       // 'notify' = mensaje nuevo normal
       // 'append' = Baileys entrega mensajes recientes post-sync — aceptar si son del último minuto
@@ -301,11 +332,28 @@ export class WinsiSocket extends EventEmitter3<WinsiEvents> {
   // respuesta a tiempo, fuerza una reconexión completa. Corre siempre, sin
   // esperar un período de silencio primero, porque la conexión puede quedar
   // zombie a los pocos minutos de conectar.
+  //
+  // El ping por sí solo NO alcanza: hay un modo de falla donde el transporte
+  // sigue vivo y responde IQs, pero WhatsApp dejó de empujar 'messages.upsert'
+  // a este dispositivo (visto tras ~7-8h apagado — reconecta "ok" pero nunca
+  // más loguea un mensaje entrante). Por eso, si el ping responde bien, se
+  // revisa también hace cuánto no llega un evento de mensaje; con 433 grupos
+  // activos, tanto silencio no es tráfico bajo, es la conexión colgada.
   private _startZombieWatchdog(): void {
     if (this.zombieCheckTimer) clearInterval(this.zombieCheckTimer)
 
     this.zombieCheckTimer = setInterval(async () => {
       if (!this.sock) return
+
+      const forceReconnect = (reason: string, extra?: Record<string, unknown>) => {
+        logger.warn(extra ?? {}, reason)
+        if (this.zombieCheckTimer) {
+          clearInterval(this.zombieCheckTimer)
+          this.zombieCheckTimer = null
+        }
+        this.cleanup()
+        this.scheduleReconnect()
+      }
 
       try {
         await this.sock.query(
@@ -317,13 +365,16 @@ export class WinsiSocket extends EventEmitter3<WinsiEvents> {
           this.ZOMBIE_PROBE_TIMEOUT_MS,
         )
       } catch (err) {
-        logger.warn({ err }, 'Conexión zombie detectada (sin respuesta al ping) — forzando reconexión')
-        if (this.zombieCheckTimer) {
-          clearInterval(this.zombieCheckTimer)
-          this.zombieCheckTimer = null
-        }
-        this.cleanup()
-        this.scheduleReconnect()
+        forceReconnect('Conexión zombie detectada (sin respuesta al ping) — forzando reconexión', { err })
+        return
+      }
+
+      const idleMs = Date.now() - this.lastMessageEventAt
+      if (idleMs > this.MESSAGE_STALENESS_LIMIT_MS) {
+        forceReconnect(
+          'Conexión zombie detectada (ping OK pero sin mensajes entrantes) — forzando reconexión',
+          { idleMinutes: Math.round(idleMs / 60_000) },
+        )
       }
     }, this.ZOMBIE_CHECK_INTERVAL_MS).unref()
   }
@@ -347,21 +398,61 @@ export class WinsiSocket extends EventEmitter3<WinsiEvents> {
   }
 
   // ─── Bad MAC — por grupo, aislado ──────────────────────────────────────────
-  // Primero consulta Rust (fuente de verdad). Si Rust no está disponible,
-  // usa el tracker en proceso como fallback.
+  // Rust es la fuente de verdad, tanto para el umbral por grupo como para el
+  // umbral GLOBAL (agregado de todos los grupos — ver rust/src/bad_mac.rs).
+  // Si Rust no está disponible, cae al fallback local en TS de abajo, que
+  // hace lo mismo (por grupo + global) pero en memoria del proceso.
   private _handleBadMac(groupJid: string): void {
-    if (!groupJid || this.clearingGroups.has(groupJid)) return
+    if (!groupJid) return
+    if (this.clearingGroups.has(groupJid)) return
 
     // Intentar con Rust primero (async, no bloquea el hilo)
     import('@lib/session.js').then(({ sessionClient }) => {
       return sessionClient.reportBadMac(groupJid)
-    }).then(({ count, shouldClear }) => {
-      if (shouldClear) {
+    }).then(({ count, shouldClear, scope }) => {
+      if (!shouldClear) return
+      if (scope === 'global') {
+        this._doClearGlobal(count)
+      } else {
         this._doClearForGroup(groupJid, count, 'Rust')
       }
     }).catch(() => {
-      // Rust no disponible — usar fallback local
+      // Rust no disponible — usar fallback local (por grupo + global)
       this._localBadMacCheck(groupJid)
+      this._globalBadMacCheck()
+    })
+  }
+
+  private _globalBadMacCheck(): void {
+    const now = Date.now()
+    if (now - this.globalBadMacClearedAt < GLOBAL_BAD_MAC_COOLDOWN) return
+
+    this.globalBadMacEvents.push(now)
+    this.globalBadMacEvents = this.globalBadMacEvents.filter(
+      t => now - t <= GLOBAL_BAD_MAC_WINDOW_MS
+    )
+
+    if (this.globalBadMacEvents.length >= GLOBAL_BAD_MAC_THRESHOLD) {
+      this.globalBadMacEvents  = []
+      this.globalBadMacClearedAt = now
+      this._doClearGlobal(GLOBAL_BAD_MAC_THRESHOLD)
+    }
+  }
+
+  private _doClearGlobal(count: number): void {
+    logger.warn(
+      `[socket] ${count} Bad MACs repartidos entre varios grupos en los últimos ${GLOBAL_BAD_MAC_WINDOW_MS / 1000}s — sesión corrupta a nivel global, limpiando Signal + reconectando`
+    )
+    import('@lib/session.js').then(({ sessionClient }) =>
+      sessionClient.clearSignalSessions()
+    ).then(res => {
+      logger.info(`[socket] ${res.deleted} archivos Signal eliminados (clear global) — reconectando`)
+      this.cleanup()
+      this.scheduleReconnect()
+    }).catch(err => {
+      logger.warn({ err }, '[socket] clearSignalSessions (global) falló — reconectando igual')
+      this.cleanup()
+      this.scheduleReconnect()
     })
   }
 

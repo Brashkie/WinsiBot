@@ -1,26 +1,24 @@
 import type { Command } from '../../../types/index.js'
 import {
   getUserData, patchUserData,
-  isOnCooldown, setCooldown, getCooldownLeft, fmtCooldown,
+  isOnCooldownDaily, setCooldown, getDailyCooldownLeft, fmtCooldown,
   checkLevelUp, levelUpLine,
 } from '@core/events.js'
 import { randomNumber as rand } from '@lib/utils.js'
 import { LevelingManager } from '@lib/leveling.js'
 
-const CD = 24 * 60 * 60_000
-
 const command: Command = {
   name: 'daily',
   aliases: ['claim', 'reclamar', 'reclamo', 'regalo'],
-  description: 'Reclama tu recompensa cada 24 horas — sube con tu racha de días',
+  description: 'Reclama tu recompensa una vez por día — se reinicia a medianoche, sube con tu racha de días',
   category: 'rpg',
   cooldown: 0,
 
   async execute({ sock, jid, msg, sender, pushName }) {
-    if (isOnCooldown(sender, 'lastClaim', CD)) {
-      const left = getCooldownLeft(sender, 'lastClaim', CD)
+    if (isOnCooldownDaily(sender, 'lastClaim')) {
+      const left = getDailyCooldownLeft()
       await sock.sendMessage(jid, {
-        text: `> ⏳ Ya reclamaste. Vuelve en *${fmtCooldown(left)}*.`,
+        text: `> ⏳ Ya reclamaste hoy. Se reinicia en *${fmtCooldown(left)}* (medianoche).`,
       }, { quoted: msg })
       return
     }
@@ -68,7 +66,7 @@ const command: Command = {
         `> +${diamonds} 💎  ·  +${pc} 🧪${lvlLine}`,
         `> Bono de racha: ×${mult.toFixed(2)}`,
         ``,
-        `_Día ${meta.streak.days + 1} → ×${nextMult.toFixed(2)} · vuelve en 24h_`,
+        `_Día ${meta.streak.days + 1} → ×${nextMult.toFixed(2)} · se reinicia a medianoche_`,
       ].join('\n'),
     }, { quoted: msg })
   },

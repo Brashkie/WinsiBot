@@ -1,16 +1,18 @@
 import type { Command } from '../../../types/index.js'
-import { getUserData, isOnCooldown, getCooldownLeft } from '@core/events.js'
+import { getUserData, isOnCooldown, getCooldownLeft, isOnCooldownDaily, getDailyCooldownLeft } from '@core/events.js'
 import { safeSend } from '@lib/media_sender.js'
 
-// Duraciones de cada comando (deben coincidir con los archivos originales)
-const CDS = [
-  { label: 'Work',    key: 'lastWork'  as const, ms: 10 * 60_000       },
-  { label: 'Slut',    key: 'lastHunt'  as const, ms: 60 * 60_000       },
-  { label: 'Crime',   key: 'lastCrime' as const, ms: 60 * 60_000       },
-  { label: 'Daily',   key: 'lastClaim' as const, ms: 24 * 60 * 60_000  },
+// Duraciones de cada comando (deben coincidir con los archivos originales).
+// ms: null → cooldown "diario" (se reinicia a medianoche UTC, no ms fijos —
+// ver daily.ts/chest.ts e isOnCooldownDaily en events/index.ts).
+const CDS: Array<{ label: string; key: Parameters<typeof isOnCooldown>[1]; ms: number | null }> = [
+  { label: 'Work',    key: 'lastWork'   as const, ms: 10 * 60_000       },
+  { label: 'Slut',    key: 'lastHunt'   as const, ms: 60 * 60_000       },
+  { label: 'Crime',   key: 'lastCrime'  as const, ms: 60 * 60_000       },
+  { label: 'Daily',   key: 'lastClaim'  as const, ms: null              },
   { label: 'Weekly',  key: 'lastWeekly' as const, ms: 7 * 24 * 60 * 60_000 },
-  { label: 'Rob',     key: 'lastRob'   as const, ms: 2  * 60 * 60_000  },
-  { label: 'Cofre',   key: 'lastCofre' as const, ms: 4  * 60 * 60_000  },
+  { label: 'Rob',     key: 'lastRob'    as const, ms: 2  * 60 * 60_000  },
+  { label: 'Cofre',   key: 'lastCofre'  as const, ms: null              },
 ]
 
 function fmtLeft(ms: number): string {
@@ -40,7 +42,9 @@ const command: Command = {
     const total = user.money + user.bank
 
     const rows = CDS.map(({ label, key, ms }) => {
-      const left = isOnCooldown(sender, key, ms) ? getCooldownLeft(sender, key, ms) : 0
+      const left = ms === null
+        ? (isOnCooldownDaily(sender, key) ? getDailyCooldownLeft() : 0)
+        : (isOnCooldown(sender, key, ms) ? getCooldownLeft(sender, key, ms) : 0)
       return `✘ *${label}* » ${fmtLeft(left)}`
     })
 

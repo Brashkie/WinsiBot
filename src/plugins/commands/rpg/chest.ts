@@ -1,13 +1,11 @@
 import type { Command } from '../../../types/index.js'
 import {
   getUserData, patchUserData,
-  isOnCooldown, setCooldown, getCooldownLeft, fmtCooldown,
+  isOnCooldownDaily, setCooldown, getDailyCooldownLeft, fmtCooldown,
   checkLevelUp, levelUpLine,
 } from '@core/events.js'
 import { safeSend } from '@lib/media_sender.js'
 import { randomNumber as rand, randomChoice as pick } from '@lib/utils.js'
-
-const CD = 24 * 60 * 60_000
 
 const OPENERS: Array<(g: number, xp: number, d: number) => string> = [
   (g, xp, d) => `Un mercader misterioso dejó un cofre frente a tu puerta. Al abrirlo encontraste *¥${g}*, *${xp} XP* y *${d} 💎*.`,
@@ -26,16 +24,16 @@ const PREM_OPENERS: Array<(g: number, xp: number, d: number) => string> = [
 const command: Command = {
   name:     'chest',
   aliases:  ['cofre', 'coffer', 'caja', 'tesoro'],
-  description: 'Abre el cofre diario — disponible cada 24 horas',
+  description: 'Abre el cofre diario — una vez por día, se reinicia a medianoche',
   category: 'rpg',
   level:    5,
   cooldown: 0,
 
   async execute({ sock, jid, msg, sender, pushName }) {
-    if (isOnCooldown(sender, 'lastCofre', CD)) {
-      const left = getCooldownLeft(sender, 'lastCofre', CD)
+    if (isOnCooldownDaily(sender, 'lastCofre')) {
+      const left = getDailyCooldownLeft()
       await safeSend(() => sock.sendMessage(jid, {
-        text: `> 🔒 El cofre está cerrado. Ábrelo de nuevo en *${fmtCooldown(left)}*.`,
+        text: `> 🔒 El cofre está cerrado. Se reinicia en *${fmtCooldown(left)}* (medianoche).`,
       }, { quoted: msg }))
       return
     }
@@ -66,7 +64,7 @@ const command: Command = {
         sp > 0 ? `> +${sp} ✨` : '',
         lvlLine,
         ``,
-        `_Próximo cofre en 24h_`,
+        `_El cofre se reinicia a medianoche_`,
       ].filter(Boolean).join('\n'),
     }, { quoted: msg }))
   },

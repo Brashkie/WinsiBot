@@ -10,11 +10,21 @@
 //! hasta un tope, en vez de repetir siempre el mismo ciclo corto para un
 //! grupo crónicamente problemático.
 //!
-//! Cada clear se persiste en DuckDB (bad_mac_events, mismo archivo que usa
-//! conversations.rs) y en el audit_log de SQLite (mismo patrón que usa el
-//! watchdog en tasks.rs) — así el historial sobrevive un reinicio de Rust,
-//! y al arrancar (main.rs) se hidrata lifetime_clears desde ese historial
-//! para no perder la escalada de cooldown de un grupo problemático.
+//! Además del contador por grupo, hay un contador GLOBAL independiente
+//! (GLOBAL_BAD_MAC_THRESHOLD eventos en GLOBAL_BAD_MAC_WINDOW_SECS, sin
+//! importar de qué grupo vinieron). Visto en producción: una sesión Signal
+//! corrupta a nivel de cuenta puede manifestarse como Bad MAC repartidos
+//! entre muchos grupos distintos — 2-3 por grupo, nunca cruzando el umbral
+//! de ningún grupo individual — y el bot se queda sordo (nada se descifra
+//! en ningún lado) sin que la limpieza automática por grupo se dispare nunca.
+//! El contador global existe exactamente para ese escenario.
+//!
+//! Cada clear (por grupo o global) se persiste en DuckDB (bad_mac_events,
+//! mismo archivo que usa conversations.rs) y en el audit_log de SQLite
+//! (mismo patrón que usa el watchdog en tasks.rs) — así el historial
+//! sobrevive un reinicio de Rust, y al arrancar (main.rs) se hidrata
+//! lifetime_clears desde ese historial para no perder la escalada de
+//! cooldown de un grupo (o del global) problemático.
 
 use axum::{extract::State, http::StatusCode, response::Json};
 use chrono::Utc;
@@ -31,14 +41,26 @@ use crate::{alerts, db, routes::AppState};
 // ── Configuración ─────────────────────────────────────────────────────────────
 const BAD_MAC_THRESHOLD:    u32 = 5;   // eventos por grupo antes de shouldClear
 const BAD_MAC_WINDOW_SECS:  u64 = 30;  // ventana deslizante (segundos)
-const COOLDOWN_BASE_SECS:   u64 = 10;  // cooldown tras el primer clear
+const COOLDOWN_BASE_SECS:   u64 = 10;  // cooldown tras el primer clear (por grupo)
 const COOLDOWN_MAX_SECS:    u64 = 600; // tope — 10 min
 
-/// Cooldown escalonado según cuántas veces ya reincidió el grupo: 10s → 30s
-/// → 90s → 270s → ... capado en COOLDOWN_MAX_SECS.
-fn cooldown_for(lifetime_clears: u32) -> u64 {
-    let exp = lifetime_clears.min(6); // 3^6 * 10 ya excede el tope, no hace falta más
-    COOLDOWN_BASE_SECS.saturating_mul(3u64.saturating_pow(exp)).min(COOLDOWN_MAX_SECS)
+// Umbral global — ver comentario del módulo. Ventana más ancha y umbral más
+// alto que el de un grupo individual porque agrega eventos de TODOS los
+// grupos; el cooldown parte más alto porque un clear global es más
+// disruptivo (reconecta el socket completo, no solo afecta a un grupo).
+const GLOBAL_BAD_MAC_THRESHOLD:   u32 = 8;
+const GLOBAL_BAD_MAC_WINDOW_SECS: u64 = 60;
+const GLOBAL_COOLDOWN_BASE_SECS:  u64 = 30;
+
+// Sentinel usado para persistir/hidratar el estado global en la misma tabla
+// bad_mac_events (que está indexada por jid) sin necesitar una tabla aparte.
+const GLOBAL_MARKER: &str = "*global*";
+
+/// Cooldown escalonado según cuántas veces ya reincidió (grupo o global):
+/// base → base×3 → base×9 → ... capado en COOLDOWN_MAX_SECS.
+fn cooldown_for(lifetime_clears: u32, base_secs: u64) -> u64 {
+    let exp = lifetime_clears.min(6); // 3^6 * base ya excede el tope, no hace falta más
+    base_secs.saturating_mul(3u64.saturating_pow(exp)).min(COOLDOWN_MAX_SECS)
 }
 
 // ── Estado por grupo ──────────────────────────────────────────────────────────
@@ -61,16 +83,22 @@ impl GroupState {
     }
 }
 
+// ── Estado global ──────────────────────────────────────────────────────────────
+// Misma forma que GroupState — un solo contador compartido entre todos los grupos.
+type GlobalState = GroupState;
+
 // ── Tracker compartido ────────────────────────────────────────────────────────
 #[derive(Clone)]
 pub struct BadMacTracker {
-    inner: Arc<Mutex<HashMap<String, GroupState>>>,
+    inner:  Arc<Mutex<HashMap<String, GroupState>>>,
+    global: Arc<Mutex<GlobalState>>,
 }
 
 impl BadMacTracker {
     pub fn new() -> Self {
         Self {
-            inner: Arc::new(Mutex::new(HashMap::new())),
+            inner:  Arc::new(Mutex::new(HashMap::new())),
+            global: Arc::new(Mutex::new(GlobalState::new())),
         }
     }
 
@@ -82,7 +110,7 @@ impl BadMacTracker {
 
         // Si el último clear fue hace menos que el cooldown (escalonado), suprimir
         if let Some(cleared) = entry.cleared_at {
-            let cooldown = cooldown_for(entry.lifetime_clears);
+            let cooldown = cooldown_for(entry.lifetime_clears, COOLDOWN_BASE_SECS);
             if now.duration_since(cleared) < Duration::from_secs(cooldown) {
                 return (entry.count, false, entry.lifetime_clears);
             }
@@ -105,7 +133,7 @@ impl BadMacTracker {
                 count           = count,
                 threshold       = BAD_MAC_THRESHOLD,
                 lifetime_clears = entry.lifetime_clears,
-                cooldown_s      = cooldown_for(entry.lifetime_clears),
+                cooldown_s      = cooldown_for(entry.lifetime_clears, COOLDOWN_BASE_SECS),
                 "Bad MAC threshold — señalando clear para este grupo"
             );
             entry.count      = 0;
@@ -115,16 +143,61 @@ impl BadMacTracker {
         (count, should_clear, entry.lifetime_clears)
     }
 
+    /// Registra un Bad MAC en el contador GLOBAL (agregado de todos los
+    /// grupos). Se llama junto con `report()` en cada evento — ver comentario
+    /// del módulo. Devuelve (count, should_clear, lifetime_clears).
+    pub fn report_global(&self) -> (u32, bool, u32) {
+        let mut global = self.global.lock().unwrap();
+        let now        = Instant::now();
+
+        if let Some(cleared) = global.cleared_at {
+            let cooldown = cooldown_for(global.lifetime_clears, GLOBAL_COOLDOWN_BASE_SECS);
+            if now.duration_since(cleared) < Duration::from_secs(cooldown) {
+                return (global.count, false, global.lifetime_clears);
+            }
+        }
+
+        if now.duration_since(global.window_start) > Duration::from_secs(GLOBAL_BAD_MAC_WINDOW_SECS) {
+            global.count        = 0;
+            global.window_start = now;
+        }
+
+        global.count += 1;
+        let count = global.count;
+
+        let should_clear = count >= GLOBAL_BAD_MAC_THRESHOLD;
+        if should_clear {
+            global.lifetime_clears += 1;
+            tracing::warn!(
+                count           = count,
+                threshold       = GLOBAL_BAD_MAC_THRESHOLD,
+                lifetime_clears = global.lifetime_clears,
+                cooldown_s      = cooldown_for(global.lifetime_clears, GLOBAL_COOLDOWN_BASE_SECS),
+                "Bad MAC GLOBAL threshold — sesión corrupta repartida entre grupos, señalando clear"
+            );
+            global.count      = 0;
+            global.cleared_at = Some(now);
+        }
+
+        (count, should_clear, global.lifetime_clears)
+    }
+
     /// Resetea manualmente el contador de un grupo (p. ej. tras clear manual).
     pub fn reset(&self, jid: &str) {
         let mut map = self.inner.lock().unwrap();
         map.remove(jid);
     }
 
-    /// Hidrata lifetime_clears de un grupo al arrancar, desde el historial
-    /// persistido en DuckDB — así un reinicio de Rust no resetea la escalada
-    /// de cooldown de un grupo problemático (ver main.rs).
+    /// Hidrata lifetime_clears de un grupo (o del global, vía GLOBAL_MARKER)
+    /// al arrancar, desde el historial persistido en DuckDB — así un reinicio
+    /// de Rust no resetea la escalada de cooldown de un grupo (o del global)
+    /// problemático (ver main.rs).
     pub fn seed(&self, jid: &str, lifetime_clears: u32) {
+        if jid == GLOBAL_MARKER {
+            let mut global = self.global.lock().unwrap();
+            global.lifetime_clears = lifetime_clears;
+            return;
+        }
         let mut map = self.inner.lock().unwrap();
         let entry = map.entry(jid.to_string()).or_insert_with(GroupState::new);
         entry.lifetime_clears = lifetime_clears;
@@ -140,10 +213,20 @@ impl BadMacTracker {
                     "jid":              jid,
                     "count":            v.count,
                     "lifetimeClears":   v.lifetime_clears,
-                    "currentCooldownS": cooldown_for(v.lifetime_clears),
+                    "currentCooldownS": cooldown_for(v.lifetime_clears, COOLDOWN_BASE_SECS),
                 })
             })
             .collect()
+    }
+
+    /// Devuelve el estado actual del contador global.
+    pub fn global_stats(&self) -> serde_json::Value {
+        let global = self.global.lock().unwrap();
+        serde_json::json!({
+            "count":            global.count,
+            "lifetimeClears":   global.lifetime_clears,
+            "currentCooldownS": cooldown_for(global.lifetime_clears, GLOBAL_COOLDOWN_BASE_SECS),
+        })
     }
 }
 
@@ -234,10 +317,13 @@ pub async fn report_bad_mac(
         );
     }
 
-    let (count, should_clear, lifetime_clears) = state.bad_mac.report(&body.jid);
+    let (count, should_clear_group, lifetime_clears) = state.bad_mac.report(&body.jid);
+    // El chequeo global corre SIEMPRE, sin importar el resultado del check
+    // por grupo de arriba — ver comentario del módulo.
+    let (global_count, should_clear_global, global_lifetime_clears) = state.bad_mac.report_global();
 
-    if should_clear {
-        let cooldown = cooldown_for(lifetime_clears);
+    if should_clear_group {
+        let cooldown = cooldown_for(lifetime_clears, COOLDOWN_BASE_SECS);
 
         alerts::fire(
             &state,
@@ -267,16 +353,51 @@ pub async fn report_bad_mac(
         });
     }
 
+    if should_clear_global {
+        let cooldown = cooldown_for(global_lifetime_clears, GLOBAL_COOLDOWN_BASE_SECS);
+
+        alerts::fire(
+            &state,
+            &format!(
+                "🔴 WinsiBot: Bad MAC GLOBAL threshold ({global_count} eventos repartidos entre grupos, reincidencia #{global_lifetime_clears}) — limpiando sesiones Signal (cooldown {cooldown}s)"
+            ),
+        ).await;
+
+        let db_path = state.conv_db_path.clone();
+        tokio::task::spawn_blocking(move || {
+            if let Err(e) = record_clear(&db_path, GLOBAL_MARKER, global_count, global_lifetime_clears, cooldown) {
+                tracing::warn!(error = %e, "bad_mac: fallo al persistir evento global en DuckDB");
+            }
+        });
+
+        let audit_db = state.db.clone();
+        let detail = serde_json::json!({
+            "scope": "global", "count": global_count,
+            "lifetimeClears": global_lifetime_clears, "cooldownSecs": cooldown,
+        }).to_string();
+        tokio::task::spawn_blocking(move || {
+            let _ = db::audit_log(&audit_db, "bad_mac", "clear_global", Some(&detail));
+        });
+    }
+
+    let should_clear = should_clear_group || should_clear_global;
+
     (
         StatusCode::OK,
         Json(serde_json::json!({
-            "ok":             true,
-            "jid":            body.jid,
-            "count":          count,
-            "threshold":      BAD_MAC_THRESHOLD,
-            "shouldClear":    should_clear,
-            "lifetimeClears": lifetime_clears,
-            "ts":             Utc::now(),
+            "ok":              true,
+            "jid":             body.jid,
+            "count":           count,
+            "threshold":       BAD_MAC_THRESHOLD,
+            "shouldClear":     should_clear,
+            // "group" salvo que el que disparó haya sido específicamente el
+            // umbral global — así TS sabe si limpiar "este grupo" o toda la
+            // sesión, y loguear el motivo real en vez de uno genérico.
+            "scope":           if should_clear_global { "global" } else { "group" },
+            "lifetimeClears":  lifetime_clears,
+            "globalCount":     global_count,
+            "globalThreshold": GLOBAL_BAD_MAC_THRESHOLD,
+            "ts":              Utc::now(),
         })),
     )
 }
@@ -296,11 +417,14 @@ pub async fn bad_mac_stats(
 ) -> Json<serde_json::Value> {
     let groups = state.bad_mac.stats();
     Json(serde_json::json!({
-        "ok":        true,
-        "threshold": BAD_MAC_THRESHOLD,
-        "window_s":  BAD_MAC_WINDOW_SECS,
-        "groups":    groups,
-        "ts":        Utc::now(),
+        "ok":              true,
+        "threshold":       BAD_MAC_THRESHOLD,
+        "window_s":        BAD_MAC_WINDOW_SECS,
+        "groups":          groups,
+        "global":          state.bad_mac.global_stats(),
+        "globalThreshold": GLOBAL_BAD_MAC_THRESHOLD,
+        "globalWindowS":   GLOBAL_BAD_MAC_WINDOW_SECS,
+        "ts":              Utc::now(),
     }))
 }
 

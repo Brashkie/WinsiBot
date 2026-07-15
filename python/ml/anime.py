@@ -2,6 +2,56 @@ import base64
 import io
 from PIL import Image
 
+# ─── Convertir foto a estilo anime (AnimeGANv2) ───────────────────────────────
+# Distinto de anime4k_upscale() — eso solo mejora resolución, esto sí cambia el
+# estilo del dibujo. Modelo cacheado en memoria tras la primera carga (~1s con
+# los pesos ya descargados, evita recargarlo en cada pedido).
+_anime_model = None
+
+def _get_anime_model():
+    global _anime_model
+    if _anime_model is None:
+        import torch
+        _anime_model = torch.hub.load(
+            'bryandlee/animegan2-pytorch', 'generator',
+            pretrained='face_paint_512_v2', device='cpu', trust_repo=True,
+        )
+        _anime_model.eval()
+    return _anime_model
+
+def image_to_anime(image_b64: str) -> dict:
+    """Convierte una foto real a estilo anime (AnimeGANv2, CPU)."""
+    try:
+        import torch
+        import numpy as np
+
+        model      = _get_anime_model()
+        image_data = base64.b64decode(image_b64)
+        image      = Image.open(io.BytesIO(image_data)).convert('RGB')
+        orig_w, orig_h = image.size
+
+        with torch.no_grad():
+            arr = np.array(image).astype('float32') / 255.0
+            x   = torch.from_numpy(arr).permute(2, 0, 1).unsqueeze(0) * 2 - 1
+            out = model(x)[0]
+            out = (out * 0.5 + 0.5).clamp(0, 1)
+            out_arr = (out.permute(1, 2, 0).numpy() * 255).astype('uint8')
+            result  = Image.fromarray(out_arr)
+
+        out_buf = io.BytesIO()
+        result.save(out_buf, format='PNG')
+        out_b64 = base64.b64encode(out_buf.getvalue()).decode('utf-8')
+
+        return {
+            'success':  True,
+            'image':    out_b64,
+            'format':   'png',
+            'original': { 'w': orig_w, 'h': orig_h },
+        }
+
+    except Exception as e:
+        return { 'success': False, 'error': str(e) }
+
 # ─── Restaurar/mejorar imagen con NAFNet ──────────────────────────────────────
 def restore_image(image_b64: str, method: str = 'nafnet') -> dict:
     """
@@ -152,7 +202,6 @@ def anime4k_upscale(image_b64: str, scale: int = 2) -> dict:
     """
     try:
         import pyanime4k
-        import numpy as np
         from PIL import Image
         import tempfile
         import os
@@ -169,21 +218,25 @@ def anime4k_upscale(image_b64: str, scale: int = 2) -> dict:
         tmp_out_path = tmp_in_path.replace('.png', '_out.png')
 
         try:
-            # upscale con anime4k
-            pyanime4k.upscale(
-                input_path  = tmp_in_path,
-                output_path = tmp_out_path,
-                scale       = scale,
+            # upscale con anime4k — la API real es upscale_images() con listas
+            # de rutas (pyanime4k.upscale es un submódulo, no una función)
+            pyanime4k.upscale_images(
+                inputs         = [tmp_in_path],
+                outputs        = [tmp_out_path],
+                factor         = float(scale),
+                processor_type = 'cpu',   # sin GPU dedicada disponible
             )
 
-            # leer resultado
-            result = Image.open(tmp_out_path)
-            out_buf = io.BytesIO()
-            result.save(out_buf, format='PNG')
-            out_b64 = base64.b64encode(out_buf.getvalue()).decode('utf-8')
+            # leer resultado — cerrar el archivo explícitamente antes del
+            # finally, si no Windows lo sigue bloqueando y el unlink falla
+            with Image.open(tmp_out_path) as result:
+                result.load()
+                result_w, result_h = result.size
+                out_buf = io.BytesIO()
+                result.save(out_buf, format='PNG')
 
-            orig_w, orig_h   = image.size
-            result_w, result_h = result.size
+            out_b64        = base64.b64encode(out_buf.getvalue()).decode('utf-8')
+            orig_w, orig_h = image.size
 
             return {
                 'success':     True,

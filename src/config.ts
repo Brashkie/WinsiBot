@@ -17,6 +17,7 @@ const envSchema = z.object({
   REDIS_URL:             z.string().default('redis://localhost:6379'),
   RULE34_API_KEY:        z.string().optional(),
   RULE34_USER_ID:        z.string().optional(),
+  XBL_API_KEY:           z.string().optional(),
   NODE_ENV:              z.enum(['development', 'production']).default('development'),
   LOG_LEVEL:             z.string().default('info'),
 })
@@ -40,4 +41,5 @@ export const config = {
   ...(env.DATABASE_URL          && { databaseUrl:         env.DATABASE_URL }),
   ...(env.RULE34_API_KEY        && { rule34ApiKey:        env.RULE34_API_KEY }),
   ...(env.RULE34_USER_ID        && { rule34UserId:        env.RULE34_USER_ID }),
+  ...(env.XBL_API_KEY           && { xblApiKey:           env.XBL_API_KEY }),
 } satisfies BotConfig

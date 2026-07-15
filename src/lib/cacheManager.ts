@@ -117,8 +117,20 @@ export function createCache<T = unknown>(opts?: CacheOptions): Cache<T> {
 // ─── Registro global — para que un comando "limpiar caché" pueda barrer todo ─
 const registry = new Map<string, Cache<any>>()
 
-export function registerCache<T>(name: string, cache: Cache<T>): Cache<T> {
+// Cachés que NO deben barrerse en la limpieza periódica automática — solo con
+// clearCache/clearAllCaches manual. Hoy solo 'groupMeta': barrerlo fuerza que
+// Baileys vuelva a pedir metadatos de los 439 grupos de golpe, y mientras se
+// investiga si WhatsApp está limitando la cuenta por actividad sospechosa,
+// generar más llamadas de las necesarias no ayuda (ver groupCache.ts).
+const periodicClearExempt = new Set<string>()
+
+export function registerCache<T>(
+  name: string,
+  cache: Cache<T>,
+  opts: { periodicClear?: boolean } = {},
+): Cache<T> {
   registry.set(name, cache)
+  if (opts.periodicClear === false) periodicClearExempt.add(name)
   return cache
 }
 
@@ -128,10 +140,14 @@ export function getAllCacheStats(): Record<string, CacheStats> {
   return out
 }
 
-export function clearAllCaches(): string[] {
-  const names = [...registry.keys()]
-  for (const cache of registry.values()) cache.clear()
-  return names
+export function clearAllCaches(opts: { skipExempt?: boolean } = {}): string[] {
+  const cleared: string[] = []
+  for (const [name, cache] of registry) {
+    if (opts.skipExempt && periodicClearExempt.has(name)) continue
+    cache.clear()
+    cleared.push(name)
+  }
+  return cleared
 }
 
 export function clearCache(name: string): boolean {
@@ -140,3 +156,13 @@ export function clearCache(name: string): boolean {
   cache.clear()
   return true
 }
+
+// ─── Limpieza periódica completa ───────────────────────────────────────────
+// Cada caché individual ya tiene TTL por entrada + tope de tamaño (nunca
+// crece sin límite, aunque nadie la barra nunca) — esto es una limpieza
+// completa extra, además de eso, para no ir acumulando entradas frías entre
+// barridos de TTL. Excluye 'groupMeta' — ver comentario de periodicClearExempt.
+const PERIODIC_CLEAR_MS = 20 * 60_000
+setInterval(() => {
+  clearAllCaches({ skipExempt: true })
+}, PERIODIC_CLEAR_MS).unref()

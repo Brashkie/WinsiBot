@@ -47,14 +47,45 @@ async function loadUsers(): Promise<void> {
   }
 }
 
+// Migración única: `autolevelup` pasó de default true → false, pero los
+// grupos que ya tenían groups.json guardado de antes tienen el valor viejo
+// escrito explícito (saveGroups serializa el objeto completo, no un diff),
+// así que el nuevo default en código no les llega — hay que bajarlo una
+// sola vez acá. El marker evita que esto vuelva a pisar a un admin que
+// después lo prenda a propósito con !on levelup.
+const MIGRATIONS_PATH = `${DIR}/.migrations.json`
+
+async function loadMigrations(): Promise<Record<string, boolean>> {
+  try {
+    return JSON.parse(await readFile(MIGRATIONS_PATH, 'utf-8'))
+  } catch {
+    return {}
+  }
+}
+
+async function saveMigrations(migrations: Record<string, boolean>): Promise<void> {
+  await atomicWrite(MIGRATIONS_PATH, JSON.stringify(migrations))
+}
+
 async function loadGroups(): Promise<void> {
   const path = `${DIR}/groups.json`
   if (!existsSync(path)) return
   try {
     const raw: Record<string, any> = JSON.parse(await readFile(path, 'utf-8'))
+    const migrations = await loadMigrations()
+    const needsAutolevelupMigration = !migrations.autolevelupOffByDefault
+
     for (const [jid, cfg] of Object.entries(raw)) {
+      if (needsAutolevelupMigration) cfg.autolevelup = false
       groupConfigs.set(jid, { ...defaultGroupConfig(), ...cfg })
     }
+
+    if (needsAutolevelupMigration) {
+      migrations.autolevelupOffByDefault = true
+      await saveMigrations(migrations)
+      logger.info(`Persistence: migración aplicada — autolevelup desactivado en ${groupConfigs.size} grupos existentes`)
+    }
+
     logger.info(`Persistence: ${groupConfigs.size} grupos cargados`)
   } catch (err) {
     logger.error({ err }, 'Persistence: error cargando groups.json')

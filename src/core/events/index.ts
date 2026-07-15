@@ -309,7 +309,7 @@ export function defaultGroupConfig(): GroupConfig {
     autoresponder: false,
     sAutoresponder: '',
     audios:        true,
-    autolevelup:   true,
+    autolevelup:   false,
     autoAccept:    false,
     autoReject:    false,
     captcha:       false,
@@ -444,6 +444,32 @@ export function getCooldownLeft(jid: string, key: CooldownKey, ms: number): numb
 export function setCooldown(jid: string, key: CooldownKey): void {
   const u = getUserData(jid)
   u.cooldowns[key] = Date.now()
+}
+
+// ─── Cooldowns "diarios" (resetean a medianoche, no 24h rodantes) ─────────────
+// Para comandos tipo #daily/#chest: en vez de esperar 24h exactas desde el
+// último uso, quedan disponibles de nuevo al llegar la medianoche — así todos
+// los usuarios resetean al mismo momento del día, sin importar a qué hora
+// reclamaron. Usa el mismo timestamp de `cooldowns` (setCooldown de arriba),
+// solo cambia cómo se interpreta.
+//
+// El "día" se calcula en UTC (no hora local del servidor) a propósito: la
+// racha de #daily (LevelingManager.updateStreak, en leveling.ts) ya compara
+// fechas con `toISOString().slice(0,10)`, que es UTC. Si este cooldown usara
+// hora local y el servidor no corre en UTC, el gate del comando y el avance
+// de racha "verían" el cambio de día en momentos distintos — desincronizado.
+
+export function isOnCooldownDaily(jid: string, key: CooldownKey): boolean {
+  const last = getUserData(jid).cooldowns[key] ?? 0
+  if (!last) return false
+  return new Date(last).toISOString().slice(0, 10) === new Date().toISOString().slice(0, 10)
+}
+
+/** ms hasta la próxima medianoche UTC — mismo valor para cualquier usuario en el mismo instante. */
+export function getDailyCooldownLeft(): number {
+  const now             = new Date()
+  const nextUtcMidnight = Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate() + 1)
+  return Math.max(0, nextUtcMidnight - now.getTime())
 }
 
 /** Formatea ms en '2h 30m 15s' */

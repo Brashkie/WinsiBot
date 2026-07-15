@@ -1,6 +1,6 @@
 import type { Command } from '../../../types/index.js'
 import { safeSend } from '@lib/media_sender.js'
-import { subBots } from './serbot.js'
+import { subBots, stopSubBot } from './serbot.js'
 import path from 'path'
 import fs from 'fs'
 
@@ -26,8 +26,7 @@ const command: Command = {
       .replace('@lid', '')
       .replace(/[^0-9]/g, '')
 
-    const bot = subBots.get(phone)
-    if (!bot) {
+    if (!subBots.has(phone)) {
       await safeSend(() => sock.sendMessage(jid, {
         text: [
           `§ No estás registrado como sub-bot`,
@@ -38,20 +37,11 @@ const command: Command = {
       return
     }
 
-    // ─── Desconectar limpiamente ───────────────────────────────────────────
-    try {
-      bot.sock?.ev?.removeAllListeners()
-    } catch {}
-
-    try {
-      // logout() cierra la sesión en WhatsApp; si falla, cerramos el WS directamente
-      await bot.sock?.logout()
-    } catch {
-      try { bot.sock?.ws?.close() } catch {}
-      try { bot.sock?.end(undefined, true) } catch {}
-    }
-
-    subBots.delete(phone)
+    // stopSubBot centraliza toda la limpieza (heartbeat, listeners, logout,
+    // desregistro en Rust) — antes este comando la reimplementaba a mano y
+    // se saltaba pasos, dejando el heartbeat corriendo y la cuota de Rust
+    // sin liberar para ese usuario.
+    await stopSubBot(phone)
 
     // borrar sesión del disco
     const subPath = path.join(SUB_DIR, phone)

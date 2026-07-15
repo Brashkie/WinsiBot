@@ -4,15 +4,31 @@ import { spawn, type ChildProcess } from 'child_process'
 import { join } from 'path'
 import { existsSync, readFileSync } from 'fs'
 import { createConnection } from 'net'
+import ffmpegStatic from 'ffmpeg-static'
 import { WinsiSocket } from '@core/socket.js'
 import { handleMessage, getActiveHandlerCount } from '@core/handler.js'
 import { loadCommands } from '@plugins/commands/index.js'
 import { logger } from '@core/logger.js'
 import { config } from '@config'
 import { loadAll, saveAll, startAutoSave } from '@core/persistence.js'
-import { color, gradient, loader, ascii, themes, configure, components, BG } from 'ansimax'
+import { color, gradient, loader, ascii, themes, configure, components, BG, animate } from 'ansimax'
 
-themes.use('dracula')
+// ffmpeg-static ya era una dependencia del proyecto, pero nada la usaba —
+// fluent-ffmpeg (usado por wa-sticker-formatter para stickers animados desde
+// video/GIF) buscaba "ffmpeg" en el PATH del sistema y fallaba si no estaba
+// instalado ahí. FFMPEG_PATH es la variable que fluent-ffmpeg respeta antes
+// de intentar el PATH — apuntarla acá, bien al inicio, resuelve el problema
+// para cualquier código que use fluent-ffmpeg en el proceso, sin necesidad
+// de tener ffmpeg instalado en la máquina.
+if (ffmpegStatic && existsSync(ffmpegStatic)) {
+  process.env.FFMPEG_PATH = ffmpegStatic
+}
+
+// Tema global — 'matrix' (verde/negro) en vez de 'dracula': recolorea TODO
+// lo que usa themes.success/warning/error/style en toda la consola (no solo
+// el banner de arranque), así el look "hacker" queda consistente durante
+// toda la sesión, no solo al prender el bot.
+themes.use('matrix')
 configure({ animationSpeed: 'fast', reducedMotion: false })
 
 // ─── Silenciar logs internos de libsignal (dependencia de Baileys) ──────────
@@ -77,6 +93,13 @@ process.on('uncaughtException', (err) => {
     // sub-bot reconnect failures — isolated per bot, never fatal
     'reconexión falló', 'startSubBot error', 'restore falló',
     'requestPairingCode', 'Cannot read properties of null',
+    // fluent-ffmpeg (vía wa-sticker-formatter) emite 'error' en un
+    // ChildProcess/Stream interno sin listener cuando falla — eso lo hace
+    // un throw genuinamente no capturable con try/catch normal desde el
+    // comando que lo llamó. Con FFMPEG_PATH ya seteado (ver arriba) esto no
+    // debería pasar más, pero si el binario bundleado llega a fallar en
+    // algún entorno, que se pierda solo ese comando, no todo el bot.
+    'Cannot find ffmpeg', 'Cannot find ffprobe',
   ]
   if (NON_FATAL.some(e => msg.includes(e))) {
     logger.warn({ msg }, 'Error de red ignorado (no fatal)')
@@ -397,36 +420,53 @@ function platformLabel(): string {
        : process.platform
 }
 
+// Verde matrix — mismos tonos que el tema 'matrix' de ansimax, para que el
+// banner y el resto de la consola (themes.success/warning/etc, ya recoloreados
+// arriba) se vean como una sola paleta consistente, no dos estilos pegados.
+const MATRIX_GREEN  = '#00ff41'
+const MATRIX_GREENS = [MATRIX_GREEN, '#008f11', MATRIX_GREEN]
+
 async function printBanner() {
   console.clear()
+  console.log()
+
+  // Intro tipo "terminal descifrando texto" antes del logo — símbolos random
+  // que se van resolviendo en el texto real. Charset a propósito solo ASCII
+  // (sin katakana/unicode raro) porque la codepage de la consola de Windows
+  // ya mostraba mojibake con acentos normales — no hay que darle más leña.
+  await animate.reveal('DESCIFRANDO SESION...', {
+    charset: '01#$%&*<>[]{}/\\?!',
+    duration: 550,
+  }).catch(() => {})
   console.log()
 
   // Título con gradiente — ASCII art si está disponible, fallback a texto
   let title: string
   try {
-    title = ascii.banner('WinsiBot', {
-      font:    'small',
-      colorFn: (t: string) => gradient(t, ['#8be9fd', '#ff79c6', '#bd93f9']),
+    title = ascii.banner('WINSIBOT', {
+      font:         'big',
+      colorFn:      (t: string) => gradient(t, MATRIX_GREENS),
+      perCharColor: true,
     })
   } catch {
-    title = `  ${gradient('WinsiBot v8.0.0', ['#8be9fd', '#ff79c6', '#bd93f9'])}`
+    title = `  ${gradient('WinsiBot v' + getBotVersion(), MATRIX_GREENS)}`
   }
   console.log(title)
-  console.log(`  ${color.dim('by Hepein Oficial')}`)
+  console.log(`  ${color.dim('by Hepein Oficial')}  ${color.dim('·')}  ${themes.success('sistema en línea')}`)
   console.log()
 
   const badges = [
-    components.badge('version',  getBotVersion(),  { labelBg: BG.blue,  valueBg: BG.magenta }),
-    components.badge('node',     process.version,  { labelBg: BG.black, valueBg: BG.green }),
-    components.badge('platform', platformLabel(),  { labelBg: BG.blue,  valueBg: BG.cyan }),
-    components.badge('github',   'Brashkie',        { labelBg: BG.black, valueBg: BG.blue }),
+    components.badge('version',  getBotVersion(),  { labelBg: BG.black, valueBg: BG.green }),
+    components.badge('node',     process.version,  { labelBg: BG.black, valueBg: BG.brightGreen }),
+    components.badge('platform', platformLabel(),  { labelBg: BG.black, valueBg: BG.green }),
+    components.badge('github',   'Brashkie',        { labelBg: BG.black, valueBg: BG.brightGreen }),
   ].join(' ')
   console.log(`  ${badges}`)
   console.log()
-  console.log(`  ${ascii.divider({ width: 30 })}`)
+  console.log(`  ${ascii.divider({ width: 40 })}`)
   console.log()
 
-  await loader.progressAnimate(6, 'Iniciando sistema...', { delay: 280 })
+  await loader.progressAnimate(6, 'Iniciando sistema...', { delay: 280, color: MATRIX_GREEN })
   console.log()
 }
 

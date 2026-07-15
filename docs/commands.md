@@ -1,12 +1,12 @@
 <div align="center">
 
-# 📖 Referencia de Comandos — WinsiBot v8.3.0
+# 📖 Referencia de Comandos — WinsiBot v8.4.2
 
-[![Comandos](https://img.shields.io/badge/Comandos-125%2B-6C63FF?style=for-the-badge)](.)
+[![Comandos](https://img.shields.io/badge/Comandos-150%2B-6C63FF?style=for-the-badge)](.)
 [![Categorías](https://img.shields.io/badge/Categorías-19-00C9FF?style=for-the-badge)](.)
-[![Versión](https://img.shields.io/badge/Versión-8.3.0-brightgreen?style=flat-square)](../README.md)
+[![Versión](https://img.shields.io/badge/Versión-8.4.2-brightgreen?style=flat-square)](../README.md)
 
-[🇬🇧 English version →](commands.en.md) &nbsp;·&nbsp; [← Volver al README](../README.md)
+[🇬🇧 English version →](commands.en.md) &nbsp;·&nbsp; [💰 Guía de economía →](economy.md) &nbsp;·&nbsp; [← Volver al README](../README.md)
 
 </div>
 
@@ -66,8 +66,6 @@
 | `ping` | `p` | 3s | 👤 | Verifica que el bot esté activo, muestra latencia |
 | `menu` | `help`, `ayuda` | — | 👤 | Lista todas las categorías de comandos |
 | `categoria` | `cat`, `category` | — | 👤 | Muestra los comandos de una categoría específica |
-| `registro` | `reg`, `register`, `registrar`, `verify` | 5s | 👤 | Regístrate en el bot para acceder al RPG |
-| `unreg` | `unregister`, `desregistrar` | 5s | 👤 | Cancela tu registro (requiere número de serie) |
 | `afk` | `ausente` | 10s | 👤 | Activa modo AFK con una razón personalizada |
 | `creator` | `info`, `about`, `botinfo`, `creador` | — | 👤 | Información del bot y su creador |
 
@@ -75,7 +73,6 @@
 !ping
 !menu
 !categoria rpg
-!registro
 !afk estudiando para el examen
 ```
 
@@ -110,13 +107,13 @@
 | `xp` | `exp`, `experiencia`, `stats`, `nivel` | 5s | 👤 | Estadísticas RPG detalladas |
 | `rangos` | `roles`, `rango`, `rol`, `ranks` | 10s | 👤 | Tabla de rangos del servidor |
 | `work` | `trabajar`, `trabajo`, `w` | 10min | 👤 | Trabaja para ganar BrasCoins (cada 10 min) |
-| `daily` | `claim`, `reclamar`, `regalo` | 24h | 👤 | Recompensa diaria — sube con tu racha de días consecutivos (bono ×1.00–×1.20+, combina racha, fin de semana, premium y prestigio) |
+| `daily` | `claim`, `reclamar`, `regalo` | diario (medianoche) | 👤 | Recompensa diaria — sube con tu racha de días consecutivos (bono ×1.00–×1.20+, combina racha, fin de semana, premium y prestigio) |
 | `weekly` | `semana`, `semanal`, `cadasemana` | 3d | 👤 | Recompensa semanal (cada 3 días) |
 | `monthly` | `mes`, `mensual`, `cadames` | 5d | 👤 | Recompensa mensual (cada 5 días) |
 | `minar` | `mine`, `minarxp`, `mining` | 10min | 👤 | Mina recursos para ganar XP y materiales |
-| `cofre` | `coffer`, `abrircofre`, `caja` | 24h | 👤 | Abre el cofre diario con recompensas aleatorias |
+| `cofre` | `coffer`, `abrircofre`, `caja` | diario (medianoche) | 👤 | Abre el cofre diario con recompensas aleatorias |
 | `crime` | `crimen`, `delito` | 1h | 👤 | Comete un crimen — gana o pierde monedas |
-| `rob` | `robar` | variable | 👤 | Roba BrasCoins a otro usuario (`@mención`) |
+| `rob` | `robar` | 2h | 👤 | Roba BrasCoins a otro usuario (`@mención`) |
 | `transfer` | `transferir`, `dar`, `enviar` | 5s | 👤 | Transfiere BrasCoins o XP a otro usuario |
 | `bal` | `balance`, `billetera`, `wallet`, `dinero`, `coins` | 3s | 👤 | Ver tu balance (billetera + banco), con ícono de BrasCoins |
 | `baltop` | `balancetop`, `richtop`, `richlist`, `topbal`, `tbal` | 10s | 👤 | Top de usuarios con más CodPoints |
@@ -258,6 +255,7 @@
 | `sus` | `impostor`, `among` | 5s | 👤 | Acusa a alguien de ser el impostor |
 | `insultar` | `insult`, `abuse`, `ofender` | 5s | 👤 | Insulta a alguien creativamente |
 | `banana` | `bana`, `pito`, `pp`, `miembro` | 5s | 👤 | Mide el pito con probabilidades reales xd |
+| `melones` | `pechos`, `boobs`, `copa` | 5s | 👤 | Mide los melones con probabilidades reales xd |
 | `sega` | `fap`, `paja`, `chaquetita`, `ganzo` | 10s | 👤 | Animación divertida |
 | `follar` | `coger` | 5s | 👤 | Comando +18 (requiere NSFW activado en el grupo) |
 
@@ -278,7 +276,8 @@
 | `sticker` | `s`, `stiker` | — | 👤 | Convierte imagen/video a sticker |
 | `stickerpack` | `packsticker`, `spack` | 30s | 👤 | Descarga un paquete de stickers desde getstickerpack.com |
 | `removebg` | `rmbg`, `sinfondo`, `nobg`, `quitarfondo` | 30s | 👤 | Elimina el fondo de una imagen |
-| `anime` | `anime4k`, `toanime` | 30s | 👤 | Mejora imagen con filtro anime (x2 o x4) |
+| `anime` | `anime4k` | 30s | 👤 | Mejora la resolución de una imagen (x2 o x4) — no cambia el estilo |
+| `toanime` | `animegan`, `cartoonize` | 30s | 👤 | Convierte una foto real a estilo anime de verdad (AnimeGANv2) |
 | `imagen` | `img`, `image`, `gimage`, `buscarimg` | 10s | 👤 | Busca imágenes en internet |
 
 ```
@@ -401,7 +400,7 @@
 | `nsfw` | Activa comandos +18 | 🔑 |
 | `muted` | Bot no responde en este grupo | 🔑 |
 | `hepein` | IA responde cuando la mencionan | 🔑 |
-| `autolevelup` | Anuncia en el chat cuando alguien sube de nivel (activado por defecto) | 🔑 |
+| `autolevelup` | Anuncia en el chat cuando alguien sube de nivel (desactivado por defecto) | 🔑 |
 | `anticall` | Rechaza llamadas automáticamente | 👑 |
 
 ```
@@ -438,10 +437,23 @@
 |---------|---------|:--------:|:-------:|-------------|
 | `creator` | `info`, `about`, `botinfo`, `creador` | — | 👤 | Información del bot y su creador |
 | `infobot` | `botstatus`, `enterprise` | — | 👤 | Tarjeta de identidad del bot — versión, comandos, uptime, características |
+| `roblox` | `rbx`, `robloxinfo` | 8s | 👤 | Busca un usuario de Roblox por nombre o ID |
+| `mcsearch` | `xblsearch`, `gamertag` | 8s | 👤 | Busca un perfil de Xbox Live por Gamertag *(requiere `XBL_API_KEY`)* |
+| `mcfriends` | `xblfriends` | 10s | 👤 | Amigos de Xbox Live de un jugador, en carrusel *(requiere `XBL_API_KEY`)* |
+| `mcachievement` | `mcachievements`, `xblachievement` | 10s | 👤 | Logros de Xbox Live de un jugador *(requiere `XBL_API_KEY`)* |
+| `mcuuid` | — | 5s | 👤 | UUID de un jugador de Minecraft Java |
+| `mcavatar` | — | 5s | 👤 | Avatar (cara+cuerpo) de un jugador de Minecraft Java |
+| `mchead` | — | 5s | 👤 | Cabeza 3D de un jugador de Minecraft Java |
+| `mcbody` | — | 5s | 👤 | Cuerpo 3D de un jugador de Minecraft Java |
+| `mcskin` | — | 5s | 👤 | Descarga la skin de un jugador de Minecraft Java |
 
 ```
 !creator
 !infobot
+!roblox builderman
+!mcsearch Notch
+!mcfriends Notch
+!mcavatar Notch
 ```
 
 ---

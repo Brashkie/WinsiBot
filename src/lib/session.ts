@@ -205,19 +205,25 @@ export class SessionClient {
 
   /**
    * Reporta un Bad MAC para un grupo específico.
-   * Devuelve shouldClear=true cuando ese grupo alcanzó el umbral (5 en 30s).
-   * Cada grupo tiene su propio contador — un grupo no afecta a los demás.
+   * Devuelve shouldClear=true cuando ese grupo alcanzó su umbral propio
+   * (5 en 30s) O cuando el contador GLOBAL de Rust (agregado de todos los
+   * grupos — 8 en 60s) se disparó, aunque este grupo en particular no haya
+   * llegado al suyo. `scope` distingue cuál de los dos fue.
    * Falla silenciosamente si Rust no está corriendo.
    */
-  async reportBadMac(jid: string): Promise<{ count: number; shouldClear: boolean }> {
+  async reportBadMac(jid: string): Promise<{ count: number; shouldClear: boolean; scope: 'group' | 'global' }> {
     try {
-      const res = await apiFetch<{ count: number; shouldClear: boolean }>('/badmac/report', {
+      const res = await apiFetch<{ count: number; shouldClear: boolean; scope?: string }>('/badmac/report', {
         method: 'POST',
         body:   JSON.stringify({ jid }),
       })
-      return { count: res.count, shouldClear: res.shouldClear }
+      return {
+        count:      res.count,
+        shouldClear: res.shouldClear,
+        scope:      res.scope === 'global' ? 'global' : 'group',
+      }
     } catch {
-      return { count: 0, shouldClear: false }
+      return { count: 0, shouldClear: false, scope: 'group' }
     }
   }
 

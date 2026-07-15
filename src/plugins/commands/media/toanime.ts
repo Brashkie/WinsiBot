@@ -22,59 +22,39 @@ async function getImageFromMsg(
 }
 
 const command: Command = {
-  name: 'anime',
-  aliases: ['anime4k'],
-  description: 'Mejora la resolución de una imagen con Anime4K (x2 o x4) — no cambia el estilo, usa #toanime para eso',
-  category: 'media',
-  cooldown: 30,
+  name:        'toanime',
+  aliases:     ['animegan', 'cartoonize'],
+  description: 'Convierte una foto real a estilo anime (AnimeGANv2)',
+  category:    'media',
+  cooldown:    30,
 
-  async execute({ sock, jid, msg, args }) {
-    const scale = args[0] === '4' ? 4 : 2
-
+  async execute({ sock, jid, msg }) {
     const imageBuffer = await getImageFromMsg(msg)
     if (!imageBuffer) {
       await sock.sendMessage(jid, {
         text: [
-          `✗ Responde a una imagen con #anime`,
+          `✗ Responde a una imagen con #toanime`,
           ``,
-          `  Uso: #anime [escala]`,
-          `  Ejemplo: #anime 2  o  #anime 4`,
+          `  Uso: responde a una foto real con #toanime`,
         ].join('\n'),
       }, { quoted: msg })
       return
     }
 
     const sent = await sock.sendMessage(jid, {
-      text: '◈ Iniciando Anime4K...',
+      text: '◈ Convirtiendo a estilo anime...',
     }, { quoted: msg })
     const key = sent?.key
 
-    const frames = [
-      `◈◈ Cargando modelo x${scale}...`,
-      '◈◈◈ Procesando imagen...',
-      '◈◈ Aplicando upscale...',
-      '◈ Finalizando...',
-    ]
-
     const imageB64 = imageBuffer.toString('base64')
 
-    const [result] = await Promise.all([
-      pythonPost<{
-        success:  boolean
-        image?:   string
-        error?:   string
-        scale?:   number
-        original?: { w: number; h: number }
-        result?:  { w: number; h: number }
-      }>('/api/v1/anime/upscale', { image: imageB64, scale })
-        .catch(() => null),
-      (async () => {
-        for (const frame of frames) {
-          await sleep(1_000)
-          await sock.sendMessage(jid, { text: frame, edit: key } as any)
-        }
-      })(),
-    ])
+    const result = await pythonPost<{
+      success:   boolean
+      image?:    string
+      error?:    string
+      original?: { w: number; h: number }
+    }>('/api/v1/anime/convert', { image: imageB64 }, 30_000)
+      .catch(() => null)
 
     if (!result?.data?.success || !result.data.image) {
       await sock.sendMessage(jid, {
@@ -85,21 +65,11 @@ const command: Command = {
     }
 
     await sock.sendMessage(jid, { text: '✔ Listo', edit: key } as any)
-    await sleep(200)
-
-    const orig = result.data.original
-    const res  = result.data.result
-
-    const caption = [
-      `◆ Anime4K x${scale}`,
-      orig && res
-        ? `§ ${orig.w}x${orig.h} → ${res.w}x${res.h}`
-        : '',
-    ].filter(Boolean).join('\n')
+    await sleep(150)
 
     await sock.sendMessage(jid, {
       image:   Buffer.from(result.data.image, 'base64'),
-      caption,
+      caption: `◆ Estilo Anime`,
     }, { quoted: msg })
   },
 }

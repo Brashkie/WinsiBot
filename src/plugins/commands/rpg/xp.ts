@@ -1,5 +1,6 @@
 import type { Command } from '../../../types/index.js'
 import { getUserData, expForLevel } from '@core/events.js'
+import { PetManager } from '@lib/petAdvanced.js'
 
 const bar = (cur: number, max: number, len = 8) => {
   const filled = Math.min(len, Math.floor((cur / max) * len))
@@ -18,8 +19,11 @@ const command: Command = {
     const target  = (msg.message?.extendedTextMessage?.contextInfo?.mentionedJid ?? [])[0] ?? sender
     const user    = getUserData(target, pushName)
     const need    = expForLevel(user.level)
-    const petLine = user.pet.type !== 'none'
-      ? `${user.pet.type} Nv.${user.pet.level}${user.pet.name ? ` "${user.pet.name}"` : ''}`
+    // user.pet (viejo sistema simple) nunca se llena — !pet adoptar solo escribe
+    // en user.petFull (sistema avanzado). Leer el campo viejo acá hacía que esta
+    // línea dijera "sin mascota" siempre, aunque el usuario sí tuviera una.
+    const petLine = user.petFull
+      ? `${PetManager.getSpecies(user.petFull.speciesId)?.emoji ?? '🐾'} Nv.${user.petFull.level} "${user.petFull.name}"`
       : 'sin mascota'
 
     await sock.sendMessage(jid, {

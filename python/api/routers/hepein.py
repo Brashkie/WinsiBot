@@ -40,6 +40,7 @@ class RespondRequest(BaseModel):
     sender_jid: str
     intent:     str            = 'neutral'
     mode:       Optional[str]  = None   # override de personalidad
+    model:      Optional[str]  = None   # modelo Ollama específico (según palabra disparadora) — sin cascada a GPT/Claude/Gemini
     use_gpt:    bool           = True   # usar GPT/Claude/Gemini
     use_humor:  bool           = False
 
@@ -163,22 +164,39 @@ SLANG_WORDS = frozenset({
     'jaja','jeje','jajaja','lol','xd','we','wey','bro','causa','men','uwu','owo',
 })
 
-async def _call_ai(prompt: str, system: str, use_gpt: bool = True) -> Optional[str]:
+async def _call_ai(prompt: str, system: str, use_gpt: bool = True, model: Optional[str] = None) -> Optional[str]:
     """
-    Orden de prioridad:
-      1. Ollama  — IA local, sin costo, sin internet
+    Si `model` viene informado (palabra disparadora en WhatsApp → modelo Ollama
+    específico, p. ej. "brashkie" → mistral), se prueba SOLO ese modelo local
+    y no se cae a GPT/Gemini/Claude — si falla, el caller cae a la plantilla
+    local de personality.py.
+
+    Sin `model`, orden de prioridad de siempre:
+      1. Ollama  — IA local, sin costo, sin internet (modelo default)
       2. GPT     — si hay OPENAI_API_KEY
       3. Gemini  — si hay GEMINI_API_KEY
       4. Claude  — si hay ANTHROPIC_API_KEY
     """
     import httpx
+    from ai.ollama_client import chat as ollama_chat, is_available
+
+    if model:
+        try:
+            if await is_available(model):
+                text = await ollama_chat(prompt, system, model=model)
+                if text:
+                    log.debug(f'Hepein → Ollama ({model})')
+                    return text
+        except Exception as e:
+            log.debug(f'Ollama ({model}) no disponible: {e}')
+        return None
+
     openai_key  = os.getenv('OPENAI_API_KEY')
     claude_key  = os.getenv('ANTHROPIC_API_KEY')
     gemini_key  = os.getenv('GEMINI_API_KEY')
 
     # ── Ollama (IA local — primera opción) ───────────────────────────────
     try:
-        from ai.ollama_client import chat as ollama_chat, is_available
         if await is_available():
             text = await ollama_chat(prompt, system)
             if text:
@@ -292,7 +310,7 @@ async def hepein_respond(req: RespondRequest):
 
         if req.use_gpt:
             system  = _build_system_prompt(group_style, user_profile, mode, prompt=req.prompt)
-            ai_text = await _call_ai(req.prompt, system)
+            ai_text = await _call_ai(req.prompt, system, model=req.model)
         else:
             ai_text = None
 

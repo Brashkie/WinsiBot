@@ -1,6 +1,6 @@
 <div align="center">
 
-<img src="https://capsule-render.vercel.app/api?type=waving&color=0:6C63FF,100:00C9FF&height=180&section=header&text=WinsiBot&fontSize=62&fontColor=ffffff&fontAlignY=38&desc=v8.4.1%20%E2%80%94%20Enterprise%20WhatsApp%20Bot&descAlignY=58&descSize=18" width="100%"/>
+<img src="https://capsule-render.vercel.app/api?type=waving&color=0:6C63FF,100:00C9FF&height=180&section=header&text=WinsiBot&fontSize=62&fontColor=ffffff&fontAlignY=38&desc=v8.4.2%20%E2%80%94%20Enterprise%20WhatsApp%20Bot&descAlignY=58&descSize=18" width="100%"/>
 
 <br/>
 
@@ -10,7 +10,7 @@
 [![Rust](https://img.shields.io/badge/Rust-1.75%2B-CE422B?style=for-the-badge&logo=rust&logoColor=white)](https://rust-lang.org)
 
 [![License](https://img.shields.io/badge/License-GPL--3.0-blue?style=flat-square)](LICENSE)
-[![Version](https://img.shields.io/badge/Version-8.4.1-6C63FF?style=flat-square)](CHANGELOG.md)
+[![Version](https://img.shields.io/badge/Version-8.4.2-6C63FF?style=flat-square)](CHANGELOG.md)
 [![Platform](https://img.shields.io/badge/Platform-Windows%20%7C%20Linux-lightgrey?style=flat-square)](https://github.com/Brashkie/WinsiBot)
 [![PRs Welcome](https://img.shields.io/badge/PRs-welcome-brightgreen?style=flat-square)](https://github.com/Brashkie/WinsiBot/pulls)
 
@@ -18,11 +18,11 @@
 
 > Bot de WhatsApp de alto rendimiento con arquitectura multi-lenguaje de tres capas.<br/>
 > Diseñado para **10,000+ grupos simultáneos**, miles de mensajes por hora y múltiples instancias.<br/>
-> v8.4.1 — Sistema de registro obligatorio eliminado, #profile rediseñado, cooldown de #daily corregido y 5 endpoints Python↔TS desconectados reparados (incluida la moderación por contenido, que estaba silenciosamente apagada).
+> v8.4.2 — Owner ya no falla para usuarios con @lid, ffmpeg ya no tumba el proceso entero, detección de Bad MAC global (además de por grupo), watchdog de conexión "zombie" con auto-reconexión, y `#daily`/`#chest` ahora reinician a medianoche en vez de 24h rodantes.
 
 <br/>
 
-**[🇺🇸 English version →](README.en.md)** &nbsp;·&nbsp; **[📖 Comandos →](docs/commands.md)** &nbsp;·&nbsp; **[🐛 Reportar bug](https://github.com/Brashkie/WinsiBot/issues)**
+**[🇺🇸 English version →](README.en.md)** &nbsp;·&nbsp; **[📖 Comandos →](docs/commands.md)** &nbsp;·&nbsp; **[💰 Guía de economía →](docs/economy.md)** &nbsp;·&nbsp; **[🐛 Reportar bug](https://github.com/Brashkie/WinsiBot/issues)**
 
 </div>
 
@@ -65,6 +65,24 @@
 | 🟦 **Core** | TypeScript / Node.js | Protocolo WhatsApp, dispatcher de comandos, RPG, IA |
 | 🐍 **Services** | Python / FastAPI / Celery | IA avanzada (Ollama + GPT + Claude + Gemini), watchdog, health checks |
 | ⚙️ **Session** | Rust / Axum | Escritura atómica de creds, 10 snapshots rotativos, tracker Bad MAC, rate limiter, delivery SQLite |
+
+### Novedades en v8.4.2
+
+| Área | Cambio |
+|------|--------|
+| **Fix: owner no reconocido con `@lid`** | Cuando WhatsApp identifica al remitente con un `@lid` (identificador opaco de privacidad de número, cada vez más común) en vez de su número real, el chequeo de owner comparaba ese `@lid` contra `OWNER_JID` y nunca podía coincidir — bloqueaba comandos `ownerOnly` para el owner real. Ahora usa `senderPn`/`participantPn` (número real que Baileys manda en paralelo) y, si esos vienen vacíos, resuelve el `@lid` contra los metadatos del grupo (`participant.jid`) como último recurso, solo en el momento exacto en que se va a rechazar un comando |
+| **Fix: ffmpeg tumbaba el proceso entero** | `ffmpeg-static` estaba en `package.json` pero nunca se usaba — `#sticker` con video/GIF dependía de `fluent-ffmpeg`, que no encontraba el binario en el PATH del sistema y lanzaba un error interno de un `ChildProcess` sin listener, **no capturable con try/catch**, que mataba todo el bot. Ahora `FFMPEG_PATH` apunta al binario bundleado desde el arranque, y el error (si volviera a pasar) quedó en la lista de excepciones no-fatales |
+| **Bad MAC — umbral global además de por grupo** | Una sesión Signal corrupta puede manifestarse como Bad MAC repartidos entre *muchos* grupos distintos (2-3 cada uno) sin que ninguno cruce su propio umbral — el bot se quedaba sordo sin que la limpieza automática se disparara nunca. Nuevo contador global en Rust (`rust/src/bad_mac.rs`, 8 eventos en 60s agregando todos los grupos) que fuerza la limpieza de sesión igual, con persistencia y cooldown escalonado propios |
+| **Watchdog de conexión "zombie"** | El ping interno de Baileys no detecta cuando WhatsApp deja de empujar mensajes en tiempo real a un dispositivo (transporte vivo, pero silencio total). Nuevo chequeo de "tiempo sin `messages.upsert`" — si pasan 10 minutos sin un solo mensaje entrante, fuerza una reconexión sola, sin necesitar reinicio manual |
+| **`#daily` / `#chest` reinician a medianoche** | Antes eran 24h rodantes desde el último uso — ahora se reinician a la medianoche (UTC, igual que la racha de días de `#daily`), como cualquier recompensa diaria estándar. Migración automática para grupos que ya tenían el default viejo guardado |
+| **`#profile` responde citando el mensaje** | Ahora podés ver el perfil de alguien respondiendo a su mensaje con `#profile`, no solo mencionándolo. De paso, arreglado un bug donde ver el perfil de alguien sin nombre guardado mostraba *tu* nombre en vez del de esa persona |
+| **Python: fix de timeouts en `/api/v1/users`** | `getOrCreateUser`/`addExp` corren en cada mensaje — antes cada llamada leía y reescribía **todo** `users.parquet` bajo un lock global, con costo proporcional al total de usuarios. Con suficiente tráfico concurrente eso llenaba el lock y causaba los `ECONNABORTED` que aparecían en los logs. Ahora vive en caché de memoria con flush a disco cada 5s, mismo patrón que ya usaba `messages.parquet` |
+| **Handler sin polling** | El semáforo de concurrencia de `handler.ts` esperaba un cupo libre sondeando cada 100ms — reemplazado por una cola de espera que entrega el cupo en el mismo instante en que se libera, sin sondeo ni CPU de más bajo ráfagas grandes |
+| **Sistema de registro: limpieza al 100%** | Quedaban restos del sistema de registro eliminado en v8.4.1 — comandos fantasma documentados en `commands.md`/`commands.en.md` y un campo `registered` muerto en `types/index.d.ts`. Ya no queda ninguna referencia en el código ni en la documentación |
+| **Sub-bots conectados al handler central** | Antes los sub-bots (`#serbot`) solo quedaban conectados sin procesar ningún mensaje — ahora comparten el mismo handler de comandos que el bot principal (y su semáforo de concurrencia). De paso, arreglado un bug donde el heartbeat hacia Rust nunca se enviaba realmente (comparaba contra la clave equivocada del registro en memoria) |
+| **8 comandos nuevos** | Info: `roblox`/`rbx`, `mcsearch`, `mcfriends`, `mcachievement`, `mcuuid`, `mcavatar`, `mchead`, `mcbody`, `mcskin` (Minecraft Java + Xbox Live, este último requiere `XBL_API_KEY` opcional) · Fun: `melones` |
+| **Guía de economía nueva** | `docs/economy.md` / `docs/economy.en.md` — cómo conseguir BrasCoins, diamantes, mascotas, personajes y objetos, con cada comando verificado contra el código real |
+| **Consola rediseñada** | Tema `matrix` (verde/negro) en toda la consola en vez de `dracula`, logo de arranque más grande con efecto de "descifrado" antes de mostrarse, y limpieza periódica de cachés cada 20 min (con `groupMeta` excluido a propósito) |
 
 ### Novedades en v8.4.1
 
@@ -237,7 +255,7 @@
 
 ```
 ╔══════════════════════════════════════════════════════════════════════════════╗
-║                           WinsiBot v8.4.1                                    ║
+║                           WinsiBot v8.4.2                                    ║
 ╠════════════════════╦═══════════════════════╦═══════════════════════════════╣
 ║   TypeScript        ║       Python           ║           Rust                ║
 ║   Node.js :4001     ║                        ║                               ║

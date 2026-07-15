@@ -71,7 +71,7 @@ const command: Command = {
     const videos = await searchTikWM(query)
     if (!videos.length) {
       await sock.sendMessage(jid, {
-        text: `✗ No se encontraron videos para "${query}".\n§ Intenta con otro término.`,
+        text: `✗ Búsqueda de TikTok no disponible temporalmente.\n§ El servicio externo que usa este comando dejó de responder — no es un problema con tu búsqueda.`,
       }, { quoted: msg })
       return
     }

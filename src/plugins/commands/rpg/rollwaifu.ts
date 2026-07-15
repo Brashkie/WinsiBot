@@ -15,8 +15,8 @@ export const charCache = registerCache('rwCharacters', createCache<RollCharacter
 const sleep = (ms: number) => new Promise(r => setTimeout(r, ms))
 
 // ─── Cooldowns ────────────────────────────────────────────────────────────────
-const RW_COOLDOWN = 29 * 60 * 1000
-const rwCooldowns = new Map<string, number>()
+export const RW_COOLDOWN = 29 * 60 * 1000
+export const rwCooldowns = new Map<string, number>()
 
 // ─── Personaje activo por grupo ───────────────────────────────────────────────
 export interface ActiveChar {

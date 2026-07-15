@@ -134,16 +134,60 @@ def get_messages_by_sender(sender: str) -> pl.DataFrame:
         return df
     return df.filter(pl.col("sender") == sender)
 
-# ─── Usuarios ─────────────────────────────────────────────────────────────────
+# ─── Usuarios (cache en memoria — hot path) ────────────────────────────────────
+# getOrCreateUser/addExp corren en CADA mensaje (vía el middleware de TS, ahora
+# también desde los sub-bots que comparten el mismo pipeline). La versión
+# anterior hacía 2 lecturas + 1 escritura COMPLETA de users.parquet por
+# llamada, todas serializadas detrás de un único lock de tabla — costo
+# O(usuarios totales) en cada mensaje. Con suficientes usuarios y mensajes
+# concurrentes eso llenaba el lock y causaba los timeouts de 5s en
+# /api/v1/users que se veían en el log. Mismo remedio que ya usa
+# messages.parquet más arriba (_msg_buf/_flush_loop): todo vive en memoria,
+# se escribe a disco solo periódicamente.
+
+_users_cache: Optional[dict[str, dict]] = None
+_users_lock:  threading.RLock = threading.RLock()
+_users_dirty: bool = False
+_USERS_FLUSH_EVERY = 5.0  # segundos
+
+def _load_users_cache() -> dict[str, dict]:
+    global _users_cache
+    if _users_cache is None:
+        with _users_lock:
+            if _users_cache is None:
+                df = load_df("users", USER_SCHEMA)
+                _users_cache = {row["jid"]: row for row in df.to_dicts()} if len(df) > 0 else {}
+    return _users_cache
+
+def _flush_users() -> None:
+    global _users_dirty
+    with _users_lock:
+        if not _users_dirty:
+            return
+        cache = _load_users_cache()
+        if cache:
+            save_df(pl.DataFrame(list(cache.values()), schema=USER_SCHEMA), "users")
+        _users_dirty = False
+
+def _users_flush_loop() -> None:
+    import time
+    while True:
+        time.sleep(_USERS_FLUSH_EVERY)
+        try:
+            _flush_users()
+        except Exception:
+            pass
+
+_users_flush_thread = threading.Thread(target=_users_flush_loop, daemon=True, name='UsersFlush')
+_users_flush_thread.start()
+atexit.register(_flush_users)
 
 def get_user(jid: str) -> Optional[dict]:
-    df = load_df("users", USER_SCHEMA)
-    if df.is_empty():
-        return None
-    result = df.filter(pl.col("jid") == jid)
-    return result.to_dicts()[0] if len(result) > 0 else None
+    with _users_lock:
+        return _load_users_cache().get(jid)
 
 def upsert_user(record: dict) -> None:
+    global _users_dirty
     record["updatedAt"] = datetime.utcnow().isoformat()
     record.setdefault("createdAt", datetime.utcnow().isoformat())
     record.setdefault("banned",    False)
@@ -151,31 +195,38 @@ def upsert_user(record: dict) -> None:
     record.setdefault("exp",       0)
     record.setdefault("level",     1)
     record.setdefault("premium",   False)
-    upsert_row(record, "jid", "users", USER_SCHEMA)
+    with _users_lock:
+        _load_users_cache()[record["jid"]] = record
+        _users_dirty = True
 
 def get_or_create_user(jid: str, push_name: str = "", is_owner: bool = False) -> dict:
-    user = get_user(jid)
-    if user:
-        return user
-    new_user = UserRecord(jid=jid, pushName=push_name, isOwner=is_owner).to_dict()
-    upsert_user(new_user)
-    return new_user
+    with _users_lock:
+        user = _load_users_cache().get(jid)
+        if user:
+            return user
+        new_user = UserRecord(jid=jid, pushName=push_name, isOwner=is_owner).to_dict()
+        upsert_user(new_user)
+        return new_user
 
 def add_exp(jid: str, amount: int = 10) -> dict:
-    user = get_or_create_user(jid)
-    user["exp"] += amount
-    user["level"] = max(1, user["exp"] // 100)
-    upsert_user(user)
-    return user
+    with _users_lock:
+        user = get_or_create_user(jid)
+        user["exp"] += amount
+        user["level"] = max(1, user["exp"] // 100)
+        upsert_user(user)
+        return user
 
 def add_warn(jid: str) -> int:
-    user = get_or_create_user(jid)
-    user["warns"] += 1
-    upsert_user(user)
-    return user["warns"]
+    with _users_lock:
+        user = get_or_create_user(jid)
+        user["warns"] += 1
+        upsert_user(user)
+        return user["warns"]
 
 def load_all_users() -> pl.DataFrame:
-    return load_df("users", USER_SCHEMA)
+    with _users_lock:
+        cache = _load_users_cache()
+        return pl.DataFrame(list(cache.values()), schema=USER_SCHEMA) if cache else pl.DataFrame(schema=USER_SCHEMA)
 
 # ─── Grupos ───────────────────────────────────────────────────────────────────
 

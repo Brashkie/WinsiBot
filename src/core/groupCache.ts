@@ -9,7 +9,14 @@ import { createCache, registerCache } from '@lib/cacheManager.js'
 
 const GROUP_META_TTL = 5 * 60 * 1000
 
-const groupMetaCache = registerCache('groupMeta', createCache<GroupMetadata>({ ttl: GROUP_META_TTL, maxSize: 500 }))
+// periodicClear:false — su propio TTL de 5min ya lo mantiene chico; barrerlo
+// entero cada 20min de más forzaría refetch de metadatos de golpe para todos
+// los grupos activos (ver comentario en cacheManager.ts).
+const groupMetaCache = registerCache(
+  'groupMeta',
+  createCache<GroupMetadata>({ ttl: GROUP_META_TTL, maxSize: 500 }),
+  { periodicClear: false },
+)
 const lastGoodMeta    = new Map<string, GroupMetadata>() // fallback si la consulta en vivo falla
 
 export async function getGroupMetadata(sock: WASocket, jid: string): Promise<GroupMetadata | undefined> {

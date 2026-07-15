@@ -121,6 +121,7 @@ export const hepein = {
     senderJid:  string
     intent?:    string
     mode?:      string
+    model?:     string   // modelo Ollama específico (según la palabra disparadora) — sin cascada a GPT/Claude/Gemini
     useGpt?:    boolean
     useHumor?:  boolean
     force?:     boolean   // omitir cooldown
@@ -149,7 +150,8 @@ export const hepein = {
       intent,
       use_gpt:    useGpt,
       use_humor:  useHumor,
-      ...(opts.mode ? { mode: opts.mode } : {}),
+      ...(opts.mode  ? { mode: opts.mode }   : {}),
+      ...(opts.model ? { model: opts.model } : {}),
     }, 15_000) // más generoso que el default (5s) — puede pasar por Ollama antes de GPT/Claude/Gemini
 
     if (!res.success || !res.data?.text) {

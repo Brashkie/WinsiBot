@@ -1,12 +1,12 @@
 <div align="center">
 
-# 📖 Command Reference — WinsiBot v8.3.0
+# 📖 Command Reference — WinsiBot v8.4.2
 
-[![Commands](https://img.shields.io/badge/Commands-125%2B-6C63FF?style=for-the-badge)](.)
+[![Commands](https://img.shields.io/badge/Commands-150%2B-6C63FF?style=for-the-badge)](.)
 [![Categories](https://img.shields.io/badge/Categories-19-00C9FF?style=for-the-badge)](.)
-[![Version](https://img.shields.io/badge/Version-8.3.0-brightgreen?style=flat-square)](../README.en.md)
+[![Version](https://img.shields.io/badge/Version-8.4.2-brightgreen?style=flat-square)](../README.en.md)
 
-[🇪🇸 Versión en español →](commands.md) &nbsp;·&nbsp; [← Back to README](../README.en.md)
+[🇪🇸 Versión en español →](commands.md) &nbsp;·&nbsp; [💰 Economy guide →](economy.en.md) &nbsp;·&nbsp; [← Back to README](../README.en.md)
 
 </div>
 
@@ -66,8 +66,6 @@
 | `ping` | `p` | 3s | 👤 | Check bot status and show latency |
 | `menu` | `help`, `ayuda` | — | 👤 | List all command categories |
 | `categoria` | `cat`, `category` | — | 👤 | Show commands for a specific category |
-| `registro` | `reg`, `register`, `registrar`, `verify` | 5s | 👤 | Register to access RPG features |
-| `unreg` | `unregister`, `desregistrar` | 5s | 👤 | Cancel your registration (requires serial number) |
 | `afk` | `ausente` | 10s | 👤 | Activate AFK mode with a custom reason |
 | `creator` | `info`, `about`, `botinfo`, `creador` | — | 👤 | Bot and creator information |
 
@@ -75,7 +73,6 @@
 !ping
 !menu
 !categoria rpg
-!registro
 !afk studying for exams
 ```
 
@@ -110,13 +107,13 @@
 | `xp` | `exp`, `experiencia`, `stats`, `nivel` | 5s | 👤 | Detailed RPG statistics |
 | `rangos` | `roles`, `rango`, `rol`, `ranks` | 10s | 👤 | Server rank table |
 | `work` | `trabajar`, `trabajo`, `w` | 10min | 👤 | Work to earn BrasCoins (every 10 min) |
-| `daily` | `claim`, `reclamar`, `regalo` | 24h | 👤 | Daily reward — scales with your consecutive-day streak (×1.00–×1.20+ bonus combining streak, weekend, premium and prestige) |
+| `daily` | `claim`, `reclamar`, `regalo` | daily (resets at midnight) | 👤 | Daily reward — scales with your consecutive-day streak (×1.00–×1.20+ bonus combining streak, weekend, premium and prestige) |
 | `weekly` | `semana`, `semanal`, `cadasemana` | 3d | 👤 | Weekly reward (every 3 days) |
 | `monthly` | `mes`, `mensual`, `cadames` | 5d | 👤 | Monthly reward (every 5 days) |
 | `minar` | `mine`, `minarxp`, `mining` | 10min | 👤 | Mine resources for XP and materials |
-| `cofre` | `coffer`, `abrircofre`, `caja` | 24h | 👤 | Open the daily chest for random rewards |
+| `cofre` | `coffer`, `abrircofre`, `caja` | daily (resets at midnight) | 👤 | Open the daily chest for random rewards |
 | `crime` | `crimen`, `delito` | 1h | 👤 | Commit a crime — win or lose coins |
-| `rob` | `robar` | variable | 👤 | Steal BrasCoins from another user (`@mention`) |
+| `rob` | `robar` | 2h | 👤 | Steal BrasCoins from another user (`@mention`) |
 | `transfer` | `transferir`, `dar`, `enviar` | 5s | 👤 | Transfer BrasCoins or XP to another user |
 | `bal` | `balance`, `billetera`, `wallet`, `dinero`, `coins` | 3s | 👤 | View your balance (wallet + bank), with BrasCoins icon |
 | `baltop` | `balancetop`, `richtop`, `richlist`, `topbal`, `tbal` | 10s | 👤 | Top users by CodPoints |
@@ -258,6 +255,7 @@
 | `sus` | `impostor`, `among` | 5s | 👤 | Accuse someone of being the impostor |
 | `insultar` | `insult`, `abuse`, `ofender` | 5s | 👤 | Creatively insult someone |
 | `banana` | `bana`, `pito`, `pp`, `miembro` | 5s | 👤 | Measure the pp (just for laughs) |
+| `melones` | `pechos`, `boobs`, `copa` | 5s | 👤 | Measure the melons (just for laughs) |
 | `sega` | `fap`, `paja`, `chaquetita`, `ganzo` | 10s | 👤 | Fun animation |
 | `follar` | `coger` | 5s | 👤 | +18 command (requires NSFW enabled in group) |
 
@@ -278,7 +276,8 @@
 | `sticker` | `s`, `stiker` | — | 👤 | Convert image/video to sticker |
 | `stickerpack` | `packsticker`, `spack` | 30s | 👤 | Download a sticker pack from getstickerpack.com |
 | `removebg` | `rmbg`, `sinfondo`, `nobg`, `quitarfondo` | 30s | 👤 | Remove background from an image |
-| `anime` | `anime4k`, `toanime` | 30s | 👤 | Enhance image with anime filter (x2 or x4) |
+| `anime` | `anime4k` | 30s | 👤 | Upscale image resolution (x2 or x4) — does not change art style |
+| `toanime` | `animegan`, `cartoonize` | 30s | 👤 | Converts a real photo into actual anime art style (AnimeGANv2) |
 | `imagen` | `img`, `image`, `gimage`, `buscarimg` | 10s | 👤 | Search for images on the internet |
 
 ```
@@ -401,7 +400,7 @@
 | `nsfw` | Enable +18 commands | 🔑 |
 | `muted` | Bot does not respond in this group | 🔑 |
 | `hepein` | AI responds when mentioned | 🔑 |
-| `autolevelup` | Announce in chat when someone levels up (enabled by default) | 🔑 |
+| `autolevelup` | Announce in chat when someone levels up (disabled by default) | 🔑 |
 | `anticall` | Automatically reject calls | 👑 |
 
 ```
@@ -438,10 +437,23 @@
 |---------|---------|:--------:|:----------:|-------------|
 | `creator` | `info`, `about`, `botinfo`, `creador` | — | 👤 | Bot and creator information |
 | `infobot` | `botstatus`, `enterprise` | — | 👤 | Bot identity card — version, command count, uptime, features |
+| `roblox` | `rbx`, `robloxinfo` | 8s | 👤 | Look up a Roblox user by name or ID |
+| `mcsearch` | `xblsearch`, `gamertag` | 8s | 👤 | Look up an Xbox Live profile by Gamertag *(requires `XBL_API_KEY`)* |
+| `mcfriends` | `xblfriends` | 10s | 👤 | Xbox Live friends of a player, shown as a carousel *(requires `XBL_API_KEY`)* |
+| `mcachievement` | `mcachievements`, `xblachievement` | 10s | 👤 | Xbox Live achievements of a player *(requires `XBL_API_KEY`)* |
+| `mcuuid` | — | 5s | 👤 | UUID of a Minecraft Java player |
+| `mcavatar` | — | 5s | 👤 | Avatar (face+body) of a Minecraft Java player |
+| `mchead` | — | 5s | 👤 | 3D head render of a Minecraft Java player |
+| `mcbody` | — | 5s | 👤 | 3D body render of a Minecraft Java player |
+| `mcskin` | — | 5s | 👤 | Download a Minecraft Java player's skin |
 
 ```
 !creator
 !infobot
+!roblox builderman
+!mcsearch Notch
+!mcfriends Notch
+!mcavatar Notch
 ```
 
 ---

@@ -1,9 +1,9 @@
 import type { Command } from '../../../types/index.js'
 import { activeChars, addToInventory } from './rollwaifu.js'
 
-const C_COOLDOWN = 10 * 60 * 1000
+export const C_COOLDOWN = 10 * 60 * 1000
 const STEAL_TIME = 16 * 1000
-const cCooldowns = new Map<string, number>()
+export const cCooldowns = new Map<string, number>()
 
 function formatTime(ms: number): string {
   const m = Math.floor(ms / 60_000)

@@ -20,6 +20,7 @@ import {
 } from '@core/events.js'
 import { hasPendingCaptcha, verifyCaptchaAnswer } from '@core/events/captcha.js'
 import { handleDrawGuessMessage, handleQuizMessage } from '@core/events/gameHandlers.js'
+import { handleTransferConfirm } from '@plugins/commands/rpg/transfer.js'
 import { sessionClient } from '@lib/session.js'
 import { getGroupParticipants } from '@core/groupCache.js'
 
@@ -35,6 +36,45 @@ const KNOWN_BOTS = new Set([
 const MAX_CONCURRENT    = 25
 const MAX_QUEUE_WAIT_MS = 3_000 // espera acotada por un cupo antes de descartar
 let _activeHandlers     = 0
+
+// Cola de espera por cupo — antes esto era un `while` que sondeaba cada 100ms
+// (`await new Promise(r => setTimeout(r, 100))`). Con ráfagas grandes (miles
+// de mensajes casi simultáneos entre el bot principal y los sub-bots) eso
+// significaba: hasta 100ms de latencia extra por mensaje aunque un cupo se
+// liberara al instante, y un poll corriendo por cada mensaje en espera. Acá
+// el cupo se entrega apenas se libera (mismo tick, sin sondeo) y solo se usa
+// un timer por esperador para el límite de espera — mismo comportamiento
+// (espera acotada, luego descarta), solo sin el retraso ni el CPU del poll.
+interface SlotWaiter { resolve: (ok: boolean) => void; timer: ReturnType<typeof setTimeout> }
+const _slotWaiters: SlotWaiter[] = []
+
+function acquireSlot(): Promise<boolean> {
+  if (_activeHandlers < MAX_CONCURRENT) {
+    _activeHandlers++
+    return Promise.resolve(true)
+  }
+  return new Promise<boolean>(resolve => {
+    const waiter: SlotWaiter = {
+      resolve,
+      timer: setTimeout(() => {
+        const idx = _slotWaiters.indexOf(waiter)
+        if (idx !== -1) _slotWaiters.splice(idx, 1)
+        resolve(false)
+      }, MAX_QUEUE_WAIT_MS),
+    }
+    _slotWaiters.push(waiter)
+  })
+}
+
+function releaseSlot(): void {
+  _activeHandlers--
+  const waiter = _slotWaiters.shift()
+  if (waiter) {
+    clearTimeout(waiter.timer)
+    _activeHandlers++
+    waiter.resolve(true)
+  }
+}
 
 // ─── Extraer texto del mensaje ────────────────────────────────────────────────
 function extractText(msg: WAMessage): string {
@@ -66,6 +106,18 @@ function extractText(msg: WAMessage): string {
   )
 }
 
+// WhatsApp puede identificar al remitente con un @lid (identificador opaco,
+// no derivado del número real) en vez de su @s.whatsapp.net — pasa cuando
+// tiene la privacidad de número activada, y cada vez más seguido por el
+// rollout de LID de WhatsApp incluso en chats normales. Cuando eso pasa,
+// remoteJid/participant NUNCA puede matchear contra OWNER_JID sin importar
+// cómo se normalice el string — son identificadores distintos, no el mismo
+// número en otro formato. Baileys sí manda el número real en paralelo vía
+// senderPn/participantPn — hay que preferirlo para el check de owner.
+function getOwnerCandidateId(msg: WAMessage, isGroup: boolean): string {
+  return (isGroup ? msg.key.participantPn : msg.key.senderPn) ?? ''
+}
+
 // ─── Construir contexto base ──────────────────────────────────────────────────
 function buildBaseContext(
   msg:  WAMessage,
@@ -83,10 +135,16 @@ function buildBaseContext(
     .replace('@lid', '')
     .replace(/[^0-9]/g, '')
 
-  const isOwner = config.ownerJid.some(o =>
-    o === sender ||
-    o.replace('@s.whatsapp.net', '').replace(/[^0-9]/g, '') === senderNum
-  )
+  const ownerCandidate    = getOwnerCandidateId(msg, isGroup)
+  const ownerCandidateNum = ownerCandidate
+    .replace('@s.whatsapp.net', '')
+    .replace(/[^0-9]/g, '')
+
+  const isOwner = config.ownerJid.some(o => {
+    const oNum = o.replace('@s.whatsapp.net', '').replace(/[^0-9]/g, '')
+    return o === sender || oNum === senderNum ||
+      (ownerCandidateNum !== '' && oNum === ownerCandidateNum)
+  })
 
   const usedPrefix = config.prefix.find(p => text.startsWith(p)) ?? ''
   const hasPrefix  = usedPrefix.length > 0
@@ -137,16 +195,30 @@ async function resolveGroupRoles(
   }
 }
 
-// ─── AI triggers ──────────────────────────────────────────────────────────────
-const AI_TRIGGERS = new Set([
-  'hepein', 'brashkie', 'bot', 'winsi', 'winsito',
-])
+// ─── AI triggers — cada palabra dispara un modelo Ollama distinto ────────────
+// 'bot' se sacó del set — es muy genérico y disparaba falsos positivos en
+// conversación normal. Las 4 palabras que quedan son lo bastante específicas
+// para no confundirse con texto normal del chat.
+const AI_MODEL_TRIGGERS: Record<string, string> = {
+  hepein:   'llama3.2:3b',
+  brashkie: 'mistral',
+  winsi:    'phi3',
+  winsito:  'phi3',
+}
+const DEFAULT_AI_MODEL = AI_MODEL_TRIGGERS.hepein!
+
+function resolveAIModel(text: string): string | null {
+  const words = text.toLowerCase().trim().split(/\s+/)
+  for (const word of words) {
+    const model = AI_MODEL_TRIGGERS[word]
+    if (model) return model
+  }
+  return null
+}
 
 function isAITrigger(text: string, botName: string): boolean {
-  const lower = text.toLowerCase().trim()
-  const words = lower.split(/\s+/)
-  if (words.some(w => AI_TRIGGERS.has(w))) return true
-  if (lower.includes(botName.toLowerCase())) return true
+  if (resolveAIModel(text) !== null) return true
+  if (text.toLowerCase().includes(botName.toLowerCase())) return true
   return false
 }
 
@@ -187,9 +259,10 @@ function localFallback(intent: string): string {
 
 // ─── Pipeline de IA ───────────────────────────────────────────────────────────
 async function handleAIResponse(
-  ctx:  BotContext,
-  sock: WASocket,
-  msg:  WAMessage,
+  ctx:   BotContext,
+  sock:  WASocket,
+  msg:   WAMessage,
+  model: string = DEFAULT_AI_MODEL,
 ): Promise<boolean> {
   try {
     // 1. Intención rápida (Rust → Python)
@@ -197,16 +270,18 @@ async function handleAIResponse(
     const intent = nlp?.primary ?? 'neutral'
     if (intent === 'spam' || intent === 'nsfw') return false
 
-    // 2. Hepein: Ollama / GPT / Gemini / Claude con perfil aprendido del grupo
-    // 14s — por debajo del timeout HTTP de hepein.respond() (15s), así esta
-    // carrera gana primero y cae al fallback local en silencio, en vez de que
-    // axios aborte la request y lo registre como error.
+    // 2. Hepein: Ollama (modelo según la palabra que disparó) con perfil
+    // aprendido del grupo. 14s — por debajo del timeout HTTP de
+    // hepein.respond() (15s), así esta carrera gana primero y cae al
+    // fallback local en silencio, en vez de que axios aborte la request y
+    // lo registre como error.
     const hepeinRes = await Promise.race([
       hepein.respond({
         prompt:    ctx.text,
         groupJid:  ctx.isGroup ? ctx.jid : '',
         senderJid: ctx.sender,
         intent,
+        model,
         force:     true,   // omitir cooldown interno — ya lo controla handler
       }),
       new Promise<null>(r => setTimeout(() => r(null), 14_000)),
@@ -259,17 +334,11 @@ export async function handleMessage(msg: WAMessage, sock: WASocket): Promise<voi
   // cupo corto (absorbe picos de un par de segundos) antes de descartar.
   // Rust ya tiene rate limiting — si seguimos llenos tras la espera es
   // sobrecarga sostenida, no un pico, y ahí sí se descarta.
-  if (_activeHandlers >= MAX_CONCURRENT) {
-    const waitDeadline = Date.now() + MAX_QUEUE_WAIT_MS
-    while (_activeHandlers >= MAX_CONCURRENT && Date.now() < waitDeadline) {
-      await new Promise(r => setTimeout(r, 100))
-    }
-    if (_activeHandlers >= MAX_CONCURRENT) {
-      logger.warn({ id: msg.key.id, active: _activeHandlers }, 'handleMessage DROPPED — semáforo lleno tras esperar')
-      return
-    }
+  const acquired = await acquireSlot()
+  if (!acquired) {
+    logger.warn({ id: msg.key.id, active: _activeHandlers }, 'handleMessage DROPPED — semáforo lleno tras esperar')
+    return
   }
-  _activeHandlers++
 
   const _startedAt = Date.now()
   logger.info({ id: msg.key.id, active: _activeHandlers }, 'handleMessage START')
@@ -319,12 +388,20 @@ export async function handleMessage(msg: WAMessage, sock: WASocket): Promise<voi
       }
     }
 
+    // fastProcess (Python/Cython) hace su propio chequeo de owner con el
+    // `sender` que se le pase — si le mandamos el @lid en vez del número
+    // real, su `is_owner` sale false y pisa el `base.isOwner` (correcto) de
+    // abajo, porque `fast?.is_owner ?? base.isOwner` solo cae al fallback
+    // cuando fast es null/undefined, no cuando es `false`. Mandarle el
+    // número real (si Baileys lo dio) evita ese pisado.
+    const senderForFast = getOwnerCandidateId(msg, base.isGroup) || base.sender
+
     const [rolesResult, fastResult] = await Promise.allSettled([
       base.isGroup
         ? resolveGroupRoles(sock, base.jid, base.sender)
         : Promise.resolve({ isAdmin: false, isBotAdmin: false }),
       Promise.race([
-        fastProcess(base.text, config.prefix, base.sender, base.jid, config.ownerJid),
+        fastProcess(base.text, config.prefix, senderForFast, base.jid, config.ownerJid),
         new Promise<null>(r => setTimeout(() => r(null), 500)),
       ]),
     ])
@@ -335,11 +412,16 @@ export async function handleMessage(msg: WAMessage, sock: WASocket): Promise<voi
 
     const fast = fastResult.status === 'fulfilled' ? fastResult.value : null
 
+    // OR, no reemplazo: `base.isOwner` (TS, síncrono) y `fast.is_owner`
+    // (Python/Cython, puede fallar o quedar corto por diferencias de
+    // normalización) son dos intentos de detectar lo mismo. Si cualquiera
+    // de los dos dice que sí, es owner — nunca dejar que uno "quite" un
+    // owner que el otro sí detectó bien.
     const ctx: BotContext = {
       ...base,
       isAdmin:    roles.isAdmin,
       isBotAdmin: roles.isBotAdmin,
-      isOwner:    fast?.is_owner ?? base.isOwner,
+      isOwner:    base.isOwner || (fast?.is_owner ?? false),
     }
 
     if (fast && !fast.allowed && !ctx.isOwner) {
@@ -443,8 +525,13 @@ export async function handleMessage(msg: WAMessage, sock: WASocket): Promise<voi
       }
 
       if (groupCfg.antispam && ctx.text.length > 10) {
+        // Timeout corto a propósito: esto corre para CADA mensaje de grupo
+        // (no solo comandos) cuando antispam está activo, y ocupa un cupo del
+        // semáforo mientras espera. Con el timeout default (5s) del cliente,
+        // una racha de mensajes con Python lento podía llenar el semáforo con
+        // solo esta llamada. Es moderación best-effort — falla abierto rápido.
         const spamResult = await pythonPost<{ is_spam: boolean; confidence: number }>(
-          '/api/v1/ml/predict/spam', { text: ctx.text }
+          '/api/v1/ml/predict/spam', { text: ctx.text }, 1_500
         ).catch(() => null)
         if (spamResult?.data?.is_spam && (spamResult.data.confidence ?? 0) > 0.85) {
           const num = ctx.sender.replace('@s.whatsapp.net', '').replace('@lid', '').replace(/[^0-9]/g, '')
@@ -460,6 +547,11 @@ export async function handleMessage(msg: WAMessage, sock: WASocket): Promise<voi
     // ─── Sin prefijo — verificar si es trigger de IA ──────────────────────────
     if (!config.prefix.some(p => ctx.text.startsWith(p))) {
       if (ctx.text) {
+        // ── Transferencia: "si"/"no" sueltos confirman una transferencia
+        // pendiente de este usuario (ver comentario en transfer.ts) ───────────
+        const tConsumed = await handleTransferConfirm(sock, ctx.jid, ctx.sender, ctx.text)
+        if (tConsumed) return
+
         // ── Draw & Guess: intercept guesses in active group games ─────────────
         if (ctx.isGroup) {
           const dgConsumed = await handleDrawGuessMessage(sock, ctx.jid, ctx.sender, ctx.text)
@@ -475,6 +567,7 @@ export async function handleMessage(msg: WAMessage, sock: WASocket): Promise<voi
         const botName = sock.user?.name ?? 'hepein'
         const lower   = ctx.text.toLowerCase().trim()
         const words   = lower.split(/\s+/)
+        const aiModel = resolveAIModel(ctx.text) ?? DEFAULT_AI_MODEL
 
         // Mencionar "hepein" o el nombre del bot siempre activa la IA (directo)
         const isDirect = words.includes('hepein') || lower.includes(botName.toLowerCase())
@@ -483,9 +576,9 @@ export async function handleMessage(msg: WAMessage, sock: WASocket): Promise<voi
           const groupCfg = getGroupConfig(ctx.jid)
           // directo → siempre; otros triggers → solo si groupCfg.hepein está activo
           const triggered = isDirect || (groupCfg.hepein && isAITrigger(ctx.text, botName))
-          if (triggered) await handleAIResponse(ctx, sock, msg)
+          if (triggered) await handleAIResponse(ctx, sock, msg, aiModel)
         } else {
-          if (isAITrigger(ctx.text, botName)) await handleAIResponse(ctx, sock, msg)
+          if (isAITrigger(ctx.text, botName)) await handleAIResponse(ctx, sock, msg, aiModel)
         }
       }
       return
@@ -502,6 +595,37 @@ export async function handleMessage(msg: WAMessage, sock: WASocket): Promise<voi
     }
 
     // ─── Validaciones del comando ─────────────────────────────────────────────
+    if (command.ownerOnly && !ctx.isOwner) {
+      // Último intento antes de rechazar: en grupos con addressingMode 'lid',
+      // msg.key NO trae senderPn/participantPn (confirmado con log real — esos
+      // campos vinieron undefined), así que el fallback de arriba no alcanza.
+      // Pero el objeto Contact del participante en groupMetadata sí trae el
+      // número real en `.jid` (distinto de `.id`/`.lid`, que están en formato
+      // @lid cuando el grupo usa addressingMode 'lid') — se resuelve acá,
+      // solo en este punto exacto (no en cada mensaje), porque implica una
+      // consulta a los metadatos del grupo.
+      if (ctx.isGroup && ctx.sender.endsWith('@lid')) {
+        try {
+          const participants = await getGroupParticipants(sock, ctx.jid)
+          const p = participants.find((pp: any) => pp.lid === ctx.sender || pp.id === ctx.sender)
+          const realJid = (p as any)?.jid as string | undefined
+          const realNum = realJid?.replace('@s.whatsapp.net', '').replace(/[^0-9]/g, '')
+          if (realNum) {
+            ctx.isOwner = config.ownerJid.some(o =>
+              o.replace('@s.whatsapp.net', '').replace(/[^0-9]/g, '') === realNum
+            )
+          }
+          // Diagnóstico temporal — sacar una vez confirmado que esto resuelve
+          // el owner check en grupos con addressingMode 'lid'.
+          logger.warn({
+            sender: ctx.sender, foundParticipant: !!p, realJid, resolved: ctx.isOwner,
+          }, 'Resolución @lid → jid real para owner check')
+        } catch (err) {
+          logger.warn({ err }, 'No se pudo resolver @lid del owner contra metadatos del grupo')
+        }
+      }
+    }
+
     if (command.ownerOnly && !ctx.isOwner) {
       await safeSend(() => sock.sendMessage(ctx.jid, {
         text: '✗ Solo el owner puede usar este comando.',
@@ -608,7 +732,7 @@ export async function handleMessage(msg: WAMessage, sock: WASocket): Promise<voi
     }
     logger.error({ err }, 'Error en handleMessage')
   } finally {
-    _activeHandlers--
+    releaseSlot()
     logger.info(
       { id: msg.key.id, active: _activeHandlers, ms: Date.now() - _startedAt, timedOut },
       'handleMessage END'

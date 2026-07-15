@@ -7,6 +7,9 @@ import {
   DisconnectReason,
 } from '@whiskeysockets/baileys'
 import { safeSend } from '@lib/media_sender.js'
+import { handleMessage } from '@core/handler.js'
+import { logger } from '@core/logger.js'
+import { color, themes } from 'ansimax'
 import pino from 'pino'
 import qrcode from 'qrcode'
 import path from 'path'
@@ -22,20 +25,53 @@ const RECONNECT_CAP  = 64_000       // ms — backoff cap per bot
 
 fs.mkdirSync(SUB_DIR, { recursive: true })
 
+// Un solo logger "silencioso" reusado por todos los sub-bots — Baileys crea un
+// child logger internamente por socket, así que no hay riesgo de estado
+// compartido entre bots; evita instanciar un pino nuevo por cada conexión o
+// reconexión (relevante con hasta MAX_SUBBOTS bots reconectando a la vez).
+const SILENT_LOGGER = pino({ level: 'silent' })
+
+// La versión de Baileys casi nunca cambia — cachearla evita un fetch HTTP
+// extra por cada conexión/reconexión de CADA sub-bot (con 100 sub-bots
+// reconectando tras un corte de red, eran hasta 100 llamadas redundantes).
+let cachedVersion:   [number, number, number] | null = null
+let versionCachedAt  = 0
+const VERSION_TTL_MS = 60 * 60_000 // 1h
+
+async function getBaileysVersion(): Promise<[number, number, number]> {
+  if (cachedVersion && Date.now() - versionCachedAt < VERSION_TTL_MS) return cachedVersion
+  try {
+    const { version } = await fetchLatestBaileysVersion()
+    cachedVersion  = version
+    versionCachedAt = Date.now()
+  } catch (err) {
+    if (!cachedVersion) throw err
+    logger.warn({ err }, 'Sub-bot: no se pudo refrescar versión de Baileys, usando la cacheada')
+  }
+  return cachedVersion!
+}
+
 // ─── Registry (sockets only — state is tracked by Rust) ───────────────────────
 
 export interface SubBot {
-  phone:       string
-  jid:         string
-  name:        string
-  sock:        any
-  status:      'connecting' | 'connected' | 'disconnected'
-  connectedAt: number
-  method:      'qr' | 'code'
-  ownerJid:    string
+  phone:         string
+  jid:           string
+  name:          string
+  sock:          any
+  status:        'connecting' | 'connected' | 'disconnected'
+  connectedAt:   number
+  method:        'qr' | 'code'
+  ownerJid:      string
+  msgCount:      number
+  lastMessageAt: number
 }
 
 export const subBots = new Map<string, SubBot>()
+
+// Teléfonos cuyo cierre de socket fue provocado a propósito (QR expirado,
+// !stopbot) — el handler de 'connection.update' lo chequea para NO agendar
+// una reconexión automática (que generaría un QR nuevo solo, en bucle).
+const intentionalCloses = new Set<string>()
 
 // ─── Rust API helpers ─────────────────────────────────────────────────────────
 
@@ -93,10 +129,15 @@ async function rustCanCreate(ownerJid: string): Promise<{ can_create: boolean; r
 
 const heartbeatTimers = new Map<string, NodeJS.Timeout>()
 
-function startHeartbeat(sessionId: string): void {
+// NOTA: antes este chequeo comparaba `subBots.has(sessionId)` contra un mapa
+// indexado por `phone` (sessionId es `subbot-<phone>`, una clave distinta) —
+// la condición era siempre verdadera y el heartbeat se autodetenía en su
+// primer tick sin llegar a avisarle nunca a Rust. Ahora se chequea por
+// `phone`, que es la clave real de `subBots`.
+function startHeartbeat(phone: string, sessionId: string): void {
   stopHeartbeat(sessionId)
   const t = setInterval(() => {
-    if (!subBots.has(sessionId)) { stopHeartbeat(sessionId); return }
+    if (!subBots.has(phone)) { stopHeartbeat(sessionId); return }
     rustHeartbeat(sessionId).catch(() => {})
   }, 30_000)
   heartbeatTimers.set(sessionId, t)
@@ -148,16 +189,16 @@ export async function startSubBot(
     rustRegistered = true
   }
 
-  let { version }          = await fetchLatestBaileysVersion()
-  let { state, saveCreds } = await useMultiFileAuthState(subPath)
+  const version             = await getBaileysVersion()
+  const { state, saveCreds } = await useMultiFileAuthState(subPath)
 
   const subSock = makeWASocket({
     version,
-    logger:            pino({ level: 'silent' }),
+    logger:            SILENT_LOGGER,
     printQRInTerminal: false,
     auth: {
       creds: state.creds,
-      keys:  makeCacheableSignalKeyStore(state.keys, pino({ level: 'silent' })),
+      keys:  makeCacheableSignalKeyStore(state.keys, SILENT_LOGGER),
     },
     browser: method === 'code'
       ? ['Windows', 'Chrome', '110.0.5585.95']
@@ -167,17 +208,19 @@ export async function startSubBot(
 
   subBots.set(phone, {
     phone,
-    jid:         `${phone}@s.whatsapp.net`,
-    name:        phone,
-    sock:        subSock,
-    status:      'connecting',
-    connectedAt: 0,
+    jid:           `${phone}@s.whatsapp.net`,
+    name:          phone,
+    sock:          subSock,
+    status:        'connecting',
+    connectedAt:   0,
     method,
     ownerJid,
+    msgCount:      0,
+    lastMessageAt: 0,
   })
 
   await rustSetState(sessionId, 'Connecting').catch(() => {})
-  startHeartbeat(sessionId)
+  startHeartbeat(phone, sessionId)
 
   let qrMsg:   any = null
   let codeMsg: any = null
@@ -219,6 +262,7 @@ export async function startSubBot(
             text: `§ El QR expiró\n§ Escribe *#serbot* de nuevo para generar otro`,
           })).catch(() => {})
 
+          intentionalCloses.add(phone)
           stopHeartbeat(sessionId)
           try { subSock.end?.(undefined) } catch {}
           subBots.delete(phone)
@@ -268,18 +312,22 @@ export async function startSubBot(
       // teléfono real) si quien escribió #serbot tenía la privacidad de
       // número activada.
       const realPhone = (sjid.split('@')[0]?.split(':')[0] ?? '').replace(/[^0-9]/g, '') || phone
+      const prev      = subBots.get(phone)
 
       subBots.set(phone, {
         phone,
-        jid:         sjid,
+        jid:           sjid,
         name,
-        sock:        subSock,
-        status:      'connected',
-        connectedAt: Date.now(),
+        sock:          subSock,
+        status:        'connected',
+        connectedAt:   Date.now(),
         method,
         ownerJid,
+        msgCount:      prev?.msgCount ?? 0,
+        lastMessageAt: prev?.lastMessageAt ?? 0,
       })
 
+      console.log(`  ${themes.success('◈')} ${color.bold('Sub-bot')}  ${color.dim('+' + realPhone)}  ${themes.success('conectado')}`)
       await rustSetState(sessionId, 'Connected').catch(() => {})
 
       try {
@@ -308,6 +356,10 @@ export async function startSubBot(
 
     // ─── Desconectado ──────────────────────────────────────────────────────
     if (connection === 'close') {
+      // Cierre provocado por nosotros (QR expiró, !stopbot) — ya se limpió
+      // todo en el lugar que lo disparó, no reconectar ni renotificar.
+      if (intentionalCloses.delete(phone)) return
+
       const reason = (lastDisconnect?.error as any)?.output?.statusCode
 
       const current = subBots.get(phone)
@@ -317,6 +369,7 @@ export async function startSubBot(
 
       // Permanent logout — clean up entirely
       if (reason === DisconnectReason.loggedOut || reason === 401 || reason === 405) {
+        console.log(`  ${themes.error('◈')} ${color.bold('Sub-bot')}  ${color.dim(phone)}  ${themes.error('logout permanente')}`)
         stopHeartbeat(sessionId)
         fs.rmSync(subPath, { recursive: true, force: true })
         subBots.delete(phone)
@@ -332,6 +385,7 @@ export async function startSubBot(
 
       // Replaced on another device
       if (reason === 440) {
+        console.log(`  ${themes.warning('◈')} ${color.bold('Sub-bot')}  ${color.dim(phone)}  ${themes.warning('sesión reemplazada')}`)
         stopHeartbeat(sessionId)
         subBots.delete(phone)
         await rustSetState(sessionId, 'Disconnected').catch(() => {})
@@ -348,6 +402,7 @@ export async function startSubBot(
       // + jitter (up to 1s) so subbots don't all reconnect at the exact same
       // instant after a shared network blip.
       const delay = Math.min(1_000 * 2 ** retries, RECONNECT_CAP) + Math.floor(Math.random() * 1000)
+      console.log(`  ${color.yellow('◈')} ${color.bold('Sub-bot')}  ${color.dim(phone)}  reconectando en ${Math.round(delay / 1000)}s ${color.dim(`(intento #${retries + 1})`)}`)
       await rustSetState(sessionId, 'Reconnecting').catch(() => {})
 
       setTimeout(() => {
@@ -355,9 +410,43 @@ export async function startSubBot(
         // Pass registeredInRust=true so we skip re-registering in Rust
         startSubBot(phone, method, sock, chatJid, null, ownerJid, retries + 1, true)
           .catch(err => {
-            console.error(`[serbot] reconexión falló para ${phone}:`, err?.message ?? err)
+            logger.warn({ err, phone }, 'Sub-bot: reconexión falló')
           })
       }, delay)
+    }
+  })
+
+  // ─── Mensajes entrantes ───────────────────────────────────────────────────
+  // Cada sub-bot procesa comandos con el mismo handler central que el bot
+  // principal — comparte su semáforo de concurrencia global (MAX_CONCURRENT
+  // en handler.ts), así que ráfagas de mensajes en cualquier combinación de
+  // sub-bots + bot principal se absorben con el mismo cupo acotado, sin que
+  // uno solo pueda saturar el event loop del proceso.
+  subSock.ev.on('messages.upsert', ({ messages, type }: any) => {
+    try {
+      if (type !== 'notify' && type !== 'append') return
+
+      const m = messages?.[0]
+      if (!m) return
+
+      // 'append' = backlog post-sync — descartar todo lo más viejo que 5min
+      // para no reprocesar historial como si fueran comandos en vivo.
+      if (type === 'append') {
+        const ts = Number(m.messageTimestamp ?? 0) * 1000
+        if (!ts || Date.now() - ts > 5 * 60_000) return
+      }
+
+      const bot = subBots.get(phone)
+      if (bot) {
+        bot.msgCount++
+        bot.lastMessageAt = Date.now()
+      }
+
+      handleMessage(m, subSock).catch(err => {
+        logger.warn({ err, phone }, 'Sub-bot: error en handleMessage')
+      })
+    } catch (err) {
+      logger.warn({ err, phone }, 'Sub-bot: error procesando messages.upsert')
     }
   })
 
@@ -372,6 +461,9 @@ export async function restoreSubBots(mainSock: any): Promise<void> {
   const folders = fs.readdirSync(SUB_DIR).filter(f =>
     fs.statSync(path.join(SUB_DIR, f)).isDirectory()
   )
+
+  let restored = 0
+  let failed   = 0
 
   for (const phone of folders) {
     const credsPath = path.join(getSubPath(phone), 'creds.json')
@@ -388,22 +480,41 @@ export async function restoreSubBots(mainSock: any): Promise<void> {
 
       // Re-register in Rust (server may have restarted)
       await startSubBot(phone, method, mainSock, chatJid, null, ownerJid, 0, false)
+      restored++
     } catch (err: any) {
-      console.error(`[serbot] restore falló para ${phone}:`, err?.message ?? err)
+      failed++
+      logger.warn({ err: err?.message ?? err, phone }, 'Sub-bot: restauración falló')
     }
+  }
+
+  if (restored || failed) {
+    console.log(`  ${themes.success('◈')} ${color.bold('Sub-bots')}  ${restored} restaurados${failed ? color.dim(`, ${failed} fallidos`) : ''}`)
   }
 }
 
 // ─── Stop sub-bot (for !stopbot command) ─────────────────────────────────────
-
+// Punto único de limpieza — evita duplicar la lógica de cierre en cada
+// comando que necesite desconectar un sub-bot (antes !stopbot reimplementaba
+// esto a mano y se saltaba stopHeartbeat/intentionalCloses/rustUnregister,
+// dejando el heartbeat corriendo al aire y la cuota de Rust sin liberar).
 export async function stopSubBot(phone: string): Promise<boolean> {
   const bot = subBots.get(phone)
   if (!bot) return false
 
   const sessionId = sessionIdFor(phone)
+  intentionalCloses.add(phone)
   stopHeartbeat(sessionId)
 
-  try { bot.sock?.end?.() } catch {}
+  try { bot.sock?.ev?.removeAllListeners() } catch {}
+  try {
+    // logout() desvincula el dispositivo en WhatsApp; si falla (ya sin
+    // conexión, por ejemplo) se cierra el socket directamente.
+    await bot.sock?.logout()
+  } catch {
+    try { bot.sock?.ws?.close() } catch {}
+    try { bot.sock?.end?.(undefined) } catch {}
+  }
+
   subBots.delete(phone)
 
   await rustSetState(sessionId, 'Disconnected').catch(() => {})
@@ -427,7 +538,8 @@ function buildListText(prefix: string): string {
     const since = b.connectedAt
       ? `· ${Math.floor((Date.now() - b.connectedAt) / 60_000)}m`
       : ''
-    return ` ${i + 1}. ${statusIcon(b)} *${b.name}* (+${b.phone}) ${since}`
+    const msgs = b.msgCount ? `· ${b.msgCount} msj` : ''
+    return ` ${i + 1}. ${statusIcon(b)} *${b.name}* (+${b.phone}) ${since} ${msgs}`
   })
 
   return [
@@ -524,7 +636,7 @@ const command: Command = {
 
     // startSubBot handles Rust registration internally
     startSubBot(phone, method, sock, jid, msg, sender).catch(err => {
-      console.error(`[serbot] startSubBot error para ${phone}:`, err?.message ?? err)
+      logger.warn({ err: err?.message ?? err, phone }, 'Sub-bot: startSubBot falló')
     })
   },
 }
