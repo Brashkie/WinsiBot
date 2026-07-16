@@ -27,6 +27,8 @@ import { join } from 'path'
 import { logger } from '@core/logger.js'
 import {
   Curve25519,
+  Base64,
+  Utf8,
   constantTimeEqual,
   CURVE25519_PRIVATE_KEY_SIZE,
   CURVE25519_PUBLIC_KEY_SIZE,
@@ -57,8 +59,36 @@ function isBaileysBuffer(v: unknown): v is BaileysBuffer {
   )
 }
 
+// Buffer serializado por Node.js (Buffer.toJSON()) — usado en las estructuras
+// ANIDADAS de sender-key-*.json (a diferencia del BaileysBuffer de nivel superior,
+// que codifica en base64, estas anidadas guardan un array de bytes).
+function isNodeBufferJson(v: unknown): v is { type: 'Buffer'; data: number[] } {
+  return (
+    typeof v === 'object' && v !== null &&
+    (v as any).type === 'Buffer' &&
+    Array.isArray((v as any).data)
+  )
+}
+
+// Decodificación estricta: signalis-core Base64.decode() lanza en base64
+// malformado (caracteres inválidos, padding incorrecto), a diferencia de
+// Buffer.from(str, 'base64') que ignora silenciosamente los bytes corruptos.
 function decodeBuffer(bb: BaileysBuffer): Buffer {
-  return Buffer.from(bb.data, 'base64')
+  return Base64.decode(bb.data)
+}
+
+// Valida un campo opcional codificado en base64 (string plano, sin envoltorio
+// BaileysBuffer — así es como libsignal-node guarda las claves dentro de
+// session-*.json). Ausente = válido, ya que no todos los campos existen en
+// todos los estados de sesión (p. ej. pendingPreKey es opcional).
+function isValidB64Field(value: unknown, allowedSizes: number[]): boolean {
+  if (value === undefined || value === null) return true
+  if (typeof value !== 'string') return false
+  try {
+    return allowedSizes.includes(Base64.decode(value).length)
+  } catch {
+    return false
+  }
 }
 
 // ─── Verificar par de claves Curve25519 ──────────────────────────────────────
@@ -123,9 +153,13 @@ function verifyCreds(raw: Record<string, any>): { ok: boolean; failed: string[] 
 
   // signedPreKey signature debe existir y tener 64 bytes
   if (isBaileysBuffer(raw.signedPreKey?.signature)) {
-    const sig = decodeBuffer(raw.signedPreKey.signature)
-    if (sig.length !== 64) {
-      failed.push(`signedPreKey.signature — tamaño inválido (${sig.length} bytes, esperado 64)`)
+    try {
+      const sig = decodeBuffer(raw.signedPreKey.signature)
+      if (sig.length !== 64) {
+        failed.push(`signedPreKey.signature — tamaño inválido (${sig.length} bytes, esperado 64)`)
+      }
+    } catch {
+      failed.push('signedPreKey.signature — base64 inválido (corrupto)')
     }
   } else {
     failed.push('signedPreKey.signature — falta o inválido')
@@ -141,16 +175,93 @@ function verifyPreKey(raw: Record<string, any>): boolean {
 }
 
 // ─── Verificar sender-key-*.json ──────────────────────────────────────────────
-// Solo valida que sea JSON parseable con estructura mínima esperada.
+// El archivo completo es un BaileysBuffer (base64) que al decodificarse da un
+// string UTF-8 con un array JSON de estados SenderKeyRecord de libsignal. Los
+// buffers ANIDADOS (senderChainKey.seed, senderSigningKey.public) usan el
+// formato Buffer.toJSON() de Node (array de bytes), no base64.
 function verifySenderKey(raw: Record<string, any>): boolean {
-  // Baileys guarda sender keys como { _senderKeyData: {...} } o similar
-  // Lo mínimo: es un objeto no vacío y JSON parseable (ya pasó por JSON.parse)
-  return typeof raw === 'object' && raw !== null
+  if (!isBaileysBuffer(raw)) return false
+
+  let decoded: Buffer
+  try {
+    decoded = Base64.decode(raw.data)
+  } catch {
+    return false
+  }
+
+  let text: string
+  try {
+    text = Utf8.decode(decoded)
+  } catch {
+    return false
+  }
+
+  let records: any[]
+  try {
+    const parsed = JSON.parse(text)
+    records = Array.isArray(parsed) ? parsed : [parsed]
+  } catch {
+    return false
+  }
+
+  for (const rec of records) {
+    if (typeof rec !== 'object' || rec === null) return false
+
+    const seed = rec.senderChainKey?.seed
+    if (seed !== undefined && (!isNodeBufferJson(seed) || seed.data.length !== 32)) {
+      return false
+    }
+
+    const signingPub = rec.senderSigningKey?.public
+    if (
+      signingPub !== undefined &&
+      (!isNodeBufferJson(signingPub) || (signingPub.data.length !== 32 && signingPub.data.length !== 33))
+    ) {
+      return false
+    }
+  }
+
+  return true
+}
+
+// ─── Verificar sender-key-memory-*.json ──────────────────────────────────────
+// Distinto de sender-key-*.json: es un mapa plano { participantId: boolean }
+// que Baileys usa para rastrear a quién ya le mandó la sender key del grupo.
+// NO es un BaileysBuffer — validarlo con verifySenderKey() borraría archivos
+// válidos (confirmado inspeccionando los archivos reales en auth/).
+function verifySenderKeyMemory(raw: Record<string, any>): boolean {
+  if (typeof raw !== 'object' || raw === null) return false
+  return Object.values(raw).every(v => typeof v === 'boolean')
 }
 
 // ─── Verificar session-*.json ─────────────────────────────────────────────────
+// Forma real (libsignal-node): { _sessions: { [baseKeyB64]: SessionEntry }, version }.
+// Las claves dentro de cada SessionEntry son strings base64 planos (33 bytes para
+// claves públicas con el byte de tipo DJB, 32 bytes para privadas/root/chain keys).
 function verifySession(raw: Record<string, any>): boolean {
-  return typeof raw === 'object' && raw !== null
+  if (typeof raw !== 'object' || raw === null) return false
+  if (typeof raw._sessions !== 'object' || raw._sessions === null) return false
+
+  for (const entry of Object.values(raw._sessions) as any[]) {
+    if (typeof entry !== 'object' || entry === null) return false
+
+    if (!isValidB64Field(entry.currentRatchet?.ephemeralKeyPair?.pubKey, [32, 33])) return false
+    if (!isValidB64Field(entry.currentRatchet?.ephemeralKeyPair?.privKey, [32])) return false
+    if (!isValidB64Field(entry.currentRatchet?.lastRemoteEphemeralKey, [32, 33])) return false
+    if (!isValidB64Field(entry.currentRatchet?.rootKey, [32])) return false
+    if (!isValidB64Field(entry.indexInfo?.baseKey, [32, 33])) return false
+    if (!isValidB64Field(entry.indexInfo?.remoteIdentityKey, [32, 33])) return false
+
+    const chains = entry._chains
+    if (chains !== undefined) {
+      if (typeof chains !== 'object' || chains === null) return false
+      for (const chain of Object.values(chains) as any[]) {
+        if (!isValidB64Field(chain?.chainKey?.key, [32])) return false
+      }
+    }
+  }
+
+  return true
 }
 
 // ─── Función principal ────────────────────────────────────────────────────────
@@ -231,6 +342,18 @@ export async function verifyAuthDir(authDir: string): Promise<VerifyReport> {
         await unlink(path).catch(() => {})
         report.deleted.push(file)
         logger.warn(`[authVerifier] ${file} — par Curve25519 inválido → eliminado`)
+      }
+      continue
+    }
+
+    if (file.startsWith('sender-key-memory-')) {
+      if (verifySenderKeyMemory(raw)) {
+        report.valid++
+      } else {
+        report.corrupted.push(file)
+        await unlink(path).catch(() => {})
+        report.deleted.push(file)
+        logger.warn(`[authVerifier] ${file} — estructura inválida → eliminado`)
       }
       continue
     }

@@ -62,12 +62,12 @@ export async function handleAntitoxic(
   text:      string,
   isAdmin:   boolean,
   isBotAdmin: boolean,
-): Promise<void> {
+): Promise<boolean> {
   const config = getGroupConfig(jid)
-  if (!config.antitoxic) return
-  if (isAdmin) return
-  if (!isBotAdmin) return
-  if (!(await isToxic(text))) return
+  if (!config.antitoxic) return false
+  if (isAdmin) return false
+  if (!isBotAdmin) return false
+  if (!(await isToxic(text))) return false
 
   // Eliminar mensaje
   await sock.sendMessage(jid, { delete: msgKey }).catch(() => {})
@@ -89,4 +89,5 @@ export async function handleAntitoxic(
     }).catch(() => {})
     await sock.groupParticipantsUpdate(jid, [sender], 'remove').catch(() => {})
   }
+  return true
 }

@@ -1,5 +1,6 @@
 import type { Command } from '../../../types/index.js'
 import { getGroupConfig, setGroupConfig } from '@core/events/index.js'
+import { setAnticall } from '@core/events/anticall.js'
 
 // ─── Definición de opciones ───────────────────────────────────────────────────
 
@@ -180,6 +181,13 @@ const command: Command = {
     }
 
     setGroupConfig(jid, { [option.key]: isEnable })
+
+    // anticall es global (una llamada no pertenece a ningún grupo puntual),
+    // así que además de guardarse en este grupo para que el panel lo muestre
+    // consistente, actualiza el flag real que usa handleCallUpdate.
+    if (option.key === 'anticall') {
+      setAnticall(isEnable)
+    }
 
     const status = isEnable ? '✅ Activado' : '❌ Desactivado'
     await sock.sendMessage(jid, {

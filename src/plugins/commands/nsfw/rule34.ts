@@ -1,6 +1,6 @@
 import type { Command } from '../../../types/index.js'
 import { getGroupConfig } from '@core/events.js'
-import { searchRule34, isImagePost } from '@lib/rule34.js'
+import { searchRule34, isImagePost, Rule34AuthError } from '@lib/rule34.js'
 
 const command: Command = {
   name:        'rule34',
@@ -27,7 +27,19 @@ const command: Command = {
       return
     }
 
-    const posts  = await searchRule34(query).catch(() => [])
+    let posts: Awaited<ReturnType<typeof searchRule34>>
+    try {
+      posts = await searchRule34(query)
+    } catch (err) {
+      if (err instanceof Rule34AuthError) {
+        await sock.sendMessage(jid, {
+          text: `✗ Rule34 no está configurado (falta API key) — avisale al owner del bot.`,
+        }, { quoted: msg })
+        return
+      }
+      posts = []
+    }
+
     const images = posts.filter(isImagePost)
 
     if (!images.length) {

@@ -26,6 +26,14 @@ const SCENARIOS: Array<(m: number) => string> = [
   m => `Vendiste tu ropa usada en una plataforma fetichista. El envío fue lo más caro. Ganaste *¥${m}*`,
   m => `Hiciste una aparición especial en un video privado de alguien muy conocido. Cachés altos: *¥${m}*`,
   m => `Un grupo de ejecutivos aburridos pagó por tu compañía toda la noche. Aburridos pero generosos: *¥${m}*`,
+  m => `Grabaste un ASMR "diferente" y los suscriptores de esa madrugada pagaron extra por la exclusividad. Ganaste *¥${m}*`,
+  m => `Te invitaron a un yate privado a "conversar de negocios". Los negocios pagaron bien: *¥${m}*`,
+  m => `Alguien pagó por una videollamada de "compañía" que duró toda la noche. Cobraste *¥${m}*`,
+  m => `Fuiste la sorpresa del cumpleaños de alguien con mucho dinero y poco tacto. Generosa propina: *¥${m}*`,
+  m => `Un extranjero de vacaciones pagó de más solo por practicar el idioma contigo. Recibiste *¥${m}*`,
+  m => `Te contrataron para "acompañar" en una gala de beneficencia. Irónico, pero pagaron bien: *¥${m}*`,
+  m => `Alguien pagó por tus fotos de pies en una plataforma que ni sabías que existía. Ganaste *¥${m}*`,
+  m => `Hiciste de "novia falsa" para presentar en la cena familiar de alguien. Buena actuación, mejor pago: *¥${m}*`,
 ]
 
 const command: Command = {

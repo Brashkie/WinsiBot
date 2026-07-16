@@ -40,10 +40,42 @@ export function getUserInventory(jid: string): RollCharacter[] {
   return inventory.get(jid)!
 }
 
-export function addToInventory(jid: string, char: RollCharacter): void {
+// ─── Exclusividad por grupo ───────────────────────────────────────────────────
+// Un mismo personaje puede tener dueños distintos en grupos distintos (cada
+// grupo es su propia "economía"), pero dentro de UN mismo grupo, una vez
+// reclamado ya no puede volver a salir en #rw ni reclamarse de nuevo — ya
+// tiene dueño ahí. Se indexa en memoria desde `inventory` (fuente de verdad
+// persistida) via rebuildGroupClaims(), no es un Map separado a sincronizar.
+export const claimedInGroup = new Map<string, Map<string, string>>() // groupJid -> charKey -> ownerJid
+
+export function charKey(char: RollCharacter): string {
+  return `${char.source}:${char.id}`
+}
+
+export function getGroupClaim(groupJid: string, char: RollCharacter): string | null {
+  return claimedInGroup.get(groupJid)?.get(charKey(char)) ?? null
+}
+
+function registerGroupClaim(groupJid: string, char: RollCharacter, owner: string): void {
+  if (!claimedInGroup.has(groupJid)) claimedInGroup.set(groupJid, new Map())
+  claimedInGroup.get(groupJid)!.set(charKey(char), owner)
+}
+
+/** Reconstruye claimedInGroup desde `inventory` — llamar tras cargar inventory.json al arrancar. */
+export function rebuildGroupClaims(): void {
+  claimedInGroup.clear()
+  for (const [owner, chars] of inventory.entries()) {
+    for (const char of chars) {
+      if (char.claimedGroup) registerGroupClaim(char.claimedGroup, char, owner)
+    }
+  }
+}
+
+export function addToInventory(jid: string, char: RollCharacter, groupJid: string): void {
   const inv = getUserInventory(jid)
-  inv.push({ ...char, user: jid, claimedAt: Date.now() })
+  inv.push({ ...char, user: jid, claimedAt: Date.now(), claimedGroup: groupJid })
   inventory.set(jid, inv)
+  registerGroupClaim(groupJid, char, jid)
 }
 
 export function removeFromInventory(jid: string, charName: string): RollCharacter | null {
@@ -160,7 +192,18 @@ const command: Command = {
       return
     }
 
-    const char = pickRandom(chars)
+    // Excluir personajes que ya tienen dueño EN ESTE GRUPO — en otro grupo
+    // el mismo personaje puede volver a salir y tener otro dueño distinto.
+    const available = chars.filter(c => !getGroupClaim(jid, c))
+    if (!available.length) {
+      await sock.sendMessage(jid, {
+        text: `✗ Ya no quedan personajes de *${source}* disponibles en este grupo — todos tienen dueño.`,
+        edit: key,
+      } as any)
+      return
+    }
+
+    const char = pickRandom(available)
 
     // registrar cooldown
     rwCooldowns.set(sender, Date.now())

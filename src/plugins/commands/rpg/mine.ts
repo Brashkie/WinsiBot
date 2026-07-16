@@ -20,12 +20,21 @@ const MSGS: Array<(xp: number, gold: number) => string> = [
   (xp, g) => `💼 Un enano viejo te enseñó la técnica de minado profundo. Aplicándola, obtuviste *${xp} XP* y *¥${g}* en un solo turno.`,
   (xp, g) => `🔩 Las paredes de hierro oxidado escondían oro puro detrás. Paciencia y pico: *${xp} XP* y *¥${g}* bien ganados.`,
   (xp, g) => `🕳️ Te aventuraste más profundo que nadie en la mina y regresaste con *${xp} XP* y *¥${g}* que nadie más se atrevió a buscar.`,
+  (xp, g) => `🦇 Espantaste a una colonia de murciélagos y detrás de ellos había una bolsa de mineros olvidada. Encontraste *${xp} XP* y *¥${g}*.`,
+  (xp, g) => `🧊 Picaste una pared de hielo subterráneo y algo brillaba adentro. Sacaste *${xp} XP* y *¥${g}* antes de que se derritiera.`,
+  (xp, g) => `🕯️ Se te apagó el farol a mitad de túnel, pero seguiste picando a ciegas. Suerte de principiante: *${xp} XP* y *¥${g}*.`,
+  (xp, g) => `🐉 Encontraste el nido vacío de algo que definitivamente no querías conocer, pero dejó atrás *${xp} XP* y *¥${g}* en tesoro.`,
+  (xp, g) => `⛓️ Una vieja vagoneta oxidada seguía con carga sin recoger de otro minero. Te quedaste con *${xp} XP* y *¥${g}*.`,
+  (xp, g) => `🌊 El túnel se inundó justo cuando terminabas de picar la última veta. Saliste nadando con *${xp} XP* y *¥${g}*.`,
+  (xp, g) => `🔥 Encontraste una bolsa de carbón ardiendo que resultó ser algo mucho más valioso por debajo. Ganaste *${xp} XP* y *¥${g}*.`,
 ]
 
 const PREM_MSGS: Array<(xp: number, g: number) => string> = [
   (xp, g) => `👑 Con tu equipo premium de titanio, rompiste la roca volcánica más dura. Botín exclusivo: *${xp} XP* y *¥${g}* en metales raros.`,
   (xp, g) => `⚙️ Tu detector de venas marca rojo intenso — jackpot. Extraíste *${xp} XP* y *¥${g}* de un depósito virginal.`,
   (xp, g) => `🌟 El mapa de minería premium te llevó directo a una bolsa de gemas oculta. *${xp} XP* y *¥${g}* son tuyos.`,
+  (xp, g) => `💠 Tu taladro de diamante perforó una cámara secreta sellada hace siglos. Botín completo: *${xp} XP* y *¥${g}*.`,
+  (xp, g) => `🛰️ El escáner premium detectó una veta a 200 metros que nadie más podía ver. Extraíste *${xp} XP* y *¥${g}* sin esfuerzo.`,
 ]
 
 const command: Command = {

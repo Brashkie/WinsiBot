@@ -149,24 +149,26 @@ export async function findMediaRandom(name: string): Promise<MediaResult> {
 
 // ─── sendWithMedia ────────────────────────────────────────────────────────────
 export async function sendWithMedia(
-  sock:    WASocket,
-  jid:     string,
-  text:    string,
-  name:    string,
-  quoted?: WAMessage,
+  sock:       WASocket,
+  jid:        string,
+  text:       string,
+  name:       string,
+  quoted?:    WAMessage,
   random = false,
+  mentions?:  string[],
 ): Promise<void> {
-  const opts  = quoted ? { quoted } : {}
-  const media = random ? await findMediaRandom(name) : await findMedia(name)
+  const opts    = quoted ? { quoted } : {}
+  const mention = mentions ? { mentions } : {}
+  const media   = random ? await findMediaRandom(name) : await findMedia(name)
 
   if (media.type === 'video' && media.buffer) {
-    return safeSend(() => sock.sendMessage(jid, { video: media.buffer!, caption: text, gifPlayback: false }, opts))
+    return safeSend(() => sock.sendMessage(jid, { video: media.buffer!, caption: text, gifPlayback: false, ...mention }, opts))
   }
   if (media.type === 'gif' && media.buffer) {
-    return safeSend(() => sock.sendMessage(jid, { video: media.buffer!, caption: text, gifPlayback: true }, opts))
+    return safeSend(() => sock.sendMessage(jid, { video: media.buffer!, caption: text, gifPlayback: true, ...mention }, opts))
   }
   if (media.type === 'image' && media.buffer) {
-    return safeSend(() => sock.sendMessage(jid, { image: media.buffer!, caption: text }, opts))
+    return safeSend(() => sock.sendMessage(jid, { image: media.buffer!, caption: text, ...mention }, opts))
   }
-  return safeSend(() => sock.sendMessage(jid, { text }, opts))
+  return safeSend(() => sock.sendMessage(jid, { text, ...mention }, opts))
 }

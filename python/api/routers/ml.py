@@ -1,8 +1,17 @@
+import asyncio
 from fastapi import APIRouter
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel
 
 router = APIRouter()
+
+# Uvicorn corre con --workers 1 (un solo event loop para toda la API) — llamar
+# estos modelos/NLP directo dentro de un handler async bloquea ese único hilo
+# mientras corre la predicción. analyzeIntent() del bot llama /nlp/intent en
+# casi cada mensaje de grupo; sin asyncio.to_thread, una ráfaga de mensajes
+# encola TODOS los demás endpoints detrás (confirmado en producción: una
+# ráfaga tras reconectar tiró ECONNABORTED en /pending, /users, /messages,
+# /fast/process, etc. — no solo en los endpoints de este archivo).
 
 class TextRequest(BaseModel):
     text: str
@@ -24,7 +33,7 @@ class ImageRequest(BaseModel):
 async def predict_spam(req: TextRequest):
     try:
         from ml.spam_guard import check_message
-        result = check_message('__predict__', req.text)
+        result = await asyncio.to_thread(check_message, '__predict__', req.text)
         return { 'success': True, 'data': {
             'is_spam':    not result['allowed'],
             'confidence': 0.9 if not result['allowed'] else 0.1,
@@ -37,7 +46,8 @@ async def predict_spam(req: TextRequest):
 async def predict_intent(req: IntentRequest):
     try:
         from ml.models import get_intent_model
-        return { 'success': True, 'data': get_intent_model().predict(req.text) }
+        result = await asyncio.to_thread(lambda: get_intent_model().predict(req.text))
+        return { 'success': True, 'data': result }
     except Exception as e:
         return JSONResponse({ 'success': False, 'error': str(e) }, status_code=500)
 
@@ -45,7 +55,8 @@ async def predict_intent(req: IntentRequest):
 async def predict_sentiment(req: TextRequest):
     try:
         from ml.models import get_sentiment_model
-        return { 'success': True, 'data': get_sentiment_model().predict(req.text) }
+        result = await asyncio.to_thread(lambda: get_sentiment_model().predict(req.text))
+        return { 'success': True, 'data': result }
     except Exception as e:
         return JSONResponse({ 'success': False, 'error': str(e) }, status_code=500)
 
@@ -53,7 +64,8 @@ async def predict_sentiment(req: TextRequest):
 async def nlp_analyze(req: TextRequest):
     try:
         from ml.nlp import analyze_text
-        return { 'success': True, 'data': analyze_text(req.text) }
+        result = await asyncio.to_thread(analyze_text, req.text)
+        return { 'success': True, 'data': result }
     except Exception as e:
         return JSONResponse({ 'success': False, 'error': str(e) }, status_code=500)
 
@@ -61,7 +73,8 @@ async def nlp_analyze(req: TextRequest):
 async def nlp_intent(req: TextRequest):
     try:
         from ml.nlp import extract_intent
-        return { 'success': True, 'data': extract_intent(req.text) }
+        result = await asyncio.to_thread(extract_intent, req.text)
+        return { 'success': True, 'data': result }
     except Exception as e:
         return JSONResponse({ 'success': False, 'error': str(e) }, status_code=500)
 
@@ -69,7 +82,8 @@ async def nlp_intent(req: TextRequest):
 async def nlp_similarity(req: SimilarityRequest):
     try:
         from ml.nlp import text_similarity
-        return { 'success': True, 'data': { 'similarity': text_similarity(req.text1, req.text2) } }
+        result = await asyncio.to_thread(text_similarity, req.text1, req.text2)
+        return { 'success': True, 'data': { 'similarity': result } }
     except Exception as e:
         return JSONResponse({ 'success': False, 'error': str(e) }, status_code=500)
 
@@ -77,7 +91,8 @@ async def nlp_similarity(req: SimilarityRequest):
 async def nlp_entities(req: TextRequest):
     try:
         from ml.nlp import extract_entities
-        return { 'success': True, 'data': extract_entities(req.text) }
+        result = await asyncio.to_thread(extract_entities, req.text)
+        return { 'success': True, 'data': result }
     except Exception as e:
         return JSONResponse({ 'success': False, 'error': str(e) }, status_code=500)
 
@@ -85,6 +100,9 @@ async def nlp_entities(req: TextRequest):
 async def train_models():
     try:
         from ml.train import train_all
-        return { 'success': True, 'data': train_all(verbose=False) }
+        # Entrenamiento puede tardar segundos/minutos — con más razón no
+        # puede correr en el event loop principal.
+        result = await asyncio.to_thread(train_all, verbose=False)
+        return { 'success': True, 'data': result }
     except Exception as e:
         return JSONResponse({ 'success': False, 'error': str(e) }, status_code=500)

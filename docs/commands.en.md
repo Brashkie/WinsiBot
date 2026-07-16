@@ -1,10 +1,10 @@
 <div align="center">
 
-# 📖 Command Reference — WinsiBot v8.4.2
+# 📖 Command Reference — WinsiBot v8.4.3
 
 [![Commands](https://img.shields.io/badge/Commands-150%2B-6C63FF?style=for-the-badge)](.)
 [![Categories](https://img.shields.io/badge/Categories-19-00C9FF?style=for-the-badge)](.)
-[![Version](https://img.shields.io/badge/Version-8.4.2-brightgreen?style=flat-square)](../README.en.md)
+[![Version](https://img.shields.io/badge/Version-8.4.3-brightgreen?style=flat-square)](../README.en.md)
 
 [🇪🇸 Versión en español →](commands.md) &nbsp;·&nbsp; [💰 Economy guide →](economy.en.md) &nbsp;·&nbsp; [← Back to README](../README.en.md)
 
@@ -44,10 +44,10 @@
 | 4 | [🎴 Gacha / Characters](#-gacha--characters) | 6 |
 | 5 | [💑 Couples](#-couples) | 5 |
 | 6 | [🎭 Roleplay](#-roleplay) | 9 |
-| 7 | [🎉 Fun](#-fun) | 9 |
+| 7 | [🎉 Fun](#-fun) | 12 |
 | 8 | [🕹️ Games](#%EF%B8%8F-games) | 3 |
 | 9 | [🎁 Gifts](#-gifts) | 1 |
-| 10 | [🖼️ Media & Stickers](#%EF%B8%8F-media--stickers) | 5 |
+| 10 | [🖼️ Media & Stickers](#%EF%B8%8F-media--stickers) | 6 |
 | 11 | [🔽 Downloads](#-downloads) | 7 |
 | 12 | [🔍 Scrapers / Search](#-scrapers--search) | 4 |
 | 13 | [🎵 Music](#-music) | 1 |
@@ -258,6 +258,9 @@
 | `melones` | `pechos`, `boobs`, `copa` | 5s | 👤 | Measure the melons (just for laughs) |
 | `sega` | `fap`, `paja`, `chaquetita`, `ganzo` | 10s | 👤 | Fun animation |
 | `follar` | `coger` | 5s | 👤 | +18 command (requires NSFW enabled in group) |
+| `reto` | `dare` | 5s | 👤 | Random dare to play in the group (optional @mention or ↩️ reply) |
+| `verdad` | `truth` | 5s | 👤 | Random Truth or Dare question (optional @mention or ↩️ reply) |
+| `tweet` | `faketweet` | 10s | 👤 | Generates a fake tweet image with your text — attach/reply with an image alongside the text to include it in the tweet |
 
 ```
 !meme
@@ -265,6 +268,9 @@
 !top best gamers
 !sus @user
 !insultar @user
+!reto @user
+!verdad
+!tweet what a great day
 ```
 
 ---
@@ -279,6 +285,7 @@
 | `anime` | `anime4k` | 30s | 👤 | Upscale image resolution (x2 or x4) — does not change art style |
 | `toanime` | `animegan`, `cartoonize` | 30s | 👤 | Converts a real photo into actual anime art style (AnimeGANv2) |
 | `imagen` | `img`, `image`, `gimage`, `buscarimg` | 10s | 👤 | Search for images on the internet |
+| `lego` | `legofy`, `legoimg` | 15s | 👤 | Turns an image into a LEGO-style mosaic — reply to an image, optional brick size |
 
 ```
 !sticker        ← attach or reply to an image
@@ -286,6 +293,8 @@
 !removebg       ← reply to an image
 !anime x4       ← reply to an image
 !imagen dogs playing
+!lego           ← reply to an image (default brick size)
+!lego 10        ← reply to an image, small bricks (more detail)
 ```
 
 ---
@@ -353,7 +362,7 @@
 |---------|---------|:--------:|:----------:|-------------|
 | `porn` | `porngif` | 10s | 👤 | Adult video (only if NSFW is enabled) |
 | `rule34` | `r34` | 10s | 👤 | Search an image on Rule34 by tag |
-| `rule34video` | `r34video`, `r34v`, `rvideo34` | 15s | 👤 | Search a video on Rule34 by tag |
+| `rule34video` | `r34video`, `r34v`, `rvideo34` | 15s | 👤 | Search a video on rule34video.com by text — no API key required |
 | `sexyimg` | `imgsexy`, `randomsexy` | 8s | 👤 | Random +18 image |
 | `stickerporn` | `stickernsfw`, `sticker18` | 10s | 👤 | Random +18 sticker |
 
@@ -420,12 +429,13 @@
 
 | Command | Aliases | Cooldown | Permission | Description |
 |---------|---------|:--------:|:----------:|-------------|
-| `serbot` | `jadibot`, `subbot`, `listbots` | — | 👤 | Become a sub-bot · `serbot lista` to list active |
+| `serbot` | `jadibot`, `subbot`, `listbots` | — | 👤 | Become a sub-bot · `serbot lista` to list active · `serbot reconectar` (👑) forces an immediate retry of every disconnected sub-bot |
 | `stopbot` | `salirbot`, `desconectarbot`, `pararbot` | — | 👤 | Disconnect as a sub-bot |
 
 ```
 !serbot
 !serbot lista
+!serbot reconectar
 !stopbot
 ```
 

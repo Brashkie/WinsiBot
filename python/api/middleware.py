@@ -11,6 +11,15 @@ console = Console()
 # ─── Rate limiter en memoria por IP ──────────────────────────────────────────
 _rate_store: dict[str, list[float]] = defaultdict(list)
 
+# uvicorn solo escucha en 127.0.0.1 (ver app.py) — este servicio NUNCA queda
+# expuesto a internet, el único llamador real es el propio bot de Node.js
+# corriendo en la misma máquina. Limitarle la tasa a localhost no protege de
+# nada externo (no puede llegar) y sí frena tráfico legítimo — endpoints como
+# /api/v1/users se llaman en CADA mensaje entrante, y con varios cientos de
+# grupos activos superan fácil el límite genérico pensado para clientes
+# externos no confiables.
+_LOOPBACK_IPS = {'127.0.0.1', '::1', 'localhost'}
+
 class RateLimitMiddleware(BaseHTTPMiddleware):
     def __init__(self, app, max_calls: int = 120, window: int = 60):
         super().__init__(app)
@@ -18,7 +27,10 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
         self.window    = window
 
     async def dispatch(self, request: Request, call_next) -> Response:
-        ip  = request.client.host if request.client else 'unknown'
+        ip = request.client.host if request.client else 'unknown'
+        if ip in _LOOPBACK_IPS:
+            return await call_next(request)
+
         key = f"{ip}:{request.url.path}"
         now = time.time()
 

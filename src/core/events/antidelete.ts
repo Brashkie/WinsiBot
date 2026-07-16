@@ -3,7 +3,7 @@ import { getGroupConfig } from './index.js'
 
 export async function handleDeleteUpdate(
   sock:    WASocket,
-  message: { fromMe: boolean; id: string; participant?: string; remoteJid: string },
+  message: { fromMe: boolean; id: string; participant?: string | undefined; remoteJid: string },
 ): Promise<void> {
   if (message.fromMe) return
 

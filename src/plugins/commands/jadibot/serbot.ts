@@ -8,6 +8,7 @@ import {
 } from '@whiskeysockets/baileys'
 import { safeSend } from '@lib/media_sender.js'
 import { handleMessage } from '@core/handler.js'
+import { getGroupMetadata } from '@core/groupCache.js'
 import { logger } from '@core/logger.js'
 import { color, themes } from 'ansimax'
 import pino from 'pino'
@@ -17,13 +18,31 @@ import fs from 'fs'
 
 // ─── Config ────────────────────────────────────────────────────────────────────
 
-const MAX_SUBBOTS    = 100          // hard cap in TypeScript (Rust also enforces)
+// Configurable por env — el default (250) es una suba conservadora desde el
+// viejo hardcode de 100: cada sub-bot conectado es un WASocket completo (su
+// propia sesión Signal + WebSocket en memoria), no un proceso aparte, así que
+// el techo real depende de la RAM del server, no del código. Subilo con
+// SUBBOT_MAX si el server aguanta más — Rust es la fuente de verdad real
+// (ver syncSubBotLimitToRust más abajo), esto es solo el cap local en TS.
+const MAX_SUBBOTS    = Number(process.env.SUBBOT_MAX) || 250
 const SUB_DIR        = path.join(process.cwd(), 'data', 'subbots')
 const RUST_URL       = process.env.RUST_API_URL ?? 'http://localhost:3001'
 const RUST_KEY       = process.env.RUST_API_KEY ?? ''
 const RECONNECT_CAP  = 64_000       // ms — backoff cap per bot
 
 fs.mkdirSync(SUB_DIR, { recursive: true })
+
+// Sincroniza el límite de TS con la cuota real de Rust (PATCH /subbots/config,
+// hot-reload sin reiniciar Rust) — sin esto, subir SUBBOT_MAX acá no serviría
+// de nada porque Rust seguiría rechazando en su propio default (100).
+export async function syncSubBotLimitToRust(): Promise<void> {
+  const res = await rustFetch('/subbots/config', 'PATCH', { maxSubbots: MAX_SUBBOTS })
+  if (res?.maxSubbots === MAX_SUBBOTS) {
+    logger.info(`Sub-bots: límite sincronizado con Rust (${MAX_SUBBOTS})`)
+  } else {
+    logger.warn({ res }, 'Sub-bots: no se pudo sincronizar el límite con Rust — puede seguir usando su default')
+  }
+}
 
 // Un solo logger "silencioso" reusado por todos los sub-bots — Baileys crea un
 // child logger internamente por socket, así que no hay riesgo de estado
@@ -54,19 +73,39 @@ async function getBaileysVersion(): Promise<[number, number, number]> {
 // ─── Registry (sockets only — state is tracked by Rust) ───────────────────────
 
 export interface SubBot {
-  phone:         string
-  jid:           string
-  name:          string
-  sock:          any
-  status:        'connecting' | 'connected' | 'disconnected'
-  connectedAt:   number
-  method:        'qr' | 'code'
-  ownerJid:      string
-  msgCount:      number
-  lastMessageAt: number
+  phone:                string
+  jid:                  string
+  name:                 string
+  sock:                 any
+  status:               'connecting' | 'connected' | 'disconnected'
+  connectedAt:          number
+  method:                'qr' | 'code'
+  ownerJid:             string
+  msgCount:             number
+  lastMessageAt:        number
+  lastDisconnectReason?: string
+  lastDisconnectAt?:     number
 }
 
 export const subBots = new Map<string, SubBot>()
+
+// ─── Diagnóstico — por qué se cayó ────────────────────────────────────────────
+function describeDisconnectReason(code: number | undefined): string {
+  switch (code) {
+    case DisconnectReason.badSession:          return 'Sesión corrupta'
+    case DisconnectReason.connectionClosed:    return 'Conexión cerrada'
+    case DisconnectReason.connectionLost:      return 'Conexión perdida (red)'
+    case DisconnectReason.connectionReplaced:  return 'Reemplazada por otro dispositivo'
+    case DisconnectReason.loggedOut:           return 'Sesión cerrada (logout)'
+    case DisconnectReason.restartRequired:     return 'WhatsApp pidió reiniciar'
+    case DisconnectReason.multideviceMismatch: return 'Desajuste multi-dispositivo'
+    case DisconnectReason.forbidden:           return 'Prohibido por WhatsApp (403)'
+    case DisconnectReason.unavailableService:  return 'Servicio no disponible (503)'
+    case 405:                                  return 'Método no permitido (405)'
+    case undefined:                            return 'Error desconocido'
+    default:                                   return `Código ${code}`
+  }
+}
 
 // Teléfonos cuyo cierre de socket fue provocado a propósito (QR expirado,
 // !stopbot) — el handler de 'connection.update' lo chequea para NO agendar
@@ -192,6 +231,11 @@ export async function startSubBot(
   const version             = await getBaileysVersion()
   const { state, saveCreds } = await useMultiFileAuthState(subPath)
 
+  // Referencia mutable para que cachedGroupMetadata (abajo) pueda usar el
+  // socket una vez creado — Baileys solo la invoca después de construir el
+  // socket por completo, así que para ese momento subSockRef ya está seteada.
+  let subSockRef: any
+
   const subSock = makeWASocket({
     version,
     logger:            SILENT_LOGGER,
@@ -204,7 +248,15 @@ export async function startSubBot(
       ? ['Windows', 'Chrome', '110.0.5585.95']
       : ['WinsiBot-SubBot', 'Chrome', '2.0.0'],
     generateHighQualityLinkPreview: true,
+    // Mismo fix que el bot principal — evita que Baileys vuelva a pedir
+    // groupMetadata a WhatsApp en cada mensaje enviado (causa de los
+    // "rate-overlimit"). Reusa el mismo cache global de groupCache.ts.
+    cachedGroupMetadata: async (jid: string) => {
+      if (!subSockRef) return undefined
+      return getGroupMetadata(subSockRef, jid)
+    },
   })
+  subSockRef = subSock
 
   subBots.set(phone, {
     phone,
@@ -228,6 +280,20 @@ export async function startSubBot(
   let qrSent       = false
 
   subSock.ev.on('connection.update', async (update: any) => {
+    // Todo el cuerpo envuelto en try/catch — antes un error inesperado acá
+    // (Baileys no espera el resultado de listeners async, así que un throw
+    // se vuelve un unhandledRejection) dependía por completo de que el
+    // filtro global de mensajes conocidos en index.ts lo reconociera; si no
+    // matcheaba ningún patrón, tumbaba TODO el proceso — bot principal y
+    // los demás sub-bots incluidos — por un error de UN solo sub-bot.
+    try {
+      await handleConnectionUpdate(update)
+    } catch (err) {
+      logger.warn({ err, phone }, 'Sub-bot: error en connection.update — aislado, no afecta a los demás')
+    }
+  })
+
+  async function handleConnectionUpdate(update: any): Promise<void> {
     const { connection, lastDisconnect, qr } = update
 
     // ─── QR ────────────────────────────────────────────────────────────────
@@ -361,10 +427,17 @@ export async function startSubBot(
       if (intentionalCloses.delete(phone)) return
 
       const reason = (lastDisconnect?.error as any)?.output?.statusCode
+      const reasonText = describeDisconnectReason(reason)
 
       const current = subBots.get(phone)
       if (current) {
-        subBots.set(phone, { ...current, status: 'disconnected', sock: null })
+        subBots.set(phone, {
+          ...current,
+          status:               'disconnected',
+          sock:                 null,
+          lastDisconnectReason: reasonText,
+          lastDisconnectAt:     Date.now(),
+        })
       }
 
       // Permanent logout — clean up entirely
@@ -414,7 +487,7 @@ export async function startSubBot(
           })
       }, delay)
     }
-  })
+  }
 
   // ─── Mensajes entrantes ───────────────────────────────────────────────────
   // Cada sub-bot procesa comandos con el mismo handler central que el bot
@@ -456,6 +529,8 @@ export async function startSubBot(
 // ─── Restaurar sub-bots al arrancar ───────────────────────────────────────────
 
 export async function restoreSubBots(mainSock: any): Promise<void> {
+  await syncSubBotLimitToRust().catch(() => {})
+
   if (!fs.existsSync(SUB_DIR)) return
 
   const folders = fs.readdirSync(SUB_DIR).filter(f =>
@@ -539,8 +614,19 @@ function buildListText(prefix: string): string {
       ? `· ${Math.floor((Date.now() - b.connectedAt) / 60_000)}m`
       : ''
     const msgs = b.msgCount ? `· ${b.msgCount} msj` : ''
-    return ` ${i + 1}. ${statusIcon(b)} *${b.name}* (+${b.phone}) ${since} ${msgs}`
+    const main = ` ${i + 1}. ${statusIcon(b)} *${b.name}* (+${b.phone}) ${since} ${msgs}`
+
+    // Motivo de la última caída — solo tiene sentido mostrarlo si no está conectado.
+    if (b.status !== 'connected' && b.lastDisconnectReason) {
+      const ago = b.lastDisconnectAt
+        ? `hace ${Math.floor((Date.now() - b.lastDisconnectAt) / 60_000)}m`
+        : ''
+      return `${main}\n     ╰ ${b.lastDisconnectReason} ${ago}`
+    }
+    return main
   })
+
+  const disconnected = [...subBots.values()].filter(b => b.status === 'disconnected').length
 
   return [
     `◈ *Sub-bots activos — ${subBots.size}/${MAX_SUBBOTS}*`,
@@ -548,7 +634,8 @@ function buildListText(prefix: string): string {
     ...lines,
     ``,
     `§ ${prefix}stopbot  para desconectarte`,
-  ].join('\n')
+    disconnected ? `§ ${prefix}serbot reconectar  — reintentar los ${disconnected} caídos ahora` : '',
+  ].filter(Boolean).join('\n')
 }
 
 // ─── Command ──────────────────────────────────────────────────────────────────
@@ -559,7 +646,7 @@ const command: Command = {
   description: 'Conviértete en sub-bot  |  serbot lista — ver activos',
   category:    'jadibot',
 
-  async execute({ sock, jid, msg, args, sender, isGroup, command: cmd, prefix }) {
+  async execute({ sock, jid, msg, args, sender, isGroup, isOwner, command: cmd, prefix }) {
     const sub = args[0]?.toLowerCase()
 
     // ─── Lista — funciona en grupos y privado ─────────────────────────────
@@ -567,6 +654,44 @@ const command: Command = {
       await safeSend(() => sock.sendMessage(jid, {
         text: buildListText(prefix),
       }, { quoted: msg }))
+      return
+    }
+
+    // ─── Reconectar en lote — fuerza el reintento YA en vez de esperar el
+    // backoff exponencial de cada sub-bot caído (útil tras un corte de red
+    // compartido que tumbó varios de golpe). Solo el owner: afecta sub-bots
+    // de cualquier usuario, no solo los propios.
+    if (sub === 'reconectar' || sub === 'reconnect') {
+      if (!isOwner) {
+        await safeSend(() => sock.sendMessage(jid, {
+          text: `✗ Solo el owner puede forzar la reconexión de todos los sub-bots.`,
+        }, { quoted: msg }))
+        return
+      }
+
+      const targets = [...subBots.entries()].filter(([, b]) => b.status === 'disconnected')
+      if (!targets.length) {
+        await safeSend(() => sock.sendMessage(jid, {
+          text: `§ No hay sub-bots caídos esperando reconexión.`,
+        }, { quoted: msg }))
+        return
+      }
+
+      await safeSend(() => sock.sendMessage(jid, {
+        text: `◈ Reconectando ${targets.length} sub-bot(s)...`,
+      }, { quoted: msg }))
+
+      for (const [phone, bot] of targets) {
+        let chatJid = jid
+        try {
+          const meta = JSON.parse(fs.readFileSync(path.join(getSubPath(phone), 'meta.json'), 'utf-8'))
+          chatJid = meta?.chatJid ?? jid
+        } catch {}
+
+        startSubBot(phone, bot.method, sock, chatJid, null, bot.ownerJid, 0, true).catch(err => {
+          logger.warn({ err, phone }, 'Sub-bot: reconexión manual falló')
+        })
+      }
       return
     }
 

@@ -1,11 +1,11 @@
 import type { Command } from '../../../types/index.js'
 import { getGroupConfig } from '@core/events.js'
-import { searchRule34, isVideoPost } from '@lib/rule34.js'
+import { searchRule34Video, downloadRule34Video } from '@lib/rule34video.js'
 
 const command: Command = {
   name:        'rule34video',
   aliases:     ['r34video', 'r34v', 'rvideo34'],
-  description: 'Busca un video en Rule34 — requiere nsfw activado',
+  description: 'Busca un video en Rule34Video — requiere nsfw activado',
   category:    'nsfw' as any,
   cooldown:    15,
   groupOnly:   true,
@@ -27,21 +27,35 @@ const command: Command = {
       return
     }
 
-    const posts  = await searchRule34(`${query} video`).catch(() => [])
-    const videos = posts.filter(isVideoPost)
-
-    if (!videos.length) {
+    const results = await searchRule34Video(query).catch(() => [])
+    if (!results.length) {
       await sock.sendMessage(jid, {
         text: `✗ No se encontraron videos para "${query}".`,
       }, { quoted: msg })
       return
     }
 
-    const post = videos[Math.floor(Math.random() * videos.length)]!
+    const pick = results[Math.floor(Math.random() * results.length)]!
+
+    const sent = await sock.sendMessage(jid, {
+      text: `◈ Descargando video...`,
+    }, { quoted: msg })
+    const key = sent?.key
+
+    const buffer = await downloadRule34Video(pick.pageUrl).catch(() => null)
+    if (!buffer) {
+      await sock.sendMessage(jid, {
+        text: `✗ No se pudo descargar el video, intenta de nuevo.`,
+        edit: key,
+      } as any)
+      return
+    }
+
+    await sock.sendMessage(jid, { text: '✔ Listo', edit: key } as any)
 
     await sock.sendMessage(jid, {
-      video:   { url: post.file_url },
-      caption: `🔞 *${query}*\n§ ${videos.length} resultados`,
+      video:   buffer,
+      caption: `🔞 *${pick.title}*\n§ ${results.length} resultados para "${query}"`,
     }, { quoted: msg })
   },
 }

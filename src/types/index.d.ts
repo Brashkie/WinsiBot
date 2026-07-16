@@ -144,6 +144,7 @@ export interface RollCharacter {
   habilidad?:  string
   debilidad?:  string
   claimedAt?:  number   // timestamp ms cuando fue reclamado en inventario
+  claimedGroup?: string // jid del grupo donde fue reclamado (exclusividad por grupo)
 }
 
 export interface RollData {

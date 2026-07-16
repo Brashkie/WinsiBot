@@ -24,6 +24,16 @@ const WIN: Array<(m: number) => string> = [
   m => `Organizaste una rifa falsa en el grupo del colegio. Nadie ganó. Tú te quedaste con *¥${m}*`,
   m => `Falsificaste tickets para un concierto y los vendiste todos. Los compradores lo descubrieron después de entrar. Ganaste *¥${m}*`,
   m => `Convenciste a tres personas de que eras cobrador del banco. Firmaron y pagaron. Total: *¥${m}*`,
+  m => `Clonaste la tarjeta de acceso del edificio de oficinas y vendiste copias a los que llegaban tarde. Ganaste *¥${m}*`,
+  m => `Montaste un "cajero automático" falso en la esquina por dos horas antes de que alguien sospechara. Recogiste *¥${m}*`,
+  m => `Le vendiste entradas VIP falsas a un concierto que ni siquiera existía. El grupo de WhatsApp lo creyó todo. Ganaste *¥${m}*`,
+  m => `Desviaste un envío de encomiendas a tu dirección "por error". Adentro había algo que se vendió rápido: *¥${m}*`,
+  m => `Te hiciste pasar por inspector de sanidad y "multaste" a tres puestos del mercado. Pagaron para que te fueras: *¥${m}*`,
+  m => `Encontraste la contraseña del wifi de un vecino pegada en la puerta y le vendiste el acceso a medio edificio. Ganaste *¥${m}*`,
+  m => `Organizaste una "colecta solidaria" que nunca llegó a ningún lado. El grupo del barrio donó *¥${m}*`,
+  m => `Le cambiaste la etiqueta de precio a un producto caro en la tienda. El cajero ni lo notó. Ahorraste y revendiste: *¥${m}*`,
+  m => `Convenciste a la aseguradora de que el celular "se cayó al río" cuando en realidad lo vendiste. Cobraste *¥${m}*`,
+  m => `Falsificaste un currículum tan bueno que hasta a ti te sorprendió que funcionara. Cobraste el primer sueldo: *¥${m}*`,
 ]
 
 const LOSE: Array<(loss: number, xp: number) => string> = [
@@ -35,6 +45,13 @@ const LOSE: Array<(loss: number, xp: number) => string> = [
   (l, x) => `Te confundiste de casa al entrar. Era la del jefe del barrio. Saliste corriendo pero te costó *¥${l}* y *${x} XP*`,
   (l, x) => `Vendiste cursos falsos pero uno de tus clientes era abogado. Te demandó en 24 horas. Perdiste *¥${l}* y *${x} XP*`,
   (l, x) => `Intentaste asaltar la bodega del viejo Ramón. El viejo sacó una escoba y te persiguió 3 cuadras. Perdiste *¥${l}* y *${x} XP*`,
+  (l, x) => `El "cajero falso" que armaste se cayó a mitad de estafa frente a todo el mundo. Perdiste *¥${l}* y *${x} XP* de dignidad`,
+  (l, x) => `La tarjeta de acceso clonada activó la alarma en vez de abrir la puerta. Perdiste *¥${l}* y *${x} XP* corriendo`,
+  (l, x) => `Uno de los que compró la entrada falsa resultó ser el hermano del organizador real. Perdiste *¥${l}* y *${x} XP*`,
+  (l, x) => `El inspector de sanidad de verdad llegó justo cuando estabas "inspeccionando". Perdiste *¥${l}* y *${x} XP*`,
+  (l, x) => `El vecino cambió la contraseña del wifi antes de que cobraras la última cuota. Perdiste *¥${l}* y *${x} XP*`,
+  (l, x) => `La aseguradora mandó a alguien a "verificar" el río. No encontraron el celular, sí encontraron tu mentira. Perdiste *¥${l}* y *${x} XP*`,
+  (l, x) => `Alguien reconoció el currículum falso porque era literalmente el suyo. Perdiste *¥${l}* y *${x} XP*`,
 ]
 
 const command: Command = {

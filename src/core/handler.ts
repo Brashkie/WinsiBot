@@ -13,6 +13,9 @@ import {
   addXP,
   checkSpam,
   handleSpam,
+  handleAntilink,
+  handleAntitoxic,
+  handleAntitraba,
   getGroupConfig,
   getUserData,
   setUserData,
@@ -396,9 +399,21 @@ export async function handleMessage(msg: WAMessage, sock: WASocket): Promise<voi
     // número real (si Baileys lo dio) evita ese pisado.
     const senderForFast = getOwnerCandidateId(msg, base.isGroup) || base.sender
 
+    // resolveGroupRoles depende de getGroupParticipants → en un cache miss
+    // (TTL 5min, 400+ grupos activos) es un IQ en vivo a WhatsApp, sin límite
+    // propio — y defaultQueryTimeoutMs del socket es 60s. Sin este race, un
+    // solo grupo con metadata lenta podía trabar el pipeline entero de ESE
+    // mensaje hasta 60s antes de que el timeout general del handler (20s)
+    // recién ahí soltara el cupo del semáforo. 2s alcanza de sobra para el
+    // caso normal (cache hit = síncrono) y deja el peor caso acotado; la
+    // consulta real sigue en curso de fondo y llena el cache para la próxima.
     const [rolesResult, fastResult] = await Promise.allSettled([
       base.isGroup
-        ? resolveGroupRoles(sock, base.jid, base.sender)
+        ? Promise.race([
+            resolveGroupRoles(sock, base.jid, base.sender),
+            new Promise<{ isAdmin: boolean; isBotAdmin: boolean }>(r =>
+              setTimeout(() => r({ isAdmin: false, isBotAdmin: false }), 2_000)),
+          ])
         : Promise.resolve({ isAdmin: false, isBotAdmin: false }),
       Promise.race([
         fastProcess(base.text, config.prefix, senderForFast, base.jid, config.ownerJid),
@@ -511,18 +526,23 @@ export async function handleMessage(msg: WAMessage, sock: WASocket): Promise<voi
 
       if (groupCfg.muted) return
 
-      if (groupCfg.antilink) {
-        const hasLink = /https?:\/\/|wa\.me\/|chat\.whatsapp\.com|t\.me\//i.test(ctx.text)
-        if (hasLink) {
-          await safeSend(() => sock.sendMessage(ctx.jid, { delete: msg.key })).catch(() => {})
-          const num = ctx.sender.replace('@s.whatsapp.net', '').replace('@lid', '').replace(/[^0-9]/g, '')
-          await safeSend(() => sock.sendMessage(ctx.jid, {
-            text:     `§ @${num} los links no estan permitidos`,
-            mentions: [ctx.sender],
-          }, { quoted: msg }))
-          return
-        }
-      }
+      // handleAntilink cubre antilink (WA), antilink2 (genérico), y las 4
+      // flags de anti-plataforma (telegram/discord/tiktok/youtube) en un
+      // solo chequeo — lee groupCfg internamente vía getGroupConfig(jid).
+      const linkDeleted = await handleAntilink(
+        sock, ctx.jid, ctx.sender, msg.key, ctx.text, ctx.isAdmin, ctx.isBotAdmin,
+      )
+      if (linkDeleted) return
+
+      const toxicDeleted = await handleAntitoxic(
+        sock, ctx.jid, ctx.sender, msg.key, ctx.text, ctx.isAdmin, ctx.isBotAdmin,
+      )
+      if (toxicDeleted) return
+
+      const trabaDeleted = await handleAntitraba(
+        sock, ctx.jid, ctx.sender, msg.key, ctx.text, ctx.isAdmin, ctx.isBotAdmin,
+      )
+      if (trabaDeleted) return
 
       if (groupCfg.antispam && ctx.text.length > 10) {
         // Timeout corto a propósito: esto corre para CADA mensaje de grupo
@@ -650,6 +670,12 @@ export async function handleMessage(msg: WAMessage, sock: WASocket): Promise<voi
     if (ctx.isGroup) {
       const groupCfg = getGroupConfig(ctx.jid)
       if (groupCfg.modoadmin && !ctx.isAdmin && !ctx.isOwner) return
+      if (command.category === 'rpg' && !groupCfg.rpg && !ctx.isOwner) {
+        await safeSend(() => sock.sendMessage(ctx.jid, {
+          text: '✗ Los comandos RPG están desactivados en este grupo.',
+        }, { quoted: msg }))
+        return
+      }
     }
 
     if (command.premiumOnly && !user.premium && !ctx.isOwner) {

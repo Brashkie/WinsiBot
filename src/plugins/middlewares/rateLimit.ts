@@ -43,6 +43,13 @@ async function spamGuardCheck(
   text:   string,
 ): Promise<{ allowed: boolean; reason: string; cooldown_ms: number }> {
   try {
+    // Este chequeo corre en el camino crítico de CADA comando (ver abajo).
+    // check_message() del lado Python es una llamada a una lib C in-process
+    // (microsegundos en el caso normal) — 1s ya es generosísimo para eso.
+    // Sin este timeout explícito, pythonPost usaba el default de 5s del
+    // cliente (+ 1 reintento con backoff si Python está lento), pudiendo
+    // demorar 10+ segundos la respuesta de CUALQUIER comando cuando Python
+    // está ocupado/degradado, en vez de fallar rápido y dejar pasar el mensaje.
     const res = await pythonPost<{
       allowed:     boolean
       reason:      string
@@ -55,7 +62,7 @@ async function spamGuardCheck(
       window_ms:       5000,
       max_repeats:     3,
       flood_window_ms: 30000,
-    })
+    }, 1_000)
     return res?.data ?? { allowed: true, reason: 'ok', cooldown_ms: 0 }
   } catch {
     // si Flask no responde — permitir para no bloquear al usuario

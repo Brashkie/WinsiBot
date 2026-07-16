@@ -50,6 +50,21 @@ const JOBS: Array<(m: number) => string> = [
   m => `Actuaste como "experto en tecnología" en el noticiero local. Dijiste "inteligencia artificial" 12 veces y te pagaron *¥${m}*`,
   m => `Ganaste una apuesta con el grupo de que podías aguantar sin ver el celular 2 horas. Ganaste *¥${m}* y una pequeña crisis existencial`,
   m => `Hiciste el trabajo de tu compañero que "no tenía tiempo". Tú tampoco tenías tiempo. Pero te dio *¥${m}*`,
+  m => `Le enseñaste a tu abuela a mandar audios de WhatsApp. Ahora manda 40 al día pero te lo agradeció con *¥${m}*`,
+  m => `Vendiste tu vieja consola en el grupo de "compra y venta" del barrio antes de que alguien notara que le faltaba un cable. Ganaste *¥${m}*`,
+  m => `Te contrataron por un día para hacer de "cliente misterioso" en un restaurante. Comiste gratis y encima cobraste *¥${m}*`,
+  m => `Armaste un mueble de IKEA para un vecino que llevaba 3 fines de semana intentándolo. Sobraron 4 tornillos, nadie preguntó. Te pagó *¥${m}*`,
+  m => `Hiciste de DJ en el cumpleaños de un primo con el celular y una bocina bluetooth. La pista se llenó igual. Te dieron *¥${m}*`,
+  m => `Pasaste la tarde respondiendo reseñas de un negocio local haciéndote pasar por "atención al cliente". Te pagaron *¥${m}*`,
+  m => `Cuidaste el perro de un vecino que solo quería morder los cables del cargador. Sobreviviste el cargador (casi) y ganaste *¥${m}*`,
+  m => `Escribiste la biografía de Instagram de un influencer local que no sabía qué poner. "Viviendo el momento ✨" fue suficiente: *¥${m}*`,
+  m => `Te pagaron por hacer fila en el banco por alguien que odiaba hacer fila. Tres horas después, cobraste *¥${m}*`,
+  m => `Organizaste el clóset de alguien que juraba que "así encontraba todo más rápido". No era cierto. Te pagó igual *¥${m}*`,
+  m => `Grabaste un video de "unboxing" para una tienda que vende fundas de celular. Le pusiste dramatismo de más. Cobraste *¥${m}*`,
+  m => `Le hiciste de intérprete a un turista perdido que solo hablaba en señas y emojis. Te agradeció con *¥${m}*`,
+  m => `Reparaste el wifi de la oficina apagando y prendiendo el router. Te llamaron "el de sistemas" el resto del día. Ganaste *¥${m}*`,
+  m => `Vendiste boletos de una rifa que ni sabías de qué era el premio. Se agotaron todos igual. Comisión: *¥${m}*`,
+  m => `Le diste like y comentario a 200 publicaciones para "subir el engagement" de un emprendimiento nuevo. Pagaron *¥${m}*`,
 ]
 
 const command: Command = {

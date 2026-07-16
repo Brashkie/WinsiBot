@@ -95,6 +95,8 @@ Las mascotas suben de nivel con la EXP que ganan cuidándolas y evolucionan en c
 
 Importante: después de reclamar con `!c`, hay una ventana de **16 segundos** donde cualquier otra persona del grupo puede "robarte" el claim respondiendo también — recién después de esos 16s el personaje pasa a tu colección en firme.
 
+Un personaje ya reclamado **no puede volver a salir ni reclamarse de nuevo en ese mismo grupo** — ya tiene dueño ahí. El mismo personaje sí puede salir y tener un dueño distinto en otro grupo (cada grupo es su propia economía).
+
 ---
 
 ## 🏆 Copas / Arena PvP

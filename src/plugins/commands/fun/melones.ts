@@ -58,15 +58,12 @@ function getMeasurement(): CupResult {
   }
 }
 
-const CUP_ORDER = ['AA', 'A', 'B', 'C', 'D', 'E', 'F', 'G', 'H']
-
-function buildBar(cup: string): string {
-  const total  = CUP_ORDER.length
-  const idx    = CUP_ORDER.indexOf(cup)
-  const filled = Math.max(1, Math.round(((idx + 1) / total) * 15))
-  const empty  = 15 - filled
-  return '(' + '='.repeat(filled) + '░'.repeat(empty) + ')'
-}
+const ASCII_ART =
+  `⠄⠄⠄⠄⢘⣛⣩⣾⣿⣿⣿⣶⣶⣿⣿⣿⣿⣿\n` +
+  `⠄⠄⣀⠺⣿⣿⣿⠟⣡⣾⠿⢿⣿⣿⡎⢋⠻⣿\n` +
+  `⠄⠄⣉⣠⣿⣿⡏⣼⣿⠁⠶⠄⣿⣿⡇⡼⠄⠈\n` +
+  `⠄⠄⣈⠻⠿⠟⢁⠘⢿⣷⣶⣾⣿⠟⡰⠃⠄⠄\n` +
+  `⠄⣴⣿⣧⢻⣿⣿⣷⣦⣬⣉⣩⣴⠞⠁⠄⠄⠄`
 
 function getProbText(cup: string): string {
   switch (cup) {
@@ -112,7 +109,6 @@ const command: Command = {
     }
 
     const result = getMeasurement()
-    const bar    = buildBar(result.cup)
     const isMe   = rawTarget === sender
 
     const lines = [
@@ -122,7 +118,7 @@ const command: Command = {
       ``,
       `  § Usuario: @${targetNum}`,
       ``,
-      `  ${bar}`,
+      ASCII_ART,
       ``,
       `  ◈ Talla:    *${result.cup}*`,
       `  ◈ Rango:    *${result.rank}*`,

@@ -10,7 +10,7 @@ import { handleMessage, getActiveHandlerCount } from '@core/handler.js'
 import { loadCommands } from '@plugins/commands/index.js'
 import { logger } from '@core/logger.js'
 import { config } from '@config'
-import { loadAll, saveAll, startAutoSave } from '@core/persistence.js'
+import { loadAll, saveAll, startAutoSave, stopAutoSave } from '@core/persistence.js'
 import { color, gradient, loader, ascii, themes, configure, components, BG, animate } from 'ansimax'
 
 // ffmpeg-static ya era una dependencia del proyecto, pero nada la usaba —
@@ -42,11 +42,25 @@ const NOISY_CONSOLE = [
   'Closing session:',
   'Decrypted message with closed session.',
   'Closing open session in favor of incoming prekey bundle',
+  'Session already closed',
 ]
 const NOISY_ERRORS  = ['Failed to decrypt message with any known session', 'Session error:']
 
+// Estas dos también vuelcan el SessionEntry COMPLETO (buffers de claves
+// incluidos) por consola — a diferencia de NOISY_CONSOLE (que se silencia
+// del todo), acá queda una línea compacta para saber que está pasando sin
+// el volcado gigante.
+const SESSION_DUMP_LABELS: Record<string, string> = {
+  'Removing old closed session:': '[libsignal] sesión Signal antigua eliminada (limpieza normal)',
+  'Opening session:':             '[libsignal] nueva sesión Signal abierta',
+}
+
 const _origConsoleInfo = console.info.bind(console)
 console.info = (...args: unknown[]) => {
+  if (typeof args[0] === 'string' && args[0] in SESSION_DUMP_LABELS) {
+    logger.debug(SESSION_DUMP_LABELS[args[0]])
+    return
+  }
   if (typeof args[0] === 'string' && NOISY_CONSOLE.some(p => (args[0] as string).startsWith(p))) return
   _origConsoleInfo(...args)
 }
@@ -132,6 +146,7 @@ function shutdownCleanly(): void {
   console.log(`  ${color.dim('Guardando datos...')}`)
 
   killSpawnedChildren()
+  stopAutoSave()
 
   saveAll()
     .catch(() => {})
@@ -192,6 +207,7 @@ process.on('SIGTERM', () => {
   console.log(`  ${themes.warning('◆')} ${color.bold(themes.warning('WinsiBot detenido (SIGTERM)'))}`)
   try { process.stdin.setRawMode(false) } catch {}
   killSpawnedChildren()
+  stopAutoSave()
   saveAll().catch(() => {}).finally(() => process.exit(0))
 })
 
@@ -573,6 +589,7 @@ async function main() {
     console.log(`  ${color.dim('Si fue un logout: borra /auth y reinicia para escanear QR nuevo')}`)
     console.log(`  ${color.dim('Si fue un kick por otra instancia: cierra WhatsApp Web y reinicia')}`)
     console.log()
+    stopAutoSave()
     saveAll().catch(() => {}).finally(() => process.exit(0))
   })
 

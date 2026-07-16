@@ -1,6 +1,6 @@
 <div align="center">
 
-<img src="https://capsule-render.vercel.app/api?type=waving&color=0:6C63FF,100:00C9FF&height=180&section=header&text=WinsiBot&fontSize=62&fontColor=ffffff&fontAlignY=38&desc=v8.4.2%20%E2%80%94%20Enterprise%20WhatsApp%20Bot&descAlignY=58&descSize=18" width="100%"/>
+<img src="https://capsule-render.vercel.app/api?type=waving&color=0:6C63FF,100:00C9FF&height=180&section=header&text=WinsiBot&fontSize=62&fontColor=ffffff&fontAlignY=38&desc=v8.4.3%20%E2%80%94%20Enterprise%20WhatsApp%20Bot&descAlignY=58&descSize=18" width="100%"/>
 
 <br/>
 
@@ -10,7 +10,7 @@
 [![Rust](https://img.shields.io/badge/Rust-1.75%2B-CE422B?style=for-the-badge&logo=rust&logoColor=white)](https://rust-lang.org)
 
 [![License](https://img.shields.io/badge/License-GPL--3.0-blue?style=flat-square)](LICENSE)
-[![Version](https://img.shields.io/badge/Version-8.4.2-6C63FF?style=flat-square)](CHANGELOG.md)
+[![Version](https://img.shields.io/badge/Version-8.4.3-6C63FF?style=flat-square)](CHANGELOG.md)
 [![Platform](https://img.shields.io/badge/Platform-Windows%20%7C%20Linux-lightgrey?style=flat-square)](https://github.com/Brashkie/WinsiBot)
 [![PRs Welcome](https://img.shields.io/badge/PRs-welcome-brightgreen?style=flat-square)](https://github.com/Brashkie/WinsiBot/pulls)
 
@@ -18,7 +18,7 @@
 
 > Bot de WhatsApp de alto rendimiento con arquitectura multi-lenguaje de tres capas.<br/>
 > Diseñado para **10,000+ grupos simultáneos**, miles de mensajes por hora y múltiples instancias.<br/>
-> v8.4.2 — Owner ya no falla para usuarios con @lid, ffmpeg ya no tumba el proceso entero, detección de Bad MAC global (además de por grupo), watchdog de conexión "zombie" con auto-reconexión, y `#daily`/`#chest` ahora reinician a medianoche en vez de 24h rodantes.
+> v8.4.3 — Bienvenida/despedida y casi todos los flags de `#on` (antitoxic, antidelete, viewonce, anticall, autoAccept/autoReject, rpg...) estaban desconectados y ya funcionan, validación criptográfica real en `authVerifier`, `#rule34video` ya no necesita API key, sub-bots con límite configurable y aislados de errores entre sí, y un fix de fondo en Python que evitaba que ráfagas de mensajes congelaran toda la API.
 
 <br/>
 
@@ -65,6 +65,23 @@
 | 🟦 **Core** | TypeScript / Node.js | Protocolo WhatsApp, dispatcher de comandos, RPG, IA |
 | 🐍 **Services** | Python / FastAPI / Celery | IA avanzada (Ollama + GPT + Claude + Gemini), watchdog, health checks |
 | ⚙️ **Session** | Rust / Axum | Escritura atómica de creds, 10 snapshots rotativos, tracker Bad MAC, rate limiter, delivery SQLite |
+
+### Novedades en v8.4.3
+
+| Área | Cambio |
+|------|--------|
+| **Bienvenida/despedida no funcionaban en absoluto** | El handler que arma el mensaje existía con toda su lógica, pero nunca estaba conectado a ningún evento de Baileys — activar `welcome`/`detect` en `#on` no hacía nada. Ya conectado, y de paso rediseñado: imagen + tarjeta propia, usa la descripción real del grupo como texto de bienvenida (o un default si no tiene), con link al repo |
+| **Aviso de cambio de nombre de grupo (`detect`) spameaba en cada resync** | WhatsApp reenvía el nombre/descripción *actuales* de todos los grupos cada vez que hace un resync interno, no solo cuando algo cambia de verdad — sin comparar contra el último valor conocido, esto mandaba "Nombre actualizado" en cada grupo con `detect` prendido, todo el tiempo. Ahora solo avisa si realmente cambió |
+| **Casi todos los flags de `#on` estaban desconectados** | `antilink2`, `antitelegram`, `antidiscord`, `antitiktok`, `antiyoutube`, `antitoxic`, `antitraba`, `antidelete`, `viewonce`, `anticall`, `autoAccept`/`autoReject` y `rpg` tenían su lógica completa escrita pero nunca conectada a ningún evento real — activarlos en `#on` no hacía nada. Auditados y conectados todos; `anticall` además tenía un bug donde el toggle escribía en un lugar que la lógica real nunca leía |
+| **`authVerifier` — validación criptográfica real** | `signalis-core` actualizado a 0.4.0. Los archivos `sender-key-*.json`/`session-*.json` decían validar "tamaños de buffer válidos" pero en realidad no chequeaban nada — ahora sí, con decodificación estricta de base64 (detecta corrupción que antes pasaba desapercibida). Probado contra los ~2000 archivos reales de `auth/` sin falsos positivos |
+| **`#rw`/`#c` — exclusividad de personajes por grupo** | Un personaje ya reclamado en un grupo ya no puede volver a salir ni reclamarse ahí — pero sí puede tener otro dueño distinto en otro grupo |
+| **4 comandos nuevos** | `#lego` (mosaico estilo LEGO, con Pillow), `#reto`/`#verdad` (verdad o reto, separados, con más de 80 frases cada uno), `#tweet` (imagen de tweet falso, ahora con soporte para adjuntar foto) |
+| **`#rule34video` migrado — ya no necesita API key** | Antes usaba mal la API de rule34.xxx (un tag inválido que casi nunca encontraba resultados) y encima requería cuenta propia. Ahora scrapea rule34video.com directo, sin cuenta ni credenciales |
+| **Sub-bots — límite configurable y más resiliencia** | `SUBBOT_MAX` (env, sincronizado con Rust en caliente sin reiniciarlo) reemplaza el límite fijo de 100. Cada sub-bot ahora está aislado de errores del resto (antes un fallo en uno podía tumbar el proceso entero), guarda por qué se cayó la última vez, y `#serbot reconectar` fuerza el reintento de todos los caídos sin esperar el backoff |
+| **Python: ráfagas de mensajes congelaban toda la API** | Uvicorn corre con un solo worker — dos routers (`fast.py`, `ml.py`) llamaban sus modelos de ML/NLP directo dentro del handler async sin pasarlos a un hilo aparte, así que una ráfaga de mensajes bloqueaba el único hilo disponible y arrastraba con él a *todos* los demás endpoints (`/users`, `/messages`, `/pending`, etc.), no solo esos dos |
+| **Fix: condición de carrera guardando datos** | El autoguardado periódico (cada 30s) podía chocar con el guardado final al cerrar sesión/SIGTERM/SIGINT — ambos escribían al mismo archivo temporal, y el que perdía la carrera tiraba `ENOENT`/`EPERM`. Ahora cada escritura usa su propio temporal y se serializan por archivo |
+| **Fix: latencia en comandos** | Dos llamadas sin límite de tiempo propio (resolver si sos admin del grupo, chequeo de spam-guard en cada comando) podían demorar la respuesta hasta varios segundos si WhatsApp o Python estaban lentos. Ahora ambas tienen un techo — si tardan más, el bot sigue igual con el valor por defecto en vez de colgarse |
+| **Consola — menos ruido de libsignal** | Los logs de "sesión Signal abierta/cerrada" volcaban el objeto completo (con buffers de claves incluidos) por consola — ahora quedan en una línea compacta |
 
 ### Novedades en v8.4.2
 
@@ -255,7 +272,7 @@
 
 ```
 ╔══════════════════════════════════════════════════════════════════════════════╗
-║                           WinsiBot v8.4.2                                    ║
+║                           WinsiBot v8.4.3                                    ║
 ╠════════════════════╦═══════════════════════╦═══════════════════════════════╣
 ║   TypeScript        ║       Python           ║           Rust                ║
 ║   Node.js :4001     ║                        ║                               ║

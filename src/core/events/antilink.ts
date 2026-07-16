@@ -58,12 +58,12 @@ export async function handleAntilink(
   text:       string,
   isAdmin:    boolean,
   isBotAdmin: boolean,
-): Promise<void> {
-  if (!isBotAdmin || isAdmin) return
+): Promise<boolean> {
+  if (!isBotAdmin || isAdmin) return false
 
   const config = getGroupConfig(jid)
   const result = detectLink(text, config)
-  if (!result.matched) return
+  if (!result.matched) return false
 
   const num      = sender.replace('@s.whatsapp.net', '').replace('@lid', '').replace(/[^0-9]/g, '')
   const platform = PLATFORM_NAMES[result.platform ?? 'generic']
@@ -74,6 +74,7 @@ export async function handleAntilink(
     mentions: [sender],
   }).catch(() => {})
   await sock.groupParticipantsUpdate(jid, [sender], 'remove').catch(() => {})
+  return true
 }
 
 // Compatibilidad con usos anteriores

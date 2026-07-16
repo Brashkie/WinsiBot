@@ -1,5 +1,5 @@
 import type { Command } from '../../../types/index.js'
-import { activeChars, addToInventory } from './rollwaifu.js'
+import { activeChars, addToInventory, getGroupClaim } from './rollwaifu.js'
 
 export const C_COOLDOWN = 10 * 60 * 1000
 const STEAL_TIME = 16 * 1000
@@ -37,6 +37,19 @@ const command: Command = {
       activeChars.delete(jid)
       await sock.sendMessage(jid, {
         text: `✗ El personaje *${active.char.name}* ya expiró.`,
+      }, { quoted: msg })
+      return
+    }
+
+    // Defensa extra: #rw ya excluye personajes con dueño en este grupo al
+    // rodar, pero por las dudas (p. ej. reinicio a mitad del robo) se
+    // revalida acá antes de dejar reclamar — ya tiene dueño en este grupo.
+    const existingOwner = getGroupClaim(jid, active.char)
+    if (existingOwner && existingOwner !== active.claimedBy) {
+      activeChars.delete(jid)
+      await sock.sendMessage(jid, {
+        text: `✗ *${active.char.name}* ya tiene dueño en este grupo (@${num(existingOwner)}).`,
+        mentions: [existingOwner],
       }, { quoted: msg })
       return
     }
@@ -90,7 +103,7 @@ const command: Command = {
       setTimeout(async () => {
         const current = activeChars.get(jid)
         if (!current || current.claimedBy !== sender || current.char.name !== active.char.name) return
-        addToInventory(sender, current.char)
+        addToInventory(sender, current.char, jid)
         activeChars.delete(jid)
         await sock.sendMessage(jid, {
           text:     charDetails(current.char.name, sender),
@@ -127,7 +140,7 @@ const command: Command = {
       setTimeout(async () => {
         const current = activeChars.get(jid)
         if (!current || current.claimedBy !== sender || current.char.name !== active.char.name) return
-        addToInventory(sender, current.char)
+        addToInventory(sender, current.char, jid)
         activeChars.delete(jid)
         await sock.sendMessage(jid, {
           text:     charDetails(current.char.name, sender),

@@ -6,10 +6,12 @@ import { userData, groupConfigs, clanData, userClan, defaultUserData, defaultGro
 // inventory y charCache se importan en tiempo de ejecución para evitar
 // ciclos de dependencia con rollwaifu.ts
 let _inventory: Map<string, any> | null = null
+let _rebuildGroupClaims: (() => void) | null = null
 async function getInventory() {
   if (!_inventory) {
     const mod = await import('../plugins/commands/rpg/rollwaifu.js')
     _inventory = mod.inventory
+    _rebuildGroupClaims = mod.rebuildGroupClaims
   }
   return _inventory!
 }
@@ -17,11 +19,42 @@ async function getInventory() {
 const DIR = './data'
 
 // ─── Escritura atómica ────────────────────────────────────────────────────────
+// Dos problemas reales cuando dos atomicWrite() al MISMO path se solapan
+// (p. ej. el autoguardado cada 30s coincidiendo con el guardado final al
+// cerrar sesión/SIGTERM/SIGINT):
+//  1. Con un nombre de temporal fijo, ambas escrituras comparten el mismo
+//     ".tmp" — el primer rename() que termina se lo lleva, y el segundo
+//     falla con ENOENT porque ya no existe.
+//  2. Aun con temporales únicos por-llamada (arreglando el ENOENT), en
+//     Windows dos rename() concurrentes hacia el MISMO destino final pueden
+//     fallar con EPERM — NTFS bloquea brevemente el destino durante un
+//     rename, y el segundo choca contra ese lock (confirmado con una prueba
+//     de 10 escrituras concurrentes reales).
+// La solución real es serializar: nunca dejar que dos escrituras al mismo
+// path corran a la vez. _writeLocks encadena cada atomicWrite() al anterior
+// PARA ESE PATH — nunca se solapan, sea cual sea el resultado del anterior.
+// Escrituras a paths DISTINTOS (users.json vs groups.json, etc.) siguen
+// corriendo en paralelo entre sí, sin perder el paralelismo de saveAll().
+let _writeSeq = 0
+const _writeLocks = new Map<string, Promise<void>>()
+
 async function atomicWrite(path: string, data: string): Promise<void> {
-  await mkdir(DIR, { recursive: true })
-  const tmp = path + '.tmp'
-  await writeFile(tmp, data, 'utf-8')
-  await rename(tmp, path)
+  const prevLock = _writeLocks.get(path) ?? Promise.resolve()
+
+  const thisWrite = prevLock.then(async () => {
+    await mkdir(DIR, { recursive: true })
+    const tmp = `${path}.${process.pid}.${++_writeSeq}.tmp`
+    await writeFile(tmp, data, 'utf-8')
+    await rename(tmp, path)
+  })
+
+  // El anchor guardado para el próximo encadenamiento NUNCA debe rechazar
+  // (si no, un fallo acá rompería la cola para las próximas escrituras a
+  // este path) — pero thisWrite (lo que se devuelve) sí preserva el error
+  // real para que saveGroups()/etc. lo loguee normalmente.
+  _writeLocks.set(path, thisWrite.then(() => {}, () => {}))
+
+  return thisWrite
 }
 
 // ─── Carga ────────────────────────────────────────────────────────────────────
@@ -101,6 +134,10 @@ async function loadInventory(): Promise<void> {
     for (const [jid, chars] of Object.entries(raw)) {
       inv.set(jid, chars)
     }
+    // Reconstruye el índice de exclusividad por grupo desde el inventario
+    // recién cargado — sin esto, tras reiniciar el bot los personajes ya
+    // reclamados volverían a estar disponibles en su grupo.
+    _rebuildGroupClaims?.()
     logger.info(`Persistence: ${inv.size} inventarios cargados`)
   } catch (err) {
     logger.error({ err }, 'Persistence: error cargando inventory.json')
@@ -185,4 +222,11 @@ export function startAutoSave(intervalMs = 30_000): void {
   _timer = setInterval(() => saveAll().catch(() => {}), intervalMs)
   _timer.unref()   // no impide que el proceso salga si no hay más trabajo
   logger.debug(`Persistence: auto-guardado cada ${intervalMs / 1000}s`)
+}
+
+/** Frena el ticker periódico — llamar antes del guardado final al apagar
+ *  (SIGINT/SIGTERM/logout), para no competir con un autoguardado en curso. */
+export function stopAutoSave(): void {
+  if (_timer) clearInterval(_timer)
+  _timer = null
 }

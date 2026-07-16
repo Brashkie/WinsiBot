@@ -95,6 +95,8 @@ Pets level up from the EXP they earn while you take care of them, and evolve at 
 
 Important: after claiming with `!c`, there's a **16-second** window where anyone else in the group can "steal" the claim by replying too — only after those 16s does the character lock into your collection for good.
 
+A character that's already been claimed **can no longer show up or be claimed again in that same group** — it already has an owner there. The same character can still show up and have a different owner in another group (each group is its own economy).
+
 ---
 
 ## 🏆 Trophies / PvP Arena

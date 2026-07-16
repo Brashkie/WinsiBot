@@ -15,6 +15,7 @@ from .search     import router as search_router
 from .fast       import router as fast_router
 from .messages   import router as messages_router
 from .hepein     import router as hepein_router
+from .imagefx    import router as imagefx_router
 
 main_router = APIRouter()
 main_router.include_router(health_router,   prefix='/health',    tags=['health'])
@@ -33,3 +34,4 @@ main_router.include_router(anime_router,    prefix='/anime',     tags=['anime'])
 main_router.include_router(search_router,   prefix='/search',    tags=['search'])
 main_router.include_router(fast_router,     prefix='/fast',      tags=['fast'])
 main_router.include_router(messages_router, prefix='/messages',  tags=['messages'])
+main_router.include_router(imagefx_router,  prefix='/imagefx',   tags=['imagefx'])

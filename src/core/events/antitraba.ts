@@ -28,12 +28,12 @@ export async function handleAntitraba(
   text:       string,
   isAdmin:    boolean,
   isBotAdmin: boolean,
-): Promise<void> {
+): Promise<boolean> {
   const config = getGroupConfig(jid)
-  if (!config.antitraba) return
-  if (isAdmin) return
-  if (!isBotAdmin) return
-  if (!isTraba(text)) return
+  if (!config.antitraba) return false
+  if (isAdmin) return false
+  if (!isBotAdmin) return false
+  if (!isTraba(text)) return false
 
   const num = sender.replace('@s.whatsapp.net', '').replace('@lid', '').replace(/[^0-9]/g, '')
 
@@ -43,4 +43,5 @@ export async function handleAntitraba(
     mentions: [sender],
   }).catch(() => {})
   await sock.groupParticipantsUpdate(jid, [sender], 'remove').catch(() => {})
+  return true
 }

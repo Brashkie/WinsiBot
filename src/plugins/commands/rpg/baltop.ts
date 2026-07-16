@@ -1,5 +1,6 @@
 import type { Command } from '../../../types/index.js'
-import { userData } from '@core/events/index.js'
+import { userData, getNumber } from '@core/events/index.js'
+import { getGroupParticipants } from '@core/groupCache.js'
 import { safeSend } from '@lib/media_sender.js'
 
 const PAGE_SIZE = 10
@@ -7,15 +8,33 @@ const PAGE_SIZE = 10
 const command: Command = {
   name:        'baltop',
   aliases:     ['balancetop', 'richtop', 'richlist', 'topbal', 'tbal'],
-  description: 'Top de usuarios con más CodPoints  |  !baltop [página]',
+  description: 'Top de usuarios con más CodPoints del grupo  |  !baltop [página]',
   category:    'rpg',
   cooldown:    10,
 
-  async execute({ sock, jid, msg, args, prefix }) {
+  async execute({ sock, jid, msg, args, prefix, isGroup }) {
     const page = Math.max(1, parseInt(args[0] ?? '1') || 1)
+
+    // Acota el top a los miembros del grupo donde se usó el comando — antes
+    // recorría TODOS los usuarios que el bot conoce de cualquier grupo/chat
+    // privado, mostrando gente que ni siquiera está en este grupo. En DM
+    // (isGroup=false) no hay grupo que acotar, así que ahí sí queda global.
+    let scopeNums: Set<string> | null = null
+    if (isGroup) {
+      const participants = await getGroupParticipants(sock, jid)
+      scopeNums = new Set(
+        participants.flatMap(p => {
+          const nums = [getNumber(p.id)]
+          const realJid = (p as any).jid as string | undefined
+          if (realJid) nums.push(getNumber(realJid))
+          return nums.filter(Boolean)
+        })
+      )
+    }
 
     // Ordenar todos los usuarios por riqueza total (billetera + banco)
     const sorted = [...userData.entries()]
+      .filter(([uJid]) => !scopeNums || scopeNums.has(getNumber(uJid)))
       .map(([jid, u]) => ({
         jid,
         name:  u.name || jid.split('@')[0],
@@ -26,7 +45,9 @@ const command: Command = {
 
     if (sorted.length === 0) {
       await safeSend(() => sock.sendMessage(jid, {
-        text: `> Aún no hay usuarios con CodPoints registrados.`,
+        text: isGroup
+          ? `> Aún no hay usuarios de este grupo con CodPoints registrados.`
+          : `> Aún no hay usuarios con CodPoints registrados.`,
       }, { quoted: msg }))
       return
     }

@@ -4,6 +4,7 @@ import makeWASocket, {
   makeCacheableSignalKeyStore,
   fetchLatestBaileysVersion,
   S_WHATSAPP_NET,
+  proto,
   type WASocket,
 } from '@whiskeysockets/baileys'
 import { Boom } from '@hapi/boom'
@@ -14,6 +15,15 @@ import { config } from '@config'
 import { logger } from './logger.js'
 import { winsiStore } from '@core/store.js'
 import { verifyAndReport } from '@lib/authVerifier.js'
+import { getGroupMetadata } from '@core/groupCache.js'
+import {
+  handleParticipantsUpdate,
+  handleGroupsUpdate,
+  handleDeleteUpdate,
+  handleViewOnce,
+  handleCallUpdate,
+} from '@core/events.js'
+import { handleJoinRequest } from '@core/events/joinRequest.js'
 
 function fmtJid(jid: string): string {
   return jid.replace('@s.whatsapp.net', '').replace('@g.us', '').replace('@lid', '')
@@ -169,9 +179,53 @@ export class WinsiSocket extends EventEmitter3<WinsiEvents> {
       connectTimeoutMs:               30_000,
       keepAliveIntervalMs:            25_000,
       defaultQueryTimeoutMs:          60_000,
+      // Sin esto, Baileys vuelve a pedirle groupMetadata a WhatsApp CADA VEZ
+      // que se manda un mensaje a un grupo (para resolver a quién encriptar),
+      // sin pasar por nuestro cache de groupCache.ts — con 400+ grupos activos
+      // eso es una consulta extra por mensaje enviado, y es lo que estaba
+      // causando los "rate-overlimit" (429) de WhatsApp. Reusa el mismo cache
+      // (TTL 5min) que ya usa el resto del bot para lo mismo.
+      cachedGroupMetadata: async (jid: string) => {
+        if (!this.sock) return undefined
+        return getGroupMetadata(this.sock, jid)
+      },
     })
 
     winsiStore.bind(this.sock)
+
+    // Bienvenida/despedida (welcome) y avisos de promote/demote/cambio de
+    // nombre-descripción (detect) — winsiStore.bind() ya escucha estos mismos
+    // eventos pero solo para refrescar el cache de groupMetadata, nunca
+    // llamaba a los handlers reales de events/welcome.ts.
+    this.sock.ev.on('group-participants.update', (update) => {
+      if (!this.sock) return
+      handleParticipantsUpdate(this.sock, update).catch(err => {
+        logger.warn({ err }, '[welcome] handleParticipantsUpdate falló')
+      })
+    })
+    this.sock.ev.on('groups.update', (updates) => {
+      if (!this.sock) return
+      handleGroupsUpdate(this.sock, updates).catch(err => {
+        logger.warn({ err }, '[welcome] handleGroupsUpdate falló')
+      })
+    })
+
+    // anticall — rechaza llamadas entrantes cuando está activo (global, no por grupo)
+    this.sock.ev.on('call', (calls) => {
+      if (!this.sock) return
+      handleCallUpdate(this.sock, calls).catch(err => {
+        logger.warn({ err }, '[anticall] handleCallUpdate falló')
+      })
+    })
+
+    // autoAccept/autoReject — solicitudes para unirse a grupos con aprobación
+    this.sock.ev.on('group.join-request', (update) => {
+      if (!this.sock) return
+      handleJoinRequest(this.sock, update).catch(err => {
+        logger.warn({ err }, '[joinRequest] handleJoinRequest falló')
+      })
+    })
+
     this.sock.ev.on('creds.update', () => {
       saveCreds()
       // backup async a Rust — no bloquea, falla silenciosamente si no está corriendo
@@ -318,6 +372,28 @@ export class WinsiSocket extends EventEmitter3<WinsiEvents> {
       console.log(
         `  ${color.blue('◈')} ${color.bold('Mensaje')}  ${chatLabel} ${color.dim(jidShort)}  ${meLabel}`
       )
+
+      // ─── antidelete — "borrar para todos" llega como protocolMessage REVOKE,
+      // no como un mensaje normal. El key adentro apunta al mensaje original
+      // (no trae su contenido, solo de quién era).
+      const revokeKey = msg.message.protocolMessage?.type === proto.Message.ProtocolMessage.Type.REVOKE
+        ? msg.message.protocolMessage.key
+        : null
+      if (revokeKey?.remoteJid) {
+        handleDeleteUpdate(this.sock!, {
+          fromMe:      !!revokeKey.fromMe,
+          id:          revokeKey.id ?? '',
+          participant: revokeKey.participant ?? undefined,
+          remoteJid:   revokeKey.remoteJid,
+        }).catch(err => logger.warn({ err }, '[antidelete] handleDeleteUpdate falló'))
+        return
+      }
+
+      // ─── antiviewonce — reenvía medios "ver una vez" si el grupo lo activó
+      if (msg.message.viewOnceMessageV2 || (msg.message as any).viewOnceMessageV2Extension) {
+        handleViewOnce(this.sock!, msg.key.remoteJid ?? '', msg)
+          .catch(err => logger.warn({ err }, '[antiviewonce] handleViewOnce falló'))
+      }
 
       this.emit('message', msg, this.sock!)
     })
