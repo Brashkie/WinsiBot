@@ -1,10 +1,10 @@
 <div align="center">
 
-# 📖 Command Reference — WinsiBot v8.4.3
+# 📖 Command Reference — WinsiBot v8.5.0
 
 [![Commands](https://img.shields.io/badge/Commands-150%2B-6C63FF?style=for-the-badge)](.)
 [![Categories](https://img.shields.io/badge/Categories-19-00C9FF?style=for-the-badge)](.)
-[![Version](https://img.shields.io/badge/Version-8.4.3-brightgreen?style=flat-square)](../README.en.md)
+[![Version](https://img.shields.io/badge/Version-8.5.0-brightgreen?style=flat-square)](../README.en.md)
 
 [🇪🇸 Versión en español →](commands.md) &nbsp;·&nbsp; [💰 Economy guide →](economy.en.md) &nbsp;·&nbsp; [← Back to README](../README.en.md)
 

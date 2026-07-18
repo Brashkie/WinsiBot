@@ -6,7 +6,7 @@ import { logger } from './logger.js'
 import { color, themes } from 'ansimax'
 import type { BotContext } from '../types/index.js'
 import { handleNotFound } from '@plugins/commands/general/notfound.js'
-import { pythonGet, pythonPost, fastProcess, analyzeIntent, learnConversation } from '@lib/pythonBridge.js'
+import { pythonGet, pythonPost, fastProcess, analyzeIntent, learnConversation, getAIContext } from '@lib/pythonBridge.js'
 import { hepein } from '@lib/hepein.js'
 import { safeSend } from '@lib/media_sender.js'
 import {
@@ -26,6 +26,19 @@ import { handleDrawGuessMessage, handleQuizMessage } from '@core/events/gameHand
 import { handleTransferConfirm } from '@plugins/commands/rpg/transfer.js'
 import { sessionClient } from '@lib/session.js'
 import { getGroupParticipants } from '@core/groupCache.js'
+import { winsiSocket } from '@core/socket.js'
+
+// handleAIResponse puede tardar 44s+ esperando a Ollama — tiempo de sobra
+// para que una reconexión (Bad MAC, watchdog zombie, corte de red) invalide
+// el `sock` capturado al recibir el mensaje. Usar el socket VIVO justo antes
+// de cada intento de envío (en vez del `sock` arrastrado desde el inicio del
+// handler) evita mandar por una conexión ya cerrada — confirmado en logs
+// reales: reconexión a las 20:01:12, error "Connection Closed" recién a las
+// 20:02:57 al intentar responder por el socket viejo, con el bot ya
+// reconectado y funcionando por el nuevo en ese momento.
+function liveSocket(fallback: WASocket): WASocket {
+  return winsiSocket.getSocket() ?? fallback
+}
 
 // ─── Bots conocidos a ignorar ─────────────────────────────────────────────────
 const KNOWN_BOTS = new Set([
@@ -175,7 +188,7 @@ async function resolveGroupRoles(
   sock:   WASocket,
   jid:    string,
   sender: string,
-): Promise<{ isAdmin: boolean; isBotAdmin: boolean }> {
+): Promise<{ isAdmin: boolean; isBotAdmin: boolean; botAliases: string[] }> {
   try {
     const participants = await getGroupParticipants(sock, jid)
 
@@ -189,12 +202,21 @@ async function resolveGroupRoles(
       (p as any).lid === sock.user?.id
     )
 
+    // Todos los alias posibles del bot EN ESTE GRUPO — necesario para detectar
+    // "responder al mensaje del bot" en grupos con addressingMode 'lid', donde
+    // contextInfo.participant de un mensaje que mandó el bot puede venir como
+    // su @lid de ese grupo (un identificador totalmente distinto al número
+    // real), no como sock.user?.id.
+    const botAliases = [botJid, sock.user?.id, botP?.id, (botP as any)?.lid]
+      .filter((v): v is string => typeof v === 'string' && v.length > 0)
+
     return {
       isAdmin:    senderP?.admin === 'admin' || senderP?.admin === 'superadmin',
       isBotAdmin: botP?.admin   === 'admin' || botP?.admin   === 'superadmin',
+      botAliases,
     }
   } catch {
-    return { isAdmin: false, isBotAdmin: false }
+    return { isAdmin: false, isBotAdmin: false, botAliases: [] }
   }
 }
 
@@ -273,11 +295,38 @@ async function handleAIResponse(
     const intent = nlp?.primary ?? 'neutral'
     if (intent === 'spam' || intent === 'nsfw') return false
 
+    // getAIContext trae el historial reciente de este sender desde Rust
+    // (rustClient, timeout de 300ms — rápido). Existía hace rato pero nunca
+    // se llamaba desde ningún lado: hepein_respond() en Python SIEMPRE
+    // devuelve ok:true con algún texto (real o de su propio fallback de
+    // plantilla interno cuando Ollama falla), y ese fallback interno nunca
+    // recibía historial — así que el filtro anti-repetición que ya existe en
+    // generate_response() (evita repetir las últimas 5 respuestas) nunca se
+    // activaba en la práctica. De ahí que la IA pareciera repetirse. Se pide
+    // ANTES de la llamada principal (no en paralelo) porque hepein.respond()
+    // necesita poder reenviárselo a Python para que su fallback interno lo use.
+    const aiContext = await getAIContext(ctx.sender).catch(() => null)
+    const history   = aiContext?.history ?? []
+
+    // Placeholder inmediato — Ollama en CPU (sin GPU) puede tardar 20-35s+ en
+    // responder (medido en real: ~19s para una respuesta corta con
+    // llama3.2:3b). Antes no había ningún feedback durante esa espera, así
+    // que además de caer casi siempre al fallback (ver nota del timeout
+    // abajo), el usuario tampoco tenía forma de saber si el bot seguía "vivo".
+    const thinking = await safeSend(() => liveSocket(sock).sendMessage(ctx.jid, {
+      text: '🤔 Pensando...',
+    }, { quoted: msg })).catch(() => null)
+    const thinkingKey = thinking?.key
+
     // 2. Hepein: Ollama (modelo según la palabra que disparó) con perfil
-    // aprendido del grupo. 14s — por debajo del timeout HTTP de
-    // hepein.respond() (15s), así esta carrera gana primero y cae al
-    // fallback local en silencio, en vez de que axios aborte la request y
-    // lo registre como error.
+    // aprendido del grupo. El timeout acá (44s) va apenas por debajo del
+    // timeout HTTP de hepein.respond() (45s, ver hepein.ts) — que a su vez
+    // le da margen a Ollama del lado Python (OLLAMA_TIMEOUT=40s por defecto)
+    // para terminar de verdad. Antes esto cortaba a los 14s, MUCHO antes de
+    // que Ollama llegara a responder en este tipo de hardware — así que
+    // prácticamente SIEMPRE caía al fallback de plantillas de Python aunque
+    // la IA real sí iba a contestar, solo que más lento. De ahí la queja de
+    // que Hepein "no habla como una IA real, repite lo que ya existe".
     const hepeinRes = await Promise.race([
       hepein.respond({
         prompt:    ctx.text,
@@ -285,9 +334,10 @@ async function handleAIResponse(
         senderJid: ctx.sender,
         intent,
         model,
+        history,
         force:     true,   // omitir cooldown interno — ya lo controla handler
       }),
-      new Promise<null>(r => setTimeout(() => r(null), 14_000)),
+      new Promise<null>(r => setTimeout(() => r(null), 44_000)),
     ]).catch(() => null)
 
     let reply: string | null = hepeinRes?.ok ? hepeinRes.text ?? null : null
@@ -302,7 +352,7 @@ async function handleAIResponse(
           text:       ctx.text,
           jid:        ctx.jid,
           use_humor:  true,
-          history:    [],
+          history,
           user_style: null,
         },
       ).catch(() => null)
@@ -312,7 +362,14 @@ async function handleAIResponse(
         : localFallback(intent)
     }
 
-    await safeSend(() => sock.sendMessage(ctx.jid, { text: reply! }, { quoted: msg }))
+    // Editar el "Pensando..." con la respuesta final en vez de mandar un
+    // mensaje nuevo — si por lo que sea no se pudo mandar el placeholder,
+    // cae a mandar la respuesta como mensaje normal.
+    if (thinkingKey) {
+      await safeSend(() => liveSocket(sock).sendMessage(ctx.jid, { text: reply!, edit: thinkingKey } as any))
+    } else {
+      await safeSend(() => liveSocket(sock).sendMessage(ctx.jid, { text: reply! }, { quoted: msg }))
+    }
 
     // 4. Guardar conversación (fire-and-forget)
     learnConversation({
@@ -411,10 +468,10 @@ export async function handleMessage(msg: WAMessage, sock: WASocket): Promise<voi
       base.isGroup
         ? Promise.race([
             resolveGroupRoles(sock, base.jid, base.sender),
-            new Promise<{ isAdmin: boolean; isBotAdmin: boolean }>(r =>
-              setTimeout(() => r({ isAdmin: false, isBotAdmin: false }), 2_000)),
+            new Promise<{ isAdmin: boolean; isBotAdmin: boolean; botAliases: string[] }>(r =>
+              setTimeout(() => r({ isAdmin: false, isBotAdmin: false, botAliases: [] }), 2_000)),
           ])
-        : Promise.resolve({ isAdmin: false, isBotAdmin: false }),
+        : Promise.resolve({ isAdmin: false, isBotAdmin: false, botAliases: [] }),
       Promise.race([
         fastProcess(base.text, config.prefix, senderForFast, base.jid, config.ownerJid),
         new Promise<null>(r => setTimeout(() => r(null), 500)),
@@ -423,7 +480,7 @@ export async function handleMessage(msg: WAMessage, sock: WASocket): Promise<voi
 
     const roles = rolesResult.status === 'fulfilled'
       ? rolesResult.value
-      : { isAdmin: false, isBotAdmin: false }
+      : { isAdmin: false, isBotAdmin: false, botAliases: [] as string[] }
 
     const fast = fastResult.status === 'fulfilled' ? fastResult.value : null
 
@@ -589,8 +646,28 @@ export async function handleMessage(msg: WAMessage, sock: WASocket): Promise<voi
         const words   = lower.split(/\s+/)
         const aiModel = resolveAIModel(ctx.text) ?? DEFAULT_AI_MODEL
 
-        // Mencionar "hepein" o el nombre del bot siempre activa la IA (directo)
-        const isDirect = words.includes('hepein') || lower.includes(botName.toLowerCase())
+        // Responder (citar) un mensaje que mandó el propio bot también cuenta
+        // como dirigirse a él directamente — antes solo se detectaba mencionar
+        // "hepein"/el nombre del bot en el texto, así que responder a algo que
+        // el bot dijo (sin repetir su nombre) no disparaba nada.
+        //
+        // Comparar solo contra sock.user?.id no alcanza en grupos con
+        // addressingMode 'lid': ahí contextInfo.participant de un mensaje que
+        // mandó el BOT puede venir como su @lid de ESE grupo — un
+        // identificador totalmente distinto al número real, no derivable por
+        // normalización de dígitos. roles.botAliases (resuelto contra la
+        // lista real de participantes del grupo) cubre ese caso; el chequeo
+        // por dígitos cubre DMs y grupos sin lid.
+        const quotedParticipant = msg.message?.extendedTextMessage?.contextInfo?.participant
+        const botNum    = (sock.user?.id ?? '').split(':')[0]?.replace(/[^0-9]/g, '') ?? ''
+        const quotedNum = (quotedParticipant ?? '').replace('@s.whatsapp.net', '').replace('@lid', '').replace(/[^0-9]/g, '')
+        const isReplyToBot = !!quotedParticipant && (
+          (!!botNum && quotedNum === botNum) ||
+          roles.botAliases.includes(quotedParticipant)
+        )
+
+        // Mencionar "hepein" o el nombre del bot, o responderle directamente, activa la IA (directo)
+        const isDirect = words.includes('hepein') || lower.includes(botName.toLowerCase()) || isReplyToBot
 
         if (ctx.isGroup) {
           const groupCfg = getGroupConfig(ctx.jid)
@@ -598,7 +675,10 @@ export async function handleMessage(msg: WAMessage, sock: WASocket): Promise<voi
           const triggered = isDirect || (groupCfg.hepein && isAITrigger(ctx.text, botName))
           if (triggered) await handleAIResponse(ctx, sock, msg, aiModel)
         } else {
-          if (isAITrigger(ctx.text, botName)) await handleAIResponse(ctx, sock, msg, aiModel)
+          // isDirect acá cubre responder al mensaje del bot en un DM — antes
+          // esta rama solo miraba isAITrigger, así que "responder al bot" no
+          // hacía nada en privado, solo en grupos.
+          if (isDirect || isAITrigger(ctx.text, botName)) await handleAIResponse(ctx, sock, msg, aiModel)
         }
       }
       return

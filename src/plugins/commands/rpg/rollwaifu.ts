@@ -7,6 +7,7 @@ import { createCache, registerCache } from '@lib/cacheManager.js'
 export const SOURCES: Record<string, string> = {
   marvel:  'https://raw.githubusercontent.com/Brashkie/module/main/rollimage/marvel.json',
   pokedex: 'https://raw.githubusercontent.com/Brashkie/module/main/rollimage/pokedex.json',
+  anime:   'https://raw.githubusercontent.com/Brashkie/module/main/rollimage/anime-character.json',
 }
 
 // ─── Cache — 1h de TTL en vez de "para siempre" (las listas rara vez cambian,

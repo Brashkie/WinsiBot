@@ -85,7 +85,7 @@ Las mascotas suben de nivel con la EXP que ganan cuidándolas y evolucionan en c
 ## 🎴 Personajes / Harem (gacha)
 
 ```
-!rw                    — tira un personaje aleatorio (Marvel o Pokédex) — CD 29 min
+!rw [marvel|pokedex|anime] — tira un personaje aleatorio (sin argumento, sortea entre las tres) — CD 29 min
 !c                      — responde AL MENSAJE del personaje para reclamarlo — tenés 10 min antes de que expire
 !harem [@usuario]       — ver tu colección, ordenada por valor
 !winfo <nombre>         — info de un personaje

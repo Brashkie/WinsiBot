@@ -69,6 +69,14 @@ export class WinsiSocket extends EventEmitter3<WinsiEvents> {
   private retryCount:    number = 0
   private retryTimer:    ReturnType<typeof setTimeout> | null = null
   private isReconnecting = false
+  // El barrido completo de verifyAndReport() (lee TODOS los session-*.json,
+  // cientos de archivos) solo corre en el arranque en frío del proceso, no en
+  // cada reconexión — que puede pasar varias veces por hora (red, Bad MAC,
+  // watchdog zombie). Repetirlo en cada reconexión exponía el directorio
+  // auth/ a falsos positivos por I/O transitorio en cada uno de esos
+  // archivos, cada vez; las reconexiones ya tienen su propio mecanismo
+  // dirigido para sesiones realmente corruptas (Bad MAC → clearSignalSessions).
+  private hasVerifiedAuthOnce = false
   // Sin límite de reintentos — el bot no muere nunca por desconexión.
   // Solo 'loggedOut' (401) o kick de otra sesión (440) detienen el loop.
 
@@ -157,11 +165,15 @@ export class WinsiSocket extends EventEmitter3<WinsiEvents> {
     const { sessionClient } = await import('@lib/session.js')
     await sessionClient.ensureHealthy()
 
-    // ─── Verificación criptográfica del auth dir ──────────────────────────────
+    // ─── Verificación criptográfica del auth dir (solo arranque en frío) ──────
     // Usa @brashkie/signalis-core para validar todos los pares Curve25519 antes
     // de pasárselos a Baileys. Archivos corruptos se eliminan aquí, evitando
-    // que Baileys los cargue y falle en descifrado con Bad MAC.
-    await verifyAndReport(config.sessionPath).catch(() => {})
+    // que Baileys los cargue y falle en descifrado con Bad MAC. Ver comentario
+    // de hasVerifiedAuthOnce arriba — no se repite en cada reconexión.
+    if (!this.hasVerifiedAuthOnce) {
+      this.hasVerifiedAuthOnce = true
+      await verifyAndReport(config.sessionPath).catch(() => {})
+    }
 
     const { state, saveCreds } = await useMultiFileAuthState(config.sessionPath)
     const { version }          = await fetchLatestBaileysVersion()
@@ -575,3 +587,14 @@ export class WinsiSocket extends EventEmitter3<WinsiEvents> {
     })
   }
 }
+
+// ─── Singleton ────────────────────────────────────────────────────────────────
+// Instancia única del socket principal — expuesta para que rutas de envío
+// LARGAS (p. ej. handleAIResponse en handler.ts, que puede tardar 44s+
+// esperando a Ollama) puedan pedir el socket VIVO justo antes de mandar, en
+// vez de arrastrar el `sock` que se capturó al recibir el mensaje. Sin esto,
+// una reconexión de por medio (Bad MAC, watchdog zombie, corte de red)
+// invalida ese `sock` capturado, y el envío final falla con
+// "Connection Closed" — aunque el bot ya esté reconectado y funcionando en
+// ese mismo momento por el socket nuevo.
+export const winsiSocket = new WinsiSocket()

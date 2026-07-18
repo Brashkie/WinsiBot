@@ -85,6 +85,8 @@ RESPONSES: dict[str, dict[str, list[str]]] = {
             'Aquí estoy si necesitas algo 😊',
             'Dime en qué te ayudo',
             'Por aquí ando, ¿algo más?',
+            'Estoy atento, contame',
+            '¿Qué tenés en mente?',
         ],
         'nsfw': [
             'Eso no es algo que pueda hacer 😅',
@@ -149,6 +151,8 @@ RESPONSES: dict[str, dict[str, list[str]]] = {
             '¡Aquí estoooy! 🙋',
             'Dime dime 🎉',
             '¡Por aquí! 🌟',
+            '¡Contame contame! 😄',
+            '¡Aquí sigo, con toda la energía! 🎉',
         ],
         'nsfw': [
             'Jajaja nooo, eso no 😂',
@@ -212,6 +216,8 @@ RESPONSES: dict[str, dict[str, list[str]]] = {
         'neutral': [
             'Aquí estoy, supongo',
             'Dime, si insistes',
+            'Sigo aquí, milagrosamente',
+            '¿Ibas a decir algo o...?',
         ],
         'nsfw': [
             'No. Solo no.',
@@ -276,6 +282,8 @@ RESPONSES: dict[str, dict[str, list[str]]] = {
             '¿?',
             'Y...',
             '.',
+            'Habla ya',
+            'mm',
         ],
         'nsfw': [
             'No. Baneado.',
@@ -340,6 +348,8 @@ RESPONSES: dict[str, dict[str, list[str]]] = {
             'A tu disposición.',
             '¿En qué puedo ayudarte?',
             'Dime.',
+            'Quedo atento a tu consulta.',
+            'Indícame en qué puedo colaborar.',
         ],
         'nsfw': [
             'Ese tipo de contenido no está permitido.',
@@ -413,6 +423,8 @@ RESPONSES: dict[str, dict[str, list[str]]] = {
             'Observando.',
             'El silencio también habla.',
             'Presente.',
+            'Todo llega a su momento.',
+            'Aquí, entre las sombras.',
         ],
         'nsfw': [
             'Algunos deseos revelan vacíos.',
@@ -490,6 +502,8 @@ RESPONSES: dict[str, dict[str, list[str]]] = {
             'Aquí pe, dime causa',
             '¡Presente bro!',
             '¿Qué necesitas pe?',
+            'Habla nomás causa',
+            '¿Y qué cuentas pe?',
         ],
         'nsfw': [
             'Oe causa, no pe 😅',
@@ -563,6 +577,8 @@ RESPONSES: dict[str, dict[str, list[str]]] = {
             'Ready cuando quieras 🎮',
             'Esperando input...',
             '¿Qué necesitas jugador?',
+            'Server online, dime bro',
+            'Standby activado 🎮',
         ],
         'nsfw': [
             'Ese contenido está en el servidor 18+, aquí no bro',
@@ -631,6 +647,8 @@ RESPONSES: dict[str, dict[str, list[str]]] = {
             'Aquí estoy para ti 💕',
             '¿En qué te puedo ayudar corazón? 🌸',
             'Cuéntame lo que necesites 🤗',
+            'Siempre pendiente de ti 💕',
+            '¿Todo bien por ahí, corazón? 🌸',
         ],
         'nsfw': [
             'Ay, eso no lo manejo, lo siento 🥺💕',
@@ -701,6 +719,8 @@ RESPONSES: dict[str, dict[str, list[str]]] = {
             'Aquí estoy, tan útil como siempre 😂',
             '¡Dime! Soy todo oídos... bueno, todo código',
             '¿Me llamaste? Tenía mejores cosas que hacer pero aquí estoy 😂',
+            'Presente, aunque nadie me pidió estar aquí 😂',
+            '¿Otra vez yo? Ok ok, dime',
         ],
         'nsfw': [
             'Jaja no, eso no. Pero me reí pensando en la cara que pusiste 😂',
@@ -769,6 +789,8 @@ RESPONSES: dict[str, dict[str, list[str]]] = {
             'Aquí estoy. Como siempre.',
             '...dime.',
             'Sigo aquí.',
+            'Nada cambió. Sigo aquí.',
+            '...supongo que sí, dime.',
         ],
         'nsfw': [
             'No. Ni energía para eso.',
@@ -835,6 +857,8 @@ RESPONSES: dict[str, dict[str, list[str]]] = {
             '¡Aquí estoy~! OwO',
             '¡Dime~! UwU 💕',
             '✨ Presente~',
+            '¿Me hablabas~? OwO',
+            '¡Sigo por aquí, nya~! 🐾',
         ],
         'nsfw': [
             '¡¡Kyaaa no~!! >//////< ¡Eso no!',

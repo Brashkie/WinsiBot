@@ -291,21 +291,35 @@ export async function verifyAuthDir(authDir: string): Promise<VerifyReport> {
     let raw: Record<string, any>
 
     // ── Parsear JSON ──────────────────────────────────────────────────────────
+    // Reintento único tras una breve espera antes de dar por corrupto un
+    // archivo: este verificador puede correr varias veces por hora (cada
+    // reconexión), leyendo cientos de archivos cada vez — un glitch
+    // transitorio de I/O (antivirus, sync de nube, lock de Windows) al leer
+    // UN archivo en medio de ese barrido no significa que el archivo esté
+    // realmente corrupto. Sin este reintento, ese glitch borraba una sesión
+    // de Signal perfectamente válida, forzando un Bad MAC innecesario con
+    // ese contacto.
     try {
       const content = await readFile(path, 'utf-8')
       raw = JSON.parse(content)
     } catch {
-      report.unparseable.push(file)
-      // Archivos con JSON inválido (truncado, corrupto) → eliminar excepto creds
-      if (file !== 'creds.json') {
-        await unlink(path).catch(() => {})
-        report.deleted.push(file)
-        logger.warn(`[authVerifier] ${file} — JSON inválido → eliminado`)
-      } else {
-        logger.error('[authVerifier] creds.json — JSON inválido → necesita re-autenticación (QR)')
-        report.credsStatus = 'corrupted'
+      await new Promise(r => setTimeout(r, 150))
+      try {
+        const content = await readFile(path, 'utf-8')
+        raw = JSON.parse(content)
+      } catch {
+        report.unparseable.push(file)
+        // Archivos con JSON inválido (truncado, corrupto) → eliminar excepto creds
+        if (file !== 'creds.json') {
+          await unlink(path).catch(() => {})
+          report.deleted.push(file)
+          logger.warn(`[authVerifier] ${file} — JSON inválido (confirmado tras reintento) → eliminado`)
+        } else {
+          logger.error('[authVerifier] creds.json — JSON inválido → necesita re-autenticación (QR)')
+          report.credsStatus = 'corrupted'
+        }
+        continue
       }
-      continue
     }
 
     // ── Verificar por tipo ────────────────────────────────────────────────────

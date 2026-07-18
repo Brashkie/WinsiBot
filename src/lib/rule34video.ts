@@ -65,11 +65,8 @@ const QUALITY_FIELDS: Array<[url: string, label: string]> = [
   ['video_alt_url3',  'video_alt_url3_text'],
 ]
 
-/** Extrae la URL directa del .mp4 desde la página del video (variables embebidas en el player). */
-export async function resolveRule34VideoUrl(pageUrl: string): Promise<string | null> {
-  const res  = await axios.get<string>(pageUrl, { timeout: 15_000, headers: { 'User-Agent': UA } })
-  const html = res.data
-
+/** Extrae la URL directa del .mp4 desde el HTML de la página (variables embebidas en el player). */
+function extractVideoUrl(html: string): string | null {
   const qualities: VideoQuality[] = []
   for (const [urlField, labelField] of QUALITY_FIELDS) {
     const urlMatch   = new RegExp(`${urlField}:\\s*'([^']+)'`).exec(html)
@@ -87,9 +84,67 @@ export async function resolveRule34VideoUrl(pageUrl: string): Promise<string | n
   return qualities[0]!.url
 }
 
+export interface Rule34VideoDetails {
+  title:       string
+  pageUrl:     string
+  videoUrl:    string | null
+  uploadedAt?: string | undefined  // texto relativo tal cual lo muestra el sitio ("2 days ago")
+  views?:      string | undefined
+  duration?:   string | undefined
+  artist?:     string | undefined  // autor/artista etiquetado (puede diferir de quién lo subió)
+  uploader?:   string | undefined  // cuenta que subió el video al sitio
+  categories:  string[]
+}
+
+/** Trae metadata + resuelve la URL directa del video en un solo fetch de la página. */
+export async function getRule34VideoDetails(pageUrl: string): Promise<Rule34VideoDetails | null> {
+  const res = await axios.get<string>(pageUrl, { timeout: 15_000, headers: { 'User-Agent': UA } })
+  const html = res.data
+  const $ = load(html)
+
+  const title = $('h1.title_video').first().text().trim() || $('title').first().text().trim()
+  if (!title) return null
+
+  // .info.row trae 3 <span> en orden fijo: fecha, vistas, duración (cada uno
+  // con su ícono svg antes — no hay una clase distinta por campo).
+  const infoSpans = $('.info.row .item_info span')
+  const uploadedAt = infoSpans.eq(0).text().trim() || undefined
+  const views       = infoSpans.eq(1).text().trim() || undefined
+  const duration    = infoSpans.eq(2).text().trim() || undefined
+
+  const artist = $('.col[data-suggest-type="model"] a.video_meta_pill span.name')
+    .first().text().trim() || undefined
+
+  let uploader: string | undefined
+  $('.row .col').each((_, el) => {
+    const $el = $(el)
+    if ($el.find('.label').first().text().trim() === 'Uploaded by') {
+      uploader = $el.find('a.video_meta_pill').first().text().trim() || undefined
+    }
+  })
+
+  const categories: string[] = []
+  $('.col[data-suggest-type="category"] a.video_meta_pill span').each((_, el) => {
+    const text = $(el).text().trim()
+    if (text) categories.push(text)
+  })
+
+  return {
+    title,
+    pageUrl,
+    videoUrl: extractVideoUrl(html),
+    uploadedAt,
+    views,
+    duration,
+    artist,
+    uploader,
+    categories,
+  }
+}
+
 /** Resuelve y descarga el video de una página de resultado — null si algo falla. */
 export async function downloadRule34Video(pageUrl: string): Promise<Buffer | null> {
-  const videoUrl = await resolveRule34VideoUrl(pageUrl)
-  if (!videoUrl) return null
-  return downloadBuffer(videoUrl)
+  const details = await getRule34VideoDetails(pageUrl)
+  if (!details?.videoUrl) return null
+  return downloadBuffer(details.videoUrl)
 }

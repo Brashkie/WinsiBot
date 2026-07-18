@@ -4,6 +4,14 @@
 //! Cada grupo tiene su propio contador independiente.
 //! Un grupo con flood NO afecta a los demás.
 //! Umbral: BAD_MAC_THRESHOLD eventos en BAD_MAC_WINDOW_SECS → shouldClear = true.
+//! La ventana es un sliding window log real (deque de timestamps, se purga en
+//! cada evento) — no un tumbling window de bloques fijos. Con bloques fijos,
+//! una ráfaga repartida justo alrededor del límite de un bloque nunca cruza
+//! el umbral en ninguno de los dos bloques aunque el total real sí lo haga;
+//! el log de timestamps no tiene ese punto ciego. O(1) amortizado por evento.
+//! Las entradas de grupos sin historial de clears se liberan periódicamente
+//! si quedan inactivas (ver cleanup() / tasks.rs) — evita crecimiento sin
+//! cota del mapa con más grupos y más tiempo de actividad.
 //! Después de triggear, el grupo tiene un cooldown antes de volver a triggear
 //! — evita bucles de clear infinitos. El cooldown escala con la cantidad de
 //! veces que el grupo ya reincidió (lifetime_clears): 10s → 30s → 90s → ...
@@ -31,7 +39,7 @@ use chrono::Utc;
 use duckdb::{params, Connection};
 use serde::Deserialize;
 use std::{
-    collections::HashMap,
+    collections::{HashMap, VecDeque},
     sync::{Arc, Mutex},
     time::{Duration, Instant},
 };
@@ -64,10 +72,19 @@ fn cooldown_for(lifetime_clears: u32, base_secs: u64) -> u64 {
 }
 
 // ── Estado por grupo ──────────────────────────────────────────────────────────
+// `events` es un log de timestamps (ventana deslizante real), no un contador
+// con reset en bloques fijos ("tumbling window"). Con un tumbling window, una
+// ráfaga repartida justo alrededor del límite de un bloque (p. ej. 4 eventos
+// a los 29s de una ventana de 30s + 4 a los 31s, ya en el bloque siguiente)
+// nunca cruza el umbral en NINGUNO de los dos bloques, aunque sean 8 eventos
+// reales en 2 segundos — un punto ciego matemático real. Purgando eventos
+// viejos del frente de la deque en cada report() en vez de resetear todo en
+// bloques, el conteo siempre refleja la ventana real de los últimos
+// BAD_MAC_WINDOW_SECS, sin ese punto ciego — O(1) amortizado por evento, cada
+// timestamp se empuja y se saca como máximo una vez.
 #[derive(Debug)]
 struct GroupState {
-    count:           u32,
-    window_start:    Instant,
+    events:          VecDeque<Instant>,
     cleared_at:      Option<Instant>,
     lifetime_clears: u32,
 }
@@ -75,11 +92,24 @@ struct GroupState {
 impl GroupState {
     fn new() -> Self {
         Self {
-            count:           0,
-            window_start:    Instant::now(),
+            events:          VecDeque::new(),
             cleared_at:      None,
             lifetime_clears: 0,
         }
+    }
+
+    /// Purga eventos fuera de la ventana y devuelve la cantidad restante.
+    fn prune_and_count(&mut self, window: Duration, now: Instant) -> u32 {
+        while matches!(self.events.front(), Some(t) if now.duration_since(*t) > window) {
+            self.events.pop_front();
+        }
+        self.events.len() as u32
+    }
+
+    /// Última actividad conocida — para decidir si esta entrada se puede
+    /// liberar de memoria (ver BadMacTracker::cleanup).
+    fn last_activity(&self) -> Option<Instant> {
+        self.events.back().copied().max(self.cleared_at)
     }
 }
 
@@ -112,18 +142,13 @@ impl BadMacTracker {
         if let Some(cleared) = entry.cleared_at {
             let cooldown = cooldown_for(entry.lifetime_clears, COOLDOWN_BASE_SECS);
             if now.duration_since(cleared) < Duration::from_secs(cooldown) {
-                return (entry.count, false, entry.lifetime_clears);
+                return (entry.events.len() as u32, false, entry.lifetime_clears);
             }
         }
 
-        // Resetear ventana si expiró
-        if now.duration_since(entry.window_start) > Duration::from_secs(BAD_MAC_WINDOW_SECS) {
-            entry.count        = 0;
-            entry.window_start = now;
-        }
-
-        entry.count += 1;
-        let count = entry.count;
+        let window = Duration::from_secs(BAD_MAC_WINDOW_SECS);
+        entry.events.push_back(now);
+        let count = entry.prune_and_count(window, now);
 
         let should_clear = count >= BAD_MAC_THRESHOLD;
         if should_clear {
@@ -136,7 +161,7 @@ impl BadMacTracker {
                 cooldown_s      = cooldown_for(entry.lifetime_clears, COOLDOWN_BASE_SECS),
                 "Bad MAC threshold — señalando clear para este grupo"
             );
-            entry.count      = 0;
+            entry.events.clear();
             entry.cleared_at = Some(now);
         }
 
@@ -153,17 +178,13 @@ impl BadMacTracker {
         if let Some(cleared) = global.cleared_at {
             let cooldown = cooldown_for(global.lifetime_clears, GLOBAL_COOLDOWN_BASE_SECS);
             if now.duration_since(cleared) < Duration::from_secs(cooldown) {
-                return (global.count, false, global.lifetime_clears);
+                return (global.events.len() as u32, false, global.lifetime_clears);
             }
         }
 
-        if now.duration_since(global.window_start) > Duration::from_secs(GLOBAL_BAD_MAC_WINDOW_SECS) {
-            global.count        = 0;
-            global.window_start = now;
-        }
-
-        global.count += 1;
-        let count = global.count;
+        let window = Duration::from_secs(GLOBAL_BAD_MAC_WINDOW_SECS);
+        global.events.push_back(now);
+        let count = global.prune_and_count(window, now);
 
         let should_clear = count >= GLOBAL_BAD_MAC_THRESHOLD;
         if should_clear {
@@ -175,7 +196,7 @@ impl BadMacTracker {
                 cooldown_s      = cooldown_for(global.lifetime_clears, GLOBAL_COOLDOWN_BASE_SECS),
                 "Bad MAC GLOBAL threshold — sesión corrupta repartida entre grupos, señalando clear"
             );
-            global.count      = 0;
+            global.events.clear();
             global.cleared_at = Some(now);
         }
 
@@ -207,11 +228,11 @@ impl BadMacTracker {
     pub fn stats(&self) -> Vec<serde_json::Value> {
         let map = self.inner.lock().unwrap();
         map.iter()
-            .filter(|(_, v)| v.count > 0 || v.lifetime_clears > 0)
+            .filter(|(_, v)| !v.events.is_empty() || v.lifetime_clears > 0)
             .map(|(jid, v)| {
                 serde_json::json!({
                     "jid":              jid,
-                    "count":            v.count,
+                    "count":            v.events.len(),
                     "lifetimeClears":   v.lifetime_clears,
                     "currentCooldownS": cooldown_for(v.lifetime_clears, COOLDOWN_BASE_SECS),
                 })
@@ -223,10 +244,32 @@ impl BadMacTracker {
     pub fn global_stats(&self) -> serde_json::Value {
         let global = self.global.lock().unwrap();
         serde_json::json!({
-            "count":            global.count,
+            "count":            global.events.len(),
             "lifetimeClears":   global.lifetime_clears,
             "currentCooldownS": cooldown_for(global.lifetime_clears, GLOBAL_COOLDOWN_BASE_SECS),
         })
+    }
+
+    /// Libera memoria de grupos inactivos que NUNCA llegaron a disparar un
+    /// clear — sin esto, cualquier grupo que tuvo aunque sea un Bad MAC
+    /// suelto quedaba en el mapa para siempre, sin límite, mientras el
+    /// proceso siguiera corriendo (más grupos + más tiempo de actividad =
+    /// crecimiento sin cota). Los grupos que SÍ reincidieron
+    /// (lifetime_clears > 0) se mantienen indefinidamente en memoria: son una
+    /// minoría, y perder ese contador reiniciaría su cooldown escalonado a
+    /// cero, tratando a un grupo crónicamente problemático como si fuera la
+    /// primera vez que pasa.
+    pub fn cleanup(&self, inactive_secs: u64) -> usize {
+        let mut map = self.inner.lock().unwrap();
+        let now     = Instant::now();
+        let before  = map.len();
+        map.retain(|_, v| {
+            v.lifetime_clears > 0
+                || v.last_activity()
+                    .map(|t| now.duration_since(t) < Duration::from_secs(inactive_secs))
+                    .unwrap_or(false)
+        });
+        before - map.len()
     }
 }
 

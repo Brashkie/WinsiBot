@@ -85,7 +85,7 @@ Pets level up from the EXP they earn while you take care of them, and evolve at 
 ## 🎴 Characters / Harem (gacha)
 
 ```
-!rw                    — roll a random character (Marvel or Pokédex) — 29 min cooldown
+!rw [marvel|pokedex|anime] — roll a random character (no argument rolls across all three) — 29 min cooldown
 !c                      — reply TO THE CHARACTER'S MESSAGE to claim it — you have 10 min before it expires
 !harem [@user]           — view your collection, sorted by value
 !winfo <name>            — character info

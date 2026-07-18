@@ -65,7 +65,10 @@ fn resolve_path(
 // ── GET /health (público) ─────────────────────────────────────────────────────
 
 pub async fn health(State(state): State<AppState>) -> Json<serde_json::Value> {
-    let sessions = session_id::list_sessions(&state.sessions_dir);
+    let dir      = state.sessions_dir.clone();
+    let sessions = tokio::task::spawn_blocking(move || session_id::list_sessions(&dir))
+        .await
+        .unwrap_or_default();
     tracing::debug!(active_sessions = sessions.len(), "health check");
     Json(serde_json::json!({
         "ok":            true,
@@ -87,7 +90,10 @@ pub async fn liveness() -> Json<serde_json::Value> {
 // ── GET /health/ready (público) — sessiones_dir accesible ────────────────────
 
 pub async fn readiness(State(state): State<AppState>) -> Json<serde_json::Value> {
-    let ready = std::fs::metadata(&state.sessions_dir).is_ok();
+    let dir   = state.sessions_dir.clone();
+    let ready = tokio::task::spawn_blocking(move || std::fs::metadata(&dir).is_ok())
+        .await
+        .unwrap_or(false);
     let status = if ready { "ready" } else { "not_ready" };
     tracing::debug!(ready, "readiness check");
     Json(serde_json::json!({
@@ -101,7 +107,10 @@ pub async fn readiness(State(state): State<AppState>) -> Json<serde_json::Value>
 // ── GET /sessions ─────────────────────────────────────────────────────────────
 
 pub async fn list_sessions(State(state): State<AppState>) -> Json<serde_json::Value> {
-    let sessions = session_id::list_sessions(&state.sessions_dir);
+    let dir      = state.sessions_dir.clone();
+    let sessions = tokio::task::spawn_blocking(move || session_id::list_sessions(&dir))
+        .await
+        .unwrap_or_default();
     tracing::info!(count = sessions.len(), "listando sesiones");
     Json(serde_json::json!({ "ok": true, "sessions": sessions, "ts": Utc::now() }))
 }
@@ -141,21 +150,39 @@ pub async fn write(
     serde_json::from_slice::<serde_json::Value>(&bytes)
         .map_err(|e| err(StatusCode::BAD_REQUEST, format!("data no es JSON válido: {e}")))?;
 
-    // Snapshot del estado anterior
-    let _ = snapshot::create(&path);
+    let bytes_len = bytes.len();
 
-    // Escritura atómica
-    if let Err(e) = atomic::atomic_write(&path, &bytes) {
-        alerts::fire(
-            &state,
-            &format!("🔴 WinsiBot: fallo al escribir sesión '{}': {e}", body.session_id),
-        ).await;
-        return Err(err(StatusCode::INTERNAL_SERVER_ERROR, e.to_string()));
+    // Snapshot + escritura atómica (con fsync) en un hilo bloqueante — esto
+    // corre en CADA creds.update de Baileys, de cada bot y sub-bot (debounced
+    // a ~5s pero con muchos sub-bots activos se acumula). fsync es una
+    // syscall que puede tardar de verdad bajo contención de disco; llamarla
+    // directo en el handler async bloqueaba el hilo del runtime de Tokio
+    // — y de paso, a cualquier otra escritura esperando el mismo _guard —
+    // ralentizando TODAS las demás peticiones a Rust mientras tanto. Este es
+    // el patrón exacto detrás de "el bot se atrasa y de golpe se recupera".
+    let path_for_write = path.clone();
+    let write_result = tokio::task::spawn_blocking(move || {
+        let _ = snapshot::create(&path_for_write);
+        atomic::atomic_write(&path_for_write, &bytes)
+    }).await;
+
+    match write_result {
+        Ok(Ok(())) => {}
+        Ok(Err(e)) => {
+            alerts::fire(
+                &state,
+                &format!("🔴 WinsiBot: fallo al escribir sesión '{}': {e}", body.session_id),
+            ).await;
+            return Err(err(StatusCode::INTERNAL_SERVER_ERROR, e.to_string()));
+        }
+        Err(e) => {
+            return Err(err(StatusCode::INTERNAL_SERVER_ERROR, format!("tarea interna falló: {e}")));
+        }
     }
 
-    state.metrics.inc_write(bytes.len());
-    tracing::info!(session = %body.session_id, bytes = bytes.len(), "sesión guardada");
-    Ok(ok(format!("sesión '{}' guardada ({} bytes)", body.session_id, bytes.len())))
+    state.metrics.inc_write(bytes_len);
+    tracing::info!(session = %body.session_id, bytes = bytes_len, "sesión guardada");
+    Ok(ok(format!("sesión '{}' guardada ({} bytes)", body.session_id, bytes_len)))
 }
 
 // ── GET /read?sessionId=bot1 ──────────────────────────────────────────────────
@@ -182,10 +209,14 @@ pub async fn read(
 ) -> Result<Json<ReadResponse>, (StatusCode, Json<serde_json::Value>)> {
     let path = resolve_path(&state.sessions_dir, &q.session_id)?;
 
-    let bytes = std::fs::read(&path).map_err(|e| {
-        tracing::warn!(session = %q.session_id, error = %e, "sesión no encontrada");
-        err(StatusCode::NOT_FOUND, format!("sesión '{}' no encontrada", q.session_id))
-    })?;
+    let path_for_read = path.clone();
+    let bytes = tokio::task::spawn_blocking(move || std::fs::read(&path_for_read))
+        .await
+        .map_err(|e| err(StatusCode::INTERNAL_SERVER_ERROR, format!("tarea interna falló: {e}")))?
+        .map_err(|e| {
+            tracing::warn!(session = %q.session_id, error = %e, "sesión no encontrada");
+            err(StatusCode::NOT_FOUND, format!("sesión '{}' no encontrada", q.session_id))
+        })?;
 
     let healthy = serde_json::from_slice::<serde_json::Value>(&bytes).is_ok();
     state.metrics.inc_read(bytes.len());
@@ -214,8 +245,13 @@ pub async fn snapshot_route(
 ) -> Result<Json<serde_json::Value>, (StatusCode, Json<serde_json::Value>)> {
     let path = resolve_path(&state.sessions_dir, &body.session_id)?;
 
-    snapshot::create(&path)
-        .map_err(|e| err(StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
+    tokio::task::spawn_blocking({
+        let path = path.clone();
+        move || snapshot::create(&path)
+    })
+    .await
+    .map_err(|e| err(StatusCode::INTERNAL_SERVER_ERROR, format!("tarea interna falló: {e}")))?
+    .map_err(|e| err(StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
 
     state.metrics.inc_snapshot_manual();
     tracing::info!(session = %body.session_id, "snapshot manual creado");
@@ -230,7 +266,14 @@ pub async fn recover(
 ) -> Result<Json<serde_json::Value>, (StatusCode, Json<serde_json::Value>)> {
     let path = resolve_path(&state.sessions_dir, &body.session_id)?;
 
-    match snapshot::recover(&path) {
+    let recovered = tokio::task::spawn_blocking({
+        let path = path.clone();
+        move || snapshot::recover(&path)
+    })
+    .await
+    .map_err(|e| err(StatusCode::INTERNAL_SERVER_ERROR, format!("tarea interna falló: {e}")))?;
+
+    match recovered {
         Some(msg) => {
             state.metrics.inc_recovery();
             tracing::info!(session = %body.session_id, from = %msg, "sesión recuperada");
@@ -250,7 +293,12 @@ pub async fn list_snapshots(
     Query(q): Query<SessionQuery>,
 ) -> Result<Json<serde_json::Value>, (StatusCode, Json<serde_json::Value>)> {
     let path = resolve_path(&state.sessions_dir, &q.session_id)?;
-    let list = snapshot::list(&path);
+    let list = tokio::task::spawn_blocking({
+        let path = path.clone();
+        move || snapshot::list(&path)
+    })
+    .await
+    .map_err(|e| err(StatusCode::INTERNAL_SERVER_ERROR, format!("tarea interna falló: {e}")))?;
     tracing::debug!(session = %q.session_id, count = list.len(), "snapshots listados");
     Ok(Json(serde_json::json!({
         "ok":       true,
@@ -267,8 +315,12 @@ pub async fn is_healthy(
     Query(q): Query<SessionQuery>,
 ) -> Result<Json<serde_json::Value>, (StatusCode, Json<serde_json::Value>)> {
     let path = resolve_path(&state.sessions_dir, &q.session_id)?;
-    let healthy      = atomic::is_healthy(&path);
-    let last_snapshot = snapshot::latest_meta(&path);
+    let (healthy, last_snapshot) = tokio::task::spawn_blocking({
+        let path = path.clone();
+        move || (atomic::is_healthy(&path), snapshot::latest_meta(&path))
+    })
+    .await
+    .map_err(|e| err(StatusCode::INTERNAL_SERVER_ERROR, format!("tarea interna falló: {e}")))?;
 
     tracing::debug!(session = %q.session_id, healthy, "health check de sesión");
 
@@ -296,23 +348,43 @@ pub async fn read_backup(
         Err(e) => return e,
     };
 
-    // 1. Intentar el backup actual
-    if let Ok(bytes) = std::fs::read(&path) {
-        if serde_json::from_slice::<serde_json::Value>(&bytes).is_ok() {
+    // Ambos intentos (archivo principal + búsqueda de snapshots) en un solo
+    // hilo bloqueante — mismo motivo que el resto de este archivo: es I/O de
+    // disco real, no algo para correr directo en el runtime async de Tokio.
+    let result = tokio::task::spawn_blocking({
+        let path = path.clone();
+        move || {
+            // 1. Intentar el backup actual
+            if let Ok(bytes) = std::fs::read(&path) {
+                if serde_json::from_slice::<serde_json::Value>(&bytes).is_ok() {
+                    return ("current".to_string(), 0usize, Some(bytes))
+                }
+            }
+            // 2. Buscar el mejor snapshot sin sobreescribir nada
+            match snapshot::read_best_valid(&path) {
+                Some((bytes, idx)) => ("snapshot".to_string(), idx, Some(bytes)),
+                None => (String::new(), 0, None),
+            }
+        }
+    }).await;
+
+    let (source, idx, bytes) = match result {
+        Ok(r)  => r,
+        Err(e) => return err(StatusCode::INTERNAL_SERVER_ERROR, format!("tarea interna falló: {e}")),
+    };
+
+    match bytes {
+        Some(bytes) if source == "current" => {
             tracing::debug!(session = %q.session_id, "read_backup desde archivo principal");
-            return (StatusCode::OK, Json(serde_json::json!({
+            (StatusCode::OK, Json(serde_json::json!({
                 "ok":     true,
                 "source": "current",
                 "index":  0,
                 "data":   B64.encode(&bytes),
                 "ts":     Utc::now(),
-            })));
+            })))
         }
-    }
-
-    // 2. Buscar el mejor snapshot sin sobreescribir nada
-    match snapshot::read_best_valid(&path) {
-        Some((bytes, idx)) => {
+        Some(bytes) => {
             tracing::info!(session = %q.session_id, index = idx, "read_backup desde snapshot");
             (StatusCode::OK, Json(serde_json::json!({
                 "ok":     true,
@@ -340,70 +412,95 @@ pub async fn read_backup(
 pub async fn clear_signal_sessions(
     State(state): State<AppState>,
 ) -> Json<serde_json::Value> {
-    let auth_path = std::path::Path::new(&state.auth_dir);
+    let auth_dir = state.auth_dir.clone();
 
-    if !auth_path.exists() {
-        tracing::warn!(auth_dir = %state.auth_dir, "auth_dir no existe");
-        return Json(serde_json::json!({
-            "ok":     false,
-            "error":  "auth_dir no existe",
-            "deleted": 0,
-            "ts":     Utc::now(),
-        }));
-    }
+    // std::fs::read_dir/remove_file son BLOQUEANTES — llamarlos directo en un
+    // handler async de Axum congela el hilo del runtime de Tokio hasta que
+    // terminan. Con cientos de session-*.json (un grupo de 400+ contactos
+    // genera esa cantidad fácil) y Windows/antivirus escaneando cada borrado,
+    // esto podía tardar varios segundos reales — tiempo durante el cual ESE
+    // hilo no podía atender ninguna otra petición concurrente (p. ej.
+    // /rate/check de otro mensaje), y encima el cliente de Node (timeout fijo
+    // de 3s pensado para operaciones sub-ms) abortaba la conexión antes de
+    // que el borrado terminara ("AbortError: This operation was aborted").
+    // spawn_blocking mueve todo esto a un hilo dedicado del pool bloqueante,
+    // sin trabar el runtime async para el resto de las peticiones.
+    let result = tokio::task::spawn_blocking(move || {
+        let auth_path = std::path::Path::new(&auth_dir);
 
-    let entries = match std::fs::read_dir(auth_path) {
-        Ok(e)  => e,
-        Err(e) => {
-            tracing::error!(error = %e, "no se pudo leer auth_dir");
-            return Json(serde_json::json!({
-                "ok":     false,
-                "error":  format!("no se pudo leer auth_dir: {e}"),
+        if !auth_path.exists() {
+            return Err(("auth_dir no existe".to_string(), auth_dir));
+        }
+
+        let entries = match std::fs::read_dir(auth_path) {
+            Ok(e)  => e,
+            Err(e) => return Err((format!("no se pudo leer auth_dir: {e}"), auth_dir)),
+        };
+
+        let mut deleted_files: Vec<String> = Vec::new();
+        let mut errors: Vec<String> = Vec::new();
+
+        for entry in entries.flatten() {
+            let name = entry.file_name();
+            let name_str = name.to_string_lossy();
+
+            let is_signal_file = (name_str.starts_with("session-") && name_str.ends_with(".json"))
+                || (name_str.starts_with("sender-key-") && name_str.ends_with(".json"));
+
+            if !is_signal_file {
+                continue;
+            }
+
+            match std::fs::remove_file(entry.path()) {
+                Ok(_) => {
+                    tracing::info!(file = %name_str, "archivo Signal eliminado");
+                    deleted_files.push(name_str.to_string());
+                }
+                Err(e) => {
+                    tracing::warn!(file = %name_str, error = %e, "no se pudo eliminar");
+                    errors.push(format!("{name_str}: {e}"));
+                }
+            }
+        }
+
+        Ok((deleted_files, errors))
+    })
+    .await;
+
+    match result {
+        Ok(Ok((deleted_files, errors))) => {
+            tracing::info!(
+                deleted = deleted_files.len(),
+                errors  = errors.len(),
+                "clear_signal_sessions completado"
+            );
+            Json(serde_json::json!({
+                "ok":      true,
+                "deleted": deleted_files.len(),
+                "files":   deleted_files,
+                "errors":  errors,
+                "ts":      Utc::now(),
+            }))
+        }
+        Ok(Err((msg, dir))) => {
+            tracing::error!(auth_dir = %dir, error = %msg, "clear_signal_sessions falló");
+            Json(serde_json::json!({
+                "ok":      false,
+                "error":   msg,
                 "deleted": 0,
-                "ts":     Utc::now(),
-            }));
+                "ts":      Utc::now(),
+            }))
         }
-    };
-
-    let mut deleted_files: Vec<String> = Vec::new();
-    let mut errors: Vec<String> = Vec::new();
-
-    for entry in entries.flatten() {
-        let name = entry.file_name();
-        let name_str = name.to_string_lossy();
-
-        let is_signal_file = (name_str.starts_with("session-") && name_str.ends_with(".json"))
-            || (name_str.starts_with("sender-key-") && name_str.ends_with(".json"));
-
-        if !is_signal_file {
-            continue;
-        }
-
-        match std::fs::remove_file(entry.path()) {
-            Ok(_) => {
-                tracing::info!(file = %name_str, "archivo Signal eliminado");
-                deleted_files.push(name_str.to_string());
-            }
-            Err(e) => {
-                tracing::warn!(file = %name_str, error = %e, "no se pudo eliminar");
-                errors.push(format!("{name_str}: {e}"));
-            }
+        Err(e) => {
+            tracing::error!(error = %e, "clear_signal_sessions: spawn_blocking panicked");
+            Json(serde_json::json!({
+                "ok":      false,
+                "error":   format!("tarea interna falló: {e}"),
+                "deleted": 0,
+                "ts":      Utc::now(),
+            }))
         }
     }
-
-    tracing::info!(
-        deleted = deleted_files.len(),
-        errors  = errors.len(),
-        "clear_signal_sessions completado"
-    );
-
-    Json(serde_json::json!({
-        "ok":      true,
-        "deleted": deleted_files.len(),
-        "files":   deleted_files,
-        "errors":  errors,
-        "ts":      Utc::now(),
-    }))
 }
 
 // ── POST /messages/track ──────────────────────────────────────────────────────

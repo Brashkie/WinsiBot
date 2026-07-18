@@ -25,6 +25,29 @@ const RATE_BACKOFF_MS  = 5_000 // cooldown al detectar rate-limit de WhatsApp
 
 const sleep = (ms: number) => new Promise<void>(r => setTimeout(r, ms))
 
+// Techo duro por envío — sin esto, un sock.sendMessage() colgado de verdad
+// (stall de red que no llega a rechazar limpio, no solo "lento") dejaba
+// bloqueada TODA la cola de _run() para siempre, ya que procesa un item a la
+// vez: nada mandado DESPUÉS de ese envío colgado salía nunca, para ningún
+// grupo, hasta que esa promesa se resolviera sola (minutos después, por algún
+// timeout de TCP de bajo nivel) — y ahí todo lo acumulado salía de golpe. Eso
+// es "escribe el comando, no responde, y después de unos minutos ya manda".
+// No cancela la llamada real de fondo (sigue corriendo y se descarta su
+// resultado si llega tarde), solo garantiza que la cola nunca quede presa de
+// un solo envío.
+const SEND_TIMEOUT_MS  = 20_000
+const TIMEOUT_ERROR_MSG = 'WinsiRateLimiter: send timeout'
+
+function withSendTimeout<T>(fn: () => Promise<T>): Promise<T> {
+  return new Promise<T>((resolve, reject) => {
+    const timer = setTimeout(() => reject(new Error(TIMEOUT_ERROR_MSG)), SEND_TIMEOUT_MS)
+    fn().then(
+      v => { clearTimeout(timer); resolve(v) },
+      e => { clearTimeout(timer); reject(e) },
+    )
+  })
+}
+
 // ─── Token Bucket ─────────────────────────────────────────────────────────────
 class TokenBucket {
   private tokens:   number
@@ -122,7 +145,7 @@ export class WinsiRateLimiter {
     const elapsed = Date.now() - this.lastSend
     if (elapsed < MIN_DELAY_MS) await sleep(MIN_DELAY_MS - elapsed)
     this.lastSend = Date.now()
-    return fn()
+    return withSendTimeout(fn)
   }
 
   private async _run(): Promise<void> {
@@ -149,7 +172,7 @@ export class WinsiRateLimiter {
       this.lastSend = Date.now()
 
       try {
-        item.resolve(await item.fn())
+        item.resolve(await withSendTimeout(item.fn))
       } catch (err: any) {
         const msg = String(err?.message ?? err ?? '')
         if (

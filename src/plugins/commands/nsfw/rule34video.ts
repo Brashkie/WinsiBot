@@ -1,6 +1,25 @@
 import type { Command } from '../../../types/index.js'
 import { getGroupConfig } from '@core/events.js'
-import { searchRule34Video, downloadRule34Video } from '@lib/rule34video.js'
+import { searchRule34Video, getRule34VideoDetails } from '@lib/rule34video.js'
+import { downloadBuffer } from '@lib/downloader.js'
+
+// Búsqueda + resolver detalles + descargar el video son 3 pedidos de red
+// SEGUIDOS, cada uno con su propio timeout de hasta 15s del lado de la lib —
+// en el peor caso eso suma bastante más que los 20s que le da el handler
+// central antes de "abandonar" el mensaje (libera el semáforo, pero el
+// mensaje puede terminar mandándose muy tarde o directamente quedar la
+// carga sin resolver si algo se cuelga de verdad). Este techo propio
+// garantiza que el usuario SIEMPRE reciba una respuesta clara — éxito o
+// error — dentro de un tiempo razonable, en vez de quedar el "Descargando
+// video..." colgado sin explicación.
+const OVERALL_TIMEOUT_MS = 18_000
+
+function withTimeout<T>(promise: Promise<T>, ms: number): Promise<T | null> {
+  return Promise.race([
+    promise,
+    new Promise<null>(resolve => setTimeout(() => resolve(null), ms)),
+  ])
+}
 
 const command: Command = {
   name:        'rule34video',
@@ -42,10 +61,25 @@ const command: Command = {
     }, { quoted: msg })
     const key = sent?.key
 
-    const buffer = await downloadRule34Video(pick.pageUrl).catch(() => null)
+    const details = await withTimeout(
+      getRule34VideoDetails(pick.pageUrl).catch(() => null),
+      OVERALL_TIMEOUT_MS,
+    )
+    if (!details?.videoUrl) {
+      await sock.sendMessage(jid, {
+        text: `✗ No se pudo descargar el video (tardó demasiado o el sitio no respondió), intenta de nuevo.`,
+        edit: key,
+      } as any)
+      return
+    }
+
+    const buffer = await withTimeout(
+      downloadBuffer(details.videoUrl).catch(() => null),
+      OVERALL_TIMEOUT_MS,
+    )
     if (!buffer) {
       await sock.sendMessage(jid, {
-        text: `✗ No se pudo descargar el video, intenta de nuevo.`,
+        text: `✗ No se pudo descargar el video (tardó demasiado o el sitio no respondió), intenta de nuevo.`,
         edit: key,
       } as any)
       return
@@ -53,9 +87,20 @@ const command: Command = {
 
     await sock.sendMessage(jid, { text: '✔ Listo', edit: key } as any)
 
+    const caption = [
+      `🔞 *${details.title}*`,
+      ``,
+      details.artist     ? `> ❖ Artista › *${details.artist}*` : '',
+      details.uploader    ? `> § Subido por › *${details.uploader}*` : '',
+      details.uploadedAt  ? `> ✩ Publicado › *${details.uploadedAt}*` : '',
+      details.views       ? `> ❀ Vistas › *${details.views}*` : '',
+      details.duration    ? `> ⴵ Duración › *${details.duration}*` : '',
+      details.categories.length ? `> ❒ Categorías › *${details.categories.join(', ')}*` : '',
+    ].filter(Boolean).join('\n')
+
     await sock.sendMessage(jid, {
       video:   buffer,
-      caption: `🔞 *${pick.title}*\n§ ${results.length} resultados para "${query}"`,
+      caption,
     }, { quoted: msg })
   },
 }

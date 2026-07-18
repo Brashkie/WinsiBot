@@ -25,6 +25,12 @@ function noKeyText(): string {
 }
 
 function xblErrorText(err: any): string {
+  if (err instanceof XblAuthExpiredError) {
+    return [
+      `✗ La sesión de Xbox Live vinculada a esta API key expiró`,
+      `§ El dueño del bot debe volver a iniciar sesión en https://xbl.io/ (Login with Xbox) para renovarla`,
+    ].join('\n')
+  }
   const status = err?.response?.status
   if (status === 401) return '✗ La API key de Xbox Live configurada es inválida'
   if (status === 429) return '✗ Demasiadas solicitudes a Xbox Live — intenta de nuevo en unos segundos'
@@ -32,10 +38,30 @@ function xblErrorText(err: any): string {
   return '✗ Error al consultar Xbox Live — intenta de nuevo más tarde'
 }
 
+// OpenXBL tiene un caso particular: cuando la sesión de Xbox Live vinculada a
+// la API key expiró (pasa con el tiempo, hay que re-loguearse en xbl.io), NO
+// devuelve un HTTP 401 — devuelve HTTP 200 con {"content":{},"code":401} en
+// el cuerpo. Sin este chequeo, ese caso se confundía con "no hay resultados"
+// (res.data?.people era undefined → null → "no encontré ningún jugador"),
+// escondiendo el problema real (la key necesita renovarse) detrás de un
+// mensaje que sugería que el Gamertag no existía. Confirmado en vivo: hasta
+// buscar "majornelson" (cuenta oficial de Xbox) devolvía este mismo error.
+class XblAuthExpiredError extends Error {
+  constructor() { super('OpenXBL: sesión de Xbox Live expirada (code 401 en body HTTP 200)') }
+}
+
+function assertNotAuthError(data: any): void {
+  const content = data?.content
+  const hasPayload = !!(data?.people || data?.titles || content?.people || content?.titles)
+  if (data && typeof data === 'object' && data.code === 401 && !hasPayload) {
+    throw new XblAuthExpiredError()
+  }
+}
+
 interface XblPerson {
   xuid:          string
   gamertag:      string
-  gamerscore?:   string
+  gamerScore?:   string
   displayPicRaw?: string
   presenceState?: string
 }
@@ -44,12 +70,14 @@ async function searchGamertag(tag: string): Promise<XblPerson | null> {
   const res = await axios.get(`${XBL_BASE}/search/${encodeURIComponent(tag)}`, {
     headers: xblHeaders(), timeout: 15_000,
   })
-  return res.data?.people?.[0] ?? null
+  assertNotAuthError(res.data)
+  return res.data?.content?.people?.[0] ?? res.data?.people?.[0] ?? null
 }
 
 async function getFriends(xuid: string): Promise<XblPerson[]> {
   const res = await axios.get(`${XBL_BASE}/friends/${xuid}`, { headers: xblHeaders(), timeout: 15_000 })
-  return res.data?.people ?? []
+  assertNotAuthError(res.data)
+  return res.data?.content?.people ?? res.data?.people ?? []
 }
 
 interface XblAchievementTitle {
@@ -58,13 +86,14 @@ interface XblAchievementTitle {
     currentAchievements?: number
     totalAchievements?:   number
     currentGamerscore?:   number
-    maxGamerscore?:       number
+    totalGamerscore?:     number
   }
 }
 
 async function getAchievements(xuid: string): Promise<XblAchievementTitle[]> {
   const res = await axios.get(`${XBL_BASE}/achievements/player/${xuid}`, { headers: xblHeaders(), timeout: 15_000 })
-  return res.data?.titles ?? []
+  assertNotAuthError(res.data)
+  return res.data?.content?.titles ?? res.data?.titles ?? []
 }
 
 function presenceLabel(state?: string): { emoji: string; text: string } {
@@ -112,7 +141,7 @@ const mcsearch: Command = {
         `🎮 *Xbox Live — ${player.gamertag}*`,
         ``,
         `§ XUID » ${player.xuid}`,
-        `§ Gamerscore » *${player.gamerscore ?? 'N/D'}*`,
+        `§ Gamerscore » *${player.gamerScore ?? 'N/D'}*`,
       ].join('\n')
 
       if (player.displayPicRaw) {
@@ -256,7 +285,7 @@ const mcachievement: Command = {
         ...shown.flatMap(t => [
           `🎮 *${t.name}*`,
           `⭐ Logros » ${t.achievement?.currentAchievements ?? 0}/${t.achievement?.totalAchievements ?? 0}`,
-          `◈ Gamerscore » ${t.achievement?.currentGamerscore ?? 0}/${t.achievement?.maxGamerscore ?? 0}`,
+          `◈ Gamerscore » ${t.achievement?.currentGamerscore ?? 0}/${t.achievement?.totalGamerscore ?? 0}`,
           ``,
         ]),
         `§ Mostrando ${shown.length} de ${titles.length} juegos`,

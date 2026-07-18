@@ -1,6 +1,6 @@
 <div align="center">
 
-<img src="https://capsule-render.vercel.app/api?type=waving&color=0:6C63FF,100:00C9FF&height=180&section=header&text=WinsiBot&fontSize=62&fontColor=ffffff&fontAlignY=38&desc=v8.4.3%20%E2%80%94%20Enterprise%20WhatsApp%20Bot&descAlignY=58&descSize=18" width="100%"/>
+<img src="https://capsule-render.vercel.app/api?type=waving&color=0:6C63FF,100:00C9FF&height=180&section=header&text=WinsiBot&fontSize=62&fontColor=ffffff&fontAlignY=38&desc=v8.5.0%20%E2%80%94%20Enterprise%20WhatsApp%20Bot&descAlignY=58&descSize=18" width="100%"/>
 
 <br/>
 
@@ -10,7 +10,7 @@
 [![Rust](https://img.shields.io/badge/Rust-1.75%2B-CE422B?style=for-the-badge&logo=rust&logoColor=white)](https://rust-lang.org)
 
 [![License](https://img.shields.io/badge/License-GPL--3.0-blue?style=flat-square)](LICENSE)
-[![Version](https://img.shields.io/badge/Version-8.4.3-6C63FF?style=flat-square)](CHANGELOG.md)
+[![Version](https://img.shields.io/badge/Version-8.5.0-6C63FF?style=flat-square)](CHANGELOG.md)
 [![Platform](https://img.shields.io/badge/Platform-Windows%20%7C%20Linux-lightgrey?style=flat-square)](https://github.com/Brashkie/WinsiBot)
 [![PRs Welcome](https://img.shields.io/badge/PRs-welcome-brightgreen?style=flat-square)](https://github.com/Brashkie/WinsiBot/pulls)
 
@@ -18,11 +18,11 @@
 
 > High-performance WhatsApp bot with a three-layer multi-language architecture.<br/>
 > Designed for **10,000+ simultaneous groups**, thousands of messages per hour, and multiple instances.<br/>
-> v8.4.3 — Welcome/goodbye messages and almost every `#on` flag (antitoxic, antidelete, viewonce, anticall, autoAccept/autoReject, rpg...) were disconnected and now actually work, real cryptographic validation in `authVerifier`, `#rule34video` no longer needs an API key, sub-bots with a configurable limit and isolated from each other's errors, and a backend fix in Python that kept message bursts from freezing the whole API.
+> v8.5.0 — The bot no longer loses AI replies after a reconnect, one stuck send can no longer freeze the whole outgoing message queue, Rust's disk I/O moved off the async runtime (less lag under load), the Bad MAC algorithm switched to a real sliding window (no blind spots) with automatic memory cleanup, the rate limiter finally blocks when it's supposed to, and a new anime source for `#rw`/`#c` (300 characters).
 
 <br/>
 
-**[🇪🇸 Versión en español →](README.md)** &nbsp;·&nbsp; **[📖 Commands →](docs/commands.en.md)** &nbsp;·&nbsp; **[💰 Economy guide →](docs/economy.en.md)** &nbsp;·&nbsp; **[🐛 Report issue](https://github.com/Brashkie/WinsiBot/issues)**
+**[🇪🇸 Versión en español →](README.md)** &nbsp;·&nbsp; **[📖 Commands →](docs/commands.en.md)** &nbsp;·&nbsp; **[💰 Economy guide →](docs/economy.en.md)** &nbsp;·&nbsp; **[📜 Version history →](CHANGELOG.md)** &nbsp;·&nbsp; **[🐛 Report issue](https://github.com/Brashkie/WinsiBot/issues)**
 
 </div>
 
@@ -66,100 +66,21 @@
 | 🐍 **Services** | Python / FastAPI / Celery | Advanced AI (Ollama + GPT + Claude + Gemini), watchdog, health checks |
 | ⚙️ **Session** | Rust / Axum | Atomic creds write, 10 rotating snapshots, Bad MAC tracker, rate limiter, delivery SQLite |
 
-### What's new in v8.4.3
+### What's new in v8.5.0
 
 | Area | Change |
 |------|--------|
-| **Welcome/goodbye messages didn't work at all** | The handler that builds the message had all its logic, but was never wired up to any Baileys event — turning on `welcome`/`detect` in `#on` did nothing. Now connected, and redesigned along the way: image + custom card layout, uses the group's real description as the welcome text (or a sensible default if it has none), with a link to the repo |
-| **Group-rename notice (`detect`) spammed on every resync** | WhatsApp resends the *current* name/description of every group on each internal resync, not just when something actually changes — without comparing against the last known value, this sent "Name updated" in every group with `detect` on, constantly. Now it only fires when it actually changed |
-| **Almost every `#on` flag was disconnected** | `antilink2`, `antitelegram`, `antidiscord`, `antitiktok`, `antiyoutube`, `antitoxic`, `antitraba`, `antidelete`, `viewonce`, `anticall`, `autoAccept`/`autoReject`, and `rpg` all had complete logic written but never wired to a real event — turning them on in `#on` did nothing. Audited and wired up all of them; `anticall` also had a bug where the toggle wrote to a place the real logic never read from |
-| **`authVerifier` — real cryptographic validation** | `signalis-core` updated to 0.4.0. `sender-key-*.json`/`session-*.json` files claimed to validate "valid buffer sizes" but actually checked nothing — now they genuinely do, with strict base64 decoding (catches corruption that previously slipped through silently). Tested against all ~2000 real files in `auth/` with zero false positives |
-| **`#rw`/`#c` — per-group character exclusivity** | A character already claimed in one group can no longer show up or be claimed there again — but it can still have a different owner in another group |
-| **4 new commands** | `#lego` (LEGO-mosaic image effect, built with Pillow), `#reto`/`#verdad` (truth or dare, separate commands, 80+ lines each), `#tweet` (fake tweet image, now supports attaching a photo) |
-| **`#rule34video` migrated — no API key needed anymore** | Used to misuse rule34.xxx's API (an invalid tag that almost never found results) and required its own account on top of that. Now scrapes rule34video.com directly, no account or credentials required |
-| **Sub-bots — configurable limit and more resilience** | `SUBBOT_MAX` (env var, hot-synced to Rust without restarting it) replaces the old fixed 100 cap. Each sub-bot is now isolated from the others' errors (a single bot's failure used to be able to crash the whole process), tracks why it last disconnected, and `#serbot reconectar` forces an immediate retry of every disconnected bot without waiting out the backoff |
-| **Python: message bursts froze the whole API** | Uvicorn runs with a single worker — two routers (`fast.py`, `ml.py`) called their ML/NLP models directly inside the async handler without offloading to a thread, so a burst of messages blocked the only available thread and dragged *every other* endpoint down with it (`/users`, `/messages`, `/pending`, etc.), not just those two |
-| **Fix: race condition saving data** | The periodic autosave (every 30s) could collide with the final save on logout/SIGTERM/SIGINT — both wrote to the same temp file, and whichever lost the race threw `ENOENT`/`EPERM`. Each write now uses its own temp file and writes to the same file are serialized |
-| **Fix: command latency** | Two calls with no timeout of their own (resolving group-admin status, the spam-guard check on every command) could delay any command's response by several seconds if WhatsApp or Python were slow. Both are now bounded — past the deadline, the bot just proceeds with a safe default instead of hanging |
-| **Console — less libsignal noise** | "Signal session opened/closed" logs used to dump the entire object (key buffers included) to the console — now they're a compact one-liner |
+| **Fix: AI replies lost after a reconnect** | `handleAIResponse` can take 44s+ waiting on Ollama — plenty of time for a reconnect to invalidate the socket captured when the message arrived. Now grabs the **live** socket right before each send |
+| **Fix: one stuck send could freeze the entire outgoing queue** | New hard 20s ceiling on the single choke point for outgoing WhatsApp sends, with automatic retry |
+| **Rust — blocking I/O moved off the async runtime** | Session handlers (creds writes, snapshots, health checks, etc.) did synchronous disk I/O directly inside `async` functions, blocking the runtime for any other concurrent request. All moved to dedicated blocking threads |
+| **`bad_mac.rs` — real sliding-window algorithm** | Replaced the fixed-block counter (which had a genuine blind spot for bursts split across a block boundary) with a timestamp log with incremental pruning — same cost, no gap |
+| **`bad_mac.rs` — memory leak fixed** | The per-group counter map was never cleaned up; a new task frees inactive groups with no clear history every 30 min |
+| **Rate limiting fixed on two layers** | Rust's (15 msg/10s) never actually blocked anyone due to an HTTP 429 misinterpretation; the local TS-side limit was stricter than that and silent 2 out of 3 times — both fixed |
+| **`authVerifier` — fewer false positives** | The full `auth/` sweep no longer runs on every reconnect, only on cold start, and retries before declaring a file corrupt |
+| **`#mcsearch`/`#mcfriends`/`#mcachievement` fixed** | The Xbox Live API nests results one level deeper than the code was reading — it never found real players |
+| **`#rw`/`#c` — new source: anime** | 300 characters from 128 series, added alongside Marvel and Pokédex |
 
-### What's new in v8.4.2
-
-| Area | Change |
-|------|--------|
-| **Fix: owner not recognized with `@lid`** | When WhatsApp identifies the sender with an `@lid` (opaque number-privacy identifier, increasingly common) instead of their real number, the owner check compared that `@lid` against `OWNER_JID` and could never match — blocked `ownerOnly` commands for the real owner. Now uses `senderPn`/`participantPn` (the real number Baileys sends alongside it) and, if those come back empty, resolves the `@lid` against the group's metadata (`participant.jid`) as a last resort, only at the exact moment a command is about to be rejected |
-| **Fix: ffmpeg was crashing the whole process** | `ffmpeg-static` was in `package.json` but never actually used — `#sticker` with video/GIF depended on `fluent-ffmpeg`, which couldn't find the binary on the system PATH and threw an internal `ChildProcess` error with no listener, **uncatchable by try/catch**, which killed the entire bot. `FFMPEG_PATH` now points to the bundled binary from startup, and the error (should it ever recur) was added to the non-fatal exception list |
-| **Bad MAC — global threshold on top of per-group** | A corrupted Signal session can show up as Bad MAC events scattered across *many* different groups (2-3 each) without any single one crossing its own threshold — the bot would go deaf without the automatic cleanup ever firing. New global counter in Rust (`rust/src/bad_mac.rs`, 8 events in 60s aggregated across all groups) that forces a session clear regardless, with its own persistence and escalating cooldown |
-| **"Zombie" connection watchdog** | Baileys' own ping doesn't catch it when WhatsApp stops pushing real-time messages to a device (transport alive, but total silence). New check for "time since last `messages.upsert`" — if 10 minutes pass with zero incoming messages, it forces a reconnect on its own, no manual restart needed |
-| **`#daily` / `#chest` reset at midnight** | Used to be a rolling 24h from last use — now they reset at midnight (UTC, same as `#daily`'s day-streak), like any standard daily reward. Automatic migration for groups that already had the old default saved |
-| **`#profile` works by replying** | You can now view someone's profile by replying to their message with `#profile`, not just by mentioning them. Also fixed a bug where viewing a profile for someone with no saved name showed *your* name instead of theirs |
-| **Python: fixed `/api/v1/users` timeouts** | `getOrCreateUser`/`addExp` run on every message — each call used to read and rewrite the **entire** `users.parquet` under a global lock, at a cost proportional to the total user count. Under enough concurrent traffic that filled up the lock and caused the `ECONNABORTED` errors showing up in the logs. Now lives in an in-memory cache flushed to disk every 5s, same pattern `messages.parquet` already used |
-| **Handler without polling** | `handler.ts`'s concurrency semaphore used to poll for a free slot every 100ms — replaced with a wait queue that hands off the slot the instant it frees up, no polling or wasted CPU under large bursts |
-| **Registration system: fully cleaned up** | Leftovers from the registration system removed in v8.4.1 were still around — phantom commands documented in `commands.md`/`commands.en.md` and a dead `registered` field in `types/index.d.ts`. No references remain anywhere in the code or docs |
-| **Sub-bots wired to the central handler** | Sub-bots (`#serbot`) used to just stay connected without processing any messages at all — now they share the same command handler as the main bot (and its concurrency semaphore). Also fixed a bug where the heartbeat to Rust was never actually being sent (it compared against the wrong key in the in-memory registry) |
-| **8 new commands** | Info: `roblox`/`rbx`, `mcsearch`, `mcfriends`, `mcachievement`, `mcuuid`, `mcavatar`, `mchead`, `mcbody`, `mcskin` (Minecraft Java + Xbox Live, the latter needs an optional `XBL_API_KEY`) · Fun: `melones` |
-| **New economy guide** | `docs/economy.md` / `docs/economy.en.md` — how to earn BrasCoins, diamonds, pets, characters and items, every command verified against the real code |
-| **Console redesign** | `matrix` theme (green/black) across the whole console instead of `dracula`, a bigger startup logo with a "decrypting" effect before it resolves, and periodic cache clearing every 20 min (with `groupMeta` deliberately excluded) |
-
-### What's new in v8.4.1
-
-| Area | Change |
-|------|--------|
-| **Registration removed** | The mandatory registration system (`!registro`/`!unreg`) was removed entirely — `crime`, `#profile`, `bank`, `afk`, `transfer`, `invest`, `quote`, `pay`, `einfo`, `coinflip`, `rob`, and `roulette` no longer require registering to use |
-| **`#profile` redesigned** | Now sends the user's WhatsApp profile picture as an image, shows birthday (`!birthday`), gender, global ranking position, harem count and value (`!rw`), total coins (wallet + bank), and a new commands-used counter |
-| **`#daily` fixed** | The real cooldown was 2 hours despite being called "daily" — let you collect the reward up to 12 times a day even though the day-streak only advanced once. Now it's a real 24 hours (`einfo.ts` and the docs fixed too) |
-| **Python↔TS endpoints repaired** | 5 TypeScript calls to the Python API were hitting routes that didn't exist or using the wrong HTTP method — the worst one: content-based spam moderation (`groupCfg.antispam`) used `GET` against a route that only accepts `POST`, so it was **silently disabled** in every group that had it turned on. Also fixed: intent classification (`/nlp/intent`), text similarity, and privacy profile deletion (`!imitate` → delete, was using `POST` instead of `DELETE` and never actually deleted anything) |
-| **AI timeout and logs** | The 5s timeout for Python calls was too short for Ollama-backed AI responses (up to 25s) — raised to 15s. Python API errors no longer dump the entire Axios error object into the logs (hundreds of lines) — just `endpoint`, `code`, `status`, and `message` now |
-| **Ollama documented** | `OLLAMA_URL`/`OLLAMA_MODEL`/`OLLAMA_TIMEOUT` added to `.env.example` (missing before) and fixed a wrongly-documented variable name in the README (`OLLAMA_BASE_URL` → `OLLAMA_URL`, which is what the code actually reads) |
-
-### What's new in v8.4.0
-
-| Area | Change |
-|------|--------|
-| **Process supervisor** | New `src/supervisor.ts` — restarts the bot with backoff if it crashes, and forces a restart if it detects the event loop hung without crashing (no heartbeat to the Rust watchdog). `npm start` now runs through it; `npm run start:unsupervised` starts the bot directly without the extra layer |
-| **Auto-restart for Redis/Celery/Rust** | Same as Python already did — if Redis, Celery, or the Rust Session API crash, they restart themselves after 3s, guarded so a voluntary shutdown (Ctrl+C / SIGTERM) never triggers a spurious restart |
-| **Bad MAC with escalating cooldown** | The cooldown between clears for the same group is no longer fixed at 10s — it now escalates 10s → 30s → 90s... up to 10 min for groups that keep reoffending. Persisted to DuckDB (`bad_mac_events`) + SQLite `audit_log`, with Parquet export (`POST /badmac/export`), and hydrated on Rust restart from the last 24h of history |
-| **Unified group cache** | `src/core/groupCache.ts` replaces 3 independent `groupMetadata` caches (one in `handler.ts`, another in `lid_mapper.ts`, and an uncached refetch in `store.ts`) with a single TTL + debounce/coalescing cache — fewer redundant calls to the WhatsApp API in large or highly active groups |
-| **Flood control** | Antispam is now keyed per group+user (previously shared across every group a user was in); `safeSend` now respects the global outbound send ceiling; downloads (`yt-dlp`) capped at 3 concurrent; the 25-concurrent-handler semaphore waits up to 3s for a free slot before dropping a message |
-| **Persistence alerts** | Alert webhook (reuses `alerts.rs`) if a session write fails on Rust, plus a visible Node warning if the Rust backup write fails |
-| **Sturdier WebSocket** | Explicit timeouts (`connectTimeoutMs`, `keepAliveIntervalMs`, `defaultQueryTimeoutMs`) + jitter on reconnect backoff (main bot and subbots) — avoids simultaneous reconnects after a shared network blip |
-| **Startup banner** | No longer shows `prefix`/`env` as vertical lines — now a row of horizontal badges (version, Node, platform, GitHub), matching this README's own badge style |
-| **Dependencies** | `@brashkie/signalis-core` 0.2.0 → 0.3.1 (adds ChaCha20-Poly1305), `ansimax` 1.4.2 → 1.4.5 (adds `panels.gridAreas`, syntax highlighting) |
-
-### What's new in v8.3.0
-
-| Area | Change |
-|------|--------|
-| **Rust Session API v5.1.0** | New modules: `metrics` (atomic counters), `tasks` (auto-snapshot + periodic cleanup), `analytics` (aggregated dashboard), `alerts` (Discord-compatible webhooks on watchdog death/recovery) |
-| **Persistent audit log** | New `audit_log` SQLite table — tracks subbot registration/state changes and watchdog events, queryable via `GET /audit` |
-| **Config hot-reload** | `GET`/`PATCH /subbots/config` adjusts subbot limits (global max, per-user max, cooldown) without restarting the process |
-| **Graceful shutdown** | Ctrl+C now takes a final snapshot of all active sessions before exiting, instead of killing the process outright |
-| **Race condition fix** | Subbot `register()` had a TOCTOU race on concurrent registrations from the same owner — fixed with a serializing mutex |
-| **Data corruption fix (Python)** | `parquet_store.py` read/wrote `users.parquet` with no locking — on Windows this caused `ERROR_USER_MAPPED_FILE` and silent loss of user records under concurrent load |
-| **Generic Cache Manager** | `@lib/cacheManager.ts` with automatic TTL, hit/miss stats, and LFU eviction — replaces two duplicated hand-rolled cache implementations (`groupMetaCache`, `charCache`) |
-| **Fixed leveling curve** | The per-level XP formula was pure exponential growth (`100 × 1.5^level`) — past level ~22 it became mathematically unreachable, despite ranks being defined up to level 400 |
-| **Daily streak bonus** | Wired up the prestige/streak system from `@lib/leveling.ts` (already existed but was never used outside `#prestige streak`) — progressive bonus (×1.00–×1.20+) for consecutive daily claims |
-| **Dependency cleanup** | 31 unused npm packages removed from the bundle (~420 transitive packages) after auditing every import — the bot already uses local `yt-dlp` instead of the scraping libs that were still listed |
-| **10+ new commands** | NSFW: `rule34`, `rule34video`, `sexyimg`, `stickerporn` · Roleplay: `kisscheeks`, `laugh`, `punch`, `sad`, `sleep` · RPG: `harem`, `leveltop` · Downloads: `ytmp4` · Info: `infobot` |
-| **Pinterest fix** | The `pinterest`/`pin` command was scraping the static search HTML (only blurred placeholders) — now uses the internal search API that Pinterest's own SPA consumes |
-| **`#sticker` quote fix** | Quoting an image/video and using `#sticker` failed with *"not a media message"* — it was substituting the quoted message incorrectly before downloading it |
-
-### What's new in v8.2.1
-
-| Area | Change |
-|------|--------|
-| **Cryptographic integrity** | Auth directory verified with Curve25519 `publicFromPrivate` at every startup via `@brashkie/signalis-core` |
-| **QR-free recovery** | Corrupted `creds.json` auto-restored from Rust snapshot — no QR scan needed |
-| **Per-group Bad MAC** | Each group has its own sliding-window counter (5 MACs / 30s); one flood no longer triggers a global reconnect |
-| **Infinite reconnect** | `maxRetries` removed — bot reconnects forever with exponential backoff capped at 64s |
-| **Semaphore** | Max 25 concurrent message handlers — prevents event-loop exhaustion under flood |
-| **Rust watchdog** | Node.js pings Rust every 20s; `GET /watchdog/status` returns 503 if Node dies |
-| **Rust rate limiter** | 15 msgs / 10s per sender with per-sender buckets, no global lock |
-| **AbortController** | All Rust API calls time out at 3s — stalled server can't accumulate pending Promises |
-| **Ollama support** | Local AI (Llama 3, Mistral, etc.) tried first in `_call_ai`, before any cloud API |
-| **Snapshot count** | Increased from 5 → 10 rotating snapshots per session |
-| **Python isolation** | `stdio: 'ignore'` prevents 4 KB pipe buffer from blocking the child process |
-| **db.ts fix** | Removed `process.exit(0)` in SIGINT handler that was bypassing graceful shutdown |
+**[📜 See the full version history →](CHANGELOG.md)**
 
 ---
 
@@ -218,7 +139,7 @@
 - Non-exponential leveling curve — reachable up to level 400
 - Daily streak with progressive bonus (`#daily`, ×1.00–×1.20+)
 - Own currency (BrasCoins) + bank
-- Gacha (rollwaifu / pokédex / marvel) + collection (`#harem`)
+- Gacha (rollwaifu / pokédex / marvel / anime) + collection (`#harem`)
 - **Advanced Clans**: territories, 24h wars, alliances, treasury
 - Missions: work, mining, chest, crime, theft
 - **Gift System**: 30+ item catalog, mailbox, wishlist, trades
@@ -272,7 +193,7 @@
 
 ```
 ╔══════════════════════════════════════════════════════════════════════════════╗
-║                           WinsiBot v8.4.3                                    ║
+║                           WinsiBot v8.5.0                                    ║
 ╠════════════════════╦═══════════════════════╦═══════════════════════════════╣
 ║   TypeScript        ║       Python           ║           Rust                ║
 ║   Node.js :4001     ║                        ║                               ║
@@ -777,7 +698,7 @@ WinsiBot/
 │   └── src/
 │       ├── main.rs                   # Entry point (Axum) — graceful shutdown + gzip compression
 │       ├── routes.rs                 # HTTP handlers + AppState
-│       ├── bad_mac.rs                # Per-group Bad MAC tracker — escalating cooldown + DuckDB/SQLite persistence
+│       ├── bad_mac.rs                # Per-group Bad MAC tracker — sliding window log, escalating cooldown, DuckDB/SQLite persistence
 │       ├── rate_limiter.rs           # Per-sender rate limiter (15 msgs / 10s)
 │       ├── watchdog.rs               # Node.js heartbeat — death/recovery tracking
 │       ├── snapshot.rs               # 10 rotating snapshots + read_best_valid()

@@ -5,7 +5,7 @@ import { join } from 'path'
 import { existsSync, readFileSync } from 'fs'
 import { createConnection } from 'net'
 import ffmpegStatic from 'ffmpeg-static'
-import { WinsiSocket } from '@core/socket.js'
+import { winsiSocket } from '@core/socket.js'
 import { handleMessage, getActiveHandlerCount } from '@core/handler.js'
 import { loadCommands } from '@plugins/commands/index.js'
 import { logger } from '@core/logger.js'
@@ -551,7 +551,7 @@ async function main() {
   await loadCommands()
   stopLoad('Comandos cargados', true)
 
-  const winsi = new WinsiSocket()
+  const winsi = winsiSocket
 
   winsi.on('message', (msg, sock) => {
     handleMessage(msg, sock)

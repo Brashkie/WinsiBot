@@ -20,9 +20,22 @@ const _headers = {
 // siempre y eventualmente agota la memoria del proceso Node.
 const FETCH_TIMEOUT_MS = 3_000
 
-async function apiFetch<T>(path: string, init?: RequestInit): Promise<T> {
+// `allowNon2xx`: /rate/check devuelve HTTP 429 A PROPÓSITO cuando bloquea a
+// alguien (con ok:true en el body — es una respuesta válida, no una falla de
+// Rust). Sin este flag, ese 429 se confundía con "Rust no responde" y
+// checkRate() caía a su fallback fail-open (`{allowed: true}`) — el rate
+// limiter de Rust JAMÁS bloqueaba a nadie en la práctica, sin importar cuánto
+// spameara un sender.
+// `timeoutMs`: casi todo en Rust es sub-ms y usa el default de 3s, pero
+// /sessions/signal/clear hace I/O real de archivos (puede borrar cientos de
+// session-*.json) — en Windows con antivirus de por medio eso puede tardar
+// más de 3s de verdad (confirmado en vivo: "AbortError: This operation was
+// aborted"), abortando una limpieza que Rust sí iba a terminar bien.
+async function apiFetch<T>(
+  path: string, init?: RequestInit, opts?: { allowNon2xx?: boolean; timeoutMs?: number },
+): Promise<T> {
   const ctrl = new AbortController()
-  const timer = setTimeout(() => ctrl.abort(), FETCH_TIMEOUT_MS)
+  const timer = setTimeout(() => ctrl.abort(), opts?.timeoutMs ?? FETCH_TIMEOUT_MS)
   try {
     const res  = await fetch(`${API_URL}${path}`, {
       ...init,
@@ -30,7 +43,7 @@ async function apiFetch<T>(path: string, init?: RequestInit): Promise<T> {
       headers: { ..._headers, ...init?.headers },
     })
     const json = (await res.json()) as T & { ok: boolean; error?: string }
-    if (!res.ok || !json.ok) throw new Error(json.error ?? `HTTP ${res.status}`)
+    if (!json.ok || (!opts?.allowNon2xx && !res.ok)) throw new Error(json.error ?? `HTTP ${res.status}`)
     return json
   } finally {
     clearTimeout(timer)
@@ -197,10 +210,11 @@ export class SessionClient {
    * Usar cuando se detecta Bad MAC flood para forzar re-keying del protocolo Signal.
    */
   async clearSignalSessions(): Promise<ClearSignalResult> {
-    return apiFetch<ClearSignalResult>('/sessions/signal/clear', {
-      method: 'POST',
-      body:   '{}',
-    })
+    return apiFetch<ClearSignalResult>(
+      '/sessions/signal/clear',
+      { method: 'POST', body: '{}' },
+      { timeoutMs: 15_000 },
+    )
   }
 
   /**
@@ -246,10 +260,11 @@ export class SessionClient {
    */
   async checkRate(sender: string): Promise<{ allowed: boolean; remaining: number }> {
     try {
-      const res = await apiFetch<{ allowed: boolean; remaining: number }>('/rate/check', {
-        method: 'POST',
-        body:   JSON.stringify({ sender }),
-      })
+      const res = await apiFetch<{ allowed: boolean; remaining: number }>(
+        '/rate/check',
+        { method: 'POST', body: JSON.stringify({ sender }) },
+        { allowNon2xx: true },
+      )
       return { allowed: res.allowed, remaining: res.remaining }
     } catch {
       return { allowed: true, remaining: 15 }

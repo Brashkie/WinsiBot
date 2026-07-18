@@ -11,6 +11,7 @@ const RETRY_DELAY = 1500
 const RETRYABLE = [
   'Connection Closed', 'Connection Lost', 'ETIMEDOUT',
   'Stream Errored', 'ECONNRESET', 'socket hang up',
+  'send timeout', // rateLimiter.ts — sock.sendMessage() colgado, ver comentario ahí
 ]
 
 const sleep = (ms: number) => new Promise<void>(r => setTimeout(r, ms))

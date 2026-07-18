@@ -12,6 +12,8 @@ from collections import defaultdict
 
 # ─── Config ───────────────────────────────────────────────────────────────────
 # probabilidad base de agregar humor según modo
+# (cubre los 12 modos de ai/personality.py::MODES — antes solo tenía los
+# primeros 6, así que en los 6 modos nuevos el humor nunca se aplicaba)
 MODE_HUMOR_PROB: dict[str, float] = {
     'amable':     0.25,   # 25% — ocasional
     'alegre':     0.55,   # 55% — frecuente
@@ -19,6 +21,12 @@ MODE_HUMOR_PROB: dict[str, float] = {
     'toxico':     0.35,   # 35% — humor negro esporádico
     'formal':     0.05,   # 5%  — casi nunca
     'misterioso': 0.15,   # 15% — filosófico ocasional
+    'peruano':    0.40,   # 40% — jerga frecuente
+    'gamer':      0.40,   # 40% — referencias frecuentes
+    'amoroso':    0.30,   # 30% — cariñoso moderado
+    'chistoso':   0.60,   # 60% — el más humorístico de todos
+    'depresivo':  0.08,   # 8%  — casi nunca, y cuando pasa es humor negro seco
+    'kawaii':     0.50,   # 50% — expresivo frecuente
 }
 
 # cooldown por usuario — evitar repetir humor seguido
@@ -168,6 +176,42 @@ HUMOR_BANK: dict[str, dict[str, list[str]]] = {
             'El universo escucha.',
             'Interesante.',
         ],
+    },
+
+    'peruano': {
+        'suffix': [' causa', ' pe', ' bro', ' men'],
+        'prefix': ['Oe, ', 'Ya pe, '],
+        'standalone': ['Oe causa, ¿qué fue?', 'Habla pe.'],
+    },
+
+    'gamer': {
+        'suffix': [' 🎮', ' GG', ' bro'],
+        'prefix': ['Server dice: ', 'Patch notes: '],
+        'standalone': ['AFK.', 'Ready cuando quieras.'],
+    },
+
+    'amoroso': {
+        'suffix': [' 💕', ' 🥰', ' con cariño'],
+        'prefix': ['Con todo el cariño: '],
+        'standalone': ['Te quiero igual 💕', 'Aquí para ti 🌸'],
+    },
+
+    'chistoso': {
+        'suffix': [' 😂', ' (es broma... o no)', ' jaja'],
+        'prefix': ['Dato random: ', 'Fun fact: '],
+        'standalone': ['Jajaja ok eso estuvo bueno.', 'No entendí pero me reí igual 😂'],
+    },
+
+    'depresivo': {
+        'suffix': ['...', ''],
+        'prefix': [],
+        'standalone': ['...', 'Da igual.'],
+    },
+
+    'kawaii': {
+        'suffix': [' owo', ' uwu', ' ✨'],
+        'prefix': ['Kyaa~ '],
+        'standalone': ['...nya~', '¿Nani? owo'],
     },
 }
 

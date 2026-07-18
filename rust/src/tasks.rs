@@ -3,6 +3,8 @@
 ///  - auto_snapshot  : cada 5 min toma snapshot de todas las sesiones activas.
 ///  - cleanup_msgs   : cada 30 min elimina del outbox mensajes de más de 7 días.
 ///  - cleanup_bots   : cada 10 min elimina subbots muertos/inactivos (>5 min).
+///  - cleanup_badmac : cada 30 min libera memoria de grupos Bad MAC inactivos
+///    sin historial de clears (>1h sin actividad).
 ///  - watchdog_check : cada 60 s registra advertencia si Node.js no responde.
 
 use std::time::Duration;
@@ -10,15 +12,18 @@ use std::time::Duration;
 use crate::routes::AppState;
 use crate::{alerts, db, session_id, snapshot};
 
-const SNAP_INTERVAL_SECS:  u64 = 300;   // 5 min
-const CLEANUP_MSG_SECS:    u64 = 1_800; // 30 min
-const CLEANUP_BOT_SECS:    u64 = 600;   // 10 min
-const WATCHDOG_CHECK_SECS: u64 = 60;    // 1 min
+const SNAP_INTERVAL_SECS:     u64 = 300;   // 5 min
+const CLEANUP_MSG_SECS:       u64 = 1_800; // 30 min
+const CLEANUP_BOT_SECS:       u64 = 600;   // 10 min
+const CLEANUP_BADMAC_SECS:    u64 = 1_800; // 30 min
+const BADMAC_INACTIVE_SECS:   u64 = 3_600; // 1h sin actividad → elegible para liberar
+const WATCHDOG_CHECK_SECS:    u64 = 60;    // 1 min
 
 pub fn start(state: AppState) {
     tokio::spawn(auto_snapshot(state.clone()));
     tokio::spawn(cleanup_msgs(state.clone()));
     tokio::spawn(cleanup_bots(state.clone()));
+    tokio::spawn(cleanup_badmac(state.clone()));
     tokio::spawn(watchdog_check(state));
 }
 
@@ -68,6 +73,18 @@ async fn cleanup_bots(state: AppState) {
         let removed = state.subbots.cleanup_dead(300);
         if removed > 0 {
             tracing::info!(removed, "subbots inactivos eliminados (tarea)");
+        }
+    }
+}
+
+async fn cleanup_badmac(state: AppState) {
+    let mut timer = tokio::time::interval(Duration::from_secs(CLEANUP_BADMAC_SECS));
+    timer.tick().await;
+    loop {
+        timer.tick().await;
+        let removed = state.bad_mac.cleanup(BADMAC_INACTIVE_SECS);
+        if removed > 0 {
+            tracing::info!(removed, "bad_mac: grupos inactivos liberados de memoria (tarea)");
         }
     }
 }

@@ -19,8 +19,13 @@ log = logging.getLogger('ollama')
 OLLAMA_URL   = os.getenv('OLLAMA_URL',   'http://localhost:11434')
 OLLAMA_MODEL = os.getenv('OLLAMA_MODEL', 'llama3.2:3b')
 
-# Timeout generoso — CPU inference es más lento que GPU
-TIMEOUT = float(os.getenv('OLLAMA_TIMEOUT', '25'))
+# Timeout generoso — CPU inference es más lento que GPU. Medido en real: una
+# respuesta corta (2 frases) con llama3.2:3b en CPU (sin GPU, size_vram=0) tardó
+# ~19s — con prompts más largos (system prompt con vocabulario del grupo/
+# usuario inyectado) puede pasar de eso fácil. 25s cortaba respuestas que
+# igual iban a llegar, forzando el fallback a plantillas de Python
+# innecesariamente — de ahí que Hepein pareciera "no hablar como una IA real".
+TIMEOUT = float(os.getenv('OLLAMA_TIMEOUT', '40'))
 
 
 async def is_available(model: Optional[str] = None) -> bool:

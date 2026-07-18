@@ -43,6 +43,7 @@ class RespondRequest(BaseModel):
     model:      Optional[str]  = None   # modelo Ollama específico (según palabra disparadora) — sin cascada a GPT/Claude/Gemini
     use_gpt:    bool           = True   # usar GPT/Claude/Gemini
     use_humor:  bool           = False
+    history:    list           = []     # turnos recientes del sender (getAIContext) — evita repetir plantilla
 
 class ImitateRequest(BaseModel):
     prompt:      str
@@ -64,6 +65,13 @@ def _build_system_prompt(
     Este prompt hace que el modelo hable como un miembro real del grupo.
     Si el usuario pregunta sobre comandos, inyecta el catálogo relevante.
     """
+    # OJO: esta lista tiene que cubrir TODOS los modos de ai/personality.py::MODES
+    # (12 en total) — antes solo tenía los primeros 6, así que al hablar con la
+    # IA real (Ollama/GPT/etc.) los 6 modos nuevos (peruano, gamer, amoroso,
+    # chistoso, depresivo, kawaii) caían silenciosamente al default 'natural':
+    # el modo SÍ quedaba guardado y SÍ se usaba bien en el fallback de
+    # plantillas (RESPONSES sí tiene los 12), pero la respuesta de la IA real
+    # no reflejaba el cambio de personalidad para esos 6 modos.
     mode_desc = {
         'amable':     'amigable y servicial',
         'alegre':     'energético y divertido',
@@ -71,6 +79,12 @@ def _build_system_prompt(
         'sarcastico': 'irónico con humor negro suave',
         'formal':     'profesional y educado',
         'misterioso': 'filosófico y críptico',
+        'peruano':    'peruano, usa jerga como "causa", "pe", "bro", "oe"',
+        'gamer':      'gamer, usa términos como GG, lag, noob y referencias a videojuegos',
+        'amoroso':    'cariñoso y afectuoso, con mucho cariño y emojis de corazón',
+        'chistoso':   'bromista, siempre buscando el chiste y la observación cómica',
+        'depresivo':  'apático, nihilista, con humor negro y desgano',
+        'kawaii':     'estilo anime kawaii, tierno, usa uwu/owo y onomatopeyas',
     }.get(personality_mode, 'natural')
 
     parts = [
@@ -92,9 +106,10 @@ def _build_system_prompt(
             parts.append("El grupo usa emojis con frecuencia.")
         if group_style.vocab_sample:
             sample = group_style.vocab_sample[:4]
-            parts.append(f"Ejemplos de mensajes del grupo:")
+            parts.append(f"Ejemplos de mensajes del grupo (SOLO para que copies el TONO, jamás el contenido):")
             for s in sample:
                 parts.append(f'  • "{s}"')
+            parts.append("IMPORTANTE: nunca repitas ni parafrasees estos ejemplos como si fueran tu respuesta — son solo referencia de cómo habla el grupo, no texto para reciclar.")
         parts.append("")
 
     # Estilo del interlocutor
@@ -111,7 +126,7 @@ def _build_system_prompt(
         elif user_profile.emoji_freq < 0.05:
             parts.append("  - Casi no usa emojis.")
         if user_profile.vocab_sample:
-            parts.append(f'  - Ejemplos: "{user_profile.vocab_sample[0]}"')
+            parts.append(f'  - Ejemplo de su forma de escribir (no repitas esta frase, es solo referencia de estilo): "{user_profile.vocab_sample[0]}"')
         parts.append("")
 
     # Conocimiento de comandos — se inyecta si el usuario pregunta sobre el bot
@@ -126,6 +141,7 @@ def _build_system_prompt(
         pass
 
     parts.append("Responde de forma natural, como lo haría un miembro de este grupo específico.")
+    parts.append("Generá una respuesta ORIGINAL y propia al mensaje del usuario — nunca copies, parafrasees ni reutilices los ejemplos de arriba, son solo guía de tono.")
     return '\n'.join(parts)
 
 
@@ -326,6 +342,7 @@ async def hepein_respond(req: RespondRequest):
                 req.intent, req.prompt,
                 jid=req.group_jid,
                 use_humor=req.use_humor,
+                history=req.history,
                 user_style=user_style_dict,
             )
 

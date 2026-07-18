@@ -125,6 +125,11 @@ export const hepein = {
     useGpt?:    boolean
     useHumor?:  boolean
     force?:     boolean   // omitir cooldown
+    // Historial reciente del sender (de getAIContext) — Python lo usa para no
+    // repetir las últimas respuestas cuando cae a su plantilla local (Ollama
+    // caído/lento). Sin esto, hepein_respond() siempre devuelve texto "ok"
+    // (real o de plantilla) sin que el filtro anti-repetición se active nunca.
+    history?: Array<{ text: string; intent: string; reply: string; ts: number }>
   }): Promise<HepeinResponse> {
     const {
       prompt, groupJid, senderJid,
@@ -132,6 +137,7 @@ export const hepein = {
       useGpt   = true,
       useHumor = false,
       force    = false,
+      history  = [],
     } = opts
 
     if (!force && !_canRespond(groupJid)) {
@@ -150,9 +156,16 @@ export const hepein = {
       intent,
       use_gpt:    useGpt,
       use_humor:  useHumor,
+      history,
       ...(opts.mode  ? { mode: opts.mode }   : {}),
       ...(opts.model ? { model: opts.model } : {}),
-    }, 15_000) // más generoso que el default (5s) — puede pasar por Ollama antes de GPT/Claude/Gemini
+    }, 45_000) // Ollama en CPU (sin GPU) puede tardar 20-35s en un modelo de 3B —
+               // medido en real: ~19s para una respuesta corta. Con 15s este
+               // timeout cortaba la llamada ANTES de que Ollama (que del lado
+               // Python espera hasta OLLAMA_TIMEOUT=40s) llegara a responder,
+               // forzando el fallback a plantillas aunque la IA sí iba a
+               // contestar — por eso Hepein parecía "repetir lo que ya existe
+               // en Python" en vez de generar una respuesta real.
 
     if (!res.success || !res.data?.text) {
       return { ok: false, text: '', mode: '', hasProfile: false, groupMsgs: 0, error: res.error }

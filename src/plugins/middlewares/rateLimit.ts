@@ -8,7 +8,14 @@ const localCache = new NodeCache({ stdTTL: 5 })
 const spamCache  = new NodeCache({ stdTTL: 30 })
 
 // ─── Rate limit local sin Python ──────────────────────────────────────────────
-function localRateLimit(sender: string, maxHits = 5, windowMs = 5000): boolean {
+// maxHits subió de 5 a 12 (mismos 5s de ventana) — el límite "real" ya lo pone
+// Rust en handler.ts (15 msj/10s, ANTES de llegar a este middleware) y este
+// era estrictamente más agresivo que ese, así que era este el que en la
+// práctica bloqueaba a usuarios normales probando varios comandos seguidos
+// (uso legítimo), no floods de verdad. Se deja como red de respaldo para
+// cuando Rust está caído (checkRate ya falla abierto en ese caso), no como el
+// límite principal.
+function localRateLimit(sender: string, maxHits = 12, windowMs = 5000): boolean {
   const key  = `rl:${sender}`
   const now  = Date.now()
   const hits = (localCache.get<number[]>(key) ?? [])
