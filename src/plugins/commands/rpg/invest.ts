@@ -51,16 +51,17 @@ async function resolveBet(bet: Bet): Promise<void> {
     : `❌ *FALLASTE*  (el mercado fue ${trendArrow(-Math.sign(priceDiff) as any)})`
 
   const text = [
-    `📊 *RESULTADO*`,
-    ``,
-    `  ${arrow} *${bet.symbol}*  ¥${fmtPrice(bet.entryPrice)} → ¥${fmtPrice(exitPrice)}`,
-    `  Cambio: *${fmtPct(pct)}*`,
-    ``,
-    result,
+    `╭─「 📊 RESULTADO 」`,
+    `│`,
+    `│ ${arrow} \`${bet.symbol}\`  ¥${fmtPrice(bet.entryPrice)} → ¥${fmtPrice(exitPrice)}`,
+    `│ Cambio  \`${fmtPct(pct)}\``,
+    `│`,
+    `│ ${result}`,
     won
-      ? `  Ganancia: *+¥${gain}*`
-      : `  Pérdida:  *-¥${bet.amount}*`,
-    `  Balance: ¥${newBal.toLocaleString()}`,
+      ? `│ Ganancia  +¥${gain.toLocaleString()}`
+      : `│ Pérdida   -¥${bet.amount.toLocaleString()}`,
+    `│ Balance   ¥${newBal.toLocaleString()}`,
+    `╰─`,
   ].join('\n')
 
   await safeSend(() => bet.sock.sendMessage(bet.chatJid, { text })).catch(() => {})
@@ -83,10 +84,11 @@ const command: Command = {
       const left = Math.max(0, Math.ceil((b.resolveAt - Date.now()) / 1000))
       await safeSend(() => sock.sendMessage(jid, {
         text: [
-          `§ Ya tienes una apuesta activa`,
-          ``,
-          `  *${b.symbol}*  ¥${b.amount}  ${b.direction === 'up' ? '📈 SUBE' : '📉 BAJA'}`,
-          `  Resuelve en *${left}s*`,
+          `╭─「 Ya tenés una apuesta activa 」`,
+          `│`,
+          `│ \`${b.symbol}\` ¥${b.amount.toLocaleString()} ${b.direction === 'up' ? '📈 SUBE' : '📉 BAJA'}`,
+          `│ Resuelve en *${left}s*`,
+          `╰─`,
         ].join('\n'),
       }, { quoted: msg }))
       return
@@ -107,15 +109,15 @@ const command: Command = {
     if (!symArg || !amtArg || !dirArg) {
       await safeSend(() => sock.sendMessage(jid, {
         text: [
-          `📊 *INVERSIÓN BINARIA*`,
-          ``,
-          `\`${prefix}invertir <activo> <¥> <sube|baja> [tiempo]\``,
-          ``,
-          `  Activos:  BTC · ETH · GOLD · SOL · WINSI · BRSCO`,
-          `  Tiempo:   30s · 1m · 3m · 5m (default: 1m)`,
-          `  Pago:     +80% si aciertas, -100% si fallas`,
-          ``,
-          `*Ejemplo:*  \`${prefix}invertir btc 200 sube 1m\``,
+          `╭─「 📊 INVERSIÓN BINARIA 」`,
+          `│`,
+          `│ \`${prefix}invertir <activo> <¥> <sube|baja> [tiempo]\``,
+          `│`,
+          `│ Activos  BTC · ETH · GOLD · SOL · WINSI · BRSCO`,
+          `│ Tiempo   30s · 1m · 3m · 5m (default: 1m)`,
+          `│ Pago     +80% si acertás, -100% si fallás`,
+          `│`,
+          `╰─ Ejemplo: \`${prefix}invertir btc 200 sube 1m\``,
         ].join('\n'),
       }, { quoted: msg }))
       return
@@ -177,16 +179,16 @@ const command: Command = {
 
     await safeSend(() => sock.sendMessage(jid, {
       text: [
-        `📊 *INVERSIÓN ABIERTA*`,
-        ``,
-        `│ Activo:   ${asset.emoji} *${asset.symbol}*  (${asset.name})`,
-        `│ Entrada:  ¥${fmtPrice(entryPrice)}`,
-        `│ Apuesta:  ¥${amount.toLocaleString()}`,
-        `│ Dirección: ${dirLabel}`,
-        `│ Tiempo:   *${tfLabel}*`,
-        `│ Pago si ganas: +¥${gain} (+80%)`,
-        ``,
-        `_Resultado en ${tfLabel}..._`,
+        `╭─「 📊 INVERSIÓN ABIERTA 」`,
+        `│`,
+        `│ Activo     ${asset.emoji} \`${asset.symbol}\` (${asset.name})`,
+        `│ Entrada    ¥${fmtPrice(entryPrice)}`,
+        `│ Apuesta    ¥${amount.toLocaleString()}`,
+        `│ Dirección  ${dirLabel}`,
+        `│ Tiempo     \`${tfLabel}\``,
+        `│ Si ganás   +¥${gain.toLocaleString()} (+80%)`,
+        `│`,
+        `╰─ Resultado en ${tfLabel}...`,
       ].join('\n'),
     }, { quoted: msg }))
   },

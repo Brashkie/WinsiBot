@@ -36,15 +36,16 @@
 
 use axum::{extract::State, http::StatusCode, response::Json};
 use chrono::Utc;
-use duckdb::{params, Connection};
+use dashmap::DashMap;
+use duckdb::params;
 use serde::Deserialize;
 use std::{
-    collections::{HashMap, VecDeque},
+    collections::VecDeque,
     sync::{Arc, Mutex},
     time::{Duration, Instant},
 };
 
-use crate::{alerts, db, routes::AppState};
+use crate::{alerts, conversations::ConvDb, db, routes::AppState};
 
 // ── Configuración ─────────────────────────────────────────────────────────────
 const BAD_MAC_THRESHOLD:    u32 = 5;   // eventos por grupo antes de shouldClear
@@ -118,25 +119,30 @@ impl GroupState {
 type GlobalState = GroupState;
 
 // ── Tracker compartido ────────────────────────────────────────────────────────
+// `inner` es DashMap, no Mutex<HashMap> — un reconexión masiva (p. ej. tras un
+// clear global) puede hacer que MUCHOS grupos reporten Bad MAC casi al mismo
+// tiempo; con un solo Mutex global, esa ráfaga se serializaría entera detrás
+// de un único lock aunque sean grupos completamente independientes entre sí.
+// `global` sigue siendo un Mutex normal a propósito: es un único contador
+// compartido por diseño (agrega TODOS los grupos), no hay nada que shardear.
 #[derive(Clone)]
 pub struct BadMacTracker {
-    inner:  Arc<Mutex<HashMap<String, GroupState>>>,
+    inner:  Arc<DashMap<String, GroupState>>,
     global: Arc<Mutex<GlobalState>>,
 }
 
 impl BadMacTracker {
     pub fn new() -> Self {
         Self {
-            inner:  Arc::new(Mutex::new(HashMap::new())),
+            inner:  Arc::new(DashMap::new()),
             global: Arc::new(Mutex::new(GlobalState::new())),
         }
     }
 
     /// Registra un Bad MAC para `jid`. Devuelve (count, should_clear, lifetime_clears).
     pub fn report(&self, jid: &str) -> (u32, bool, u32) {
-        let mut map = self.inner.lock().unwrap();
-        let entry   = map.entry(jid.to_string()).or_insert_with(GroupState::new);
-        let now     = Instant::now();
+        let mut entry = self.inner.entry(jid.to_string()).or_insert_with(GroupState::new);
+        let now       = Instant::now();
 
         // Si el último clear fue hace menos que el cooldown (escalonado), suprimir
         if let Some(cleared) = entry.cleared_at {
@@ -205,8 +211,7 @@ impl BadMacTracker {
 
     /// Resetea manualmente el contador de un grupo (p. ej. tras clear manual).
     pub fn reset(&self, jid: &str) {
-        let mut map = self.inner.lock().unwrap();
-        map.remove(jid);
+        self.inner.remove(jid);
     }
 
     /// Hidrata lifetime_clears de un grupo (o del global, vía GLOBAL_MARKER)
@@ -219,19 +224,19 @@ impl BadMacTracker {
             global.lifetime_clears = lifetime_clears;
             return;
         }
-        let mut map = self.inner.lock().unwrap();
-        let entry = map.entry(jid.to_string()).or_insert_with(GroupState::new);
+        let mut entry = self.inner.entry(jid.to_string()).or_insert_with(GroupState::new);
         entry.lifetime_clears = lifetime_clears;
     }
 
     /// Devuelve stats de todos los grupos con contadores o historial activos.
     pub fn stats(&self) -> Vec<serde_json::Value> {
-        let map = self.inner.lock().unwrap();
-        map.iter()
-            .filter(|(_, v)| !v.events.is_empty() || v.lifetime_clears > 0)
-            .map(|(jid, v)| {
+        self.inner
+            .iter()
+            .filter(|e| !e.value().events.is_empty() || e.value().lifetime_clears > 0)
+            .map(|e| {
+                let v = e.value();
                 serde_json::json!({
-                    "jid":              jid,
+                    "jid":              e.key(),
                     "count":            v.events.len(),
                     "lifetimeClears":   v.lifetime_clears,
                     "currentCooldownS": cooldown_for(v.lifetime_clears, COOLDOWN_BASE_SECS),
@@ -260,23 +265,33 @@ impl BadMacTracker {
     /// cero, tratando a un grupo crónicamente problemático como si fuera la
     /// primera vez que pasa.
     pub fn cleanup(&self, inactive_secs: u64) -> usize {
-        let mut map = self.inner.lock().unwrap();
-        let now     = Instant::now();
-        let before  = map.len();
-        map.retain(|_, v| {
+        let now    = Instant::now();
+        let before = self.inner.len();
+        self.inner.retain(|_, v| {
             v.lifetime_clears > 0
                 || v.last_activity()
                     .map(|t| now.duration_since(t) < Duration::from_secs(inactive_secs))
                     .unwrap_or(false)
         });
-        before - map.len()
+        before - self.inner.len()
     }
 }
 
 // ── Persistencia DuckDB — historial de clears, sobrevive reinicios de Rust ───
 
-pub fn init_schema(path: &str) {
-    match Connection::open(path) {
+// Recibe la MISMA conexión compartida que usa conversations.rs (ver ConvDb),
+// no una propia — DuckDB es single-writer por archivo, y abrir una segunda
+// Connection::open() al mismo path mientras conversations::init() ya tiene el
+// archivo abierto dejaba la tabla creada en una conexión que la conexión
+// compartida (la que después hace los INSERT reales en record_clear) nunca
+// llegaba a ver: en producción, bad_mac_events nunca se creó de verdad — cada
+// intento de persistir un clear fallaba en silencio con "Catalog Error: Table
+// with name bad_mac_events does not exist" (confirmado inspeccionando la
+// DuckDB real: solo tenía conversations/user_style). Usando la misma conexión
+// para crear la tabla, no hay dos vistas de catálogo distintas que puedan
+// desincronizarse.
+pub fn init_schema(conv_db: &ConvDb) {
+    match conv_db.lock() {
         Ok(conn) => {
             let r = conn.execute_batch(
                 "CREATE TABLE IF NOT EXISTS bad_mac_events (
@@ -292,18 +307,18 @@ pub fn init_schema(path: &str) {
                 tracing::warn!("DuckDB bad_mac_events schema init error: {}", e);
             }
         }
-        Err(e) => tracing::warn!("DuckDB open error (bad_mac): {}", e),
+        Err(e) => tracing::warn!("DuckDB lock error (bad_mac init_schema): {}", e),
     }
 }
 
 fn record_clear(
-    path:            &str,
+    conv_db:         &ConvDb,
     jid:             &str,
     count:           u32,
     lifetime_clears: u32,
     cooldown_secs:   u64,
 ) -> Result<(), String> {
-    let conn = Connection::open(path).map_err(|e| e.to_string())?;
+    let conn = conv_db.lock().map_err(|e| e.to_string())?;
     let ts   = Utc::now().timestamp_millis();
     conn.execute(
         "INSERT INTO bad_mac_events (jid, ts, count, lifetime_clears, cooldown_secs)
@@ -315,10 +330,10 @@ fn record_clear(
 
 /// Cuenta clears por grupo en las últimas `hours` horas — usado al arrancar
 /// para hidratar el tracker en memoria (ver main.rs).
-pub fn recent_clear_counts(path: &str, hours: i64) -> Vec<(String, u32)> {
-    let conn = match Connection::open(path) {
+pub fn recent_clear_counts(conv_db: &ConvDb, hours: i64) -> Vec<(String, u32)> {
+    let conn = match conv_db.lock() {
         Ok(c)  => c,
-        Err(e) => { tracing::warn!("DuckDB open error (bad_mac hydrate): {}", e); return Vec::new() }
+        Err(e) => { tracing::warn!("DuckDB lock error (bad_mac hydrate): {}", e); return Vec::new() }
     };
 
     let since = Utc::now().timestamp_millis() - hours * 3_600_000;
@@ -378,10 +393,10 @@ pub async fn report_bad_mac(
 
         // Persistencia — fire-and-forget, no bloquea la respuesta ni afecta
         // la decisión en caliente (que ya se tomó arriba, en memoria).
-        let db_path = state.conv_db_path.clone();
+        let conv_db = state.conv_db.clone();
         let jid_c   = body.jid.clone();
         tokio::task::spawn_blocking(move || {
-            if let Err(e) = record_clear(&db_path, &jid_c, count, lifetime_clears, cooldown) {
+            if let Err(e) = record_clear(&conv_db, &jid_c, count, lifetime_clears, cooldown) {
                 tracing::warn!(error = %e, "bad_mac: fallo al persistir evento en DuckDB");
             }
         });
@@ -406,9 +421,9 @@ pub async fn report_bad_mac(
             ),
         ).await;
 
-        let db_path = state.conv_db_path.clone();
+        let conv_db = state.conv_db.clone();
         tokio::task::spawn_blocking(move || {
-            if let Err(e) = record_clear(&db_path, GLOBAL_MARKER, global_count, global_lifetime_clears, cooldown) {
+            if let Err(e) = record_clear(&conv_db, GLOBAL_MARKER, global_count, global_lifetime_clears, cooldown) {
                 tracing::warn!(error = %e, "bad_mac: fallo al persistir evento global en DuckDB");
             }
         });
@@ -473,10 +488,11 @@ pub async fn bad_mac_stats(
 
 // ── POST /badmac/export — vuelca bad_mac_events a Parquet (analítica) ────────
 pub async fn export_bad_mac(State(state): State<AppState>) -> Json<serde_json::Value> {
-    let path = state.conv_db_path.clone();
+    let conv_db = state.conv_db.clone();
+    let path    = state.conv_db_path.clone();
 
     let res = tokio::task::spawn_blocking(move || -> Result<String, String> {
-        let conn = Connection::open(&path).map_err(|e| e.to_string())?;
+        let conn = conv_db.lock().map_err(|e| e.to_string())?;
         let out  = path.replace(".duckdb", "_bad_mac.parquet").replace('\\', "/");
         conn.execute_batch(&format!(
             "COPY bad_mac_events TO '{out}' (FORMAT PARQUET, COMPRESSION ZSTD)"

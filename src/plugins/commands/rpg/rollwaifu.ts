@@ -1,13 +1,23 @@
 import type { Command, RollCharacter, RollData } from '../../../types/index.js'
 import axios from 'axios'
+import { decode } from '@msgpack/msgpack'
 import { downloadBuffer } from '@lib/downloader.js'
 import { createCache, registerCache } from '@lib/cacheManager.js'
+import { userData } from '@core/events/index.js'
+
+function ownerName(jid: string): string {
+  return userData.get(jid)?.name || jid.replace(/@s\.whatsapp\.net|@lid/g, '').replace(/[^0-9]/g, '')
+}
 
 // ─── Fuentes ──────────────────────────────────────────────────────────────────
+// module-data (MessagePack) reemplaza a module (JSON) — mismo contenido
+// verificado byte a byte (250/1350/500 personajes, cero diferencias), pero
+// 13-19% más liviano por archivo, y se decodifica directo a binario sin pasar
+// por el parser de texto de JSON.
 export const SOURCES: Record<string, string> = {
-  marvel:  'https://raw.githubusercontent.com/Brashkie/module/main/rollimage/marvel.json',
-  pokedex: 'https://raw.githubusercontent.com/Brashkie/module/main/rollimage/pokedex.json',
-  anime:   'https://raw.githubusercontent.com/Brashkie/module/main/rollimage/anime-character.json',
+  marvel:  'https://raw.githubusercontent.com/Brashkie/module-data/main/rollmedia/marvel.msgpack',
+  pokedex: 'https://raw.githubusercontent.com/Brashkie/module-data/main/rollmedia/pokedex.msgpack',
+  anime:   'https://raw.githubusercontent.com/Brashkie/module-data/main/rollmedia/anime-character.msgpack',
 }
 
 // ─── Cache — 1h de TTL en vez de "para siempre" (las listas rara vez cambian,
@@ -31,7 +41,40 @@ export interface ActiveChar {
   msgKey:    any
 }
 
-export const activeChars = new Map<string, ActiveChar>()
+// Un roll activo POR USUARIO POR GRUPO, no uno solo compartido por todo el
+// grupo — antes, si alguien tiraba un personaje y no lo reclamaba, NADIE MÁS
+// en el grupo podía usar #rw hasta que ese roll expirara o se reclamara,
+// aunque fueran personas completamente distintas tirando su propio
+// personaje. jid -> sender -> roll.
+export const activeChars = new Map<string, Map<string, ActiveChar>>()
+
+export function getUserActiveChar(jid: string, sender: string): ActiveChar | undefined {
+  return activeChars.get(jid)?.get(sender)
+}
+
+export function setUserActiveChar(jid: string, sender: string, active: ActiveChar): void {
+  if (!activeChars.has(jid)) activeChars.set(jid, new Map())
+  activeChars.get(jid)!.set(sender, active)
+}
+
+export function deleteUserActiveChar(jid: string, sender: string): void {
+  activeChars.get(jid)?.delete(sender)
+}
+
+// #c es una respuesta a un mensaje puntual — cualquiera del grupo puede
+// reclamarlo (o robarlo dentro de la ventana), no solo quien lo tiró, así que
+// hay que buscar por el ID del mensaje citado entre TODOS los rolls activos
+// del grupo, no asumir que hay uno solo.
+export function findActiveCharByMsgId(
+  jid: string, msgId: string,
+): { rolledBy: string; active: ActiveChar } | null {
+  const groupMap = activeChars.get(jid)
+  if (!groupMap) return null
+  for (const [rolledBy, active] of groupMap) {
+    if (active.msgKey?.id === msgId) return { rolledBy, active }
+  }
+  return null
+}
 
 // ─── Inventario ───────────────────────────────────────────────────────────────
 export const inventory = new Map<string, RollCharacter[]>()
@@ -91,11 +134,13 @@ export async function getCharacters(source: string): Promise<RollCharacter[]> {
   if (charCache.has(source)) return charCache.get(source)!
   const url = SOURCES[source]
   if (!url)  return []
-  const res  = await axios.get<RollData>(url, {
-    timeout: 15_000,
-    headers: { 'User-Agent': 'Mozilla/5.0 (compatible; WinsiBot/1.0)' },
+  const res  = await axios.get<ArrayBuffer>(url, {
+    timeout:      15_000,
+    responseType: 'arraybuffer',
+    headers:      { 'User-Agent': 'Mozilla/5.0 (compatible; WinsiBot/1.0)' },
   })
-  const chars = res.data.personajes ?? []
+  const data  = decode(new Uint8Array(res.data)) as RollData
+  const chars = data.personajes ?? []
   charCache.set(source, chars)
   return chars
 }
@@ -150,13 +195,13 @@ const command: Command = {
       return
     }
 
-    // ─── personaje activo en el grupo ─────────────────────────────────────────
-    const existing = activeChars.get(jid)
+    // ─── personaje activo del usuario en el grupo ─────────────────────────────
+    const existing = getUserActiveChar(jid, sender)
     if (existing && existing.expiresAt > Date.now()) {
       const remaining = existing.expiresAt - Date.now()
       await sock.sendMessage(jid, {
         text: [
-          `✗ Ya hay un personaje activo: *${existing.char.name}*`,
+          `✗ Ya tenés un personaje activo: *${existing.char.name}*`,
           `  § Expira en ${formatTime(remaining)}`,
           `  § Responde al mensaje del personaje con *${prefix}c* para reclamarlo`,
         ].join('\n'),
@@ -215,26 +260,33 @@ const command: Command = {
       buffer = await downloadBuffer(pickImage(char.image))
     } catch {}
 
+    // getGroupClaim ya excluyó arriba a cualquier personaje con dueño en este
+    // grupo, así que acá SIEMPRE va a dar null — pero se resuelve igual (en
+    // vez de asumirlo) para que este caption use la misma lógica real que
+    // #winfo, no el campo estático "Libre" que trae el JSON de la fuente.
+    const ownerJid  = getGroupClaim(jid, char)
+    const estadoStr = ownerJid ? `Reclamado por ${ownerName(ownerJid)}` : (char.status ?? 'Libre')
+
     const caption = [
       `◈ Nombre ⇝ *${char.name}*`,
       `⚥ Genero ⇝ *${char.gender}*`,
       `☆ Valor  ⇝ *${char.value}*`,
-      `♡ Estado ⇝ *${char.status}*`,
+      `♡ Estado ⇝ *${estadoStr}*`,
       `◆ Fuente ⇝ *${char.source}*`,
-      char.habilidad ? `> Habilidad » ${char.habilidad}` : '',
-      char.debilidad ? `> Debilidad » ${char.debilidad}` : '',
-    ].filter(Boolean).join('\n')
+    ].join('\n')
+
+    const mentions = ownerJid ? [ownerJid] : []
 
     let sentImg: any = null
     if (buffer) {
-      sentImg = await sock.sendMessage(jid, { image: buffer, caption })
+      sentImg = await sock.sendMessage(jid, { image: buffer, caption, mentions })
     } else {
-      sentImg = await sock.sendMessage(jid, { text: caption })
+      sentImg = await sock.sendMessage(jid, { text: caption, mentions })
     }
 
     // registrar personaje activo
     const expiresAt = Date.now() + 10 * 60 * 1000
-    activeChars.set(jid, {
+    setUserActiveChar(jid, sender, {
       char,
       rolledBy:  sender,
       jid,
@@ -246,9 +298,9 @@ const command: Command = {
     })
 
     setTimeout(() => {
-      const active = activeChars.get(jid)
+      const active = getUserActiveChar(jid, sender)
       if (active?.char.name === char.name && !active.claimedBy) {
-        activeChars.delete(jid)
+        deleteUserActiveChar(jid, sender)
       }
     }, 10 * 60 * 1000)
   },

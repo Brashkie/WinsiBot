@@ -1,6 +1,5 @@
 import type { Command } from '../../../types/index.js'
 import { getUserData, expForLevel } from '@core/events.js'
-import { PetManager } from '@lib/petAdvanced.js'
 
 const bar = (cur: number, max: number, len = 8) => {
   const filled = Math.min(len, Math.floor((cur / max) * len))
@@ -19,12 +18,10 @@ const command: Command = {
     const target  = (msg.message?.extendedTextMessage?.contextInfo?.mentionedJid ?? [])[0] ?? sender
     const user    = getUserData(target, pushName)
     const need    = expForLevel(user.level)
-    // user.pet (viejo sistema simple) nunca se llena — !pet adoptar solo escribe
-    // en user.petFull (sistema avanzado). Leer el campo viejo acá hacía que esta
-    // línea dijera "sin mascota" siempre, aunque el usuario sí tuviera una.
-    const petLine = user.petFull
-      ? `${PetManager.getSpecies(user.petFull.speciesId)?.emoji ?? '🐾'} Nv.${user.petFull.level} "${user.petFull.name}"`
-      : 'sin mascota'
+    const topDragon = [...user.dragons].sort((a, b) => b.level - a.level)[0]
+    const petLine = topDragon
+      ? `${user.dragons.length} · Nv.${topDragon.level} "${topDragon.name}"`
+      : 'sin dragones'
 
     await sock.sendMessage(jid, {
       text: `*${user.name || pushName}*  Nv.${user.level}  _${user.profile.role}_
@@ -34,7 +31,7 @@ const command: Command = {
 > Diam.  ${user.diamonds}   Salud ${user.health}/100
 
 > ⚔  ${user.items.sword}   🧪 ${user.items.pc}   ✨ ${user.items.sp}   🏆 ${user.items.legendary}
-> 🐾 ${petLine}${user.premium ? '\n> ★ _Premium_' : ''}`,
+> 🐉 ${petLine}${user.premium ? '\n> ★ _Premium_' : ''}`,
       mentions: [target],
     }, { quoted: msg })
   },

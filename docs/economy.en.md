@@ -8,7 +8,7 @@ For the full command list (with aliases and permissions) see [commands.en.md](co
 
 ## 🪙 BrasCoins (your main currency)
 
-BrasCoins (¥) is what you use to buy pets, gifts, and bet in games. It's kept either in your **wallet** (`money`) or your **bank** (`bank`) — see the [Bank](#-bank--protect-your-money) section below, it matters.
+BrasCoins (¥) is what you use to buy dragon eggs, gifts, and bet in games. It's kept either in your **wallet** (`money`) or your **bank** (`bank`) — see the [Bank](#-bank--protect-your-money) section below, it matters.
 
 ### Recurring income (no risk)
 
@@ -64,21 +64,63 @@ Live prices via `!mercado` (aliases: `market`, `precios`, `bolsa`), chart with `
 
 ---
 
-## 🐾 Pets
+## BrasEmbers
 
-Full system under `!pet` (alias `!mascota`).
+A deliberately scarce currency — unlike diamonds, it's not handed out freely.
+
+**How to get them:**
+
+- `!ascuas` (aliases `!embers`, `!brasas`) — main source: 3h cooldown, 50% success chance (60% premium), 1–2 per success (2–3 premium). On failure you get nothing and the cooldown still applies.
+- 4% chance of +1 from `!daily`, `!work`, `!crime` (only on a successful crime) and `!minar` — as a side bonus, no dedicated command needed.
+
+**What they're for:** every NSFW command (`!rule34`, `!rule34video`, `!sexyimg`, `!stickerporn`, `!porn`) now costs 1 BrasEmber per use — on top of the group's `!on nsfw` toggle, which still has to be on. The group toggle controls whether NSFW is allowed there at all; BrasEmbers controls whether YOU can keep using it.
+
+Shown in `!profile`.
+
+---
+
+## 🏭 Businesses
+
+Buy a business once and it generates passive BrasCoins over time — no need to be online, it accumulates on its own (up to a 24h cap; after that you need to collect to keep accumulating).
 
 ```
-!pet adoptar [species] <name>   — adopt (costs ¥500; no species = random)
-!pet list                        — species catalog by rarity
-!pet feed / play / clean / sleep — care for it (grants EXP, some have cooldowns: clean 2h)
-!pet explore                     — 1h cooldown — ¥100–500 + XP
-!pet adventure <zone>            — 4h cooldown — 5 zones, 75% success rate, better payout than explore
-!pet battle @user                — fight another user's pet, both gain EXP
-!pet stats / view                — view your pet
+!business                    — see the catalog and your businesses (with pending income)
+!business comprar <id>       — buy one from the catalog
+!collect                     — collect accumulated income from all your businesses
 ```
 
-Pets level up from the EXP they earn while you take care of them, and evolve at certain levels (varies by species — check `!pet info <species>`). Rarity ranges from common to legendary.
+**Catalog:**
+
+| Business | Cost | Produces |
+|---------|------:|---------|
+| 🌽 Farm (`farm`) | ¥5,000 | ¥120/hour |
+| 🥖 Bakery (`bakery`) | ¥15,000 | ¥320/hour |
+| 🏪 Store (`store`) | ¥40,000 | ¥800/hour |
+| 🍔 Restaurant (`restaurant`) | ¥150,000 | ¥2,800/hour |
+| 🏨 Hotel (`hotel`) | ¥500,000 | ¥9,000/hour |
+| 🏭 Factory (`factory`) | ¥1,200,000 | ¥22,000/hour |
+
+You can own several businesses, even repeats of the same type — each accumulates separately. `!collect` cashes in all of them at once.
+
+---
+
+## 🐉 Dragons (Dragon City)
+
+Full system under `!pet` (alias `!mascota`, `!dragon`, `!dragones`) — a real 579-dragon catalog (Brashkie/module-data), with real evolution images and videos.
+
+```
+!pet                          — view your collection (level, stage, pending gold)
+!pet hatch                    — hatch a new egg (costs ¥800, random species)
+!pet feed <#|name>            — feed with Gold (grants EXP, may evolve)
+!pet collect                  — collect the passive Gold accumulated by all your dragons
+!pet info <#|name>            — dragon sheet (rarity, elements, skills, description)
+!pet rename <#> <name>        — rename
+!pet release <#|name>         — release
+```
+
+**Gold** is a new currency, separate from BrasCoins — each dragon generates it passively based on its level (same 24h accumulation cap logic as businesses) and it's spent feeding it. The egg itself is paid in BrasCoins (so you're not stuck needing a dragon to afford your first one).
+
+Dragons evolve twice based on level: egg (0–9) → young (10–24, with an evolution animation) → adult (25+, final evolution). Each dragon's description is translated to Spanish on the fly for the in-chat text.
 
 ---
 
@@ -175,7 +217,7 @@ A full social system with wars, territories and alliances between clans. Run `!c
 | Fast, safe BrasCoins | `!work`, `!minar` |
 | Big BrasCoins (with risk) | `!crime`, `!slut` |
 | Diamonds | `!crime`, `!minar`, `!weekly`, `!monthly` |
-| A pet | `!pet adoptar` (¥500) |
+| A dragon | `!pet hatch` (¥800) |
 | Characters/harem | `!rw` → `!c` (replying to its message) |
 | To climb the competitive ranking | `!arena retar @user` |
 | A trophy/gift for someone | `!regalo enviar @user trophy` |

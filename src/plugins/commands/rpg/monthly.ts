@@ -44,7 +44,7 @@ const command: Command = {
     setCooldown(sender, 'lastMonthly')
 
     const leveled = checkLevelUp(sender)
-    const lvlLine = levelUpLine(leveled)
+    const lvlLine = levelUpLine(leveled, jid)
 
     await sock.sendMessage(jid, {
       text: `*RECOMPENSA MENSUAL* ${isPrem ? '★' : ''}

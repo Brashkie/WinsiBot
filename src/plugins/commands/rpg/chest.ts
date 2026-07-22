@@ -55,7 +55,7 @@ const command: Command = {
     setCooldown(sender, 'lastCofre')
 
     const leveled = checkLevelUp(sender)
-    const lvlLine = levelUpLine(leveled)
+    const lvlLine = levelUpLine(leveled, jid)
     const story   = isPrem ? pick(PREM_OPENERS)(money, exp, diamonds) : pick(OPENERS)(money, exp, diamonds)
 
     await safeSend(() => sock.sendMessage(jid, {

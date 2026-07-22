@@ -1,0 +1,19 @@
+target-version = "py311"
+line-length = 100
+
+exclude = [
+    "venv",
+    "cython_ext/build",
+    "data",
+]
+
+[lint]
+# Set por defecto de ruff (pyflakes + un subset de pycodestyle) — punto de
+# partida conservador, igual que se hizo con Biome del lado TS: primero ver
+# qué encuentra de verdad contra el código real antes de sumar reglas más
+# estrictas (type hints, imports, etc.) que podrían generar mucho ruido.
+select = ["E4", "E7", "E9", "F"]
+
+[format]
+quote-style = "double"
+indent-style = "space"

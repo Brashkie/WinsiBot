@@ -2,19 +2,16 @@
 // TIPOS
 // ─────────────────────────────────────────────────────────────────────────────
 
-// ─── Mascota activa del usuario ───────────────────────────────────────────────
-export type PetType =
-  | 'none' | 'dog' | 'cat' | 'fox' | 'horse'
-  | 'dragon' | 'phoenix' | 'centaur' | 'legendary'
-
-export interface PetData {
-  type:    PetType
-  name:    string
-  level:   number
-  exp:     number
-  health:  number    // 0-100
-  hunger:  number    // 0-100 (100=lleno)
-  lastFed: number    // timestamp
+// ─── Dragones (Dragon City, #pet) ─────────────────────────────────────────────
+export interface OwnedDragon {
+  id:          number   // referencia a DragonDef.id en @lib/dragoncity.ts
+  slug:        string
+  name:        string   // nombre personalizado (por defecto el de la especie)
+  level:       number
+  exp:         number
+  stage:       0 | 1 | 3
+  hatchedAt:   number
+  lastCollect: number   // última recolección de Oro pasivo
 }
 
 // ─── Inventario de ítems ──────────────────────────────────────────────────────
@@ -25,6 +22,13 @@ export interface ItemInventory {
   sp:           number   // puntos de magia
   legendary:    number   // objetos legendarios
   stickerPack:  string   // nombre del pack de stickers
+}
+
+// ─── Negocios comprados (#business/#collect) ─────────────────────────────────
+export interface OwnedBusiness {
+  id:          string   // referencia a BusinessDef.id en @lib/business.ts
+  boughtAt:    number
+  lastCollect: number
 }
 
 // ─── Cooldowns de actividades RPG ────────────────────────────────────────────
@@ -46,6 +50,7 @@ export interface Cooldowns {
   lastBet:       number
   lastCofre:     number
   lastCrime:     number
+  lastAscuas:    number
   lastGift:      number
   lastReward:    number
   lastCode:      number
@@ -72,6 +77,10 @@ export interface UserData {
   money:        number
   bank:         number
   diamonds:     number
+  embers:       number   // BrasEmbers — moneda rara, cuesta usarla en comandos NSFW
+  businesses:   OwnedBusiness[]   // negocios comprados — #business/#collect
+  oro:          number   // Oro (Dragon City) — se gana con los dragones, se gasta alimentándolos
+  dragons:      OwnedDragon[]     // colección de dragones — #pet
   health:       number    // 0-100
   crime:        number    // puntos de criminalidad
   commandsUsed: number    // total de comandos ejecutados
@@ -88,8 +97,6 @@ export interface UserData {
   lastSpam:     number
   // ── Perfil ─────────────────────────────────────────────────────────────────
   profile:      UserProfile
-  // ── Mascota ────────────────────────────────────────────────────────────────
-  pet:          PetData
   // ── Inventario ─────────────────────────────────────────────────────────────
   items:        ItemInventory
   // ── Cooldowns ──────────────────────────────────────────────────────────────
@@ -104,8 +111,6 @@ export interface UserData {
   quizProfile?:  import('@lib/quiz.js').QuizProfile
   // ── Leveling avanzado ───────────────────────────────────────────────────────
   levelingMeta?: import('@lib/leveling.js').LevelingMeta
-  // ── Mascota avanzada ────────────────────────────────────────────────────────
-  petFull?:      import('@lib/petAdvanced.js').PetFullData
 }
 
 // ─── Configuración de grupo ───────────────────────────────────────────────────
@@ -187,18 +192,6 @@ export const userClan     = new Map<string, string>()      // userJid → clanTa
 // DEFAULTS
 // ─────────────────────────────────────────────────────────────────────────────
 
-export function defaultPet(): PetData {
-  return {
-    type:    'none',
-    name:    '',
-    level:   0,
-    exp:     0,
-    health:  100,
-    hunger:  100,
-    lastFed: 0,
-  }
-}
-
 export function defaultItems(): ItemInventory {
   return {
     sword:       0,
@@ -229,6 +222,7 @@ export function defaultCooldowns(): Cooldowns {
     lastBet:       0,
     lastCofre:     0,
     lastCrime:     0,
+    lastAscuas:    0,
     lastGift:      0,
     lastReward:    0,
     lastCode:      0,
@@ -256,6 +250,10 @@ export function defaultUserData(name = ''): UserData {
     money:        1000,
     bank:         0,
     diamonds:     10,
+    embers:       0,
+    businesses:   [],
+    oro:          0,
+    dragons:      [],
     health:       100,
     crime:        0,
     commandsUsed: 0,
@@ -269,7 +267,6 @@ export function defaultUserData(name = ''): UserData {
     spam:         0,
     lastSpam:     0,
     profile:      defaultProfile(name),
-    pet:          defaultPet(),
     items:        defaultItems(),
     cooldowns:    defaultCooldowns(),
   }
@@ -326,14 +323,29 @@ export function getUserData(jid: string, name = ''): UserData {
   const u = userData.get(jid)!
   // Rellenar sub-objetos si vienen de una versión anterior sin ellos
   if (!u.profile)   u.profile   = defaultProfile(u.name)
-  if (!u.pet)       u.pet       = defaultPet()
   if (!u.items)     u.items     = defaultItems()
   if (!u.cooldowns) u.cooldowns = defaultCooldowns()
+  if (u.embers === undefined) u.embers = 0
+  if (!u.businesses) u.businesses = []
+  if (u.oro === undefined) u.oro = 0
+  if (!u.dragons) u.dragons = []
   return u
 }
 
 export function setUserData(jid: string, data: Partial<UserData>): void {
   userData.set(jid, { ...getUserData(jid), ...data })
+}
+
+/** Cobra `cost` BrasEmbers a `sender` — usado por los comandos NSFW, que
+ *  además del toggle #on nsfw del grupo (controla si el GRUPO permite NSFW)
+ *  ahora también requieren que el USUARIO tenga esta moneda rara. Devuelve
+ *  true y descuenta si le alcanza; false y no toca nada si no le alcanza —
+ *  el comando que llama a esto debe avisarle al usuario en el caso false. */
+export function chargeEmbers(sender: string, cost: number): boolean {
+  const u = getUserData(sender)
+  if (u.embers < cost) return false
+  setUserData(sender, { embers: u.embers - cost })
+  return true
 }
 
 export function patchUserData(jid: string, patch: DeepPartial<UserData>): void {
@@ -519,9 +531,24 @@ export function checkLevelUp(jid: string): number {
   return leveled
 }
 
-/** Línea de "subiste de nivel" para anexar a la respuesta de un comando — '' si leveled es 0. */
-export function levelUpLine(leveled: number): string {
-  return leveled > 0 ? `\n> ◆ *¡Subiste ${leveled} nivel(es)!*` : ''
+// Grupos con autolevelup apagado no deben ver el aviso de subida de nivel en
+// NINGÚN lado — ni embebido en la respuesta del comando (work/crime/mine/
+// daily/weekly/monthly/chest) ni en el anuncio centralizado de handler.ts.
+// Antes cada uno de esos comandos llamaba levelUpLine() sin chequear la
+// config del grupo, así que el aviso aparecía SIEMPRE sin importar el
+// toggle (o su valor por defecto, que es `false`) — coincide con lo
+// reportado: "desactivé el level y sigue apareciendo". En DMs (sin grupo)
+// no aplica ningún toggle de grupo, así que se muestra siempre, igual que
+// ya hacía el chequeo centralizado en handler.ts (`groupCfg === null`).
+function canAnnounceLevelUp(jid: string): boolean {
+  if (!jid.endsWith('@g.us')) return true
+  return getGroupConfig(jid).autolevelup
+}
+
+/** Línea de "subiste de nivel" para anexar a la respuesta de un comando —
+ *  '' si leveled es 0 o si el grupo tiene autolevelup desactivado. */
+export function levelUpLine(leveled: number, jid: string): string {
+  return leveled > 0 && canAnnounceLevelUp(jid) ? `\n> ◆ *¡Subiste ${leveled} nivel(es)!*` : ''
 }
 
 // ─────────────────────────────────────────────────────────────────────────────

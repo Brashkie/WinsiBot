@@ -109,8 +109,11 @@ async fn main() {
 
     let database = db::open(&cfg.db_path).expect("no se pudo abrir SQLite");
 
-    conversations::init(&cfg.conv_db_path);
-    bad_mac::init_schema(&cfg.conv_db_path);
+    // Conexión DuckDB única, compartida entre conversations.rs y bad_mac.rs
+    // (mismo archivo) — ver comentario al inicio de conversations.rs.
+    let conv_db = conversations::init(&cfg.conv_db_path)
+        .expect("no se pudo abrir DuckDB de conversaciones");
+    bad_mac::init_schema(&conv_db);
 
     let state = AppState {
         sessions_dir:  cfg.sessions_dir.clone(),
@@ -118,6 +121,7 @@ async fn main() {
         locks:         lock_manager::LockManager::new(),
         db:            database,
         conv_db_path:  cfg.conv_db_path.clone(),
+        conv_db:       conv_db.clone(),
         bad_mac:       bad_mac::BadMacTracker::new(),
         rate_limiter:  rate_limiter::RateLimiter::new(),
         watchdog:      watchdog::WatchdogState::new(),
@@ -129,7 +133,7 @@ async fn main() {
     // Hidratar reincidencia de Bad MAC desde el historial persistido (últimas
     // 24h) — así un reinicio de Rust no resetea la escalada de cooldown de
     // un grupo que ya venía siendo problemático.
-    for (jid, lifetime_clears) in bad_mac::recent_clear_counts(&cfg.conv_db_path, 24) {
+    for (jid, lifetime_clears) in bad_mac::recent_clear_counts(&conv_db, 24) {
         state.bad_mac.seed(&jid, lifetime_clears);
     }
 

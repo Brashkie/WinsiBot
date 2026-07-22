@@ -1,11 +1,12 @@
 import type { Command } from '../../../types/index.js'
-import { getGroupConfig } from '@core/events.js'
+import { getGroupConfig, getUserData, chargeEmbers } from '@core/events.js'
 import { makeStickerFromUrl } from '@lib/sticker.js'
 import { readFile } from 'fs/promises'
 import { cleanTemp } from '@lib/utils.js'
 import axios from 'axios'
 
 const IMAGES_URL = 'https://raw.githubusercontent.com/Brashkie/module/refs/heads/main/nsfw/image/sexy.json'
+const EMBER_COST = 1
 
 const command: Command = {
   name:        'stickerporn',
@@ -15,11 +16,18 @@ const command: Command = {
   cooldown:    10,
   groupOnly:   true,
 
-  async execute({ sock, jid, msg, args, prefix }) {
+  async execute({ sock, jid, msg, args, prefix, sender }) {
     const config = getGroupConfig(jid)
     if (!config.nsfw) {
       await sock.sendMessage(jid, {
         text: `✗ Los comandos NSFW están desactivados en este grupo.\n\nPide a un admin que active:\n> ${prefix}on nsfw`,
+      }, { quoted: msg })
+      return
+    }
+
+    if (!chargeEmbers(sender, EMBER_COST)) {
+      await sock.sendMessage(jid, {
+        text: `✗ Te faltan BrasEmbers — necesitás *${EMBER_COST}* y tenés *${getUserData(sender).embers}*.\n§ Conseguí más con ${prefix}ascuas, o una chance random en ${prefix}daily/${prefix}work/${prefix}crime/${prefix}mine.`,
       }, { quoted: msg })
       return
     }

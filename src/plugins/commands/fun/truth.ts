@@ -107,7 +107,7 @@ const command: Command = {
     const caption = [
       `╭─「 💭 VERDAD 」`,
       `│`,
-      `│ ${truth}`,
+      `> ${truth}`,
       `│`,
       `│ § Para: @${targetNum}`,
       `╰─ ${TRUTHS.length} preguntas en el mazo`,

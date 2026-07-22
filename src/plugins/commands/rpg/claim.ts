@@ -1,5 +1,12 @@
 import type { Command } from '../../../types/index.js'
-import { activeChars, addToInventory, getGroupClaim } from './rollwaifu.js'
+import {
+  addToInventory,
+  getGroupClaim,
+  getUserActiveChar,
+  setUserActiveChar,
+  deleteUserActiveChar,
+  findActiveCharByMsgId,
+} from './rollwaifu.js'
 
 export const C_COOLDOWN = 10 * 60 * 1000
 const STEAL_TIME = 16 * 1000
@@ -24,17 +31,35 @@ const command: Command = {
   cooldown:    0,
 
   async execute({ sock, jid, msg, sender, prefix }) {
-    const active = activeChars.get(jid)
+    // #c es una respuesta a un mensaje puntual — con un roll activo POR
+    // USUARIO (ver rollwaifu.ts), puede haber varios rolls sin reclamar al
+    // mismo tiempo en el mismo grupo, cada uno de una persona distinta. Hay
+    // que encontrar CUÁL es el que se está reclamando por el mensaje citado,
+    // no asumir que hay uno solo compartido por todo el grupo.
+    const quotedId = msg.message?.extendedTextMessage?.contextInfo?.stanzaId
 
-    if (!active) {
+    if (!quotedId) {
       await sock.sendMessage(jid, {
-        text: `✗ No hay personaje activo.\n  Usa *${prefix}rw* para rodar uno.`,
+        text: [
+          `✗ Debes *responder* al mensaje de un personaje para reclamarlo.`,
+          `> § Tira uno con *${prefix}rw* y respondé a su mensaje con *${prefix}c*`,
+        ].join('\n'),
       }, { quoted: msg })
       return
     }
 
+    const found = findActiveCharByMsgId(jid, quotedId)
+    if (!found) {
+      await sock.sendMessage(jid, {
+        text: `✗ No encontré un personaje activo para ese mensaje — puede que ya haya expirado o haya sido reclamado.\n  Usa *${prefix}rw* para rodar uno.`,
+      }, { quoted: msg })
+      return
+    }
+
+    const { rolledBy, active } = found
+
     if (active.expiresAt < Date.now()) {
-      activeChars.delete(jid)
+      deleteUserActiveChar(jid, rolledBy)
       await sock.sendMessage(jid, {
         text: `✗ El personaje *${active.char.name}* ya expiró.`,
       }, { quoted: msg })
@@ -46,24 +71,10 @@ const command: Command = {
     // revalida acá antes de dejar reclamar — ya tiene dueño en este grupo.
     const existingOwner = getGroupClaim(jid, active.char)
     if (existingOwner && existingOwner !== active.claimedBy) {
-      activeChars.delete(jid)
+      deleteUserActiveChar(jid, rolledBy)
       await sock.sendMessage(jid, {
         text: `✗ *${active.char.name}* ya tiene dueño en este grupo (@${num(existingOwner)}).`,
         mentions: [existingOwner],
-      }, { quoted: msg })
-      return
-    }
-
-    // ─── debe responder al mensaje del personaje ──────────────────────────────
-    const quotedId    = msg.message?.extendedTextMessage?.contextInfo?.stanzaId
-    const activeMsgId = active.msgKey?.id
-
-    if (!quotedId || !activeMsgId || quotedId !== activeMsgId) {
-      await sock.sendMessage(jid, {
-        text: [
-          `✗ Debes *responder* al mensaje del personaje para reclamarlo.`,
-          `> § Busca el mensaje de *${active.char.name}* y responde con *${prefix}c*`,
-        ].join('\n'),
       }, { quoted: msg })
       return
     }
@@ -91,7 +102,7 @@ const command: Command = {
       active.claimedBy = sender
       active.claimedAt = Date.now()
       active.stealEnds = Date.now() + STEAL_TIME
-      activeChars.set(jid, active)
+      setUserActiveChar(jid, rolledBy, active)
       cCooldowns.set(sender, Date.now())
 
       const sent = await sock.sendMessage(jid, {
@@ -101,10 +112,10 @@ const command: Command = {
       const key = sent?.key
 
       setTimeout(async () => {
-        const current = activeChars.get(jid)
+        const current = getUserActiveChar(jid, rolledBy)
         if (!current || current.claimedBy !== sender || current.char.name !== active.char.name) return
         addToInventory(sender, current.char, jid)
-        activeChars.delete(jid)
+        deleteUserActiveChar(jid, rolledBy)
         await sock.sendMessage(jid, {
           text:     charDetails(current.char.name, sender),
           mentions: [sender],
@@ -128,7 +139,7 @@ const command: Command = {
       active.claimedBy = sender
       active.claimedAt = Date.now()
       active.stealEnds = Date.now() + STEAL_TIME
-      activeChars.set(jid, active)
+      setUserActiveChar(jid, rolledBy, active)
       cCooldowns.set(sender, Date.now())
 
       const sent = await sock.sendMessage(jid, {
@@ -138,10 +149,10 @@ const command: Command = {
       const key = sent?.key
 
       setTimeout(async () => {
-        const current = activeChars.get(jid)
+        const current = getUserActiveChar(jid, rolledBy)
         if (!current || current.claimedBy !== sender || current.char.name !== active.char.name) return
         addToInventory(sender, current.char, jid)
-        activeChars.delete(jid)
+        deleteUserActiveChar(jid, rolledBy)
         await sock.sendMessage(jid, {
           text:     charDetails(current.char.name, sender),
           mentions: [sender],

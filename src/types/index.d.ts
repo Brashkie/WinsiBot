@@ -151,6 +151,44 @@ export interface RollData {
   personajes: RollCharacter[]
 }
 
+// ─── Dragon City ──────────────────────────────────────────────────────────────
+export interface DragonImageStage {
+  stage: 0 | 1 | 3
+  url:   string
+}
+
+export interface DragonVideoStage {
+  stage: 1 | 3
+  url:   string
+}
+
+export interface DragonSkill {
+  name:      string
+  element:   string
+  power:     number
+  trainable: boolean
+}
+
+export interface DragonDef {
+  id:        number
+  name:      string
+  slug:      string
+  source:    string
+  image:     DragonImageStage[]
+  vid:       DragonVideoStage[]
+  status:    string
+  user:      string | null
+  votes:     number
+  rarity:    string
+  elements:  string[]
+  desp:      string   // descripción original en inglés
+  habilidad: DragonSkill[]
+}
+
+export interface DragonCatalog {
+  personajes: DragonDef[]
+}
+
 // ─── Trade / Intercambio ──────────────────────────────────────────────────────
 export interface TradeRequest {
   from:      string

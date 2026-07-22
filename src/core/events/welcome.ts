@@ -48,7 +48,10 @@ export async function handleParticipantsUpdate(
             `│ ◆ *${groupName}*`,
             `│ § @${num}`,
             `│`,
-            `│ ${body}`,
+            // body puede ser la descripción del grupo (multilínea) — cada
+            // línea necesita su propio `>` al principio, WhatsApp no
+            // continúa el bloque de cita si alguna línea no lo tiene.
+            ...body.split('\n').map(line => `> ${line}`),
             ...footerLines(),
             `╰─ WinsiBot`,
           ].join('\n')
@@ -70,7 +73,7 @@ export async function handleParticipantsUpdate(
             `│ ◆ *${groupName}*`,
             `│ § @${num}`,
             `│`,
-            `│ ${DEFAULT_BYE_BODY}`,
+            `> ${DEFAULT_BYE_BODY}`,
             ...footerLines(),
             `╰─ WinsiBot`,
           ].join('\n')

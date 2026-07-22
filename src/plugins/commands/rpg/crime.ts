@@ -83,22 +83,25 @@ const command: Command = {
       const diamonds = rand(5, 50)
       const choice   = Math.floor(Math.random() * 3)
       const story    = pick(WIN)
+      // BrasEmbers — moneda rara para comandos NSFW, chance chica (solo en éxito)
+      const embers    = Math.random() < 0.04 ? 1 : 0
+      const emberLine = embers > 0 ? `\n> +${embers} BrasEmbers (¡raro!)` : ''
 
       if (choice === 0) {
-        patchUserData(sender, { exp: user.exp + exp })
-        const lvlLine = levelUpLine(checkLevelUp(sender))
+        patchUserData(sender, { exp: user.exp + exp, embers: user.embers + embers })
+        const lvlLine = levelUpLine(checkLevelUp(sender), jid)
         await sock.sendMessage(jid, {
-          text: `> ${story(exp)}\n> +${exp} XP${lvlLine}\n\n_Próximo en 1h_`,
+          text: `> ${story(exp)}\n> +${exp} XP${lvlLine}${emberLine}\n\n_Próximo en 1h_`,
         }, { quoted: msg })
       } else if (choice === 1) {
-        patchUserData(sender, { diamonds: user.diamonds + diamonds, money: user.money + money })
+        patchUserData(sender, { diamonds: user.diamonds + diamonds, money: user.money + money, embers: user.embers + embers })
         await sock.sendMessage(jid, {
-          text: `> ${story(money)}\n> +${diamonds} 💎  ·  +¥${money.toLocaleString()}\n\n_Próximo en 1h_`,
+          text: `> ${story(money)}\n> +${diamonds} 💎  ·  +¥${money.toLocaleString()}${emberLine}\n\n_Próximo en 1h_`,
         }, { quoted: msg })
       } else {
-        patchUserData(sender, { money: user.money + money })
+        patchUserData(sender, { money: user.money + money, embers: user.embers + embers })
         await sock.sendMessage(jid, {
-          text: `> ${story(money)}\n\n_Próximo en 1h_`,
+          text: `> ${story(money)}${emberLine}\n\n_Próximo en 1h_`,
         }, { quoted: msg })
       }
     } else {

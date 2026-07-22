@@ -1,6 +1,6 @@
 <div align="center">
 
-<img src="https://capsule-render.vercel.app/api?type=waving&color=0:6C63FF,100:00C9FF&height=180&section=header&text=WinsiBot&fontSize=62&fontColor=ffffff&fontAlignY=38&desc=v8.5.0%20%E2%80%94%20Enterprise%20WhatsApp%20Bot&descAlignY=58&descSize=18" width="100%"/>
+<img src="https://capsule-render.vercel.app/api?type=waving&color=0:6C63FF,100:00C9FF&height=180&section=header&text=WinsiBot&fontSize=62&fontColor=ffffff&fontAlignY=38&desc=v8.5.1%20%E2%80%94%20Enterprise%20WhatsApp%20Bot&descAlignY=58&descSize=18" width="100%"/>
 
 <br/>
 
@@ -10,7 +10,7 @@
 [![Rust](https://img.shields.io/badge/Rust-1.75%2B-CE422B?style=for-the-badge&logo=rust&logoColor=white)](https://rust-lang.org)
 
 [![License](https://img.shields.io/badge/License-GPL--3.0-blue?style=flat-square)](LICENSE)
-[![Version](https://img.shields.io/badge/Version-8.5.0-6C63FF?style=flat-square)](CHANGELOG.md)
+[![Version](https://img.shields.io/badge/Version-8.5.1-6C63FF?style=flat-square)](CHANGELOG.md)
 [![Platform](https://img.shields.io/badge/Platform-Windows%20%7C%20Linux-lightgrey?style=flat-square)](https://github.com/Brashkie/WinsiBot)
 [![PRs Welcome](https://img.shields.io/badge/PRs-welcome-brightgreen?style=flat-square)](https://github.com/Brashkie/WinsiBot/pulls)
 
@@ -18,7 +18,7 @@
 
 > Bot de WhatsApp de alto rendimiento con arquitectura multi-lenguaje de tres capas.<br/>
 > Diseñado para **10,000+ grupos simultáneos**, miles de mensajes por hora y múltiples instancias.<br/>
-> v8.5.0 — El bot ya no pierde respuestas de IA tras una reconexión, un envío colgado ya no congela toda la cola de mensajes salientes, la I/O de Rust se movió fuera del runtime async (menos lag bajo carga), el algoritmo de Bad MAC pasó a ventana deslizante real (sin puntos ciegos) con limpieza de memoria automática, el rate limiter finalmente bloquea cuando corresponde, y nueva fuente de anime para `#rw`/`#c` (300 personajes).
+> v8.5.1 — Baileys ya no descarta mensajes en lote tras una reconexión (el bug real detrás de los Bad MAC que parecían empeorar con grupos muy activos), la ruta rápida de NLP en Rust dejó de entrar en pánico, el historial de Bad MAC ya se persiste de verdad, y el rate limiter/tracker de Bad MAC pasaron a DashMap para concurrencia real bajo carga. Además: `#pet` ahora es Dragon City (579 dragones reales, evolución con video, Oro pasivo), BrasEmbers, Negocios (`#business`/`#collect`), y `#applemusic`/`#deezer`.
 
 <br/>
 
@@ -66,19 +66,21 @@
 | 🐍 **Services** | Python / FastAPI / Celery | IA avanzada (Ollama + GPT + Claude + Gemini), watchdog, health checks |
 | ⚙️ **Session** | Rust / Axum | Escritura atómica de creds, 10 snapshots rotativos, tracker Bad MAC, rate limiter, delivery SQLite |
 
-### Novedades en v8.5.0
+### Novedades en v8.5.1
 
 | Área | Cambio |
 |------|--------|
-| **Fix: respuestas de IA perdidas tras una reconexión** | `handleAIResponse` puede tardar 44s+ esperando a Ollama — tiempo de sobra para que una reconexión invalide el socket capturado al llegar el mensaje. Ahora pide el socket **vivo** justo antes de cada envío |
-| **Fix: un solo envío colgado congelaba TODA la cola de mensajes salientes** | Nuevo techo duro de 20s en el punto único de envío a WhatsApp, con reintento automático |
-| **Rust — I/O bloqueante movida fuera del runtime async** | Los handlers de sesión (guardado de creds, snapshots, health checks, etc.) hacían disco síncrono directo en funciones `async`, bloqueando el runtime para cualquier otra petición concurrente. Todos movidos a hilos dedicados |
-| **`bad_mac.rs` — algoritmo de ventana deslizante real** | Reemplazado el contador de bloques fijos (con un punto ciego matemático real ante ráfagas repartidas en el límite) por un log de timestamps con purga incremental — mismo costo, sin el hueco |
-| **`bad_mac.rs` — fuga de memoria corregida** | El mapa de contadores por grupo nunca se limpiaba; nueva tarea libera grupos inactivos sin historial de clears cada 30 min |
-| **Rate limiting reparado en dos capas** | El de Rust (15 msj/10s) nunca bloqueaba de verdad por un bug de interpretación de HTTP 429; el límite local en TS era más estricto que ese y silencioso 2 de cada 3 veces — ambos corregidos |
-| **`authVerifier` — menos falsos positivos** | El barrido completo de `auth/` ya no corre en cada reconexión, solo al arrancar en frío, y reintenta antes de dar un archivo por corrupto |
-| **`#mcsearch`/`#mcfriends`/`#mcachievement` reparados** | La API de Xbox Live anida los resultados un nivel más profundo de lo que leía el código — nunca encontraba jugadores reales |
-| **`#rw`/`#c` — nueva fuente: anime** | 300 personajes de 128 series, sumada a Marvel y Pokédex |
+| **Fix: mensajes descartados en lote tras una reconexión** | Baileys entrega varios mensajes en un solo evento cuando su buffer interno está activo — y ese buffer se activa en **cada reconexión**, no solo al arrancar. El código solo leía el primer mensaje del lote; en un grupo activo que sigue hablando justo durante la resincronización (el escenario típico tras un Bad MAC), el resto se descartaba en silencio. Corregido en el socket principal y en los sub-bots |
+| **Fix: la ruta rápida de NLP en Rust entraba en pánico** | Dos regex usaban backreferences, sintaxis que el crate `regex` de Rust no soporta — fallaban con cualquier texto no vacío. Reescritas sin regex, verificado en vivo |
+| **Fix: el historial de Bad MAC nunca se guardaba en disco** | Una conexión DuckDB separada de la real dejaba la tabla "invisible" para los `INSERT` — confirmado en la base de producción |
+| **Rust — concurrencia real bajo carga** | `rate_limiter.rs`, `bad_mac.rs` y `lock_manager.rs` migrados de `Mutex<HashMap>` global a `DashMap` particionado por núcleo — verificado con 200 usuarios y 60 grupos disparando en paralelo puro, cero condiciones de carrera |
+| **`#pet` reemplazado por Dragon City** | 579 dragones reales (`Brashkie/module-data`), huevo → evolución con video → evolución final, más **Oro** (moneda nueva) como ingreso pasivo |
+| **BrasEmbers** | Moneda escasa (`#ascuas`) que gatea el uso de comandos NSFW, además de dropear con baja chance en otras actividades |
+| **Negocios (`#business`/`#collect`)** | 6 negocios comprables con ingreso pasivo de BrasCoins por hora |
+| **`#applemusic`/`#deezer`** | Alternativas gratuitas a Spotify (bloqueado por su nueva política de Premium para developers) |
+| **`#rw`/`#c` migrados a MessagePack** | 13-19% más liviano, verificado byte a byte — anime subió de 300 a 500 personajes |
+| **Fix: level-up y panel `#on`/`#off`** | El anuncio de subida de nivel ignoraba `autolevelup` en 7 comandos; `autoaccept`/`autoreject` no aparecían en el panel por un desajuste de mayúsculas |
+| **Biome + ruff + `cargo clippy`** | Linter/formateador nuevo para TypeScript y Python — ver tabla de scripts más abajo |
 
 **[📜 Ver el historial completo de versiones →](CHANGELOG.md)**
 
@@ -139,12 +141,14 @@
 - Curva de niveles no-exponencial — alcanzable hasta nivel 400
 - Rachas diarias con bono progresivo (`#daily`, ×1.00–×1.20+)
 - Moneda propia (BrasCoins) + banco
+- **BrasEmbers**: moneda escasa que gatea el uso de comandos NSFW (`#ascuas`)
+- **Negocios**: 6 negocios comprables con ingreso pasivo por hora (`#business`/`#collect`)
 - Gacha (rollwaifu / pokédex / marvel / anime) + colección (`#harem`)
 - **Clanes avanzados**: territorios, guerras 24h, alianzas, tesorería
 - Misiones: trabajo, minería, cofre, crimen, robo
 - **Sistema de regalos**: catálogo 30+ items, buzón, wishlist, trueques
 - **Arena PvP**: ELO, 9 divisiones, apuestas, 5 acciones de combate
-- **Mascotas avanzadas**: 25 especies, evolución, batallas auto
+- **Dragon City**: 579 dragones reales, huevos, evolución con video, Oro pasivo
 - **Quiz de programación**: 42 preguntas, ELO, 5 dificultades
 - **Draw & Guess**: 55 palabras, pistas progresivas, puntuación
 
@@ -193,7 +197,7 @@
 
 ```
 ╔══════════════════════════════════════════════════════════════════════════════╗
-║                           WinsiBot v8.5.0                                    ║
+║                           WinsiBot v8.5.1                                    ║
 ╠════════════════════╦═══════════════════════╦═══════════════════════════════╣
 ║   TypeScript        ║       Python           ║           Rust                ║
 ║   Node.js :4001     ║                        ║                               ║
@@ -400,7 +404,13 @@ npm run monitor         # Monitor Python con auto-restart y dashboard
 | `manage:restore` | Restaurar desde backup |
 | `manage:logs` | Ver logs recientes |
 | `typecheck` | Verificar tipos sin compilar |
-| `lint` | ESLint |
+| `lint` / `lint:fix` | Biome — linter de `src/`/`scripts/` (revisa / revisa y corrige lo seguro) |
+| `format` / `format:fix` | Biome — formateo de `src/`/`scripts/` (solo mostrar diff / escribir) |
+| `check` / `check:fix` | Biome — lint + formato + orden de imports en un solo paso |
+| `rust:lint` | `cargo clippy` sobre la Session API de Rust |
+| `py:lint` / `py:lint:fix` | Ruff — linter de `python/` (requiere `pip install -r python/requirements-dev.txt`) |
+| `py:format` | Ruff — formateo de `python/` |
+| `lint:all` | Corre `lint` + `rust:lint` + `py:lint` de una |
 | `test` | Vitest |
 
 </details>
@@ -420,7 +430,7 @@ El bot tiene **125+ comandos** en **19 categorías**.
 |-----------|--------------------|----|
 | 🤖 IA | `!gpt` `!claude` `!imagine` `!translate` | Chat multi-modelo, imágenes, traducciones |
 | 💰 RPG | `!work` `!daily` `!perfil` `!rw` `!clan` `!prestige` `!harem` `!leveltop` | Economía, gacha, niveles (racha en daily), clanes, prestige |
-| 🎮 Juegos | `!arena` `!quiz` `!adivinar` `!mascota` | PvP Arena, Quiz coding, Draw & Guess, mascotas |
+| 🎮 Juegos | `!arena` `!quiz` `!adivinar` `!pet` | PvP Arena, Quiz coding, Draw & Guess, dragones |
 | 🎁 Social | `!regalo` | Sistema de regalos, buzón, wishlist, trueques |
 | 🛡️ Admin | `!ban` `!kick` `!antilink` `!warn` | Moderación de grupos |
 | 👑 Owner | `!exec` `!broadcast` `!premium` `!boost` | Control total del bot |
@@ -662,7 +672,7 @@ WinsiBot/
 │   │   ├── quiz.ts                   # Quiz de programación (42 preguntas, 5 dificultades)
 │   │   ├── drawguess.ts              # Draw & Guess (55 palabras, pistas, puntuación)
 │   │   ├── leveling.ts               # Prestige (10 rangos), rachas, medallas, multiplicadores
-│   │   ├── petAdvanced.ts            # Mascotas avanzadas (25 especies, evolución, batallas)
+│   │   ├── dragoncity.ts             # Dragon City (579 dragones, evolución, Oro pasivo)
 │   │   ├── clan.ts                   # Clan extendido (territorios, guerras 24h, alianzas)
 │   │   ├── downloader.ts             # yt-dlp wrapper (YouTube audio/video, TikTok, Instagram) — máx 3 concurrentes
 │   │   ├── queue.ts                  # Cola genérica con concurrencia configurable (usada por downloader.ts)

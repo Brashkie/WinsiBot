@@ -22,11 +22,11 @@ interface Opt {
 
 // Categorías para el panel
 const GROUPS: Array<{ label: string; keys: string[] }> = [
-  { label: '🛡️  Moderación',     keys: ['antilink','antilink2','antispam','antiflood','antifake','antibot','antidelete','antitoxic','antitraba'] },
-  { label: '🚫  Anti-plataformas', keys: ['antitelegram','antidiscord','antitiktok','antiyoutube'] },
-  { label: '📢  Bienvenida',       keys: ['welcome','detect'] },
-  { label: '⚙️  Funciones',        keys: ['modoadmin','nsfw','muted','hepein','game','rpg','reaction','autosticker','viewonce','audios','autolevelup','autoresponder','autoAccept','autoReject'] },
-  { label: '📵  Global (owner)',    keys: ['anticall'] },
+  { label: 'Moderación',       keys: ['antilink','antilink2','antispam','antiflood','antifake','antibot','antidelete','antitoxic','antitraba'] },
+  { label: 'Anti-plataformas', keys: ['antitelegram','antidiscord','antitiktok','antiyoutube'] },
+  { label: 'Bienvenida',       keys: ['welcome','detect'] },
+  { label: 'Funciones',        keys: ['modoadmin','nsfw','muted','hepein','game','rpg','reaction','autosticker','viewonce','audios','autolevelup','autoresponder','autoaccept','autoreject'] },
+  { label: 'Global (owner)',   keys: ['anticall'] },
 ]
 
 const OPTIONS: Record<string, Opt> = {
@@ -112,27 +112,23 @@ const ALIASES: Record<string, string> = {
 
 function buildPanel(cfg: ReturnType<typeof getGroupConfig>, prefix: string): string {
   const lines: string[] = []
-  lines.push(`┌─────────────────────────────`)
-  lines.push(`│  ◈ *CONFIGURACIÓN DEL GRUPO*`)
-  lines.push(`└─────────────────────────────`)
+  lines.push(`╭─「 CONFIGURACIÓN DEL GRUPO 」`)
 
   for (const group of GROUPS) {
-    lines.push(``)
-    lines.push(`*${group.label}*`)
+    lines.push(`│`)
+    lines.push(`│ *${group.label}*`)
     for (const name of group.keys) {
       const opt = OPTIONS[name]
       if (!opt) continue
-      const val    = cfg[opt.key] as boolean
-      const icon   = val ? '✅' : '❌'
-      const who    = opt.ownerOnly ? '▲' : '◆'
-      lines.push(`  ${icon} ${who} *${name}* — ${opt.description}`)
+      const val   = cfg[opt.key] as boolean
+      const state = val ? '`ON`' : '`OFF`'
+      const who   = opt.ownerOnly ? '▲' : '◆'
+      lines.push(`│ ${who} \`${name}\` ${state} — ${opt.description}`)
     }
   }
 
-  lines.push(``)
-  lines.push(`─────────────────────────────`)
-  lines.push(`  ${prefix}on  <opcion> — activar`)
-  lines.push(`  ${prefix}off <opcion> — desactivar`)
+  lines.push(`│`)
+  lines.push(`╰─ \`${prefix}on <opcion>\` activar · \`${prefix}off <opcion>\` desactivar`)
   return lines.join('\n')
 }
 
@@ -189,15 +185,14 @@ const command: Command = {
       setAnticall(isEnable)
     }
 
-    const status = isEnable ? '✅ Activado' : '❌ Desactivado'
+    const state = isEnable ? '`ON`' : '`OFF`'
     await sock.sendMessage(jid, {
       text: [
-        `┌─────────────────────────`,
-        `│  ${status}`,
-        `└─────────────────────────`,
-        ``,
-        `  ◆ *${type}*`,
-        `  § ${option.description}`,
+        `╭─「 \`${type}\` 」`,
+        `│`,
+        `│ Estado: ${state}`,
+        `│ ${option.description}`,
+        `╰─`,
       ].join('\n'),
     }, { quoted: msg })
   },

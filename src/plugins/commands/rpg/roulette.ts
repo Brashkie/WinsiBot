@@ -50,17 +50,17 @@ const command: Command = {
     if (!betArg || !amtArg) {
       await safeSend(() => sock.sendMessage(jid, {
         text: [
-          `🎰 *RULETA*`,
-          ``,
-          `\`${prefix}rt <apuesta> <monto>\``,
-          ``,
-          `  Apuestas:`,
-          `   🔴 \`red\`    — paga ×2`,
-          `   ⚫ \`black\`  — paga ×2`,
-          `   🟢 \`0\`      — paga ×35`,
-          `   🔢 \`1-36\`   — número exacto, paga ×35`,
-          ``,
-          `  Ejemplo: \`${prefix}rt red 5000\``,
+          `╭─「 🎰 RULETA 」`,
+          `│`,
+          `│ \`${prefix}rt <apuesta> <monto>\``,
+          `│`,
+          `│ Apuestas:`,
+          `│  🔴 \`red\`    — paga ×2`,
+          `│  ⚫ \`black\`  — paga ×2`,
+          `│  🟢 \`0\`      — paga ×35`,
+          `│  🔢 \`1-36\`   — número exacto, paga ×35`,
+          `│`,
+          `╰─ Ejemplo: \`${prefix}rt red 5000\``,
         ].join('\n'),
       }, { quoted: msg }))
       return
@@ -135,16 +135,22 @@ const command: Command = {
 
     const text = won
       ? [
-          `🎰 La ruleta cayó en *${resultEmoji} ${result} ${resultLabel}*`,
-          ``,
-          `✅ Apostaste ${betLabel} — *¡GANASTE!*`,
-          `Ganancia: *+¥${Math.abs(payout).toLocaleString()} CodPoints*`,
-          `Balance: ¥${Math.max(0, newBalance).toLocaleString()}`,
+          `╭─「 🎰 RULETA 」`,
+          `│`,
+          `> ${resultEmoji} Cayó en *${result} ${resultLabel}*`,
+          `│`,
+          `│ ✅ Apostaste ${betLabel} — *¡GANASTE!*`,
+          `> Ganancia +¥${Math.abs(payout).toLocaleString()} · Balance ¥${Math.max(0, newBalance).toLocaleString()}`,
+          `╰─`,
         ].join('\n')
       : [
-          `🎰 La ruleta salió en *${resultEmoji} ${result} ${resultLabel}* y has perdido *¥${amount.toLocaleString()} CodPoints!*`,
-          ``,
-          `Balance: ¥${Math.max(0, newBalance).toLocaleString()}`,
+          `╭─「 🎰 RULETA 」`,
+          `│`,
+          `> ${resultEmoji} Cayó en *${result} ${resultLabel}*`,
+          `│`,
+          `│ ❌ Apostaste ${betLabel} — perdiste *¥${amount.toLocaleString()}*`,
+          `> Balance ¥${Math.max(0, newBalance).toLocaleString()}`,
+          `╰─`,
         ].join('\n')
 
     await safeSend(() => sock.sendMessage(jid, { text }, { quoted: msg }))

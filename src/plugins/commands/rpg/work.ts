@@ -88,18 +88,22 @@ const command: Command = {
     const earned  = isPrem ? rand(1000, 4000) : rand(300, 1500)
     const expGain = rand(50, 200)
     const jobFn   = pick(JOBS)
+    // BrasEmbers — moneda rara para comandos NSFW, chance chica
+    const embers  = Math.random() < 0.04 ? 1 : 0
 
     patchUserData(sender, {
-      money: user.money + earned,
-      exp:   user.exp + expGain,
+      money:  user.money + earned,
+      exp:    user.exp + expGain,
+      embers: user.embers + embers,
     })
     setCooldown(sender, 'lastWork')
 
-    const leveled = checkLevelUp(sender)
-    const lvlLine = levelUpLine(leveled)
+    const leveled   = checkLevelUp(sender)
+    const lvlLine   = levelUpLine(leveled, jid)
+    const emberLine = embers > 0 ? `\n> +${embers} BrasEmbers (¡raro!)` : ''
 
     await sock.sendMessage(jid, {
-      text: `> ${jobFn(earned)}${lvlLine}\n\n_Próximo trabajo en 10 min_`,
+      text: `> ${jobFn(earned)}${lvlLine}${emberLine}\n\n_Próximo trabajo en 10 min_`,
     }, { quoted: msg })
   },
 }

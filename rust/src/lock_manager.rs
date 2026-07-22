@@ -7,14 +7,22 @@
 /// Ejemplo:
 ///   bot1 llama save() dos veces al mismo tiempo →
 ///   segunda espera hasta que la primera termina → sin race condition.
+///
+/// DashMap en vez de Mutex<HashMap>: con muchos sub-bots/sesiones guardando
+/// en paralelo (varios grupos activos a la vez), buscar el lock de CADA
+/// sessionId pasaba antes por un único Mutex global — dos sesiones
+/// completamente independientes se bloqueaban entre sí solo por competir por
+/// ESE lock, no por ningún dato compartido real. Con DashMap, cada shard
+/// tiene su propio lock interno, así que sesiones distintas casi nunca
+/// contienden entre sí.
 
-use std::collections::HashMap;
-use std::sync::{Arc, Mutex};
+use dashmap::DashMap;
+use std::sync::Arc;
 use tokio::sync::Mutex as AsyncMutex;
 
 #[derive(Clone, Default)]
 pub struct LockManager {
-    locks: Arc<Mutex<HashMap<String, Arc<AsyncMutex<()>>>>>,
+    locks: Arc<DashMap<String, Arc<AsyncMutex<()>>>>,
 }
 
 impl LockManager {
@@ -26,19 +34,19 @@ impl LockManager {
     /// Cuando el mapa supera 512 entradas, elimina los locks sin uso
     /// (Arc con strong_count == 1 significa que solo el mapa lo retiene).
     pub fn get(&self, session_id: &str) -> Arc<AsyncMutex<()>> {
-        let mut map = self.locks.lock().unwrap();
-        if map.len() >= 512 && !map.contains_key(session_id) {
-            let before = map.len();
-            map.retain(|_, v| Arc::strong_count(v) > 1);
-            tracing::debug!(before, after = map.len(), "LockManager: evicted unused locks");
+        if self.locks.len() >= 512 && !self.locks.contains_key(session_id) {
+            let before = self.locks.len();
+            self.locks.retain(|_, v| Arc::strong_count(v) > 1);
+            tracing::debug!(before, after = self.locks.len(), "LockManager: evicted unused locks");
         }
-        map.entry(session_id.to_string())
+        self.locks
+            .entry(session_id.to_string())
             .or_insert_with(|| Arc::new(AsyncMutex::new(())))
             .clone()
     }
 
     /// Cuántas sesiones tienen un lock vivo en memoria.
     pub fn active_count(&self) -> usize {
-        self.locks.lock().unwrap().len()
+        self.locks.len()
     }
 }

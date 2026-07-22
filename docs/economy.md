@@ -8,7 +8,7 @@ Para la lista completa de comandos (con aliases y permisos) ver [commands.md](co
 
 ## 🪙 BrasCoins (tu moneda principal)
 
-BrasCoins (¥) es la moneda con la que comprás mascotas, regalos, y con la que apostás en los juegos. Se guarda en tu **billetera** (`money`) o en el **banco** (`bank`) — ver la sección [Banco](#-banco--protegé-tu-dinero) más abajo, es importante.
+BrasCoins (¥) es la moneda con la que comprás huevos de dragón, regalos, y con la que apostás en los juegos. Se guarda en tu **billetera** (`money`) o en el **banco** (`bank`) — ver la sección [Banco](#-banco--protegé-tu-dinero) más abajo, es importante.
 
 ### Ingreso recurrente (sin riesgo)
 
@@ -64,21 +64,63 @@ Precios en vivo con `!mercado` (aliases: `market`, `precios`, `bolsa`), gráfico
 
 ---
 
-## 🐾 Mascotas
+## BrasEmbers
 
-Sistema completo en `!pet` (alias `!mascota`).
+Moneda deliberadamente escasa — a diferencia de diamantes, no se regala en cantidad.
+
+**Cómo conseguirlos:**
+
+- `!ascuas` (alias `!embers`, `!brasas`) — fuente principal: CD 3h, 50% de éxito (60% premium), 1–2 por acierto (2–3 premium). Si falla, no da nada y igual consume el cooldown.
+- Chance del 4% de +1 en `!daily`, `!work`, `!crime` (solo si el crimen sale bien) y `!minar` — de paso, sin comando dedicado.
+
+**Para qué sirven:** cuestan 1 BrasEmber por uso en todos los comandos NSFW (`!rule34`, `!rule34video`, `!sexyimg`, `!stickerporn`, `!porn`) — además del `!on nsfw` que ya tiene que estar activo en el grupo. El toggle de grupo controla si el NSFW está permitido ahí; BrasEmbers controla si VOS podés seguir usándolo.
+
+Se ven en `!profile`.
+
+---
+
+## 🏭 Negocios
+
+Comprás un negocio una vez, y genera BrasCoins pasivos con el tiempo — no hace falta estar conectado, se acumula solo (hasta un tope de 24h; después de eso hay que cobrar para seguir acumulando).
 
 ```
-!pet adoptar [especie] <nombre>   — adoptar (cuesta ¥500; sin especie = aleatoria)
-!pet list                          — catálogo de especies por rareza
-!pet feed / play / clean / sleep   — cuidarla (dan EXP, algunas tienen cooldown: clean 2h)
-!pet explore                       — CD 1h — ¥100–500 + XP
-!pet adventure <zona>              — CD 4h — 5 zonas, 75% de éxito, mejor pago que explore
-!pet battle @usuario               — pelea contra la mascota de otro, EXP para ambas
-!pet stats / view                  — ver a tu mascota
+!business                    — ver catálogo y tus negocios (con lo pendiente de cobrar)
+!business comprar <id>       — comprar uno del catálogo
+!collect                     — cobrar lo acumulado de todos tus negocios
 ```
 
-Las mascotas suben de nivel con la EXP que ganan cuidándolas y evolucionan en ciertos niveles (varía por especie — ver `!pet info <especie>`). Rareza va de común a legendaria.
+**Catálogo:**
+
+| Negocio | Costo | Produce |
+|---------|------:|---------|
+| 🌽 Granja (`farm`) | ¥5,000 | ¥120/hora |
+| 🥖 Panadería (`bakery`) | ¥15,000 | ¥320/hora |
+| 🏪 Tienda (`store`) | ¥40,000 | ¥800/hora |
+| 🍔 Restaurante (`restaurant`) | ¥150,000 | ¥2,800/hora |
+| 🏨 Hotel (`hotel`) | ¥500,000 | ¥9,000/hora |
+| 🏭 Fábrica (`factory`) | ¥1,200,000 | ¥22,000/hora |
+
+Podés tener varios negocios, incluso repetidos del mismo tipo — cada uno acumula por separado. `!collect` cobra todos de una.
+
+---
+
+## 🐉 Dragones (Dragon City)
+
+Sistema completo en `!pet` (alias `!mascota`, `!dragon`, `!dragones`) — catálogo real de 579 dragones (Brashkie/module-data), con imagen y video de evolución reales.
+
+```
+!pet                          — ver tu colección (nivel, etapa, oro pendiente)
+!pet hatch                    — incubar un huevo nuevo (cuesta ¥800, especie aleatoria)
+!pet feed <#|nombre>          — alimentar con Oro (gana EXP, puede evolucionar)
+!pet collect                  — cobrar el Oro pasivo acumulado de todos tus dragones
+!pet info <#|nombre>          — ficha del dragón (rareza, elementos, habilidades, descripción)
+!pet rename <#> <nombre>      — renombrar
+!pet release <#|nombre>       — liberar
+```
+
+**Oro** es una moneda nueva, separada de BrasCoins — cada dragón la genera pasivamente según su nivel (misma lógica de acumulación con tope de 24h que los negocios) y se gasta alimentándolo. El huevo se paga en BrasCoins (para no depender de tener ya un dragón).
+
+Los dragones evolucionan dos veces según su nivel: huevo (0–9) → joven (10–24, con animación de evolución) → adulto (25+, evolución final). La descripción de cada dragón se traduce al español al vuelo.
 
 ---
 
@@ -175,7 +217,7 @@ Sistema social completo con guerras, territorios y alianzas entre clanes. Ver `!
 | BrasCoins rápido y seguro | `!work`, `!minar` |
 | BrasCoins en grande (con riesgo) | `!crime`, `!slut` |
 | Diamantes | `!crime`, `!minar`, `!weekly`, `!monthly` |
-| Una mascota | `!pet adoptar` (¥500) |
+| Un dragón | `!pet hatch` (¥800) |
 | Personajes/harem | `!rw` → `!c` (respondiendo su mensaje) |
 | Subir de ranking competitivo | `!arena retar @usuario` |
 | Un trofeo/regalo para alguien | `!regalo enviar @usuario trophy` |

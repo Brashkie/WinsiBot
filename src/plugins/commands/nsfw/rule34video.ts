@@ -1,7 +1,9 @@
 import type { Command } from '../../../types/index.js'
-import { getGroupConfig } from '@core/events.js'
+import { getGroupConfig, getUserData, chargeEmbers } from '@core/events.js'
 import { searchRule34Video, getRule34VideoDetails } from '@lib/rule34video.js'
 import { downloadBuffer } from '@lib/downloader.js'
+
+const EMBER_COST = 1
 
 // Búsqueda + resolver detalles + descargar el video son 3 pedidos de red
 // SEGUIDOS, cada uno con su propio timeout de hasta 15s del lado de la lib —
@@ -29,11 +31,18 @@ const command: Command = {
   cooldown:    15,
   groupOnly:   true,
 
-  async execute({ sock, jid, msg, args, prefix }) {
+  async execute({ sock, jid, msg, args, prefix, sender }) {
     const config = getGroupConfig(jid)
     if (!config.nsfw) {
       await sock.sendMessage(jid, {
         text: `✗ Los comandos NSFW están desactivados en este grupo.\n\nPide a un admin que active:\n> ${prefix}on nsfw`,
+      }, { quoted: msg })
+      return
+    }
+
+    if (!chargeEmbers(sender, EMBER_COST)) {
+      await sock.sendMessage(jid, {
+        text: `✗ Te faltan BrasEmbers — necesitás *${EMBER_COST}* y tenés *${getUserData(sender).embers}*.\n§ Conseguí más con ${prefix}ascuas, o una chance random en ${prefix}daily/${prefix}work/${prefix}crime/${prefix}mine.`,
       }, { quoted: msg })
       return
     }

@@ -1,10 +1,10 @@
 <div align="center">
 
-# 📖 Command Reference — WinsiBot v8.5.0
+# 📖 Command Reference — WinsiBot v8.5.1
 
 [![Commands](https://img.shields.io/badge/Commands-150%2B-6C63FF?style=for-the-badge)](.)
 [![Categories](https://img.shields.io/badge/Categories-19-00C9FF?style=for-the-badge)](.)
-[![Version](https://img.shields.io/badge/Version-8.5.0-brightgreen?style=flat-square)](../README.en.md)
+[![Version](https://img.shields.io/badge/Version-8.5.1-brightgreen?style=flat-square)](../README.en.md)
 
 [🇪🇸 Versión en español →](commands.md) &nbsp;·&nbsp; [💰 Economy guide →](economy.en.md) &nbsp;·&nbsp; [← Back to README](../README.en.md)
 
@@ -113,6 +113,9 @@
 | `minar` | `mine`, `minarxp`, `mining` | 10min | 👤 | Mine resources for XP and materials |
 | `cofre` | `coffer`, `abrircofre`, `caja` | daily (resets at midnight) | 👤 | Open the daily chest for random rewards |
 | `crime` | `crimen`, `delito` | 1h | 👤 | Commit a crime — win or lose coins |
+| `ascuas` | `embers`, `brasas` | 3h | 👤 | Search for BrasEmbers (scarce currency, costs to use on NSFW commands) — 50% success chance |
+| `business` | `negocio`, `negocios`, `empresa`, `empresas` | 3s | 👤 | Buy businesses that generate passive BrasCoins per hour |
+| `collect` | `recolectar`, `cobrar` | 5s | 👤 | Collect accumulated income from your businesses |
 | `rob` | `robar` | 2h | 👤 | Steal BrasCoins from another user (`@mention`) |
 | `transfer` | `transferir`, `dar`, `enviar` | 5s | 👤 | Transfer BrasCoins or XP to another user |
 | `bal` | `balance`, `billetera`, `wallet`, `dinero`, `coins` | 3s | 👤 | View your balance (wallet + bank), with BrasCoins icon |
@@ -120,7 +123,7 @@
 | `leveltop` | `toplevel`, `topnivel`, `niveltop`, `levelrank` | 10s | 👤 | Top users by level |
 | `depositar` | `dep`, `deposit`, `retirar`, `withdraw`, `banco` | 3s | 👤 | Deposit or withdraw coins from the bank |
 | `prestige` | `prestigio`, `ascender` | — | 👤 | Reset progress in exchange for exclusive prestige rewards |
-| `mascota` | `pet`, `mipet` | 5s | 👤 | Manage your pet: feed, train, evolve, send on adventure |
+| `pet` | `mascota`, `mipet`, `dragon`, `dragones` | 3s | 👤 | Dragon City: hatch eggs, feed with Gold and evolve your dragons (579 available) |
 | `harem` | `waifus`, `claims`, `coleccion` | 5s | 👤 | View characters claimed with `!rw`, sorted by value |
 | `regalo` | `gift`, `dar`, `regalar` | 10s | 👤 | Gift coins, XP or items to another user |
 
@@ -138,7 +141,9 @@
 !depositar 1000
 !retirar 500
 !prestige
-!mascota feed
+!pet hatch
+!pet feed 1
+!pet collect
 !harem
 !harem @user 2
 !regalo @user 500 coins
@@ -346,17 +351,21 @@
 | Command | Aliases | Cooldown | Permission | Description |
 |---------|---------|:--------:|:----------:|-------------|
 | `spotify` | `sp`, `spoti` | — | 👤 | Search song information on Spotify |
+| `applemusic` | `am`, `itunes` | 5s | 👤 | Search a song on Apple Music |
+| `deezer` | `dz` | 5s | 👤 | Search a song on Deezer |
 
 ```
 !spotify Bohemian Rhapsody
 !sp Feid INTER SHIBUYA
+!applemusic Blinding Lights
+!deezer Shape of You
 ```
 
 ---
 
 ## 🔞 NSFW
 
-> ⚠️ Requires the group admin to enable NSFW with `!on nsfw`
+> ⚠️ Requires the group admin to enable NSFW with `!on nsfw`, and each costs **1 BrasEmber** per use (see `!ascuas` to earn them)
 
 | Command | Aliases | Cooldown | Permission | Description |
 |---------|---------|:--------:|:----------:|-------------|

@@ -36,6 +36,7 @@ const command: Command = {
       `§ *${prefix}cotizacion <activo>*   — gráfico`,
       `§ *${prefix}invertir <activo> <¥> <sube|baja> [30s|1m|3m|5m]*`,
       `§ *${prefix}comprar <activo> <¥>*  — comprar y mantener`,
+      `§ *${prefix}vender <activo> <¥|todo>* — vender`,
       `§ *${prefix}portafolio*             — tus posiciones`,
       ``,
       `_Activos: BTC · ETH · GOLD · SOL · WINSI · BRSCO_`,

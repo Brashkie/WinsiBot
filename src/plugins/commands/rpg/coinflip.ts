@@ -45,12 +45,12 @@ const command: Command = {
     if (isNaN(amount) || amount < 10) {
       await safeSend(() => sock.sendMessage(jid, {
         text: [
-          `🪙 *COINFLIP*`,
-          ``,
-          `\`${prefix}cf <cara|cruz> <monto>\``,
-          ``,
-          `  Si aciertas: ganas ×2 tu apuesta`,
-          `  Ejemplo: \`${prefix}cf cara 5000\``,
+          `╭─「 🪙 COINFLIP 」`,
+          `│`,
+          `│ \`${prefix}cf <cara|cruz> <monto>\``,
+          `│`,
+          `│ Si acertás: ganás ×2 tu apuesta`,
+          `╰─ Ejemplo: \`${prefix}cf cara 5000\``,
         ].join('\n'),
       }, { quoted: msg }))
       return
@@ -70,22 +70,31 @@ const command: Command = {
 
     setCooldown(sender, 'lastFight')
 
+    const resultLabel = result.charAt(0).toUpperCase() + result.slice(1)
+    const choiceLabel = choice.charAt(0).toUpperCase() + choice.slice(1)
+
     if (won) {
       patchUserData(sender, { money: user.money + amount })
       await safeSend(() => sock.sendMessage(jid, {
         text: [
-          `「✧」La moneda ha caído en *${result.charAt(0).toUpperCase() + result.slice(1)}* ${emoji} y has ganado *¥${(amount * 2).toLocaleString()} CodPoints!*`,
-          ``,
-          `Tu elección fue *${choice.charAt(0).toUpperCase() + choice.slice(1)}*`,
+          `╭─「 🪙 COINFLIP 」`,
+          `│`,
+          `> ${emoji} Cayó en *${resultLabel}* — elegiste *${choiceLabel}*`,
+          `│`,
+          `> ¡Ganaste! +¥${(amount * 2).toLocaleString()}`,
+          `╰─`,
         ].join('\n'),
       }, { quoted: msg }))
     } else {
       patchUserData(sender, { money: Math.max(0, user.money - amount) })
       await safeSend(() => sock.sendMessage(jid, {
         text: [
-          `「✧」La moneda ha caído en *${result.charAt(0).toUpperCase() + result.slice(1)}* ${emoji} y has perdido *¥${amount.toLocaleString()} CodPoints!*`,
-          ``,
-          `Tu elección fue *${choice.charAt(0).toUpperCase() + choice.slice(1)}*`,
+          `╭─「 🪙 COINFLIP 」`,
+          `│`,
+          `> ${emoji} Cayó en *${resultLabel}* — elegiste *${choiceLabel}*`,
+          `│`,
+          `> Perdiste -¥${amount.toLocaleString()}`,
+          `╰─`,
         ].join('\n'),
       }, { quoted: msg }))
     }

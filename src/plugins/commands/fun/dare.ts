@@ -107,7 +107,7 @@ const command: Command = {
     const caption = [
       `╭─「 🔥 RETO 」`,
       `│`,
-      `│ ${dare}`,
+      `> ${dare}`,
       `│`,
       `│ § Para: @${targetNum}`,
       `╰─ ${DARES.length} retos en el mazo`,

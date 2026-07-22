@@ -60,22 +60,26 @@ const command: Command = {
     const money    = isPrem ? rand(500, 2000) : rand(100, 800)
     const diamonds = isPrem ? rand(0, 5)      : rand(0, 2)
     const sp       = isPrem ? rand(1, 4)      : rand(0, 2)
+    // BrasEmbers — moneda rara para comandos NSFW, chance chica
+    const embers   = Math.random() < 0.04 ? 1 : 0
 
     patchUserData(sender, {
       exp:      user.exp + exp,
       money:    user.money + money,
       diamonds: user.diamonds + diamonds,
+      embers:   user.embers + embers,
       items:    { ...user.items, sp: user.items.sp + sp },
     })
     setCooldown(sender, 'lastMining')
 
     const leveled = checkLevelUp(sender)
-    const lvlLine = levelUpLine(leveled)
+    const lvlLine = levelUpLine(leveled, jid)
 
     const story = isPrem ? pick(PREM_MSGS)(exp, money) : pick(MSGS)(exp, money)
     const extras = [
       diamonds > 0 ? `+${diamonds} 💎` : '',
       sp > 0 ? `+${sp} ✨` : '',
+      embers > 0 ? `+${embers} BrasEmbers (¡raro!)` : '',
     ].filter(Boolean).join('  ')
 
     await safeSend(() => sock.sendMessage(jid, {

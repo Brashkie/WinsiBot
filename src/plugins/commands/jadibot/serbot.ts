@@ -499,25 +499,30 @@ export async function startSubBot(
     try {
       if (type !== 'notify' && type !== 'append') return
 
-      const m = messages?.[0]
-      if (!m) return
+      // Baileys consolida en un solo array todo lo que llega mientras el
+      // buffer interno de eventos está activo (se activa en cada reconexión,
+      // no solo al arrancar) — con solo messages[0] se descartaba en
+      // silencio el resto de un lote (ver el mismo fix en socket.ts).
+      for (const m of messages ?? []) {
+        if (!m) continue
 
-      // 'append' = backlog post-sync — descartar todo lo más viejo que 5min
-      // para no reprocesar historial como si fueran comandos en vivo.
-      if (type === 'append') {
-        const ts = Number(m.messageTimestamp ?? 0) * 1000
-        if (!ts || Date.now() - ts > 5 * 60_000) return
+        // 'append' = backlog post-sync — descartar todo lo más viejo que 5min
+        // para no reprocesar historial como si fueran comandos en vivo.
+        if (type === 'append') {
+          const ts = Number(m.messageTimestamp ?? 0) * 1000
+          if (!ts || Date.now() - ts > 5 * 60_000) continue
+        }
+
+        const bot = subBots.get(phone)
+        if (bot) {
+          bot.msgCount++
+          bot.lastMessageAt = Date.now()
+        }
+
+        handleMessage(m, subSock).catch(err => {
+          logger.warn({ err, phone }, 'Sub-bot: error en handleMessage')
+        })
       }
-
-      const bot = subBots.get(phone)
-      if (bot) {
-        bot.msgCount++
-        bot.lastMessageAt = Date.now()
-      }
-
-      handleMessage(m, subSock).catch(err => {
-        logger.warn({ err, phone }, 'Sub-bot: error en handleMessage')
-      })
     } catch (err) {
       logger.warn({ err, phone }, 'Sub-bot: error procesando messages.upsert')
     }

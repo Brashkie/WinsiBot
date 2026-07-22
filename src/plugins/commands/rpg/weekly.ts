@@ -43,7 +43,7 @@ const command: Command = {
     setCooldown(sender, 'lastWeekly')
 
     const leveled = checkLevelUp(sender)
-    const lvlLine = levelUpLine(leveled)
+    const lvlLine = levelUpLine(leveled, jid)
 
     await sock.sendMessage(jid, {
       text: `> +${exp} XP  ·  +¥${money.toLocaleString()} BrasCoins\n> +${diamonds} 💎  ·  +${sword} ⚔️  ·  +${sp} ✨${lvlLine}\n\n_Próxima recompensa en 3 días_`,

@@ -28,18 +28,19 @@ const command: Command = {
     if (!cat) {
       const categories = [...new Set(unique.map(c => c.category))]
 
-      let text = `(つ▀¯▀)つ═𖡼 *${config.botName}* 𖡼═══\n`
-      text    += `‖ ❖ *Categorias disponibles*\n`
-      text    += `(つ▀¯▀)つ══════════════\n\n`
-
-      for (const c of categories) {
+      const rows = categories.map(c => {
         const count  = unique.filter(cmd => cmd.category === c).length
         const symbol = CATEGORY_SYMBOLS[c] ?? '·'
-        text += `${symbol} *${c.toUpperCase()}* 𒀭 ${count} cmds\n`
-        text += `> ${prefix}category ${c}\n\n`
-      }
+        return `> ${symbol} *${c.toUpperCase()}* — ${count} comandos`
+      })
 
-      text += `𒉺══════════════𒉺`
+      const text = [
+        `◈ *${config.botName} — CATEGORÍAS DISPONIBLES*`,
+        ``,
+        ...rows,
+        ``,
+        `Usá \`${prefix}category <nombre>\` para ver los comandos de una categoría`,
+      ].join('\n')
 
       await sendWithMedia(sock, jid, text, 'menu', msg)
       return
@@ -57,20 +58,18 @@ const command: Command = {
 
     const symbol = CATEGORY_SYMBOLS[cat] ?? '·'
 
-    let text = `(つ▀¯▀)つ═𖡼 *${config.botName}* 𖡼═══\n`
-    text    += `‖ ${symbol} *${cat.toUpperCase()}*\n`
-    text    += `‖ ${cmds.length} comandos\n`
-    text    += `(つ▀¯▀)つ══════════════𒉺\n`
+    const rows = cmds.map(cmd => {
+      const aliases = cmd.aliases?.length
+        ? `  (${cmd.aliases.map(a => `${prefix}${a}`).join(', ')})`
+        : ''
+      return `> *${prefix}${cmd.name}*${aliases} — ${cmd.description}`
+    })
 
-    for (const cmd of cmds) {
-      text += `\n ◆ *${prefix}${cmd.name}*`
-      if (cmd.aliases?.length) {
-        text += `  ${cmd.aliases.map(a => `${prefix}${a}`).join('  ')}`
-      }
-      text += `\n> ${cmd.description}\n`
-    }
-
-    text += `\n𒉺══════════════𒉺`
+    const text = [
+      `${symbol} *${cat.toUpperCase()}* — ${cmds.length} comandos`,
+      ``,
+      ...rows,
+    ].join('\n')
 
     await sendWithMedia(sock, jid, text, cat, msg)
   },

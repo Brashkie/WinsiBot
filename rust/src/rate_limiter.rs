@@ -4,15 +4,32 @@
 //! Ventana deslizante: RATE_LIMIT mensajes por WINDOW_SECS por sender.
 //! Limpieza automática de entradas inactivas cada CLEANUP_EVERY llamadas.
 //! Falla abierto: si el sender no existe, se crea y se permite el primer mensaje.
+//!
+//! Este es el camino MÁS caliente de todo el proceso: Node llama /rate/check
+//! por CADA mensaje de texto de cada usuario no-owner (ver handler.ts), así
+//! que en un grupo grande y hablador, este check corre a la misma frecuencia
+//! que los mensajes llegan — potencialmente decenas por segundo, de decenas
+//! de senders distintos, en simultáneo. Con un único Mutex<HashMap> global,
+//! CADA una de esas llamadas serializa detrás de un solo lock, sin importar
+//! que sean senders (y por lo tanto entradas del mapa) completamente
+//! distintos entre sí — el trabajo real por llamada es de nanosegundos, pero
+//! bajo contención real (muchos hilos de tokio pidiendo el mismo lock al
+//! mismo tiempo) el costo deja de ser el trabajo en sí y pasa a ser la
+//! espera del futex del SO, que no escala linealmente con más núcleos.
+//! DashMap resuelve esto particionando el mapa en N shards independientes
+//! (uno por núcleo lógico, ver `with_capacity_and_shard_amount` más abajo)
+//! — dos senders distintos casi siempre caen en shards distintos y no se
+//! bloquean entre sí, que es exactamente el patrón de acceso real acá
+//! (muchos usuarios distintos, cada uno tocando solo su propia entrada).
 
 use axum::{extract::State, http::StatusCode, response::Json};
 use chrono::Utc;
+use dashmap::DashMap;
 use serde::Deserialize;
 use std::{
-    collections::HashMap,
     sync::{
         atomic::{AtomicU32, Ordering},
-        Arc, Mutex,
+        Arc,
     },
     time::{Duration, Instant},
 };
@@ -47,14 +64,23 @@ impl SenderBucket {
 // ── Rate limiter compartido ───────────────────────────────────────────────────
 #[derive(Clone)]
 pub struct RateLimiter {
-    inner:      Arc<Mutex<HashMap<String, SenderBucket>>>,
+    inner:      Arc<DashMap<String, SenderBucket>>,
     call_count: Arc<AtomicU32>,
 }
 
 impl RateLimiter {
     pub fn new() -> Self {
+        // Un shard por núcleo lógico (potencia de 2, DashMap lo exige) — con
+        // más shards, dos senders random tienen menos probabilidad de caer
+        // en el mismo shard y bloquearse entre sí bajo carga concurrente.
+        let shards = std::thread::available_parallelism()
+            .map(|n| n.get())
+            .unwrap_or(4)
+            .max(16)
+            .next_power_of_two();
+
         Self {
-            inner:      Arc::new(Mutex::new(HashMap::new())),
+            inner:      Arc::new(DashMap::with_capacity_and_shard_amount(1024, shards)),
             call_count: Arc::new(AtomicU32::new(0)),
         }
     }
@@ -64,17 +90,19 @@ impl RateLimiter {
     pub fn check(&self, sender: &str) -> (bool, u32, u64) {
         let calls = self.call_count.fetch_add(1, Ordering::Relaxed);
         let now   = Instant::now();
-        let mut map = self.inner.lock().unwrap();
 
-        // Limpieza periódica — evita que el HashMap crezca sin límite
+        // Limpieza periódica — evita que el mapa crezca sin límite. retain()
+        // de DashMap toma los locks de shard uno a la vez, nunca todo el
+        // mapa de golpe, así que no bloquea checks concurrentes de otros
+        // senders mientras barre.
         if calls % CLEANUP_EVERY == 0 {
-            map.retain(|_, v| {
+            self.inner.retain(|_, v| {
                 now.duration_since(v.last_seen) < Duration::from_secs(INACTIVE_SECS)
             });
-            tracing::debug!(entries = map.len(), "rate_limiter: limpieza periódica");
+            tracing::debug!(entries = self.inner.len(), "rate_limiter: limpieza periódica");
         }
 
-        let entry = map.entry(sender.to_string()).or_insert_with(SenderBucket::new);
+        let mut entry = self.inner.entry(sender.to_string()).or_insert_with(SenderBucket::new);
         entry.last_seen = now;
 
         // Resetear ventana si expiró
@@ -84,11 +112,13 @@ impl RateLimiter {
         }
 
         entry.count += 1;
-        let count = entry.count;
+        let count        = entry.count;
+        let window_start = entry.window_start;
+        drop(entry); // soltar el lock del shard antes de seguir — ya no hace falta
 
         let allowed   = count <= RATE_LIMIT;
         let remaining = RATE_LIMIT.saturating_sub(count);
-        let elapsed   = now.duration_since(entry.window_start);
+        let elapsed   = now.duration_since(window_start);
         let reset_ms  = Duration::from_secs(WINDOW_SECS)
             .saturating_sub(elapsed)
             .as_millis() as u64;
@@ -107,7 +137,7 @@ impl RateLimiter {
 
     /// Total de senders rastreados actualmente.
     pub fn tracked_count(&self) -> usize {
-        self.inner.lock().unwrap().len()
+        self.inner.len()
     }
 }
 

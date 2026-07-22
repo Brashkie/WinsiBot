@@ -1,6 +1,17 @@
 /// conversations.rs
 /// DuckDB-backed AI conversation storage.
 /// Routes: POST /ai/learn, GET /ai/context/{sender}, POST /ai/export
+///
+/// Conexión DuckDB COMPARTIDA (Arc<Mutex<Connection>>, mismo patrón que
+/// db::Db para SQLite) — antes cada llamada a estos tres endpoints abría una
+/// conexión nueva desde cero (Connection::open) contra el mismo archivo.
+/// GET /ai/context/:sender está en el camino crítico de CADA respuesta de IA
+/// (Node lo llama con presupuesto de 300ms antes de generar la respuesta) —
+/// abrir el archivo de DuckDB entero en cada mensaje, bajo carga real con
+/// miles de mensajes/hora, es overhead evitable que además compite por el
+/// lock de escritura de DuckDB con llamadas concurrentes a bad_mac.rs (mismo
+/// archivo). Una sola conexión, serializada con un mutex, es más barata que
+/// reabrir el archivo y elimina esa contención entre módulos.
 
 use axum::{
     extract::{Path, Query, State},
@@ -9,8 +20,11 @@ use axum::{
 use chrono::Utc;
 use duckdb::{params, Connection};
 use serde::{Deserialize, Serialize};
+use std::sync::{Arc, Mutex};
 
 use crate::routes::AppState;
+
+pub type ConvDb = Arc<Mutex<Connection>>;
 
 // ── Structs ───────────────────────────────────────────────────────────────────
 
@@ -48,41 +62,38 @@ pub struct ContextParams {
 
 // ── Init ──────────────────────────────────────────────────────────────────────
 
-pub fn init(path: &str) {
+pub fn init(path: &str) -> Result<ConvDb, duckdb::Error> {
     if let Some(parent) = std::path::Path::new(path).parent() {
         let _ = std::fs::create_dir_all(parent);
     }
-    match Connection::open(path) {
-        Ok(conn) => {
-            let r = conn.execute_batch("
-                CREATE TABLE IF NOT EXISTS conversations (
-                    id        VARCHAR DEFAULT gen_random_uuid(),
-                    sender    VARCHAR NOT NULL,
-                    gjid      VARCHAR NOT NULL DEFAULT '',
-                    text      VARCHAR NOT NULL,
-                    intent    VARCHAR NOT NULL DEFAULT 'neutral',
-                    reply     VARCHAR NOT NULL DEFAULT '',
-                    mode      VARCHAR NOT NULL DEFAULT 'amable',
-                    ts        BIGINT  NOT NULL,
-                    len       INTEGER NOT NULL DEFAULT 0,
-                    has_emoji BOOLEAN NOT NULL DEFAULT false
-                );
-                CREATE TABLE IF NOT EXISTS user_style (
-                    sender        VARCHAR PRIMARY KEY,
-                    total_msgs    BIGINT  NOT NULL DEFAULT 0,
-                    avg_len       DOUBLE  NOT NULL DEFAULT 0.0,
-                    emoji_freq    DOUBLE  NOT NULL DEFAULT 0.0,
-                    question_freq DOUBLE  NOT NULL DEFAULT 0.0,
-                    common_words  VARCHAR NOT NULL DEFAULT '[]',
-                    updated_at    BIGINT  NOT NULL DEFAULT 0
-                );
-            ");
-            if let Err(e) = r {
-                tracing::warn!("DuckDB schema init error: {}", e);
-            }
-        }
-        Err(e) => tracing::warn!("DuckDB open error: {}", e),
+    let conn = Connection::open(path)?;
+    let r = conn.execute_batch("
+        CREATE TABLE IF NOT EXISTS conversations (
+            id        VARCHAR DEFAULT gen_random_uuid(),
+            sender    VARCHAR NOT NULL,
+            gjid      VARCHAR NOT NULL DEFAULT '',
+            text      VARCHAR NOT NULL,
+            intent    VARCHAR NOT NULL DEFAULT 'neutral',
+            reply     VARCHAR NOT NULL DEFAULT '',
+            mode      VARCHAR NOT NULL DEFAULT 'amable',
+            ts        BIGINT  NOT NULL,
+            len       INTEGER NOT NULL DEFAULT 0,
+            has_emoji BOOLEAN NOT NULL DEFAULT false
+        );
+        CREATE TABLE IF NOT EXISTS user_style (
+            sender        VARCHAR PRIMARY KEY,
+            total_msgs    BIGINT  NOT NULL DEFAULT 0,
+            avg_len       DOUBLE  NOT NULL DEFAULT 0.0,
+            emoji_freq    DOUBLE  NOT NULL DEFAULT 0.0,
+            question_freq DOUBLE  NOT NULL DEFAULT 0.0,
+            common_words  VARCHAR NOT NULL DEFAULT '[]',
+            updated_at    BIGINT  NOT NULL DEFAULT 0
+        );
+    ");
+    if let Err(e) = r {
+        tracing::warn!("DuckDB schema init error: {}", e);
     }
+    Ok(Arc::new(Mutex::new(conn)))
 }
 
 // ── POST /ai/learn ────────────────────────────────────────────────────────────
@@ -91,10 +102,10 @@ pub async fn ai_learn(
     State(state): State<AppState>,
     Json(req):    Json<LearnRequest>,
 ) -> Json<serde_json::Value> {
-    let path = state.conv_db_path.clone();
+    let conv_db = state.conv_db.clone();
 
     let res = tokio::task::spawn_blocking(move || -> Result<(), String> {
-        let conn = Connection::open(&path).map_err(|e| e.to_string())?;
+        let conn = conv_db.lock().map_err(|e| e.to_string())?;
 
         let has_emoji = req.text.chars().any(|c| (c as u32) > 0x2500);
         let has_q     = req.text.contains('?');
@@ -108,29 +119,26 @@ pub async fn ai_learn(
             params![req.sender, req.gjid, req.text, req.intent, req.reply, req.mode, ts, len, has_emoji],
         ).map_err(|e| e.to_string())?;
 
-        // Recompute aggregates
-        let total: i64 = conn
-            .query_row("SELECT COUNT(*) FROM conversations WHERE sender = ?",
-                params![req.sender], |r| r.get(0))
-            .unwrap_or(1);
-
-        let avg_len: f64 = conn
-            .query_row("SELECT AVG(len) FROM conversations WHERE sender = ?",
-                params![req.sender], |r| r.get(0))
-            .unwrap_or(f64::from(len));
-
-        let emoji_freq: f64 = conn
+        // Recompute aggregates — una sola consulta combinada en vez de 3
+        // separadas: cada round-trip acá se hace mientras se retiene el
+        // mutex de la conexión COMPARTIDA con bad_mac.rs y con /ai/context
+        // (camino crítico de cada respuesta de IA, presupuesto 300ms del
+        // lado de Node) — menos queries, menos tiempo bloqueando a quien
+        // espera ese mismo lock.
+        let (total, avg_len, emoji_freq, question_freq): (i64, f64, f64, f64) = conn
             .query_row(
-                "SELECT AVG(CAST(has_emoji AS INTEGER)) FROM conversations WHERE sender = ?",
-                params![req.sender], |r| r.get(0))
-            .unwrap_or(if has_emoji { 1.0 } else { 0.0 });
-
-        let question_freq: f64 = conn
-            .query_row(
-                "SELECT AVG(CASE WHEN text LIKE '%?%' THEN 1.0 ELSE 0.0 END) \
+                "SELECT COUNT(*), AVG(len), AVG(CAST(has_emoji AS INTEGER)), \
+                 AVG(CASE WHEN text LIKE '%?%' THEN 1.0 ELSE 0.0 END) \
                  FROM conversations WHERE sender = ?",
-                params![req.sender], |r| r.get(0))
-            .unwrap_or(if has_q { 1.0 } else { 0.0 });
+                params![req.sender],
+                |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?, r.get(3)?)),
+            )
+            .unwrap_or((
+                1,
+                f64::from(len),
+                if has_emoji { 1.0 } else { 0.0 },
+                if has_q { 1.0 } else { 0.0 },
+            ));
 
         let common_words = if total % 20 == 0 {
             compute_common_words(&conn, &req.sender)
@@ -209,11 +217,11 @@ pub async fn ai_context(
     Path(sender):  Path<String>,
     Query(params): Query<ContextParams>,
 ) -> Json<serde_json::Value> {
-    let limit = params.limit.unwrap_or(8).clamp(1, 50);
-    let path  = state.conv_db_path.clone();
+    let limit   = params.limit.unwrap_or(8).clamp(1, 50);
+    let conv_db = state.conv_db.clone();
 
     let res = tokio::task::spawn_blocking(move || -> Result<_, String> {
-        let conn = Connection::open(&path).map_err(|e| e.to_string())?;
+        let conn = conv_db.lock().map_err(|e| e.to_string())?;
 
         let mut stmt = conn
             .prepare("SELECT text, intent, reply, ts \
@@ -274,10 +282,11 @@ pub async fn ai_context(
 pub async fn ai_export(
     State(state): State<AppState>,
 ) -> Json<serde_json::Value> {
-    let path = state.conv_db_path.clone();
+    let conv_db = state.conv_db.clone();
+    let path    = state.conv_db_path.clone();
 
     let res = tokio::task::spawn_blocking(move || -> Result<String, String> {
-        let conn = Connection::open(&path).map_err(|e| e.to_string())?;
+        let conn = conv_db.lock().map_err(|e| e.to_string())?;
         let out  = path.replace(".duckdb", "_conversations.parquet")
                        .replace('\\', "/");
         conn.execute_batch(&format!(

@@ -38,19 +38,24 @@ const command: Command = {
     const money     = Math.floor(baseMoney * mult)
     const diamonds  = isPrem ? rand(4, 12) : rand(1, 5)
     const pc        = isPrem ? rand(2, 6)  : rand(1, 3)
+    // BrasEmbers — moneda rara para comandos NSFW, chance chica acá para que
+    // no dependa solo de #ascuas (ver comando dedicado)
+    const embers    = Math.random() < 0.04 ? 1 : 0
 
     patchUserData(sender, {
       exp:          user.exp + exp,
       money:        user.money + money,
       diamonds:     user.diamonds + diamonds,
+      embers:       user.embers + embers,
       items:        { ...user.items, pc: user.items.pc + pc },
       levelingMeta: meta,
     })
     setCooldown(sender, 'lastClaim')
 
     const leveled  = checkLevelUp(sender)
-    const lvlLine  = levelUpLine(leveled)
+    const lvlLine  = levelUpLine(leveled, jid)
     const brokeLine = broken ? '\n> 💔 Perdiste tu racha anterior — empezando de nuevo' : ''
+    const emberLine = embers > 0 ? `\n> +${embers} BrasEmbers (¡raro!)` : ''
 
     // Vista previa del bono de mañana — incentiva volver al día siguiente
     const nextMult = LevelingManager.getXpMultiplier(
@@ -63,7 +68,7 @@ const command: Command = {
         `「🎴」Reclamaste tu recompensa diaria — *Día ${meta.streak.days}* 🔥${brokeLine}`,
         ``,
         `> +¥${money.toLocaleString()} BrasCoins  ·  +${exp} XP`,
-        `> +${diamonds} 💎  ·  +${pc} 🧪${lvlLine}`,
+        `> +${diamonds} 💎  ·  +${pc} 🧪${lvlLine}${emberLine}`,
         `> Bono de racha: ×${mult.toFixed(2)}`,
         ``,
         `_Día ${meta.streak.days + 1} → ×${nextMult.toFixed(2)} · se reinicia a medianoche_`,

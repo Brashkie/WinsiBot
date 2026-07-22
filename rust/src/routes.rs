@@ -13,7 +13,7 @@ use base64::{engine::general_purpose::STANDARD as B64, Engine as _};
 use chrono::Utc;
 use serde::{Deserialize, Serialize};
 
-use crate::{alerts, atomic, bad_mac, db, metrics, rate_limiter, session_id, snapshot, subbots, watchdog};
+use crate::{alerts, atomic, bad_mac, conversations, db, metrics, rate_limiter, session_id, snapshot, subbots, watchdog};
 
 // ── AppState ──────────────────────────────────────────────────────────────────
 
@@ -27,6 +27,7 @@ pub struct AppState {
     pub locks:         LockManager,
     pub db:            db::Db,
     pub conv_db_path:  String,
+    pub conv_db:       conversations::ConvDb,
     pub bad_mac:       bad_mac::BadMacTracker,
     pub rate_limiter:  rate_limiter::RateLimiter,
     pub watchdog:      watchdog::WatchdogState,

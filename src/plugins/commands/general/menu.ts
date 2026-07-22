@@ -51,11 +51,7 @@ const command: Command = {
       text += `\n${symbol} *${cat.toUpperCase()}*  ·  ${count} cmds`
     }
 
-    text += `\n\n───────────────────────`
-    text += `\n  ${prefix}categoria <nombre>`
-    text += `\n  para ver cmds de cada categoria`
-    text += `\n───────────────────────`
-    text += `\n  Prefix: *${config.prefix.join('  ')}*`
+    text += `\n\n> ${prefix}categoria <nombre> — ver comandos de una categoría`
 
     // Intentar con media (video/gif/imagen) + newsletter context → "Ver canal"
     const media = await findMediaRandom('menu')

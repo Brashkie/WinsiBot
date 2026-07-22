@@ -354,60 +354,73 @@ export class WinsiSocket extends EventEmitter3<WinsiEvents> {
       // 'append' = Baileys entrega mensajes recientes post-sync — aceptar si son del último minuto
       if (type !== 'notify' && type !== 'append') return
 
-      const msg = messages[0]
-      if (!msg) return
+      // Baileys puede entregar VARIOS mensajes en un solo evento: el buffer
+      // interno de eventos (ev.buffer()/ev.flush()) se activa automáticamente
+      // en CADA reconexión, no solo en el arranque en frío (ver chats.js:
+      // 'Connection is now AwaitingInitialSync, buffering events'), y todo lo
+      // que llega mientras el buffer está activo se consolida en un solo
+      // array cuando se vacía (event-buffer.js: 'messages.upsert' junta todos
+      // los mensajes bufferizados en `messages`). Antes acá solo se leía
+      // messages[0] — en un grupo activo con 10+ personas escribiendo casi al
+      // mismo tiempo, justo el escenario que dispara una reconexión por Bad
+      // MAC, eso descartaba en silencio el resto del lote: comandos que nunca
+      // se ejecutaban, Bad MAC adicionales del mismo lote que nunca se
+      // reportaban. Hay que recorrer TODO el array, no solo el primero.
+      for (const msg of messages) {
+        if (!msg) continue
 
-      if (type === 'append') {
-        const ts = Number(msg.messageTimestamp ?? 0) * 1000
-        // descartar mensajes históricos (>5min) del sync inicial
-        if (!ts || Date.now() - ts > 5 * 60_000) return
-      }
+        if (type === 'append') {
+          const ts = Number(msg.messageTimestamp ?? 0) * 1000
+          // descartar mensajes históricos (>5min) del sync inicial
+          if (!ts || Date.now() - ts > 5 * 60_000) continue
+        }
 
-      const jidShort  = fmtJid(msg.key.remoteJid ?? '')
-      const isGroup   = msg.key.remoteJid?.endsWith('@g.us') ?? false
-      const chatLabel = isGroup ? color.magenta('Grupo') : themes.warning('Privado')
-      const meLabel   = msg.key.fromMe
-        ? color.dim('fromMe')
-        : color.cyan('entrante')
+        const jidShort  = fmtJid(msg.key.remoteJid ?? '')
+        const isGroup   = msg.key.remoteJid?.endsWith('@g.us') ?? false
+        const chatLabel = isGroup ? color.magenta('Grupo') : themes.warning('Privado')
+        const meLabel   = msg.key.fromMe
+          ? color.dim('fromMe')
+          : color.cyan('entrante')
 
-      if (!msg.message) {
-        const groupJid = msg.key.remoteJid ?? ''
+        if (!msg.message) {
+          const groupJid = msg.key.remoteJid ?? ''
+          console.log(
+            `  ${color.red('◈')} ${color.bold(color.red('Bad MAC'))}  ${chatLabel} ${color.dim(jidShort)}  ${meLabel}`
+          )
+          // ─── Bad MAC flood detection — por grupo, aislado ──────────────────
+          // Un grupo con flood NO afecta a los demás grupos.
+          this._handleBadMac(groupJid)
+          continue
+        }
+
         console.log(
-          `  ${color.red('◈')} ${color.bold(color.red('Bad MAC'))}  ${chatLabel} ${color.dim(jidShort)}  ${meLabel}`
+          `  ${color.blue('◈')} ${color.bold('Mensaje')}  ${chatLabel} ${color.dim(jidShort)}  ${meLabel}`
         )
-        // ─── Bad MAC flood detection — por grupo, aislado ──────────────────
-        // Un grupo con flood NO afecta a los demás grupos.
-        this._handleBadMac(groupJid)
-        return
+
+        // ─── antidelete — "borrar para todos" llega como protocolMessage REVOKE,
+        // no como un mensaje normal. El key adentro apunta al mensaje original
+        // (no trae su contenido, solo de quién era).
+        const revokeKey = msg.message.protocolMessage?.type === proto.Message.ProtocolMessage.Type.REVOKE
+          ? msg.message.protocolMessage.key
+          : null
+        if (revokeKey?.remoteJid) {
+          handleDeleteUpdate(this.sock!, {
+            fromMe:      !!revokeKey.fromMe,
+            id:          revokeKey.id ?? '',
+            participant: revokeKey.participant ?? undefined,
+            remoteJid:   revokeKey.remoteJid,
+          }).catch(err => logger.warn({ err }, '[antidelete] handleDeleteUpdate falló'))
+          continue
+        }
+
+        // ─── antiviewonce — reenvía medios "ver una vez" si el grupo lo activó
+        if (msg.message.viewOnceMessageV2 || (msg.message as any).viewOnceMessageV2Extension) {
+          handleViewOnce(this.sock!, msg.key.remoteJid ?? '', msg)
+            .catch(err => logger.warn({ err }, '[antiviewonce] handleViewOnce falló'))
+        }
+
+        this.emit('message', msg, this.sock!)
       }
-
-      console.log(
-        `  ${color.blue('◈')} ${color.bold('Mensaje')}  ${chatLabel} ${color.dim(jidShort)}  ${meLabel}`
-      )
-
-      // ─── antidelete — "borrar para todos" llega como protocolMessage REVOKE,
-      // no como un mensaje normal. El key adentro apunta al mensaje original
-      // (no trae su contenido, solo de quién era).
-      const revokeKey = msg.message.protocolMessage?.type === proto.Message.ProtocolMessage.Type.REVOKE
-        ? msg.message.protocolMessage.key
-        : null
-      if (revokeKey?.remoteJid) {
-        handleDeleteUpdate(this.sock!, {
-          fromMe:      !!revokeKey.fromMe,
-          id:          revokeKey.id ?? '',
-          participant: revokeKey.participant ?? undefined,
-          remoteJid:   revokeKey.remoteJid,
-        }).catch(err => logger.warn({ err }, '[antidelete] handleDeleteUpdate falló'))
-        return
-      }
-
-      // ─── antiviewonce — reenvía medios "ver una vez" si el grupo lo activó
-      if (msg.message.viewOnceMessageV2 || (msg.message as any).viewOnceMessageV2Extension) {
-        handleViewOnce(this.sock!, msg.key.remoteJid ?? '', msg)
-          .catch(err => logger.warn({ err }, '[antiviewonce] handleViewOnce falló'))
-      }
-
-      this.emit('message', msg, this.sock!)
     })
   }
 
