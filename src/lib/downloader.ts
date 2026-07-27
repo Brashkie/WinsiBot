@@ -9,6 +9,7 @@ import { randomUUID } from 'crypto'
 import axios from 'axios'
 import ffmpegStatic from 'ffmpeg-static'
 import { Queue } from './queue.js'
+import { createCache, registerCache } from './cacheManager.js'
 
 const execAsync = promisify(exec)
 
@@ -16,6 +17,26 @@ const execAsync = promisify(exec)
 // en simultáneo — sin esto, una ráfaga de comandos de descarga en varios grupos
 // puede agotar recursos del sistema sin ningún límite.
 const downloadQueue = new Queue(3)
+
+// Cola APARTE para audio de YouTube (#ytmp3/#ytaudio/#playaudio) — extraer
+// solo audio es mucho más liviano que descargar+codificar video (sin decode
+// de frames de video), así que una descarga de video pesada compitiendo por
+// los mismos 3 cupos de downloadQueue no debería hacer esperar a alguien que
+// solo pidió una canción. Más cupos que downloadQueue a propósito, por lo
+// mismo — el costo por tarea es menor.
+const audioQueue = new Queue(4)
+
+// Caché de resultados + dedupe de descargas en curso, específico para audio
+// — en un grupo activo, varios usuarios pidiendo la MISMA canción casi al
+// mismo tiempo (un tema en tendencia, alguien la vuelve a pedir) disparaban
+// una descarga+transcodificación de yt-dlp completa por cada uno. Ahora:
+// si ya está cacheada, se responde al instante; si ya se está descargando,
+// todos los pedidos iguales esperan esa MISMA promesa en vez de arrancar la
+// suya. maxSize chico a propósito — son buffers de varios MB cada uno, no
+// texto, así que 40 entradas ya son ~100-150MB en memoria.
+const audioResultCache = registerCache('ytAudioResult', createCache<DownloadResult>({ ttl: 15 * 60_000, maxSize: 40 }))
+const audioInFlight = new Map<string, Promise<DownloadResult>>()
+const normalizeAudioKey = (q: string) => q.trim().toLowerCase()
 
 // ─── Path a yt-dlp ────────────────────────────────────────────────────────────
 function getYtdlp(): string {
@@ -52,27 +73,52 @@ export interface DownloadResult {
 }
 
 // ─── Descargar audio de YouTube ───────────────────────────────────────────────
+// Cacheado + deduplicado por query normalizada (ver audioResultCache/
+// audioInFlight arriba) y corre en audioQueue, separada de la cola de video.
 export async function downloadYoutubeAudio(query: string): Promise<DownloadResult> {
-  const ytdlp   = getYtdlp()
-  const ffmpeg  = getFfmpegDir()
-  const tmpDir  = await getTmpDir()
-  const outFile = join(tmpDir, `${randomUUID()}.mp3`)
+  const key = normalizeAudioKey(query)
 
-  const isUrl  = query.startsWith('http')
-  const target = isUrl ? query : `ytsearch1:${query}`
-  
-  // Flag para usar el FFmpeg local
-  const ffmpegFlag = ffmpeg ? `--ffmpeg-location "${ffmpeg}"` : ''
+  const cached = audioResultCache.get(key)
+  if (cached) return cached
 
+  const inFlight = audioInFlight.get(key)
+  if (inFlight) return inFlight
+
+  const promise = (async (): Promise<DownloadResult> => {
+    const ytdlp   = getYtdlp()
+    const ffmpeg  = getFfmpegDir()
+    const tmpDir  = await getTmpDir()
+    const outFile = join(tmpDir, `${randomUUID()}.mp3`)
+
+    const isUrl  = query.startsWith('http')
+    const target = isUrl ? query : `ytsearch1:${query}`
+
+    // Flag para usar el FFmpeg local
+    const ffmpegFlag = ffmpeg ? `--ffmpeg-location "${ffmpeg}"` : ''
+
+    try {
+      await audioQueue.enqueue(() => execAsync(
+        // audio-quality 4 (~165-185kbps VBR) en vez de 0 (~245kbps, la
+        // configuración MÁS LENTA de codificar) — para escuchar por
+        // WhatsApp la diferencia es imperceptible, y el ffmpeg interno de
+        // yt-dlp tarda notablemente menos en transcodificar a esta calidad.
+        `"${ytdlp}" ${ffmpegFlag} -x --audio-format mp3 --audio-quality 4 -o "${outFile}" "${target}" --no-playlist --max-filesize 50m`,
+        { timeout: 60_000 }
+      ), 60_000)
+      const buffer = await readFile(outFile)
+      const result: DownloadResult = { buffer, filename: outFile, ext: 'mp3' }
+      audioResultCache.set(key, result)
+      return result
+    } finally {
+      if (existsSync(outFile)) await unlink(outFile).catch(() => {})
+    }
+  })()
+
+  audioInFlight.set(key, promise)
   try {
-    await downloadQueue.enqueue(() => execAsync(
-      `"${ytdlp}" ${ffmpegFlag} -x --audio-format mp3 --audio-quality 0 -o "${outFile}" "${target}" --no-playlist --max-filesize 50m`,
-      { timeout: 60_000 }
-    ), 60_000)
-    const buffer = await readFile(outFile)
-    return { buffer, filename: outFile, ext: 'mp3' }
+    return await promise
   } finally {
-    if (existsSync(outFile)) await unlink(outFile).catch(() => {})
+    audioInFlight.delete(key)
   }
 }
 

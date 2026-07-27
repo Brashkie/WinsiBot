@@ -9,7 +9,7 @@ export interface OwnedDragon {
   name:        string   // nombre personalizado (por defecto el de la especie)
   level:       number
   exp:         number
-  stage:       0 | 1 | 3
+  stage:       1 | 3   // nunca 0 — el huevo no es un estado guardado, ver @lib/dragoncity.ts
   hatchedAt:   number
   lastCollect: number   // última recolección de Oro pasivo
 }
@@ -29,6 +29,16 @@ export interface OwnedBusiness {
   id:          string   // referencia a BusinessDef.id en @lib/business.ts
   boughtAt:    number
   lastCollect: number
+}
+
+// ─── Stickers guardados (#savesticker/#stickers/#delsticker) ─────────────────
+// El .webp en sí vive en disco (@lib/stickerVault.ts) — acá solo la metadata
+// liviana, para no engordar users.json con binarios.
+export interface SavedSticker {
+  id:      string   // nombre de archivo en data/stickers/<sender>/<id>.webp
+  name:    string   // nombre que le puso el usuario — se busca por esto
+  path:    string
+  savedAt: number
 }
 
 // ─── Cooldowns de actividades RPG ────────────────────────────────────────────
@@ -111,6 +121,8 @@ export interface UserData {
   quizProfile?:  import('@lib/quiz.js').QuizProfile
   // ── Leveling avanzado ───────────────────────────────────────────────────────
   levelingMeta?: import('@lib/leveling.js').LevelingMeta
+  // ── Stickers guardados ──────────────────────────────────────────────────────
+  savedStickers?: SavedSticker[]
 }
 
 // ─── Configuración de grupo ───────────────────────────────────────────────────

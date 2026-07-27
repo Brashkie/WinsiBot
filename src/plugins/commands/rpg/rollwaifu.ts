@@ -26,8 +26,28 @@ export const charCache = registerCache('rwCharacters', createCache<RollCharacter
 const sleep = (ms: number) => new Promise(r => setTimeout(r, ms))
 
 // ─── Cooldowns ────────────────────────────────────────────────────────────────
-export const RW_COOLDOWN = 29 * 60 * 1000
+export const RW_COOLDOWN = 20 * 60 * 1000
 export const rwCooldowns = new Map<string, number>()
+
+// Barre entradas vencidas — sin esto, un entry por cada sender que alguna vez
+// usó #rw se queda para siempre (nunca se borra solo), creciendo sin límite
+// con la cantidad de usuarios únicos vistos a lo largo de la vida del proceso.
+setInterval(() => {
+  const now = Date.now()
+  for (const [k, t] of rwCooldowns) {
+    if (now - t > RW_COOLDOWN) rwCooldowns.delete(k)
+  }
+}, 10 * 60_000).unref()
+
+// Roll en curso por usuario+grupo — el cooldown/personaje-activo antes se
+// registraban recién al FINAL del flujo (después de la animación, el fetch
+// de personajes y la descarga de imagen — varios segundos reales), así que
+// dos #rw casi simultáneos del mismo usuario (doble tap, WhatsApp
+// reentregando el mensaje) leían el mismo estado viejo, pasaban AMBOS los
+// checks de cooldown/activo, y tiraban DOS personajes en vez de bloquear el
+// segundo. Mismo patrón que register_lock en subbots.rs (Rust) para el mismo
+// tipo de bug: marcar "en curso" de forma síncrona, antes de cualquier await.
+const rollInProgress = new Set<string>()
 
 // ─── Personaje activo por grupo ───────────────────────────────────────────────
 export interface ActiveChar {
@@ -209,100 +229,112 @@ const command: Command = {
       return
     }
 
-    // animacion
-    const sent = await sock.sendMessage(jid, {
-      text: '◈ Rodando personaje...',
-    }, { quoted: msg })
-    const key = sent?.key
-
-    const frames = [
-      '◈◈ Buscando personaje...',
-      '◈◈◈ Seleccionando...',
-    ]
-
-    const [chars] = await Promise.all([
-      getCharacters(source).catch(() => [] as RollCharacter[]),
-      (async () => {
-        for (const frame of frames) {
-          await sleep(400)
-          await sock.sendMessage(jid, { text: frame, edit: key } as any)
-        }
-      })(),
-    ])
-
-    if (!chars.length) {
-      await sock.sendMessage(jid, {
-        text: '✗ No se pudieron obtener personajes.',
-        edit: key,
-      } as any)
+    // ─── reservar el roll — SIN ningún await entre esto y el chequeo de
+    // arriba, para que sea atómico frente a un #rw casi simultáneo (ver
+    // comentario de rollInProgress) ────────────────────────────────────────
+    const lockKey = `${jid}:${sender}`
+    if (rollInProgress.has(lockKey)) {
+      await sock.sendMessage(jid, { text: `✗ Ya hay un roll en curso — esperá un segundo.` }, { quoted: msg })
       return
     }
-
-    // Excluir personajes que ya tienen dueño EN ESTE GRUPO — en otro grupo
-    // el mismo personaje puede volver a salir y tener otro dueño distinto.
-    const available = chars.filter(c => !getGroupClaim(jid, c))
-    if (!available.length) {
-      await sock.sendMessage(jid, {
-        text: `✗ Ya no quedan personajes de *${source}* disponibles en este grupo — todos tienen dueño.`,
-        edit: key,
-      } as any)
-      return
-    }
-
-    const char = pickRandom(available)
-
-    // registrar cooldown
+    rollInProgress.add(lockKey)
     rwCooldowns.set(sender, Date.now())
 
-    // descargar imagen
-    let buffer: Buffer | null = null
     try {
-      buffer = await downloadBuffer(pickImage(char.image))
-    } catch {}
+      // animacion
+      const sent = await sock.sendMessage(jid, {
+        text: '◈ Rodando personaje...',
+      }, { quoted: msg })
+      const key = sent?.key
 
-    // getGroupClaim ya excluyó arriba a cualquier personaje con dueño en este
-    // grupo, así que acá SIEMPRE va a dar null — pero se resuelve igual (en
-    // vez de asumirlo) para que este caption use la misma lógica real que
-    // #winfo, no el campo estático "Libre" que trae el JSON de la fuente.
-    const ownerJid  = getGroupClaim(jid, char)
-    const estadoStr = ownerJid ? `Reclamado por ${ownerName(ownerJid)}` : (char.status ?? 'Libre')
+      const frames = [
+        '◈◈ Buscando personaje...',
+        '◈◈◈ Seleccionando...',
+      ]
 
-    const caption = [
-      `◈ Nombre ⇝ *${char.name}*`,
-      `⚥ Genero ⇝ *${char.gender}*`,
-      `☆ Valor  ⇝ *${char.value}*`,
-      `♡ Estado ⇝ *${estadoStr}*`,
-      `◆ Fuente ⇝ *${char.source}*`,
-    ].join('\n')
+      const [chars] = await Promise.all([
+        getCharacters(source).catch(() => [] as RollCharacter[]),
+        (async () => {
+          for (const frame of frames) {
+            await sleep(400)
+            await sock.sendMessage(jid, { text: frame, edit: key } as any)
+          }
+        })(),
+      ])
 
-    const mentions = ownerJid ? [ownerJid] : []
-
-    let sentImg: any = null
-    if (buffer) {
-      sentImg = await sock.sendMessage(jid, { image: buffer, caption, mentions })
-    } else {
-      sentImg = await sock.sendMessage(jid, { text: caption, mentions })
-    }
-
-    // registrar personaje activo
-    const expiresAt = Date.now() + 10 * 60 * 1000
-    setUserActiveChar(jid, sender, {
-      char,
-      rolledBy:  sender,
-      jid,
-      expiresAt,
-      claimedBy: null,
-      claimedAt: null,
-      stealEnds: null,
-      msgKey:    sentImg?.key ?? null,
-    })
-
-    setTimeout(() => {
-      const active = getUserActiveChar(jid, sender)
-      if (active?.char.name === char.name && !active.claimedBy) {
-        deleteUserActiveChar(jid, sender)
+      if (!chars.length) {
+        await sock.sendMessage(jid, {
+          text: '✗ No se pudieron obtener personajes.',
+          edit: key,
+        } as any)
+        return
       }
-    }, 10 * 60 * 1000)
+
+      // Excluir personajes que ya tienen dueño EN ESTE GRUPO — en otro grupo
+      // el mismo personaje puede volver a salir y tener otro dueño distinto.
+      const available = chars.filter(c => !getGroupClaim(jid, c))
+      if (!available.length) {
+        await sock.sendMessage(jid, {
+          text: `✗ Ya no quedan personajes de *${source}* disponibles en este grupo — todos tienen dueño.`,
+          edit: key,
+        } as any)
+        return
+      }
+
+      const char = pickRandom(available)
+
+      // descargar imagen
+      let buffer: Buffer | null = null
+      try {
+        buffer = await downloadBuffer(pickImage(char.image))
+      } catch {}
+
+      // getGroupClaim ya excluyó arriba a cualquier personaje con dueño en este
+      // grupo, así que acá SIEMPRE va a dar null — pero se resuelve igual (en
+      // vez de asumirlo) para que este caption use la misma lógica real que
+      // #winfo, no el campo estático "Libre" que trae el JSON de la fuente.
+      const ownerJid  = getGroupClaim(jid, char)
+      const estadoStr = ownerJid ? `Reclamado por ${ownerName(ownerJid)}` : (char.status ?? 'Libre')
+
+      const caption = [
+        `◈ Nombre ⇝ *${char.name}*`,
+        `⚥ Genero ⇝ *${char.gender}*`,
+        `☆ Valor  ⇝ *${char.value}*`,
+        `♡ Estado ⇝ *${estadoStr}*`,
+        `◆ Fuente ⇝ *${char.source}*`,
+      ].join('\n')
+
+      const mentions = ownerJid ? [ownerJid] : []
+
+      let sentImg: any = null
+      if (buffer) {
+        sentImg = await sock.sendMessage(jid, { image: buffer, caption, mentions })
+      } else {
+        sentImg = await sock.sendMessage(jid, { text: caption, mentions })
+      }
+
+      // registrar personaje activo
+      const expiresAt = Date.now() + 10 * 60 * 1000
+      setUserActiveChar(jid, sender, {
+        char,
+        rolledBy:  sender,
+        jid,
+        expiresAt,
+        claimedBy: null,
+        claimedAt: null,
+        stealEnds: null,
+        msgKey:    sentImg?.key ?? null,
+      })
+
+      setTimeout(() => {
+        const active = getUserActiveChar(jid, sender)
+        if (active?.char.name === char.name && !active.claimedBy) {
+          deleteUserActiveChar(jid, sender)
+        }
+      }, 10 * 60 * 1000)
+    } finally {
+      rollInProgress.delete(lockKey)
+    }
   },
 }
 

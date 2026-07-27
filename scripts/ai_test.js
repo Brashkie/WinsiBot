@@ -1,12 +1,21 @@
 #!/usr/bin/env node
 // npm run ai:test — prueba el clasificador de intents con casos reales
 
+import 'dotenv/config'
 import { spawnSync } from 'child_process'
 import { join }      from 'path'
+import { ascii, color, themes } from 'ansimax'
 
 const WIN    = process.platform === 'win32'
 const PYTHON = join(process.cwd(), 'python', 'venv', WIN ? 'Scripts/python.exe' : 'bin/python')
 const CWD    = join(process.cwd(), 'python')
+
+// Antes apuntaba a http://127.0.0.1:3001 (puerto viejo, el real es 18080
+// hace rato) y no mandaba x-api-key — /nlp/fast está protegido por el
+// mismo middleware que el resto de rutas de Rust, así que esto SIEMPRE
+// devolvía null en la práctica (401, o directamente conexión rechazada).
+const RUST_URL = process.env.SESSION_API_URL ?? process.env.RUST_API_URL ?? 'http://127.0.0.1:18080'
+const RUST_KEY = process.env.SESSION_API_KEY ?? process.env.RUST_API_KEY ?? ''
 
 const CASES = [
   { text: 'hola como estas',          expect: 'greeting' },
@@ -26,9 +35,9 @@ const CASES = [
 async function rustTest(text) {
   try {
     const t0 = Date.now()
-    const r  = await fetch('http://127.0.0.1:3001/nlp/fast', {
+    const r  = await fetch(`${RUST_URL}/nlp/fast`, {
       method:  'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: { 'Content-Type': 'application/json', 'x-api-key': RUST_KEY },
       body:    JSON.stringify({ text }),
       signal:  AbortSignal.timeout(500),
     })
@@ -66,12 +75,11 @@ print(json.dumps(out))
 
 // ─── Main ────────────────────────────────────────────────────────────────────
 
-console.log('\n  WinsiBot — AI Intent Classifier Test')
-console.log('  ──────────────────────────────────────────────────\n')
+console.log(`\n  ${color.bold('WinsiBot — AI Intent Classifier Test')}\n`)
 
 // Check Rust
 const rustPing = await rustTest('hola')
-console.log(`  Rust NLP: ${rustPing ? `🟢 Online (${rustPing.ms}ms)` : '🔴 Offline — solo Python'}`)
+console.log(`  Rust NLP: ${rustPing ? themes.success(`Online (${rustPing.ms}ms)`) : themes.error('Offline — solo Python')}`)
 
 // Run Python tests
 const results = pythonTest(CASES)
@@ -88,8 +96,7 @@ const rustResults = await Promise.all(
 let passed = 0
 let rustPassed = 0
 
-console.log('\n  Texto                          Esperado         Python           Rust')
-console.log('  ─────────────────────────────────────────────────────────────────────')
+const rows = [['Texto', 'Esperado', 'Python', 'Rust']]
 
 for (let i = 0; i < results.length; i++) {
   const p  = results[i]
@@ -100,18 +107,23 @@ for (let i = 0; i < results.length; i++) {
   if (pyOk) passed++
   if (rustOk) rustPassed++
 
-  const pyIcon   = pyOk ? '✅' : '❌'
-  const rustIcon = rr ? (rustOk ? '✅' : '❌') : '—'
+  const pyMark   = pyOk ? themes.success('✓') : themes.error('✗')
+  const rustMark = rr ? (rustOk ? themes.success('✓') : themes.error('✗')) : color.dim('—')
 
-  const txt    = p.text.slice(0, 28).padEnd(29)
-  const exp    = p.expect.padEnd(16)
-  const pyOut  = `${pyIcon} ${p.intent.padEnd(14)} (${p.ms}ms)`
-  const rOut   = rr ? `${rustIcon} ${rr.intent.padEnd(14)} (${rr.ms}ms)` : '  offline'
+  const pyCell   = `${pyMark} ${p.intent} (${p.ms}ms)`
+  const rustCell = rr ? `${rustMark} ${rr.intent} (${rr.ms}ms)` : color.dim('offline')
 
-  console.log(`  ${txt}  ${exp}  ${pyOut}  ${rOut}`)
+  rows.push([p.text, p.expect, pyCell, rustCell])
 }
 
-console.log('\n  ─────────────────────────────────────────────────────────────────────')
+console.log()
+console.log(ascii.table(rows, {
+  align:       ['left', 'left', 'left', 'left'],
+  borderStyle: 'rounded',
+  maxWidth:    100,
+  wrap:        true,
+}))
+
 console.log(`  Python  ${passed}/${results.length} correctos`)
 if (rustPing) console.log(`  Rust    ${rustPassed}/${results.length} correctos`)
 console.log()

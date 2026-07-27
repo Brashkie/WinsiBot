@@ -127,7 +127,7 @@ Los dragones evolucionan dos veces según su nivel: huevo (0–9) → joven (10�
 ## 🎴 Personajes / Harem (gacha)
 
 ```
-!rw [marvel|pokedex|anime] — tira un personaje aleatorio (sin argumento, sortea entre las tres) — CD 29 min
+!rw [marvel|pokedex|anime] — tira un personaje aleatorio (sin argumento, sortea entre las tres) — CD 20 min
 !c                      — responde AL MENSAJE del personaje para reclamarlo — tenés 10 min antes de que expire
 !harem [@usuario]       — ver tu colección, ordenada por valor
 !winfo <nombre>         — info de un personaje

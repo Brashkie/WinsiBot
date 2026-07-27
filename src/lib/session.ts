@@ -206,13 +206,20 @@ export class SessionClient {
   }
 
   /**
-   * Elimina session-*.json y sender-key-*.json del directorio auth de Baileys.
-   * Usar cuando se detecta Bad MAC flood para forzar re-keying del protocolo Signal.
+   * Limpia archivos Signal del directorio auth de Baileys para forzar
+   * re-establecimiento del protocolo tras un Bad MAC flood.
+   *
+   * Con `groupJid`: borra SOLO los sender-key-*.json de ESE grupo (scope
+   * real, no toca sesiones 1:1 con otros contactos ni sender-keys de otros
+   * grupos). Sin `groupJid`: borrado global histórico (todos los
+   * session-*.json y sender-key-*.json) — reservar para cuando el umbral
+   * GLOBAL de Rust se dispara (corrupción repartida entre muchos grupos a
+   * la vez), no para un Bad MAC aislado de un solo grupo.
    */
-  async clearSignalSessions(): Promise<ClearSignalResult> {
+  async clearSignalSessions(groupJid?: string): Promise<ClearSignalResult> {
     return apiFetch<ClearSignalResult>(
       '/sessions/signal/clear',
-      { method: 'POST', body: '{}' },
+      { method: 'POST', body: JSON.stringify(groupJid ? { groupJid } : {}) },
       { timeoutMs: 15_000 },
     )
   }

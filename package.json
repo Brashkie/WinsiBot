@@ -1,7 +1,7 @@
 {
   "name": "winsi-bot",
-  "version": "8.5.1",
-  "description": "WinsiBot v8.5.1 — High-performance WhatsApp bot with multi-language architecture (TypeScript + Rust + Python), advanced AI, RPG economy, and resilience for very active groups (Baileys no longer drops batched messages after a reconnect, Rust's rate limiter and Bad MAC tracker moved to DashMap for real concurrency, Bad MAC history actually persists, fast NLP path no longer panics). Adds Dragon City (replaces the old pet system), BrasEmbers, Businesses, and free Spotify alternatives.",
+  "version": "8.6.0",
+  "description": "WinsiBot v8.6.0 — High-performance WhatsApp bot with multi-language architecture (TypeScript + Rust + Python), advanced AI, RPG economy, and resilience for very active groups. Bad MAC cleanup is now scoped per-group instead of wiping every Signal session account-wide, the socket-leak behind repeated forced unlinks is fixed, and a personal sticker collection was added (#savesticker/#stickers/#delsticker).",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
   "type": "module",
@@ -93,7 +93,7 @@
     "@spotify/web-api-ts-sdk": "^1.2.0",
     "@vitalets/google-translate-api": "^9.2.0",
     "@whiskeysockets/baileys": "^6.7.18",
-    "ansimax": "^1.4.5",
+    "ansimax": "^1.4.10",
     "axios": "^1.7.3",
     "axios-retry": "^4.2.1",
     "better-sqlite3": "^11.3.0",

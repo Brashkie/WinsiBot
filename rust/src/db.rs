@@ -101,17 +101,26 @@ pub struct DeliveryStats {
 // ─── Operaciones ─────────────────────────────────────────────────────────────
 
 /// Registrar mensajes salientes en lote.
+/// Un solo `transaction()` para todo el lote (hasta MAX_BATCH=1000 items por
+/// request) en vez de un execute() por item — cada execute() de rusqlite en
+/// modo autocommit es su propio commit implícito; con WAL+synchronous=NORMAL
+/// no hace fsync por commit, pero sigue siendo cientos de commits separados
+/// en vez de uno solo. Con ráfagas reales (varios grupos activos mandando
+/// mensajes casi al mismo tiempo) esto es la diferencia entre una escritura
+/// de disco por lote y una por mensaje.
 pub fn track(db: &Db, items: &[TrackItem]) -> Result<usize, rusqlite::Error> {
-    let conn = db.lock().unwrap();
+    let mut conn = db.lock().unwrap();
+    let tx = conn.transaction()?;
     let mut n = 0usize;
     for m in items {
         let is_group = m.jid.ends_with("@g.us") as i32;
-        n += conn.execute(
+        n += tx.execute(
             "INSERT OR IGNORE INTO outbox (id, jid, msg_type, status, sent_at, is_group)
              VALUES (?1, ?2, ?3, 0, ?4, ?5)",
             params![m.id, m.jid, m.msg_type, m.ts, is_group],
         )?;
     }
+    tx.commit()?;
     tracing::debug!(n, "mensajes registrados en outbox");
     Ok(n)
 }
@@ -119,21 +128,24 @@ pub fn track(db: &Db, items: &[TrackItem]) -> Result<usize, rusqlite::Error> {
 /// Actualizar estado de entrega en lote.
 /// Solo avanza (no permite bajar de 'leído' a 'entregado').
 /// Statuses válidos: -1 (fallido), 0 (enviado), 1 (entregado), 2 (leído), 3 (reproducido).
+/// Misma transacción única que track() — ver comentario ahí.
 pub fn ack(db: &Db, items: &[AckItem]) -> Result<usize, rusqlite::Error> {
-    let conn  = db.lock().unwrap();
+    let mut conn = db.lock().unwrap();
+    let tx    = conn.transaction()?;
     let now   = Utc::now().timestamp();
     let mut n = 0usize;
     for a in items {
-        if !matches!(a.status, -1 | 0 | 1 | 2 | 3) {
+        if !matches!(a.status, -1..=3) {
             tracing::warn!(id = %a.id, status = a.status, "ack status fuera de rango, ignorado");
             continue;
         }
-        n += conn.execute(
+        n += tx.execute(
             "UPDATE outbox SET status = ?1, updated_at = ?2
              WHERE id = ?3 AND status < ?1",
             params![a.status, now, a.id],
         )?;
     }
+    tx.commit()?;
     tracing::debug!(n, "mensajes actualizados en outbox");
     Ok(n)
 }

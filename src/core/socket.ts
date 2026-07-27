@@ -10,7 +10,7 @@ import makeWASocket, {
 import { Boom } from '@hapi/boom'
 import EventEmitter3 from 'eventemitter3'
 import pino from 'pino'
-import { color, themes } from 'ansimax'
+import { color, themes, components } from 'ansimax'
 import { config } from '@config'
 import { logger } from './logger.js'
 import { winsiStore } from '@core/store.js'
@@ -106,6 +106,20 @@ export class WinsiSocket extends EventEmitter3<WinsiEvents> {
   private lastMessageEventAt = 0
   private readonly MESSAGE_STALENESS_LIMIT_MS = 10 * 60_000
 
+  // Precarga completa de grupos — solo re-correr si pasó bastante desde la
+  // última vez que terminó bien. Antes esto corría en CADA 'open' (cada
+  // reconexión, no solo el arranque en frío), y con 400+ grupos cada corrida
+  // es una ráfaga real de requests a WhatsApp; el comentario de arriba sobre
+  // MESSAGE_STALENESS_LIMIT_MS ya documentaba la sospecha de que reconectar
+  // seguido + refetchear todo en cada una es lo que hace que WhatsApp empiece
+  // a limitar la entrega de mensajes (círculo vicioso: reconexión → refetch
+  // pesado → más probabilidad de zombie/Bad MAC → más reconexión). Los
+  // cambios puntuales de un grupo YA se capturan en vivo vía
+  // schedulePreloadGroup() (group-participants.update/groups.update), así
+  // que un refetch completo reciente no aporta nada — solo carga.
+  private lastGroupPreloadAt = 0
+  private readonly GROUP_PRELOAD_COOLDOWN_MS = 30 * 60_000
+
   // Per-group Bad MAC tracking (fallback local cuando Rust no responde)
   private badMacByGroup = new Map<string, { count: number; windowStart: number; clearedAt: number }>()
   // Grupos que están en proceso de clear
@@ -136,6 +150,21 @@ export class WinsiSocket extends EventEmitter3<WinsiEvents> {
       } catch (err) {
         logger.warn({ err }, 'Error al limpiar listeners')
       }
+      // Cerrar el WebSocket real antes de soltar la referencia — quitar los
+      // listeners solo hace que NOSOTROS dejemos de escuchar; el socket hacia
+      // los servidores de WhatsApp podía seguir abierto del otro lado. Cada
+      // reconexión (Bad MAC, watchdog zombie, corte de red — puede pasar
+      // varias veces por hora) dejaba una conexión fantasma más acumulándose
+      // con las MISMAS credenciales, sin que Baileys la cerrara nunca — el
+      // patrón exacto que los sistemas antiabuso de WhatsApp usan para
+      // detectar sesiones múltiples anómalas y forzar el desvínculo del
+      // dispositivo. sock.end() es idempotente (Baileys ya se protege con su
+      // propio flag `closed` si el socket ya se había cerrado solo).
+      try {
+        this.sock.end(new Error('WinsiBot: reconectando'))
+      } catch (err) {
+        logger.warn({ err }, 'Error al cerrar el socket anterior')
+      }
       this.sock = null
     }
   }
@@ -154,6 +183,30 @@ export class WinsiSocket extends EventEmitter3<WinsiEvents> {
       this.isReconnecting = false
       await this.connect()
     }, delay)
+  }
+
+  /** Dispara una reconexión reactiva (Bad MAC, watchdog zombie) — cierra el
+   *  socket actual y agenda el siguiente intento. Si YA hay una reconexión
+   *  en curso, es un no-op.
+   *
+   *  Sin este guard, acá antes cada disparador llamaba a cleanup()+
+   *  scheduleReconnect() por su cuenta — y como el clear de Bad MAC por
+   *  grupo y el clear GLOBAL pueden dispararse casi al mismo tiempo (un
+   *  mismo tirón de eventos puede cruzar ambos umbrales), el SEGUNDO
+   *  cleanup() cancelaba el retryTimer que el PRIMER scheduleReconnect()
+   *  acababa de agendar (clearTimeout), y el segundo scheduleReconnect()
+   *  no lo reemplazaba porque isReconnecting ya estaba en true (guard
+   *  pensado para el caso normal, no para esta carrera). Resultado: ningún
+   *  timer quedaba agendado, isReconnecting quedaba trabado en true para
+   *  siempre, y el bot se quedaba con sock=null sin ningún reintento
+   *  futuro — vivo (el heartbeat seguía andando) pero sordo, sin loguear
+   *  un solo mensaje más. Confirmado en logs reales de producción: "452
+   *  archivos... reconectando" seguido de "0 archivos... reconectando" y
+   *  después silencio total, sin "WinsiBot conectado" nunca más. */
+  private requestReconnect(): void {
+    if (this.isReconnecting) return
+    this.cleanup()
+    this.scheduleReconnect()
   }
 
   async connect(): Promise<void> {
@@ -204,6 +257,46 @@ export class WinsiSocket extends EventEmitter3<WinsiEvents> {
     })
 
     winsiStore.bind(this.sock)
+
+    // ─── "Recuperando mensajes..." en tiempo real, igual que WhatsApp ────────
+    // Baileys manda 'messaging-history.set' en tandas mientras sincroniza el
+    // historial tras conectar/reconectar, con un `progress` (0-100) por tanda
+    // — esto nunca se escuchaba, así que la consola quedaba muda durante toda
+    // la sincronización (que puede tardar bastante con muchos grupos). Ahora
+    // se ve una barra que se actualiza en el lugar (misma línea, sin spamear
+    // el log), igual que el "Recuperando mensajes" nativo de WhatsApp.
+    let historySyncActive = false
+    this.sock.ev.on('messaging-history.set', ({ progress, isLatest, chats, messages, syncType }) => {
+      const typeLabel: Partial<Record<number, string>> = {
+        [proto.HistorySync.HistorySyncType.INITIAL_BOOTSTRAP]: 'sincronización inicial',
+        [proto.HistorySync.HistorySyncType.RECENT]:            'mensajes recientes',
+        [proto.HistorySync.HistorySyncType.FULL]:               'historial completo',
+        [proto.HistorySync.HistorySyncType.PUSH_NAME]:          'nombres de contactos',
+        [proto.HistorySync.HistorySyncType.ON_DEMAND]:          'bajo demanda',
+      }
+      const label = (syncType !== undefined && typeLabel[syncType]) || 'historial'
+
+      if (progress != null) {
+        historySyncActive = true
+        const bar = components.progressBar(progress, {
+          width: 24,
+          showPercentage: true,
+          label: `◈ Recuperando ${label}`,
+        })
+        process.stdout.write(`\r${bar}   `)
+      }
+
+      if (isLatest) {
+        if (historySyncActive) {
+          process.stdout.write('\n')
+          historySyncActive = false
+        }
+        logger.info(
+          { chats: chats.length, messages: messages.length },
+          `Historial sincronizado (${label}) — ${chats.length} chats, ${messages.length} mensajes`,
+        )
+      }
+    })
 
     // Bienvenida/despedida (welcome) y avisos de promote/demote/cambio de
     // nombre-descripción (detect) — winsiStore.bind() ya escucha estos mismos
@@ -325,19 +418,27 @@ export class WinsiSocket extends EventEmitter3<WinsiEvents> {
 
         // precargar grupos en background — no bloquea la conexión ni el handler de mensajes
         // timeout de 30s para evitar colgar en grupos grandes (10k+)
-        const sockRef = this.sock!
-        Promise.race([
-          sockRef.groupFetchAllParticipating(),
-          new Promise<never>((_, rej) => setTimeout(() => rej(new Error('timeout')), 30_000)),
-        ]).then(groups => {
-          const keys = Object.keys(groups)
-          for (const groupJid of keys) {
-            winsiStore.preloadFromData(groupJid, (groups as Record<string, any>)[groupJid])
-          }
-          logger.info(`${keys.length} grupos precargados`)
-        }).catch(err => {
-          logger.warn({ err }, 'Error precargando grupos (no crítico — se cargan bajo demanda)')
-        })
+        // Se salta si ya precargamos hace poco (ver comentario de
+        // GROUP_PRELOAD_COOLDOWN_MS) — evita repetir un refetch pesado en
+        // cada reconexión cuando los reconnects vienen seguidos.
+        if (Date.now() - this.lastGroupPreloadAt < this.GROUP_PRELOAD_COOLDOWN_MS) {
+          logger.debug('Precarga de grupos omitida — ya se hizo hace poco')
+        } else {
+          const sockRef = this.sock!
+          Promise.race([
+            sockRef.groupFetchAllParticipating(),
+            new Promise<never>((_, rej) => setTimeout(() => rej(new Error('timeout')), 30_000)),
+          ]).then(groups => {
+            const keys = Object.keys(groups)
+            for (const groupJid of keys) {
+              winsiStore.preloadFromData(groupJid, (groups as Record<string, any>)[groupJid])
+            }
+            this.lastGroupPreloadAt = Date.now()
+            logger.info(`${keys.length} grupos precargados`)
+          }).catch(err => {
+            logger.warn({ err }, 'Error precargando grupos (no crítico — se cargan bajo demanda)')
+          })
+        }
       }
     })
 
@@ -452,8 +553,7 @@ export class WinsiSocket extends EventEmitter3<WinsiEvents> {
           clearInterval(this.zombieCheckTimer)
           this.zombieCheckTimer = null
         }
-        this.cleanup()
-        this.scheduleReconnect()
+        this.requestReconnect()
       }
 
       try {
@@ -548,12 +648,10 @@ export class WinsiSocket extends EventEmitter3<WinsiEvents> {
       sessionClient.clearSignalSessions()
     ).then(res => {
       logger.info(`[socket] ${res.deleted} archivos Signal eliminados (clear global) — reconectando`)
-      this.cleanup()
-      this.scheduleReconnect()
+      this.requestReconnect()
     }).catch(err => {
       logger.warn({ err }, '[socket] clearSignalSessions (global) falló — reconectando igual')
-      this.cleanup()
-      this.scheduleReconnect()
+      this.requestReconnect()
     })
   }
 
@@ -586,17 +684,15 @@ export class WinsiSocket extends EventEmitter3<WinsiEvents> {
       `[socket] ${count} Bad MACs en grupo ${groupJid.replace('@g.us', '')} (${source}) — limpiando Signal + reconectando`
     )
     import('@lib/session.js').then(({ sessionClient }) =>
-      sessionClient.clearSignalSessions()
+      sessionClient.clearSignalSessions(groupJid)
     ).then(res => {
-      logger.info(`[socket] ${res.deleted} archivos Signal eliminados — reconectando`)
+      logger.info(`[socket] ${res.deleted} archivos Signal eliminados (scope: grupo) — reconectando`)
       this.clearingGroups.delete(groupJid)
-      this.cleanup()
-      this.scheduleReconnect()
+      this.requestReconnect()
     }).catch(err => {
       logger.warn({ err }, '[socket] clearSignalSessions falló — reconectando igual')
       this.clearingGroups.delete(groupJid)
-      this.cleanup()
-      this.scheduleReconnect()
+      this.requestReconnect()
     })
   }
 }

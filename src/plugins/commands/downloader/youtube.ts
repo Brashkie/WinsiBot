@@ -3,7 +3,7 @@ import { downloadYoutubeAudio, getYoutubeInfo, downloadBuffer, formatDuration } 
 
 const command: Command = {
   name: 'ytmp3',
-  aliases: ['yt', 'youtube', 'ytaudio'],
+  aliases: ['yt', 'youtube', 'ytaudio', 'playaudio'],
   description: 'Descarga audio de YouTube',
   category: 'downloader',
   cooldown: 15,

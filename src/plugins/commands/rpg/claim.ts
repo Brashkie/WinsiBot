@@ -12,6 +12,15 @@ export const C_COOLDOWN = 10 * 60 * 1000
 const STEAL_TIME = 16 * 1000
 export const cCooldowns = new Map<string, number>()
 
+// Barre entradas vencidas — mismo motivo que en rollwaifu.ts: sin esto crece
+// sin límite, un entry por cada sender único que alguna vez reclamó/robó.
+setInterval(() => {
+  const now = Date.now()
+  for (const [k, t] of cCooldowns) {
+    if (now - t > C_COOLDOWN) cCooldowns.delete(k)
+  }
+}, 10 * 60_000).unref()
+
 function formatTime(ms: number): string {
   const m = Math.floor(ms / 60_000)
   const s = Math.floor((ms % 60_000) / 1000)

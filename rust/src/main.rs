@@ -27,8 +27,18 @@ use axum::{
 };
 use routes::AppState;
 use std::path::Path;
-use tower_http::{compression::CompressionLayer, trace::TraceLayer};
+use std::time::Duration;
+use tower_http::{compression::CompressionLayer, timeout::TimeoutLayer, trace::TraceLayer};
 use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
+
+// Techo global por request — antes no había NINGÚN timeout del lado del
+// servidor; un handler colgado (esperando un lock indefinidamente, una
+// consulta lenta) no se cortaba nunca acá, solo del lado del cliente
+// (Node.js), que sí tiene sus propios timeouts pero no libera nada de este
+// proceso. 30s es generoso a propósito — no debe interferir con operaciones
+// legítimas más lentas (exports a Parquet, snapshots con muchas sesiones),
+// solo cortar lo que está genuinamente colgado.
+const REQUEST_TIMEOUT_SECS: u64 = 30;
 
 // ── Middleware: contar respuestas no-2xx en métricas ──────────────────────────
 async fn count_errors(State(state): State<AppState>, req: Request, next: Next) -> Response {
@@ -66,29 +76,57 @@ async fn shutdown_signal(state: AppState) {
 
     tracing::warn!("señal de apagado recibida — tomando snapshot final de todas las sesiones");
 
-    let sessions = session_id::list_sessions(&state.sessions_dir);
-    let total    = sessions.len();
-    let mut ok   = 0u32;
+    let sessions_dir = state.sessions_dir.clone();
+    let (ok, total) = tokio::task::spawn_blocking(move || {
+        let sessions = session_id::list_sessions(&sessions_dir);
+        let total    = sessions.len();
+        let mut ok   = 0u32;
 
-    for sid in &sessions {
-        if let Ok(path) = session_id::resolve(&state.sessions_dir, sid) {
-            if snapshot::create(&path).is_ok() {
-                ok += 1;
+        for sid in &sessions {
+            if let Ok(path) = session_id::resolve(&sessions_dir, sid) {
+                if snapshot::create(&path).is_ok() {
+                    ok += 1;
+                }
             }
         }
-    }
+        (ok, total)
+    }).await.unwrap_or((0, 0));
 
     tracing::warn!(ok, total, "snapshot final completado — cerrando proceso");
 }
 
-#[tokio::main]
+// multi_thread explícito (mismo comportamiento que el default de #[tokio::main]
+// sin argumentos — un worker por núcleo lógico) para que quede documentado en
+// el código en vez de depender de conocer el default implícito de la macro.
+#[tokio::main(flavor = "multi_thread")]
 async fn main() {
+    // Log a archivo con rotación real — antes stdout se redirigía a mano a un
+    // único archivo (rust_startup.log) que crecía sin límite (1.7MB y
+    // subiendo tras unas horas). Ahora: un archivo nuevo por minuto, y solo
+    // se conservan los últimos 20 (≈ los últimos 20 minutos) — los viejos se
+    // borran solos, sin tarea de limpieza aparte. `non_blocking` además saca
+    // la escritura a disco del hilo que atiende requests — antes cada línea
+    // de log escribía sincrónicamente ahí mismo.
+    let file_appender = tracing_appender::rolling::Builder::new()
+        .rotation(tracing_appender::rolling::Rotation::MINUTELY)
+        .filename_prefix("winsibot")
+        .filename_suffix("log")
+        .max_log_files(20)
+        .build("./logs")
+        .expect("no se pudo inicializar el log rotativo");
+    let (non_blocking_file, _log_guard) = tracing_appender::non_blocking(file_appender);
+
     tracing_subscriber::registry()
         .with(
             tracing_subscriber::EnvFilter::try_from_default_env()
                 .unwrap_or_else(|_| "winsibot_session_api=info,tower_http=info".into()),
         )
         .with(tracing_subscriber::fmt::layer())
+        .with(
+            tracing_subscriber::fmt::layer()
+                .with_writer(non_blocking_file)
+                .with_ansi(false),
+        )
         .init();
 
     let cfg = config::Config::load();
@@ -97,7 +135,7 @@ async fn main() {
         port         = cfg.port,
         sessions_dir = %cfg.sessions_dir,
         db_path      = %cfg.db_path,
-        "winsibot-session-api v5.1.0 iniciando"
+        "winsibot-session-api v{} iniciando", env!("CARGO_PKG_VERSION")
     );
 
     // Crear directorio para la DB si no existe
@@ -210,7 +248,8 @@ async fn main() {
         .layer(middleware::from_fn_with_state(state.clone(), count_errors))
         .with_state(state)
         .layer(TraceLayer::new_for_http())
-        .layer(CompressionLayer::new());
+        .layer(CompressionLayer::new())
+        .layer(TimeoutLayer::new(Duration::from_secs(REQUEST_TIMEOUT_SECS)));
 
     // Solo loopback — el API lo consume Node.js en la misma máquina. Enlazar a
     // 0.0.0.0 ata el bind a TODAS las interfaces, incluida la virtual de WSL2

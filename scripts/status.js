@@ -1,17 +1,28 @@
 #!/usr/bin/env node
 // npm run status — estado de todos los servicios del bot
 
+import 'dotenv/config'
 import { execSync } from 'child_process'
 import { existsSync } from 'fs'
 import { join }       from 'path'
+import { ascii, color, themes } from 'ansimax'
 
 const WIN  = process.platform === 'win32'
 const ROOT = process.cwd()
 
+// Puertos leídos de .env — antes estaban hardcodeados (Rust en 3001), pero
+// el puerto real configurado (SESSION_API_URL/RUST_API_URL) es 18080 desde
+// hace rato. Con el valor viejo, este chequeo siempre marcaba Rust como
+// caído aunque estuviera corriendo perfectamente.
+const RUST_URL = process.env.SESSION_API_URL ?? process.env.RUST_API_URL ?? 'http://127.0.0.1:18080'
+const RUST_PORT = Number(new URL(RUST_URL).port) || 18080
+const PY_URL  = process.env.PYTHON_API_URL ?? 'http://127.0.0.1:5000'
+const PY_PORT = Number(new URL(PY_URL).port) || 5000
+
 const SERVICES = [
   { name: 'Redis',  port: 6379, health: null },
-  { name: 'FastAPI', port: 5000, health: 'http://127.0.0.1:5000/health' },
-  { name: 'Rust',   port: 3001, health: 'http://127.0.0.1:3001/health/live' },
+  { name: 'FastAPI', port: PY_PORT, health: `${PY_URL}/health` },
+  { name: 'Rust',   port: RUST_PORT, health: `${RUST_URL}/health/live` },
   { name: 'Celery', port: null, health: null },
 ]
 
@@ -49,9 +60,9 @@ function celeryAlive() {
 
 // ─── Main ────────────────────────────────────────────────────────────────────
 
-console.log('\n  WinsiBot — Estado de Servicios')
-console.log('  ─────────────────────────────────────\n')
+console.log(`\n  ${color.bold('WinsiBot — Estado de Servicios')}\n`)
 
+const serviceRows = [['Servicio', 'Puerto', 'Estado']]
 for (const svc of SERVICES) {
   let alive, pingStr
 
@@ -63,16 +74,19 @@ for (const svc of SERVICES) {
     pingStr = alive && svc.health ? await healthPing(svc.health) : null
   }
 
-  const dot    = alive ? '🟢' : '🔴'
-  const label  = svc.port ? `:${svc.port}` : '     '
   const timing = pingStr ? ` (${pingStr})` : ''
-  const status = alive ? `Online${timing}` : 'Offline'
-  console.log(`  ${dot}  ${svc.name.padEnd(8)}  ${label.padEnd(6)}  ${status}`)
+  const status = alive ? themes.success(`Online${timing}`) : themes.error('Offline')
+  serviceRows.push([svc.name, svc.port ? `:${svc.port}` : '—', status])
 }
+
+console.log(ascii.table(serviceRows, {
+  align:       ['left', 'left', 'left'],
+  borderStyle: 'rounded',
+}))
 
 // ─── Bot / Files ──────────────────────────────────────────────────────────────
 
-console.log('\n  ─────────────────────────────────────')
+console.log()
 
 const checks = [
   { label: 'Venv Python', path: join(ROOT, 'python', 'venv'),       missing: 'npm run setup' },
@@ -81,10 +95,16 @@ const checks = [
   { label: 'Rust bin',    path: join(ROOT, 'rust', 'target', 'release'), missing: 'npm run rust:build' },
 ]
 
+const checkRows = [['Chequeo', 'Estado']]
 for (const c of checks) {
   const ok = existsSync(c.path)
-  console.log(`  ${ok ? '✅' : '❌'}  ${c.label.padEnd(14)} ${ok ? 'OK' : `→ ${c.missing}`}`)
+  checkRows.push([c.label, ok ? themes.success('OK') : themes.error(`Falta → ${c.missing}`)])
 }
+
+console.log(ascii.table(checkRows, {
+  align:       ['left', 'left'],
+  borderStyle: 'rounded',
+}))
 
 console.log(`\n  Node.js   ${process.version}`)
 console.log(`  Platform  ${process.platform} (${process.arch})`)

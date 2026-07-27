@@ -1,6 +1,6 @@
 <div align="center">
 
-<img src="https://capsule-render.vercel.app/api?type=waving&color=0:6C63FF,100:00C9FF&height=180&section=header&text=WinsiBot&fontSize=62&fontColor=ffffff&fontAlignY=38&desc=v8.5.1%20%E2%80%94%20Enterprise%20WhatsApp%20Bot&descAlignY=58&descSize=18" width="100%"/>
+<img src="https://capsule-render.vercel.app/api?type=waving&color=0:6C63FF,100:00C9FF&height=180&section=header&text=WinsiBot&fontSize=62&fontColor=ffffff&fontAlignY=38&desc=v8.6.0%20%E2%80%94%20Enterprise%20WhatsApp%20Bot&descAlignY=58&descSize=18" width="100%"/>
 
 <br/>
 
@@ -10,7 +10,7 @@
 [![Rust](https://img.shields.io/badge/Rust-1.75%2B-CE422B?style=for-the-badge&logo=rust&logoColor=white)](https://rust-lang.org)
 
 [![License](https://img.shields.io/badge/License-GPL--3.0-blue?style=flat-square)](LICENSE)
-[![Version](https://img.shields.io/badge/Version-8.5.1-6C63FF?style=flat-square)](CHANGELOG.md)
+[![Version](https://img.shields.io/badge/Version-8.6.0-6C63FF?style=flat-square)](CHANGELOG.md)
 [![Platform](https://img.shields.io/badge/Platform-Windows%20%7C%20Linux-lightgrey?style=flat-square)](https://github.com/Brashkie/WinsiBot)
 [![PRs Welcome](https://img.shields.io/badge/PRs-welcome-brightgreen?style=flat-square)](https://github.com/Brashkie/WinsiBot/pulls)
 
@@ -18,7 +18,7 @@
 
 > Bot de WhatsApp de alto rendimiento con arquitectura multi-lenguaje de tres capas.<br/>
 > Diseñado para **10,000+ grupos simultáneos**, miles de mensajes por hora y múltiples instancias.<br/>
-> v8.5.1 — Baileys ya no descarta mensajes en lote tras una reconexión (el bug real detrás de los Bad MAC que parecían empeorar con grupos muy activos), la ruta rápida de NLP en Rust dejó de entrar en pánico, el historial de Bad MAC ya se persiste de verdad, y el rate limiter/tracker de Bad MAC pasaron a DashMap para concurrencia real bajo carga. Además: `#pet` ahora es Dragon City (579 dragones reales, evolución con video, Oro pasivo), BrasEmbers, Negocios (`#business`/`#collect`), y `#applemusic`/`#deezer`.
+> v8.6.0 — La limpieza de Bad MAC ya no borra las sesiones Signal de TODA la cuenta por el problema de un solo grupo (causa real detrás de la desvinculación forzada recurrente), se cerró la fuga de sockets que quedaban abiertos en cada reconexión, y la precarga de grupos ya no se repite en cada una. Además: colección personal de stickers (`#savesticker`/`#stickers`/`#delsticker`), fix de reproducción de los videos de evolución de Dragon City, y `#rw` bajó a 20 min de cooldown.
 
 <br/>
 
@@ -66,21 +66,20 @@
 | 🐍 **Services** | Python / FastAPI / Celery | IA avanzada (Ollama + GPT + Claude + Gemini), watchdog, health checks |
 | ⚙️ **Session** | Rust / Axum | Escritura atómica de creds, 10 snapshots rotativos, tracker Bad MAC, rate limiter, delivery SQLite |
 
-### Novedades en v8.5.1
+### Novedades en v8.6.0
 
 | Área | Cambio |
 |------|--------|
-| **Fix: mensajes descartados en lote tras una reconexión** | Baileys entrega varios mensajes en un solo evento cuando su buffer interno está activo — y ese buffer se activa en **cada reconexión**, no solo al arrancar. El código solo leía el primer mensaje del lote; en un grupo activo que sigue hablando justo durante la resincronización (el escenario típico tras un Bad MAC), el resto se descartaba en silencio. Corregido en el socket principal y en los sub-bots |
-| **Fix: la ruta rápida de NLP en Rust entraba en pánico** | Dos regex usaban backreferences, sintaxis que el crate `regex` de Rust no soporta — fallaban con cualquier texto no vacío. Reescritas sin regex, verificado en vivo |
-| **Fix: el historial de Bad MAC nunca se guardaba en disco** | Una conexión DuckDB separada de la real dejaba la tabla "invisible" para los `INSERT` — confirmado en la base de producción |
-| **Rust — concurrencia real bajo carga** | `rate_limiter.rs`, `bad_mac.rs` y `lock_manager.rs` migrados de `Mutex<HashMap>` global a `DashMap` particionado por núcleo — verificado con 200 usuarios y 60 grupos disparando en paralelo puro, cero condiciones de carrera |
-| **`#pet` reemplazado por Dragon City** | 579 dragones reales (`Brashkie/module-data`), huevo → evolución con video → evolución final, más **Oro** (moneda nueva) como ingreso pasivo |
-| **BrasEmbers** | Moneda escasa (`#ascuas`) que gatea el uso de comandos NSFW, además de dropear con baja chance en otras actividades |
-| **Negocios (`#business`/`#collect`)** | 6 negocios comprables con ingreso pasivo de BrasCoins por hora |
-| **`#applemusic`/`#deezer`** | Alternativas gratuitas a Spotify (bloqueado por su nueva política de Premium para developers) |
-| **`#rw`/`#c` migrados a MessagePack** | 13-19% más liviano, verificado byte a byte — anime subió de 300 a 500 personajes |
-| **Fix: level-up y panel `#on`/`#off`** | El anuncio de subida de nivel ignoraba `autolevelup` en 7 comandos; `autoaccept`/`autoreject` no aparecían en el panel por un desajuste de mayúsculas |
-| **Biome + ruff + `cargo clippy`** | Linter/formateador nuevo para TypeScript y Python — ver tabla de scripts más abajo |
+| **Fix: Bad MAC — la limpieza de sesiones era global, aunque el problema fuera de un solo grupo** | Cualquier limpieza (aunque fuera de un solo grupo) borraba **todas** las sesiones Signal de la cuenta entera, forzando renegociación simultánea en los 400+ grupos y retroalimentando el propio problema — confirmado en producción: 10 limpiezas "globales" en una sola sesión de 6.5h. Ahora la limpieza por grupo solo borra las claves de ESE grupo; el borrado de cuenta completa queda reservado para cuando el umbral realmente global se dispara |
+| **Fix: reconexión dejaba el socket viejo abierto del lado de WhatsApp** | Cada reconexión (Bad MAC, watchdog zombie, corte de red) dejaba la conexión anterior abierta a nivel de WhatsApp mientras se abría una nueva con las mismas credenciales — justo el patrón que los sistemas antiabuso detectan y castigan con desvinculación forzada. Corregido, más una condición de carrera donde dos reconexiones casi simultáneas podían dejar al bot sin ningún intento programado |
+| **Fix: precarga completa de grupos se repetía en cada reconexión** | Con reconexiones seguidas, una ráfaga pesada de requests a WhatsApp en cada una — sospechada como posible causa de que WhatsApp empezara a limitar la entrega de mensajes. Ahora se salta si ya se precargó en los últimos 30 minutos |
+| **Fix: sistema de subida de nivel duplicado ignoraba `autolevelup`** | Un segundo sistema de nivel, paralelo al centralizado, explicaba por qué el aviso seguía apareciendo con el toggle apagado |
+| **Nuevo: colección personal de stickers** | `#savesticker`, `#stickers [nombre]`, `#delsticker` — guardá, buscá y borrá stickers de tu propia colección |
+| **Dragon City — fix de reproducción de videos de evolución** | Los videos de evolución no se reproducían de forma confiable en WhatsApp (formato VP9); reencodeados a H.264/MP4 al vuelo. De paso, animación real de "huevo temblando" al incubar |
+| **`#ytmp3`/`#ytaudio`/`#playaudio` — cola separada y caché** | Ya no compite por los mismos cupos que la descarga de video; pedidos duplicados de la misma canción comparten una sola descarga |
+| **Rust — resiliencia adicional** | I/O bloqueante restante movida fuera del runtime async, techo de 30s en requests colgados, logs con rotación real (antes crecían sin límite) |
+| **`ansimax` actualizado a 1.4.10 — tablas ASCII reales** | Scripts internos migrados a `ascii.table()`; de paso se corrigió un bug donde el test de comparación de NLP nunca mandaba su API key a Rust y fallaba en silencio |
+| **`#rw`** | Cooldown bajado de 29 a 20 min |
 
 **[📜 Ver el historial completo de versiones →](CHANGELOG.md)**
 
@@ -197,7 +196,7 @@
 
 ```
 ╔══════════════════════════════════════════════════════════════════════════════╗
-║                           WinsiBot v8.5.1                                    ║
+║                           WinsiBot v8.6.0                                    ║
 ╠════════════════════╦═══════════════════════╦═══════════════════════════════╣
 ║   TypeScript        ║       Python           ║           Rust                ║
 ║   Node.js :4001     ║                        ║                               ║

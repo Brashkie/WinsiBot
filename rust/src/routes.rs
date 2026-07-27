@@ -74,7 +74,7 @@ pub async fn health(State(state): State<AppState>) -> Json<serde_json::Value> {
     Json(serde_json::json!({
         "ok":            true,
         "service":       "winsibot-session-api",
-        "version":       "4.0.0",
+        "version":       env!("CARGO_PKG_VERSION"),
         "activeSessions": sessions.len(),
         "sessions":      sessions,
         "locksInMemory": state.locks.active_count(),
@@ -407,13 +407,46 @@ pub async fn read_backup(
 }
 
 // ── POST /sessions/signal/clear ───────────────────────────────────────────────
-// Elimina session-*.json y sender-key-*.json del auth_dir de Baileys.
-// Usar cuando se detecta Bad MAC flood para forzar re-establecimiento del protocolo Signal.
+// Elimina archivos Signal del auth_dir de Baileys para forzar re-establecimiento
+// del protocolo tras un Bad MAC flood.
+//
+// Body opcional: { "groupJid": "120363...@g.us" }
+//
+// - Con groupJid: borra SOLO los sender-key-<groupJid>--*.json de ESE grupo.
+//   Baileys nombra estos archivos como `sender-key-${groupId}::${user}::${device}.json`
+//   (ver SenderKeyName.serialize() en Baileys, y fixFileName() en
+//   use-multi-file-auth-state.js, que convierte "::" en "--") — el groupJid
+//   completo queda embebido en el nombre, así que un prefijo exacto alcanza
+//   para scopear el borrado a un solo grupo sin tocar nada de otros grupos.
+//   Las session-*.json NO se tocan en este caso: son direcciones Signal
+//   pairwise por contacto (user.device), no existen "por grupo" — borrarlas
+//   acá no aportaría nada al problema de ESTE grupo y sí rompería sesiones
+//   1:1 de otros chats sin necesidad.
+// - Sin groupJid (o null): comportamiento global histórico, borra TODOS los
+//   session-*.json y sender-key-*.json — reservado para cuando Rust detecta
+//   corrupción repartida entre MUCHOS grupos a la vez (umbral global), donde
+//   sí hace falta un re-keying de cuenta completa.
+//
+// Antes esto SIEMPRE era un borrado global sin importar el scope real del
+// Bad MAC — un solo grupo problemático disparaba una limpieza de TODA la
+// cuenta, forzando renegociación simultánea en los 400+ grupos activos, lo
+// que generaba más Bad MAC durante esa renegociación masiva y retroalimentaba
+// el ciclo (evidencia: auth/ con casi cero session-*.json sobrevivientes tras
+// horas de actividad, y lifetimeClears repartidos en múltiples grupos
+// distintos). Scopear a groupJid corta ese ciclo de raíz.
+
+#[derive(Deserialize, Default)]
+pub struct ClearSignalBody {
+    #[serde(rename = "groupJid")]
+    group_jid: Option<String>,
+}
 
 pub async fn clear_signal_sessions(
     State(state): State<AppState>,
+    body: Option<Json<ClearSignalBody>>,
 ) -> Json<serde_json::Value> {
-    let auth_dir = state.auth_dir.clone();
+    let auth_dir  = state.auth_dir.clone();
+    let group_jid = body.and_then(|Json(b)| b.group_jid).filter(|g| !g.is_empty());
 
     // std::fs::read_dir/remove_file son BLOQUEANTES — llamarlos directo en un
     // handler async de Axum congela el hilo del runtime de Tokio hasta que
@@ -426,6 +459,13 @@ pub async fn clear_signal_sessions(
     // que el borrado terminara ("AbortError: This operation was aborted").
     // spawn_blocking mueve todo esto a un hilo dedicado del pool bloqueante,
     // sin trabar el runtime async para el resto de las peticiones.
+    // Prefijo exacto para scopear a un solo grupo — replica fixFileName() de
+    // Baileys (reemplaza '/' y ':' antes de armar el nombre de archivo) para
+    // que el prefijo calse byte a byte con lo que Baileys realmente escribió.
+    let group_prefix = group_jid
+        .as_deref()
+        .map(|g| format!("sender-key-{}--", g.replace('/', "__").replace(':', "-")));
+
     let result = tokio::task::spawn_blocking(move || {
         let auth_path = std::path::Path::new(&auth_dir);
 
@@ -445,8 +485,15 @@ pub async fn clear_signal_sessions(
             let name = entry.file_name();
             let name_str = name.to_string_lossy();
 
-            let is_signal_file = (name_str.starts_with("session-") && name_str.ends_with(".json"))
-                || (name_str.starts_with("sender-key-") && name_str.ends_with(".json"));
+            let is_signal_file = match &group_prefix {
+                // Scopeado a un grupo: solo sus propios sender-key-*.json.
+                Some(prefix) => name_str.starts_with(prefix.as_str()) && name_str.ends_with(".json"),
+                // Sin scope: comportamiento global histórico (toda la cuenta).
+                None => {
+                    (name_str.starts_with("session-") && name_str.ends_with(".json"))
+                        || (name_str.starts_with("sender-key-") && name_str.ends_with(".json"))
+                }
+            };
 
             if !is_signal_file {
                 continue;
@@ -468,11 +515,14 @@ pub async fn clear_signal_sessions(
     })
     .await;
 
+    let scope = group_jid.clone().unwrap_or_else(|| "global".to_string());
+
     match result {
         Ok(Ok((deleted_files, errors))) => {
             tracing::info!(
                 deleted = deleted_files.len(),
                 errors  = errors.len(),
+                scope   = %scope,
                 "clear_signal_sessions completado"
             );
             Json(serde_json::json!({
@@ -480,6 +530,7 @@ pub async fn clear_signal_sessions(
                 "deleted": deleted_files.len(),
                 "files":   deleted_files,
                 "errors":  errors,
+                "scope":   scope,
                 "ts":      Utc::now(),
             }))
         }

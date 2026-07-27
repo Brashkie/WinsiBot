@@ -521,7 +521,7 @@ export async function handleMessage(msg: WAMessage, sock: WASocket): Promise<voi
     }
 
     if (ctx.sender) {
-      addXP(sock, ctx.jid, ctx.sender, ctx.pushName)
+      addXP(ctx.sender, ctx.pushName)
     }
 
     // ─── Entrenamiento (Hepein) — aprende de cada mensaje real del grupo ──────

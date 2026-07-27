@@ -1,6 +1,6 @@
 <div align="center">
 
-<img src="https://capsule-render.vercel.app/api?type=waving&color=0:6C63FF,100:00C9FF&height=180&section=header&text=WinsiBot&fontSize=62&fontColor=ffffff&fontAlignY=38&desc=v8.5.1%20%E2%80%94%20Enterprise%20WhatsApp%20Bot&descAlignY=58&descSize=18" width="100%"/>
+<img src="https://capsule-render.vercel.app/api?type=waving&color=0:6C63FF,100:00C9FF&height=180&section=header&text=WinsiBot&fontSize=62&fontColor=ffffff&fontAlignY=38&desc=v8.6.0%20%E2%80%94%20Enterprise%20WhatsApp%20Bot&descAlignY=58&descSize=18" width="100%"/>
 
 <br/>
 
@@ -10,7 +10,7 @@
 [![Rust](https://img.shields.io/badge/Rust-1.75%2B-CE422B?style=for-the-badge&logo=rust&logoColor=white)](https://rust-lang.org)
 
 [![License](https://img.shields.io/badge/License-GPL--3.0-blue?style=flat-square)](LICENSE)
-[![Version](https://img.shields.io/badge/Version-8.5.1-6C63FF?style=flat-square)](CHANGELOG.md)
+[![Version](https://img.shields.io/badge/Version-8.6.0-6C63FF?style=flat-square)](CHANGELOG.md)
 [![Platform](https://img.shields.io/badge/Platform-Windows%20%7C%20Linux-lightgrey?style=flat-square)](https://github.com/Brashkie/WinsiBot)
 [![PRs Welcome](https://img.shields.io/badge/PRs-welcome-brightgreen?style=flat-square)](https://github.com/Brashkie/WinsiBot/pulls)
 
@@ -18,7 +18,7 @@
 
 > High-performance WhatsApp bot with a three-layer multi-language architecture.<br/>
 > Designed for **10,000+ simultaneous groups**, thousands of messages per hour, and multiple instances.<br/>
-> v8.5.1 — Baileys no longer drops batched messages after a reconnect (the real bug behind Bad MAC seeming worse in very active groups), Rust's fast NLP path stopped panicking, Bad MAC history is actually persisted now, and the rate limiter/Bad MAC tracker moved to DashMap for real concurrency under load. Also: `#pet` is now Dragon City (579 real dragons, video evolution, passive Gold), BrasEmbers, Businesses (`#business`/`#collect`), and `#applemusic`/`#deezer`.
+> v8.6.0 — Bad MAC cleanup no longer wipes Signal sessions for the WHOLE account over one group's problem (the real cause behind recurring forced unlinks), the socket leak behind every reconnect is fixed, and group preloading no longer repeats on every reconnect. Also: a personal sticker collection (`#savesticker`/`#stickers`/`#delsticker`), a fix for Dragon City's evolution video playback, and `#rw`'s cooldown dropped to 20 min.
 
 <br/>
 
@@ -66,21 +66,20 @@
 | 🐍 **Services** | Python / FastAPI / Celery | Advanced AI (Ollama + GPT + Claude + Gemini), watchdog, health checks |
 | ⚙️ **Session** | Rust / Axum | Atomic creds write, 10 rotating snapshots, Bad MAC tracker, rate limiter, delivery SQLite |
 
-### What's new in v8.5.1
+### What's new in v8.6.0
 
 | Area | Change |
 |------|--------|
-| **Fix: batched messages dropped after a reconnect** | Baileys delivers several messages in a single event while its internal buffer is active — and that buffer activates on **every** reconnect, not just cold start. The code only ever read the first message in the batch; in an active group still chatting during resync (the typical scenario right after a Bad MAC), the rest got silently dropped. Fixed in the main socket and in sub-bots |
-| **Fix: Rust's fast NLP path was panicking** | Two regexes used backreferences, syntax the `regex` crate doesn't support — they failed on any non-empty text. Rewritten without regex, verified live |
-| **Fix: Bad MAC history was never actually saved to disk** | A separate DuckDB connection left the table invisible to the real `INSERT`s — confirmed against the production database |
-| **Rust — real concurrency under load** | `rate_limiter.rs`, `bad_mac.rs` and `lock_manager.rs` moved from a global `Mutex<HashMap>` to `DashMap` sharded per core — verified with 200 users and 60 groups firing in pure parallel, zero race conditions |
-| **`#pet` replaced by Dragon City** | 579 real dragons (`Brashkie/module-data`), egg → video evolution → final evolution, plus **Gold** (new currency) as passive income |
-| **BrasEmbers** | Scarce currency (`#ascuas`) gating NSFW commands, with a small chance to drop from other activities too |
-| **Businesses (`#business`/`#collect`)** | 6 buyable businesses generating passive BrasCoins per hour |
-| **`#applemusic`/`#deezer`** | Free Spotify alternatives (blocked by Spotify's new Premium-for-developers policy) |
-| **`#rw`/`#c` migrated to MessagePack** | 13-19% lighter, verified byte-for-byte — anime grew from 300 to 500 characters |
-| **Fix: level-up announcements and the `#on`/`#off` panel** | Level-up announcements ignored `autolevelup` in 7 commands; `autoaccept`/`autoreject` never showed in the panel due to a casing mismatch |
-| **Biome + ruff + `cargo clippy`** | New linter/formatter for TypeScript and Python — see the scripts table below |
+| **Fix: Bad MAC cleanup was account-wide even when only one group was affected** | Any cleanup (even one triggered by a single group) wiped **every** Signal session for the whole account, forcing simultaneous renegotiation across 400+ groups and feeding back into the same problem — confirmed in production: 10 "global" cleanups in a single 6.5h session. Now a per-group cleanup only deletes that group's keys; the account-wide wipe is reserved for when the actual global threshold fires |
+| **Fix: reconnects left the old socket open on WhatsApp's end** | Every reconnect (Bad MAC, zombie watchdog, network drop) left the previous connection open on WhatsApp's side while a new one opened with the same credentials — exactly the pattern anti-abuse systems are built to detect and punish with forced unlinking. Fixed, plus a race condition where two near-simultaneous reconnects could leave the bot with no reconnect scheduled at all |
+| **Fix: full group preload repeated on every reconnect** | A heavy burst of requests to WhatsApp on every reconnect when they came in quick succession — suspected as a possible cause of WhatsApp throttling message delivery. Now skipped if a preload already ran in the last 30 minutes |
+| **Fix: duplicate leveling system ignored `autolevelup`** | A second, parallel leveling system explained why the level-up announcement kept appearing with the toggle off |
+| **New: personal sticker collection** | `#savesticker`, `#stickers [name]`, `#delsticker` — save, search, and delete stickers from your own collection |
+| **Dragon City — fixed evolution video playback** | Evolution videos weren't playing reliably on WhatsApp (VP9 format); now transcoded to H.264/MP4 on the fly. Also added a real "egg shaking" animation while hatching |
+| **`#ytmp3`/`#ytaudio`/`#playaudio` — separate queue and caching** | No longer competes for the same slots as video downloads; duplicate requests for the same song now share a single download |
+| **Rust — additional resilience** | Remaining blocking I/O moved off the async runtime, a 30s ceiling on hung requests, and real log rotation (logs used to grow unbounded) |
+| **`ansimax` updated to 1.4.10 — real ASCII tables** | Internal scripts migrated to `ascii.table()`; also fixed a bug where the NLP comparison test never sent its API key to Rust and failed silently |
+| **`#rw`** | Cooldown dropped from 29 to 20 min |
 
 **[📜 See the full version history →](CHANGELOG.md)**
 
@@ -197,7 +196,7 @@
 
 ```
 ╔══════════════════════════════════════════════════════════════════════════════╗
-║                           WinsiBot v8.5.1                                    ║
+║                           WinsiBot v8.6.0                                    ║
 ╠════════════════════╦═══════════════════════╦═══════════════════════════════╣
 ║   TypeScript        ║       Python           ║           Rust                ║
 ║   Node.js :4001     ║                        ║                               ║

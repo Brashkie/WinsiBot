@@ -32,18 +32,28 @@ async fn auto_snapshot(state: AppState) {
     timer.tick().await; // saltar el primer tick inmediato
     loop {
         timer.tick().await;
-        let sessions = session_id::list_sessions(&state.sessions_dir);
-        let total = sessions.len();
-        let mut ok = 0u32;
 
-        for sid in &sessions {
-            if let Ok(path) = session_id::resolve(&state.sessions_dir, sid) {
-                if snapshot::create(&path).is_ok() {
-                    state.metrics.inc_snapshot_auto();
-                    ok += 1;
+        // list_sessions (fs::read_dir) + snapshot::create por sesión (fs::rename,
+        // fs::read, fsync real) corrían directo en esta tarea de fondo, sin
+        // spawn_blocking — con muchas sesiones/subbots, este barrido cada 5 min
+        // podía ocupar un hilo worker de Tokio entero mientras Axum seguía
+        // atendiendo requests HTTP concurrentes en el mismo runtime.
+        let state_c = state.clone();
+        let (ok, total) = tokio::task::spawn_blocking(move || {
+            let sessions = session_id::list_sessions(&state_c.sessions_dir);
+            let total = sessions.len();
+            let mut ok = 0u32;
+
+            for sid in &sessions {
+                if let Ok(path) = session_id::resolve(&state_c.sessions_dir, sid) {
+                    if snapshot::create(&path).is_ok() {
+                        state_c.metrics.inc_snapshot_auto();
+                        ok += 1;
+                    }
                 }
             }
-        }
+            (ok, total)
+        }).await.unwrap_or((0, 0));
 
         if total > 0 {
             tracing::info!(ok, total, "auto-snapshot completado");

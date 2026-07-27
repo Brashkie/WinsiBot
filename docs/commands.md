@@ -1,10 +1,10 @@
 <div align="center">
 
-# 📖 Referencia de Comandos — WinsiBot v8.5.1
+# 📖 Referencia de Comandos — WinsiBot v8.6.0
 
 [![Comandos](https://img.shields.io/badge/Comandos-150%2B-6C63FF?style=for-the-badge)](.)
 [![Categorías](https://img.shields.io/badge/Categorías-19-00C9FF?style=for-the-badge)](.)
-[![Versión](https://img.shields.io/badge/Versión-8.5.1-brightgreen?style=flat-square)](../README.md)
+[![Versión](https://img.shields.io/badge/Versión-8.6.0-brightgreen?style=flat-square)](../README.md)
 
 [🇬🇧 English version →](commands.en.md) &nbsp;·&nbsp; [💰 Guía de economía →](economy.md) &nbsp;·&nbsp; [← Volver al README](../README.md)
 
@@ -286,6 +286,9 @@
 |---------|---------|:--------:|:-------:|-------------|
 | `sticker` | `s`, `stiker` | — | 👤 | Convierte imagen/video a sticker |
 | `stickerpack` | `packsticker`, `spack` | 30s | 👤 | Descarga un paquete de stickers desde getstickerpack.com |
+| `savesticker` | `guardarsticker`, `gs` | 3s | 👤 | Guarda un sticker en tu colección personal — respondé a un sticker con este comando |
+| `stickers` | `misstickers`, `buscarsticker` | 3s | 👤 | Lista o busca tus stickers guardados por nombre — reenvía el que coincida |
+| `delsticker` | `borrarsticker`, `eliminarsticker` | 3s | 👤 | Borra un sticker de tu colección guardada |
 | `removebg` | `rmbg`, `sinfondo`, `nobg`, `quitarfondo` | 30s | 👤 | Elimina el fondo de una imagen |
 | `anime` | `anime4k` | 30s | 👤 | Mejora la resolución de una imagen (x2 o x4) — no cambia el estilo |
 | `toanime` | `animegan`, `cartoonize` | 30s | 👤 | Convierte una foto real a estilo anime de verdad (AnimeGANv2) |
@@ -295,6 +298,9 @@
 ```
 !sticker          ← adjuntar o citar imagen
 !stickerpack https://getstickerpack.com/stickers/flork-memes
+!savesticker gato-llorando   ← citar un sticker
+!stickers gato               ← buscar/reenviar
+!delsticker gato-llorando
 !removebg         ← citar imagen
 !anime x4         ← citar imagen
 !imagen perros jugando

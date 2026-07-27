@@ -4,21 +4,17 @@ import { getUserData, patchUserData } from '@core/events.js'
 import {
   getDragons, findDragon, pickRandomDragon,
   expForLevel, stageForLevel, imageForStage, videoForStage,
-  goldPerMinute, pendingGold, translatedDesc,
+  goldPerMinute, pendingGold, translatedDesc, generateEggShakeVideo, transcodeToMp4,
   HATCH_COST_MONEY, FEED_EXP, feedCostOro,
-  STAGE1_LEVEL, STAGE3_LEVEL,
+  STAGE3_LEVEL,
 } from '@lib/dragoncity.js'
 import { downloadBuffer } from '@lib/downloader.js'
 import { safeSend } from '@lib/media_sender.js'
 
-const sleep = (ms: number) => new Promise(r => setTimeout(r, ms))
+const STAGE_EMOJI: Record<1 | 3, string> = { 1: '🐲', 3: '🐉' }
 
-const STAGE_EMOJI: Record<0 | 1 | 3, string> = { 0: '🥚', 1: '🐲', 3: '🐉' }
-
-function stageLabel(stage: 0 | 1 | 3): string {
-  if (stage === 0) return 'Huevo'
-  if (stage === 1) return 'Joven'
-  return 'Adulto'
+function stageLabel(stage: 1 | 3): string {
+  return stage === 3 ? 'Adulto' : 'Joven'
 }
 
 // ─── Resolver un dragón de la colección del usuario por índice o nombre ──────
@@ -33,19 +29,17 @@ function resolveOwned(dragons: OwnedDragon[], query: string): { dragon: OwnedDra
   return { dragon: dragons[index]!, index }
 }
 
-/** Sube de nivel un dragón consumiendo `exp`, devolviendo si evolucionó de etapa. */
-function applyExp(dragon: OwnedDragon, exp: number): { leveled: boolean; newStage: 0 | 1 | 3 | null } {
-  const oldLevel = dragon.level
-  const oldStage = dragon.stage
+/** Sube de nivel un dragón consumiendo `exp`, devolviendo si evolucionó a la etapa final. */
+function applyExp(dragon: OwnedDragon, exp: number): { leveled: boolean; evolvedToFinal: boolean } {
+  const oldLevel  = dragon.level
+  const wasStage3 = dragon.stage === 3
   dragon.exp += exp
   while (dragon.exp >= expForLevel(dragon.level)) {
     dragon.exp -= expForLevel(dragon.level)
     dragon.level++
   }
-  const stage = stageForLevel(dragon.level)
-  const evolved = stage !== oldStage ? stage : null
-  dragon.stage = stage
-  return { leveled: dragon.level > oldLevel, newStage: evolved }
+  dragon.stage = stageForLevel(dragon.level)
+  return { leveled: dragon.level > oldLevel, evolvedToFinal: !wasStage3 && dragon.stage === 3 }
 }
 
 const command: Command = {
@@ -124,44 +118,73 @@ const command: Command = {
 
       const picked = pickRandomDragon(dragons)
 
-      const sent = await sock.sendMessage(jid, { text: '🥚 Un huevo empieza a temblar...' }, { quoted: msg })
-      const key  = sent?.key
-      const frames = ['🥚 ¡Se escuchan golpecitos desde adentro!', '🥚 ¡Está a punto de romperse!']
-      for (const frame of frames) {
-        await sleep(500)
-        if (key) await sock.sendMessage(jid, { text: frame, edit: key } as any)
+      // ── mensaje 1: el huevo "temblando" — video generado al vuelo con
+      // ffmpeg a partir de la imagen estática (la fuente no trae ningún
+      // asset animado para este momento, solo para las evoluciones) ────────
+      try {
+        const eggImgUrl = imageForStage(picked, 0)
+        const eggBuffer = eggImgUrl ? await downloadBuffer(eggImgUrl) : null
+        const shakeVideo = eggBuffer ? await generateEggShakeVideo(eggBuffer) : null
+        if (shakeVideo) {
+          await safeSend(() => sock.sendMessage(jid, {
+            video:   shakeVideo,
+            caption: '🥚 Un huevo está a punto de romperse...',
+            gifPlayback: true,
+          }, { quoted: msg }))
+        } else {
+          await safeSend(() => sock.sendMessage(jid, { text: '🥚 Un huevo está a punto de romperse...' }, { quoted: msg }))
+        }
+      } catch {
+        await safeSend(() => sock.sendMessage(jid, { text: '🥚 Un huevo está a punto de romperse...' }, { quoted: msg }))
       }
 
+      // ── registrar el dragón — arranca directo en etapa 1 (recién nacido) ─
       const owned: OwnedDragon = {
         id:          picked.id,
         slug:        picked.slug,
         name:        picked.name,
         level:       1,
         exp:         0,
-        stage:       0,
+        stage:       1,
         hatchedAt:   Date.now(),
         lastCollect: Date.now(),
       }
       patchUserData(sender, { money: user.money - HATCH_COST_MONEY, dragons: [...user.dragons, owned] })
 
-      const imgUrl = imageForStage(picked, 0)
+      // ── mensaje 2: revelación — video real de la etapa 1, con la info ────
+      const newIndex = user.dragons.length + 1
       const caption = [
         `🐣 *¡Nació ${picked.name}!*`,
         `${picked.rarity} · ${picked.elements.join('/')}`,
         ``,
         `> +${goldPerMinute(1)} oro/min en este nivel`,
-        `> ${prefix}pet feed ${user.dragons.length + 1} — para alimentarlo y subirlo de nivel`,
+        `> ${prefix}pet feed ${newIndex} — para alimentarlo y subirlo de nivel`,
       ].join('\n')
 
+      let sentMedia = false
       try {
-        const buffer = imgUrl ? await downloadBuffer(imgUrl) : null
+        const vidUrl = videoForStage(picked, 1)
+        const webm   = vidUrl ? await downloadBuffer(vidUrl) : null
+        const buffer = webm ? await transcodeToMp4(webm) : null
         if (buffer) {
-          await sock.sendMessage(jid, { image: buffer, caption, edit: key } as any)
-        } else {
-          await sock.sendMessage(jid, { text: caption, edit: key } as any)
+          await safeSend(() => sock.sendMessage(jid, { video: buffer, caption, gifPlayback: true }, { quoted: msg }))
+          sentMedia = true
         }
-      } catch {
-        await sock.sendMessage(jid, { text: caption, edit: key } as any)
+      } catch { /* cae a imagen abajo */ }
+
+      if (!sentMedia) {
+        try {
+          const imgUrl = imageForStage(picked, 1)
+          const buffer = imgUrl ? await downloadBuffer(imgUrl) : null
+          if (buffer) {
+            await safeSend(() => sock.sendMessage(jid, { image: buffer, caption }, { quoted: msg }))
+            sentMedia = true
+          }
+        } catch { /* cae a texto abajo */ }
+      }
+
+      if (!sentMedia) {
+        await safeSend(() => sock.sendMessage(jid, { text: caption }, { quoted: msg }))
       }
       return
     }
@@ -190,26 +213,27 @@ const command: Command = {
         return
       }
 
-      const { leveled, newStage } = applyExp(dragon, FEED_EXP)
+      const { leveled, evolvedToFinal } = applyExp(dragon, FEED_EXP)
       const dragons = [...user.dragons]
       dragons[index] = dragon
       patchUserData(sender, { oro: user.oro - cost, dragons })
 
-      // ── evolución — se muestra el video una sola vez, al momento exacto ─────
-      if (newStage === 1 || newStage === 3) {
+      // ── evolución final — se muestra el video una sola vez, al momento exacto ─
+      if (evolvedToFinal) {
         let def
         try { def = await findDragon(dragon.id) } catch { def = undefined }
-        const vidUrl = def ? videoForStage(def, newStage) : undefined
+        const vidUrl = def ? videoForStage(def, 3) : undefined
         const caption = [
           `✨ *¡${dragon.name} evolucionó!*`,
-          `${STAGE_EMOJI[newStage]} Ahora es ${stageLabel(newStage)} · Nv.${dragon.level}`,
+          `${STAGE_EMOJI[3]} Ahora es ${stageLabel(3)} · Nv.${dragon.level}`,
           `> +${goldPerMinute(dragon.level)} oro/min`,
         ].join('\n')
 
         try {
-          const buffer = vidUrl ? await downloadBuffer(vidUrl) : null
+          const webm   = vidUrl ? await downloadBuffer(vidUrl) : null
+          const buffer = webm ? await transcodeToMp4(webm) : null
           if (buffer) {
-            await safeSend(() => sock.sendMessage(jid, { video: buffer, caption, gifPlayback: false }, { quoted: msg }))
+            await safeSend(() => sock.sendMessage(jid, { video: buffer, caption, gifPlayback: true }, { quoted: msg }))
           } else {
             await safeSend(() => sock.sendMessage(jid, { text: caption }, { quoted: msg }))
           }
@@ -290,32 +314,54 @@ const command: Command = {
       const desc  = await translatedDesc(def)
       const stage = owned ? owned.dragon.stage : 3
       const skills = def.habilidad.slice(0, 4)
-        .map(s => `  ${s.trainable ? '★' : '☆'} ${s.name} (${s.element}, ${s.power})`)
+        .map(s => `│ ${s.trainable ? '★' : '☆'} ${s.name} (${s.element}, ${s.power})`)
 
-      const lines = [
-        `🐉 *${def.name}*  ·  #${def.id}`,
-        `${def.rarity}  ·  ${def.elements.join('/')}`,
-        ``,
-        `_${desc}_`,
-        ``,
+      const caption = [
+        `╭─「 🐉 ${def.name} 」`,
+        `│`,
+        `│ ${def.rarity} · ${def.elements.join('/')}`,
         ...(owned ? [
-          `Nv.${owned.dragon.level}  ·  ${stageLabel(owned.dragon.stage)}`,
-          `+${goldPerMinute(owned.dragon.level)} oro/min`,
-          ``,
+          `│ Nv.${owned.dragon.level} · ${stageLabel(owned.dragon.stage)}`,
+          `│ +${goldPerMinute(owned.dragon.level)} oro/min`,
         ] : []),
-        skills.length ? `⚡ Habilidades:` : '',
-        ...skills,
-      ].filter(Boolean)
+        `│`,
+        `> ${desc}`,
+        ...(skills.length ? [`│`, `│ ⚡ Habilidades:`, ...skills] : []),
+        `│`,
+        ...(owned
+          ? [`> ${prefix}pet feed ${owned.index + 1} — alimentar`, `> ${prefix}pet collect — cobrar oro acumulado`]
+          : [`> ${prefix}pet hatch — conseguí tu propio huevo (¥${HATCH_COST_MONEY.toLocaleString()})`]),
+        `╰─`,
+      ].join('\n')
 
-      const imgUrl = imageForStage(def, stage as 0 | 1 | 3)
+      // El video real (stage 1/3) se muestra en loop como GIF — mucho más
+      // vivo que la imagen estática, y ya lo tenemos descargado igual para
+      // el momento de nacer/evolucionar.
+      let sentMedia = false
       try {
-        const buffer = imgUrl ? await downloadBuffer(imgUrl) : null
+        const vidUrl = videoForStage(def, stage)
+        const webm   = vidUrl ? await downloadBuffer(vidUrl) : null
+        const buffer = webm ? await transcodeToMp4(webm) : null
         if (buffer) {
-          await safeSend(() => sock.sendMessage(jid, { image: buffer, caption: lines.join('\n') }, { quoted: msg }))
-          return
+          await safeSend(() => sock.sendMessage(jid, { video: buffer, caption, gifPlayback: true }, { quoted: msg }))
+          sentMedia = true
         }
-      } catch { /* cae a texto */ }
-      await safeSend(() => sock.sendMessage(jid, { text: lines.join('\n') }, { quoted: msg }))
+      } catch { /* cae a imagen abajo */ }
+
+      if (!sentMedia) {
+        try {
+          const imgUrl = imageForStage(def, stage)
+          const buffer = imgUrl ? await downloadBuffer(imgUrl) : null
+          if (buffer) {
+            await safeSend(() => sock.sendMessage(jid, { image: buffer, caption }, { quoted: msg }))
+            sentMedia = true
+          }
+        } catch { /* cae a texto abajo */ }
+      }
+
+      if (!sentMedia) {
+        await safeSend(() => sock.sendMessage(jid, { text: caption }, { quoted: msg }))
+      }
       return
     }
 
@@ -371,7 +417,7 @@ const command: Command = {
         `│ \`${prefix}pet rename <#> <nombre>\` — renombrar`,
         `│ \`${prefix}pet release <#|nombre>\`  — liberar`,
         `│`,
-        `> Los dragones evolucionan en nivel ${STAGE1_LEVEL} y ${STAGE3_LEVEL}, y generan oro pasivo según su nivel.`,
+        `> Los dragones nacen ya en su forma joven, evolucionan a su forma final en nivel ${STAGE3_LEVEL}, y generan oro pasivo según su nivel.`,
         `╰─`,
       ].join('\n'),
     }, { quoted: msg }))

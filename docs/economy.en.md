@@ -127,7 +127,7 @@ Dragons evolve twice based on level: egg (0–9) → young (10–24, with an evo
 ## 🎴 Characters / Harem (gacha)
 
 ```
-!rw [marvel|pokedex|anime] — roll a random character (no argument rolls across all three) — 29 min cooldown
+!rw [marvel|pokedex|anime] — roll a random character (no argument rolls across all three) — 20 min cooldown
 !c                      — reply TO THE CHARACTER'S MESSAGE to claim it — you have 10 min before it expires
 !harem [@user]           — view your collection, sorted by value
 !winfo <name>            — character info

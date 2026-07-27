@@ -11,7 +11,13 @@ use crate::{db, session_id};
 use crate::routes::AppState;
 
 pub async fn analytics(State(state): State<AppState>) -> Json<serde_json::Value> {
-    let sessions = session_id::list_sessions(&state.sessions_dir);
+    // list_sessions hace std::fs::read_dir + stat por cada sesión — bloqueante,
+    // igual que en routes.rs (health/list_sessions), pero acá corría directo
+    // en el hilo async sin spawn_blocking, inconsistente con esos handlers.
+    let sessions_dir = state.sessions_dir.clone();
+    let sessions = tokio::task::spawn_blocking(move || session_id::list_sessions(&sessions_dir))
+        .await
+        .unwrap_or_default();
 
     // Delivery stats últimas 24h — operación bloqueante en spawn_blocking
     let db_c = state.db.clone();
