@@ -1,3 +1,4 @@
+import asyncio
 from fastapi import APIRouter
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel
@@ -62,12 +63,17 @@ async def brain_learn(req: BrainLearnRequest):
         return JSONResponse({ 'success': False, 'error': str(e) }, status_code=500)
 
 # ─── Intent ───────────────────────────────────────────────────────────────────
+# use_transformer=True carga y corre un pipeline de HF transformers síncrono
+# — potencialmente lento (carga perezosa del modelo la primera vez). Con
+# --workers 1, eso bloquearía el único hilo del event loop entero mientras
+# dura; asyncio.to_thread lo saca de ahí (barato para el caso rápido default
+# use_transformer=False también, sin downside real).
 @router.post('/intent/classify')
 async def intent_classify(req: IntentRequest):
     try:
         from ai.intent_classifier import classify
         from dataclasses import asdict
-        result = classify(req.text, req.use_transformer)
+        result = await asyncio.to_thread(classify, req.text, req.use_transformer)
         return { 'success': True, 'data': asdict(result) }
     except Exception as e:
         return JSONResponse({ 'success': False, 'error': str(e) }, status_code=500)

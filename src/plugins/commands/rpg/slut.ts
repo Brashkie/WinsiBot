@@ -5,7 +5,7 @@ import {
 } from '@core/events.js'
 import { randomNumber as rand, randomChoice as pick } from '@lib/utils.js'
 
-const CD = 60 * 60_000  // 1 hora
+const CD = 10 * 60_000  // 10 min
 
 const SCENARIOS: Array<(m: number) => string> = [
   m => `Dejaste que un grupo de jóvenes te vistieran de puta a cambio de *¥${m}*`,
@@ -39,7 +39,7 @@ const SCENARIOS: Array<(m: number) => string> = [
 const command: Command = {
   name:        'slut',
   aliases:     ['prostituta', 'puta', 'escort', 'prepago'],
-  description: 'Usa tus encantos para ganar BrasCoins +18 (1h cooldown)',
+  description: 'Usa tus encantos para ganar BrasCoins +18 (10 min cooldown)',
   category:    'rpg',
   cooldown:    0,
   async execute({ sock, jid, msg, sender, pushName }) {
@@ -60,7 +60,7 @@ const command: Command = {
     setCooldown(sender, 'lastHunt')
 
     await sock.sendMessage(jid, {
-      text: `> ${story(earned)}\n\n_Próximo en 1h_`,
+      text: `> ${story(earned)}\n\n_Próximo en 10 min_`,
     }, { quoted: msg })
   },
 }

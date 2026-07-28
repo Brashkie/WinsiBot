@@ -1,6 +1,7 @@
 import type { WASocket, WAMessage } from '@whiskeysockets/baileys'
 import { downloadMediaMessage } from '@whiskeysockets/baileys'
 import { getGroupConfig } from './index.js'
+import { getNumber } from '@lib/jid_utils.js'
 
 // ─────────────────────────────────────────────────────────────────────────────
 //  antiviewonce — reenvía medios de "ver una vez" cuando viewonce=ON
@@ -47,7 +48,7 @@ export async function handleViewOnce(
     const inner    = (viewMsg as any)[type]
     const fileSize = formatSize(Number(inner?.fileLength ?? 0))
     const sender   = msg.key.participant ?? msg.key.remoteJid ?? ''
-    const num      = sender.replace('@s.whatsapp.net', '').replace('@lid', '').replace(/[^0-9]/g, '')
+    const num      = getNumber(sender)
     const caption  = inner?.caption ? `\n> ${inner.caption}` : ''
 
     const description = [

@@ -1,5 +1,6 @@
 import type { WASocket } from '@whiskeysockets/baileys'
 import { getGroupConfig } from './index.js'
+import { getNumber } from '@lib/jid_utils.js'
 
 // ─────────────────────────────────────────────────────────────────────────────
 //  antitraba — elimina mensajes que pueden trabarse el chat o el dispositivo
@@ -35,7 +36,7 @@ export async function handleAntitraba(
   if (!isBotAdmin) return false
   if (!isTraba(text)) return false
 
-  const num = sender.replace('@s.whatsapp.net', '').replace('@lid', '').replace(/[^0-9]/g, '')
+  const num = getNumber(sender)
 
   await sock.sendMessage(jid, { delete: msgKey }).catch(() => {})
   await sock.sendMessage(jid, {

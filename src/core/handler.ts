@@ -27,6 +27,7 @@ import { handleTransferConfirm } from '@plugins/commands/rpg/transfer.js'
 import { sessionClient } from '@lib/session.js'
 import { getGroupParticipants } from '@core/groupCache.js'
 import { winsiSocket } from '@core/socket.js'
+import { getNumber } from '@lib/jid_utils.js'
 
 // handleAIResponse puede tardar 44s+ esperando a Ollama — tiempo de sobra
 // para que una reconexión (Bad MAC, watchdog zombie, corte de red) invalide
@@ -611,7 +612,7 @@ export async function handleMessage(msg: WAMessage, sock: WASocket): Promise<voi
           '/api/v1/ml/predict/spam', { text: ctx.text }, 1_500
         ).catch(() => null)
         if (spamResult?.data?.is_spam && (spamResult.data.confidence ?? 0) > 0.85) {
-          const num = ctx.sender.replace('@s.whatsapp.net', '').replace('@lid', '').replace(/[^0-9]/g, '')
+          const num = getNumber(ctx.sender)
           await safeSend(() => sock.sendMessage(ctx.jid, {
             text:     `§ @${num} mensaje detectado como spam`,
             mentions: [ctx.sender],
@@ -660,7 +661,7 @@ export async function handleMessage(msg: WAMessage, sock: WASocket): Promise<voi
         // por dígitos cubre DMs y grupos sin lid.
         const quotedParticipant = msg.message?.extendedTextMessage?.contextInfo?.participant
         const botNum    = (sock.user?.id ?? '').split(':')[0]?.replace(/[^0-9]/g, '') ?? ''
-        const quotedNum = (quotedParticipant ?? '').replace('@s.whatsapp.net', '').replace('@lid', '').replace(/[^0-9]/g, '')
+        const quotedNum = getNumber(quotedParticipant ?? '')
         const isReplyToBot = !!quotedParticipant && (
           (!!botNum && quotedNum === botNum) ||
           roles.botAliases.includes(quotedParticipant)

@@ -28,9 +28,11 @@ const FETCH_TIMEOUT_MS = 3_000
 // spameara un sender.
 // `timeoutMs`: casi todo en Rust es sub-ms y usa el default de 3s, pero
 // /sessions/signal/clear hace I/O real de archivos (puede borrar cientos de
-// session-*.json) — en Windows con antivirus de por medio eso puede tardar
+// session-*.json) y /write hace un fsync() real por cada respaldo de creds —
+// en Windows con antivirus de por medio, cualquiera de las dos puede tardar
 // más de 3s de verdad (confirmado en vivo: "AbortError: This operation was
-// aborted"), abortando una limpieza que Rust sí iba a terminar bien.
+// aborted" en ambos endpoints), abortando una operación que Rust sí iba a
+// terminar bien.
 async function apiFetch<T>(
   path: string, init?: RequestInit, opts?: { allowNon2xx?: boolean; timeoutMs?: number },
 ): Promise<T> {
@@ -146,7 +148,7 @@ export class SessionClient {
       await apiFetch('/write', {
         method: 'POST',
         body:   JSON.stringify({ sessionId: this.sessionId, data }),
-      })
+      }, { timeoutMs: 10_000 })
     } catch (err) {
       logger.warn({ err }, `[session:${this.sessionId}] fallo al respaldar sesión en Rust`)
     }

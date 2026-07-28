@@ -27,8 +27,8 @@ Todos escalan si sos premium (ver [sección Premium](#-premium)).
 
 | Comando | Cooldown | Requisito | Cómo funciona |
 |---------|:--------:|:---------:|----------------|
-| `!crime` | 1h | solo grupos | 50% de éxito (65% premium). Si sale bien: ¥500–8,000 + XP + a veces 💎. Si sale mal: perdés dinero y XP |
-| `!slut` (+18) | 1h | — | Sin riesgo de fallo — siempre da ¥1,000–10,000 (¥3,000–10,000 premium) |
+| `!crime` | 15 min | solo grupos | 50% de éxito (65% premium). Si sale bien: ¥500–8,000 + XP + a veces 💎. Si sale mal: perdés dinero y XP |
+| `!slut` (+18) | 10 min | — | Sin riesgo de fallo — siempre da ¥1,000–10,000 (¥3,000–10,000 premium) |
 | `!rob @usuario` | 2h | solo grupos | Le robás hasta 30% de lo que tiene en la **billetera** (máx ¥4,000). Si tiene menos de ¥100, no hay nada que robar |
 
 ⚠️ `!rob` solo puede tocar lo que la víctima tiene en la billetera — lo que está en el banco (`!dep`) está a salvo.

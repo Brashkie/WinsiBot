@@ -9,7 +9,7 @@ import { LevelingManager } from '@lib/leveling.js'
 
 const command: Command = {
   name: 'daily',
-  aliases: ['claim', 'reclamar', 'reclamo', 'regalo'],
+  aliases: ['reclamo'],
   description: 'Reclama tu recompensa una vez por día — se reinicia a medianoche, sube con tu racha de días',
   category: 'rpg',
   cooldown: 0,

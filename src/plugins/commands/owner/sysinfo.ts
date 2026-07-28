@@ -55,7 +55,7 @@ async function pingService(url: string): Promise<string> {
 
 const command: Command = {
   name:        'sysinfo',
-  aliases:     ['system', 'info', 'servidor', 'estado'],
+  aliases:     ['system', 'servidor'],
   description: 'Información del sistema y estado de servicios',
   category:    'owner',
   ownerOnly:   true,

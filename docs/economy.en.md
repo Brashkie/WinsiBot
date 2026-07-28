@@ -27,8 +27,8 @@ All of these scale up if you're premium (see [Premium](#-premium)).
 
 | Command | Cooldown | Requirement | How it works |
 |---------|:--------:|:-----------:|----------------|
-| `!crime` | 1h | groups only | 50% success chance (65% premium). Success: ¥500–8,000 + XP + sometimes 💎. Failure: you lose money and XP |
-| `!slut` (+18) | 1h | — | No fail chance — always gives ¥1,000–10,000 (¥3,000–10,000 premium) |
+| `!crime` | 15 min | groups only | 50% success chance (65% premium). Success: ¥500–8,000 + XP + sometimes 💎. Failure: you lose money and XP |
+| `!slut` (+18) | 10 min | — | No fail chance — always gives ¥1,000–10,000 (¥3,000–10,000 premium) |
 | `!rob @user` | 2h | groups only | Steals up to 30% of what the target has in their **wallet** (max ¥4,000). If they have under ¥100, there's nothing to steal |
 
 ⚠️ `!rob` can only touch what the victim has in their wallet — anything in their bank (`!dep`) is safe.

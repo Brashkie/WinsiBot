@@ -4,7 +4,7 @@ import { market, fmtPrice, fmtPct, trendArrow } from '@lib/market.js'
 
 const command: Command = {
   name:        'mercado',
-  aliases:     ['market', 'precios', 'coins', 'bolsa'],
+  aliases:     ['market', 'precios', 'bolsa'],
   description: 'Panel del mercado virtual — precios en tiempo real',
   category:    'rpg',
   cooldown:    5,

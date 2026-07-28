@@ -71,7 +71,7 @@ async function resolveBet(bet: Bet): Promise<void> {
 
 const command: Command = {
   name:        'invertir',
-  aliases:     ['apostar', 'bet', 'trade', 'inv'],
+  aliases:     ['apostar', 'bet', 'inv'],
   description: 'Apuesta sobre si un activo sube o baja  |  !invertir btc 100 sube 1m',
   category:    'rpg',
   cooldown:    0,

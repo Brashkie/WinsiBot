@@ -1,10 +1,10 @@
 <div align="center">
 
-# 📖 Referencia de Comandos — WinsiBot v8.6.0
+# 📖 Referencia de Comandos — WinsiBot v8.7.0
 
-[![Comandos](https://img.shields.io/badge/Comandos-150%2B-6C63FF?style=for-the-badge)](.)
+[![Comandos](https://img.shields.io/badge/Comandos-190%2B-6C63FF?style=for-the-badge)](.)
 [![Categorías](https://img.shields.io/badge/Categorías-19-00C9FF?style=for-the-badge)](.)
-[![Versión](https://img.shields.io/badge/Versión-8.6.0-brightgreen?style=flat-square)](../README.md)
+[![Versión](https://img.shields.io/badge/Versión-8.7.0-brightgreen?style=flat-square)](../README.md)
 
 [🇬🇧 English version →](commands.en.md) &nbsp;·&nbsp; [💰 Guía de economía →](economy.md) &nbsp;·&nbsp; [← Volver al README](../README.md)
 
@@ -52,10 +52,10 @@
 | 12 | [🔍 Scrapers / Búsqueda](#-scrapers--búsqueda) | 4 |
 | 13 | [🎵 Música](#-música) | 1 |
 | 14 | [🔞 NSFW](#-nsfw) | 5 |
-| 15 | [🔑 Admin del grupo](#-admin-del-grupo) | 13 |
-| 16 | [🤖 JadiBot](#-jadibot) | 2 |
+| 15 | [🔑 Admin del grupo](#-admin-del-grupo) | 41 |
+| 16 | [🤖 JadiBot](#-jadibot) | 3 |
 | 17 | [ℹ️ Info](#%EF%B8%8F-info) | 2 |
-| 18 | [👑 Owner / Sistema](#-owner--sistema) | 23 |
+| 18 | [👑 Owner / Sistema](#-owner--sistema) | 24 |
 
 ---
 
@@ -404,37 +404,56 @@
 | `tagone` | `tago`, `mention` | — | 🔑 | Menciona a una persona específica |
 | `delete` | `del`, `borrar`, `eliminar` | — | 🔑 | Elimina el mensaje citado |
 | `antilink` | `antienlace` | — | 🔑 | Activa/desactiva filtro de links |
-| `mute` | `silenciar`, `unmute` | — | 🔑 | Silencia o activa el bot en el grupo |
+| `mute` | `silenciar` | — | 🔑 | Silencia o activa el bot en el grupo |
 | `banchat` | `bangrupo`, `unbanchat` | — | 🛡️ | Silencia/activa el bot en este grupo |
 | `groupinfo` | `grupoinfo`, `gcfg` | — | 🔑 | Información del grupo + tu perfil en él |
 | `stats` | `estadisticas` | — | 🔑 | Estadísticas del bot en el grupo |
-| `on` / `off` | `enable`, `disable` | — | 🔑 | Activa o desactiva funciones del grupo |
+| `on` / `off` | `enable`, `disable` | — | 🔑 | Panel con las 30 configuraciones + estado de cada una |
 
-**Configuraciones con `!on` / `!off`:**
+**Cada configuración es también su propio comando** — `!<comando> enable`/`!<comando> disable` (o `activar`/`desactivar`), y sin argumento muestra una tarjeta con instrucciones y el estado actual. `!on`/`!off <clave>` sigue funcionando igual que antes como alternativa.
 
-| Clave | Descripción | Requiere |
-|-------|-------------|:--------:|
-| `antilink` | Elimina links del grupo | 🔑 |
-| `antispam` | Detecta y elimina spam | 🔑 |
-| `antifake` | Bloquea números falsos/virtuales | 🔑 |
-| `antidelete` | Muestra mensajes eliminados | 🔑 |
-| `modoadmin` | Solo admins pueden usar comandos | 🔑 |
-| `welcome` | Mensajes de bienvenida y despedida | 🔑 |
-| `detect` | Avisos de cambios en el grupo | 🔑 |
-| `nsfw` | Activa comandos +18 | 🔑 |
-| `muted` | Bot no responde en este grupo | 🔑 |
-| `hepein` | IA responde cuando la mencionan | 🔑 |
-| `autolevelup` | Anuncia en el chat cuando alguien sube de nivel (desactivado por defecto) | 🔑 |
-| `anticall` | Rechaza llamadas automáticamente | 👑 |
+| Comando | Aliases | Clave interna | Requiere |
+|---------|---------|----------------|:--------:|
+| `antilink` | `antienlace` | `antilink` | 🔑 |
+| `antilink2` | `linksadmin` | `antilink2` | 🔑 |
+| `antispam` | — | `antispam` | 🔑 |
+| `antiflood` | — | `antiflood` | 🔑 |
+| `antifake` | `antifalsos` | `antifake` | 🔑 |
+| `antibot` | — | `antibot` | 🔑 |
+| `antidelete` | `antieliminar` | `antidelete` | 🔑 |
+| `antitoxic` | `antitoxico` | `antitoxic` | 🔑 |
+| `antitraba` | `antilag` | `antitraba` | 🔑 |
+| `antitelegram` | `antitg` | `antitelegram` | 🔑 |
+| `antidiscord` | `antidc` | `antidiscord` | 🔑 |
+| `antitiktok` | `antitt` | `antitiktok` | 🔑 |
+| `antiyoutube` | `antiyt` | `antiyoutube` | 🔑 |
+| `welcome` | `bienvenida` | `welcome` | 🔑 |
+| `detect` | `avisos` | `detect` | 🔑 |
+| `modoadmin` | `soloadmin` | `modoadmin` | 🔑 |
+| `activarnsfw` | `modohorny`, `caliente` | `nsfw` | 🔑 |
+| `mute` | `silenciar` | `muted` | 🔑 |
+| `modoia` | `iabot` | `hepein` | 🔑 |
+| `juegos` | `game` | `game` | 🔑 |
+| `rpg` | — | `rpg` | 🔑 |
+| `reaction` | `reacciones` | `reaction` | 🔑 |
+| `autosticker` | — | `autosticker` | 🔑 |
+| `viewonce` | `antiver` | `viewonce` | 🔑 |
+| `audios` | — | `audios` | 🔑 |
+| `autolevelup` | `levelup` | `autolevelup` | 🔑 |
+| `autoresponder` | — | `autoresponder` | 🔑 |
+| `autoaccept` | `aceptarsolicitud` | `autoAccept` | 🔑 |
+| `autoreject` | `rechazarsolicitud` | `autoReject` | 🔑 |
+| `anticall` | `antillamar` | `anticall` | 👑 |
 
 ```
 !ban @usuario
 !kick @usuario
 !warn @usuario 3
 !tag Atención a todos
-!on antilink
-!off welcome
-!on nsfw
+!antilink               ← tarjeta con instrucciones y estado actual
+!antilink enable
+!welcome disable
+!on nsfw                ← alternativa vía el panel genérico
 !groupinfo
 ```
 
@@ -444,14 +463,16 @@
 
 | Comando | Aliases | Cooldown | Permiso | Descripción |
 |---------|---------|:--------:|:-------:|-------------|
-| `serbot` | `jadibot`, `subbot`, `listbots` | — | 👤 | Conviértete en sub-bot · `serbot lista` para ver activos · `serbot reconectar` (👑) fuerza el reintento de todos los caídos |
+| `serbot` | `jadibot`, `subbot`, `listbots` | — | 👤 | Conviértete en sub-bot · `serbot lista` para ver activos (detalle uno por uno) · `serbot reconectar` (👑) fuerza el reintento de todos los caídos |
 | `stopbot` | `salirbot`, `desconectarbot`, `pararbot` | — | 👤 | Desconectarte como sub-bot |
+| `bots` | `botsactivos`, `statsbots` | — | 👤 | Resumen de sub-bots activos por categoría (Principal/VIP/Premium/Pro/Pro Max/Free) + cuál está activo en este grupo |
 
 ```
 !serbot
 !serbot lista
 !serbot reconectar
 !stopbot
+!bots
 ```
 
 ---
@@ -490,6 +511,7 @@
 | Comando | Aliases | Cooldown | Permiso | Descripción |
 |---------|---------|:--------:|:-------:|-------------|
 | `addpremium` | `delpremium`, `addvip`, `delvip` | — | 👑 | Añade o quita premium a un usuario |
+| `settier` | `tier`, `nivelbot` | — | 👑 | Asigna el nivel de cuenta a un usuario (free/vip/premium/pro/promax) — etiqueta usada por `#bots` |
 | `addcoins` | `delcoins`, `darcoins`, `quitarcoins` | — | 👑 | Añade o quita BrasCoins a un usuario |
 | `adddiamonds` | `deldiamonds`, `dardiamantes` | — | 👑 | Añade o quita diamantes a un usuario |
 | `addexp` | `delexp`, `addxp`, `darexp` | — | 👑 | Añade o quita EXP a un usuario |
@@ -516,6 +538,7 @@
 ```
 !addpremium @usuario 30        ← 30 días de premium
 !delpremium @usuario
+!settier @usuario vip
 !addcoins @usuario 5000
 !bc Hola a todos!
 !exec ctx.userData.size

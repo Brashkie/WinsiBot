@@ -4,7 +4,7 @@ import { config } from '@config'
 
 const command: Command = {
   name: 'imagine',
-  aliases: ['dalle', 'img', 'imagen'],
+  aliases: ['dalle'],
   description: 'Genera una imagen con DALL-E 3',
   category: 'ai',
 

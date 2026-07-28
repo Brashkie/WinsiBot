@@ -4,6 +4,7 @@ import { handleCaptchaJoin } from './captcha.js'
 import { getGroupMetadata } from '@core/groupCache.js'
 import { sendWithMedia } from '@lib/media_sender.js'
 import { config as botConfig } from '@config'
+import { getNumber } from '@lib/jid_utils.js'
 
 const GITHUB_URL           = 'https://github.com/Brashkie/WinsiBot'
 const DEFAULT_WELCOME_BODY = 'Respeta las reglas, sé amable y diviértete'
@@ -26,7 +27,7 @@ export async function handleParticipantsUpdate(
   const config = getGroupConfig(id)
 
   for (const participant of participants) {
-    const num = participant.replace('@s.whatsapp.net', '').replace('@lid', '').replace(/[^0-9]/g, '')
+    const num = getNumber(participant)
 
     switch (action) {
       case 'add': {

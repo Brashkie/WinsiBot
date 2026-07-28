@@ -6,7 +6,7 @@ import {
 } from '@core/events.js'
 import { randomNumber as rand, randomChoice as pick } from '@lib/utils.js'
 
-const CD = 60 * 60_000
+const CD = 15 * 60_000
 
 const WIN: Array<(m: number) => string> = [
   m => `Vendiste cromos de Steam que robaste de una cuenta olvidada. El comprador ni preguntó. Ganaste *¥${m}*`,
@@ -57,7 +57,7 @@ const LOSE: Array<(loss: number, xp: number) => string> = [
 const command: Command = {
   name: 'crime',
   aliases: ['crimen', 'delito'],
-  description: 'Comete un crimen — gana o pierde (1h cooldown)',
+  description: 'Comete un crimen — gana o pierde (15 min cooldown)',
   category: 'rpg',
   cooldown: 0,
   groupOnly: true,
@@ -91,17 +91,17 @@ const command: Command = {
         patchUserData(sender, { exp: user.exp + exp, embers: user.embers + embers })
         const lvlLine = levelUpLine(checkLevelUp(sender), jid)
         await sock.sendMessage(jid, {
-          text: `> ${story(exp)}\n> +${exp} XP${lvlLine}${emberLine}\n\n_Próximo en 1h_`,
+          text: `> ${story(exp)}\n> +${exp} XP${lvlLine}${emberLine}\n\n_Próximo en 15 min_`,
         }, { quoted: msg })
       } else if (choice === 1) {
         patchUserData(sender, { diamonds: user.diamonds + diamonds, money: user.money + money, embers: user.embers + embers })
         await sock.sendMessage(jid, {
-          text: `> ${story(money)}\n> +${diamonds} 💎  ·  +¥${money.toLocaleString()}${emberLine}\n\n_Próximo en 1h_`,
+          text: `> ${story(money)}\n> +${diamonds} 💎  ·  +¥${money.toLocaleString()}${emberLine}\n\n_Próximo en 15 min_`,
         }, { quoted: msg })
       } else {
         patchUserData(sender, { money: user.money + money, embers: user.embers + embers })
         await sock.sendMessage(jid, {
-          text: `> ${story(money)}${emberLine}\n\n_Próximo en 1h_`,
+          text: `> ${story(money)}${emberLine}\n\n_Próximo en 15 min_`,
         }, { quoted: msg })
       }
     } else {
@@ -112,7 +112,7 @@ const command: Command = {
         exp:   Math.max(0, user.exp - xpLoss),
       })
       await sock.sendMessage(jid, {
-        text: `> ${pick(LOSE)(loss, xpLoss)}\n\n_Próximo en 1h_`,
+        text: `> ${pick(LOSE)(loss, xpLoss)}\n\n_Próximo en 15 min_`,
       }, { quoted: msg })
     }
   },

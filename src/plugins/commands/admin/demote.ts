@@ -1,5 +1,6 @@
 import type { Command } from '../../../types/index.js'
 import { safeSend } from '@lib/media_sender.js'
+import { getNumber } from '@lib/jid_utils.js'
 
 const command: Command = {
   name:        'demote',
@@ -22,7 +23,7 @@ const command: Command = {
       return
     }
 
-    const number = target.replace('@s.whatsapp.net', '').replace('@lid', '').replace(/[^0-9]/g, '')
+    const number = getNumber(target)
 
     await sock.groupParticipantsUpdate(jid, [target], 'demote')
 

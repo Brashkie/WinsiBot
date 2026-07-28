@@ -1,5 +1,6 @@
 import type { WASocket } from '@whiskeysockets/baileys'
 import { getGroupConfig } from './index.js'
+import { getNumber } from '@lib/jid_utils.js'
 
 // ─────────────────────────────────────────────────────────────────────────────
 //  antilink — detección de links por plataforma + links de grupos WA
@@ -65,7 +66,7 @@ export async function handleAntilink(
   const result = detectLink(text, config)
   if (!result.matched) return false
 
-  const num      = sender.replace('@s.whatsapp.net', '').replace('@lid', '').replace(/[^0-9]/g, '')
+  const num      = getNumber(sender)
   const platform = PLATFORM_NAMES[result.platform ?? 'generic']
 
   await sock.sendMessage(jid, { delete: msgKey }).catch(() => {})

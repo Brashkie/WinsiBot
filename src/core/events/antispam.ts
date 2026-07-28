@@ -1,6 +1,7 @@
 import type { WASocket } from '@whiskeysockets/baileys'
 import { getGroupConfig } from './index.js'
 import { analyzeIntent } from '@lib/pythonBridge.js'
+import { getNumber } from '@lib/jid_utils.js'
 
 // ─────────────────────────────────────────────────────────────────────────────
 //  antispam — ventana deslizante + Rust NLP (spam/nonsense)
@@ -85,7 +86,7 @@ export async function handleSpam(
 
   if (!contentSpam && !isSpam) return
 
-  const num = sender.replace('@s.whatsapp.net', '').replace('@lid', '').replace(/[^0-9]/g, '')
+  const num = getNumber(sender)
 
   // Eliminar el mensaje de spam
   await sock.sendMessage(jid, { delete: msgKey }).catch(() => {})

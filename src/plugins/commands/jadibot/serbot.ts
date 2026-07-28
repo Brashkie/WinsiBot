@@ -81,6 +81,7 @@ export interface SubBot {
   connectedAt:          number
   method:                'qr' | 'code'
   ownerJid:             string
+  chatJid:              string   // grupo/chat donde se activó — ver #bots
   msgCount:             number
   lastMessageAt:        number
   lastDisconnectReason?: string
@@ -267,6 +268,7 @@ export async function startSubBot(
     connectedAt:   0,
     method,
     ownerJid,
+    chatJid,
     msgCount:      0,
     lastMessageAt: 0,
   })
@@ -389,6 +391,7 @@ export async function startSubBot(
         connectedAt:   Date.now(),
         method,
         ownerJid,
+        chatJid,
         msgCount:      prev?.msgCount ?? 0,
         lastMessageAt: prev?.lastMessageAt ?? 0,
       })

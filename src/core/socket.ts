@@ -545,7 +545,15 @@ export class WinsiSocket extends EventEmitter3<WinsiEvents> {
     if (this.zombieCheckTimer) clearInterval(this.zombieCheckTimer)
 
     this.zombieCheckTimer = setInterval(async () => {
-      if (!this.sock) return
+      // Si ya hay una reconexión en curso (p. ej. la conexión se cerró hace
+      // instantes y scheduleReconnect() ya está agendado), un ping ahora
+      // mismo va a fallar SIEMPRE — no es un zombie real, es que el socket
+      // ya está muerto y sabemos por qué. requestReconnect() ya es un no-op
+      // en ese caso (ver su comentario), pero sin este chequeo el catch de
+      // abajo igual logueaba un WARN completo con stacktrace de "Connection
+      // Closed" por cada uno de estos, como si fuera un segundo problema
+      // real en vez de ruido esperado de la misma desconexión.
+      if (!this.sock || this.isReconnecting) return
 
       const forceReconnect = (reason: string, extra?: Record<string, unknown>) => {
         logger.warn(extra ?? {}, reason)

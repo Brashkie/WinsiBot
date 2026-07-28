@@ -1,5 +1,6 @@
 import type { Command, RollCharacter, TradeRequest } from '../../../types/index'
 import { getUserInventory } from '../rpg/rollwaifu.js'
+import { getNumber } from '@lib/jid_utils.js'
 
 const pendingTrades = new Map<string, TradeRequest>()
 
@@ -53,8 +54,8 @@ const command: Command = {
       invFrom.push({ ...charTo,   user: trade.from })
       invTo.push({   ...charFrom, user: trade.to   })
 
-      const numFrom = trade.from.replace('@s.whatsapp.net', '').replace('@lid', '').replace(/[^0-9]/g, '')
-      const numTo   = trade.to.replace('@s.whatsapp.net', '').replace('@lid', '').replace(/[^0-9]/g, '')
+      const numFrom = getNumber(trade.from)
+      const numTo   = getNumber(trade.to)
 
       await sock.sendMessage(jid, {
         text: [
@@ -123,7 +124,7 @@ const command: Command = {
     const targetHas = invTo.some(c => c.name.toLowerCase() === charToName.toLowerCase())
 
     if (!targetHas) {
-      const numTo = targetJid.replace('@s.whatsapp.net', '').replace('@lid', '').replace(/[^0-9]/g, '')
+      const numTo = getNumber(targetJid)
       await sock.sendMessage(jid, {
         text:     `✗ @${numTo} no tiene el personaje *${charToName}* en su inventario.`,
         mentions: [targetJid],
@@ -146,8 +147,8 @@ const command: Command = {
     // limpiar después de 60s
     setTimeout(() => pendingTrades.delete(tradeKey), 60_000)
 
-    const numFrom = sender.replace('@s.whatsapp.net', '').replace('@lid', '').replace(/[^0-9]/g, '')
-    const numTo   = targetJid.replace('@s.whatsapp.net', '').replace('@lid', '').replace(/[^0-9]/g, '')
+    const numFrom = getNumber(sender)
+    const numTo   = getNumber(targetJid)
 
     const sent = await sock.sendMessage(jid, {
       text: [

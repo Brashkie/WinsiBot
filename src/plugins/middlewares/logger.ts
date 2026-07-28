@@ -39,23 +39,39 @@ export async function loggerMiddleware(ctx: BotContext): Promise<boolean> {
   const isCmd = config.prefix.some(p => ctx.text.startsWith(p))
   const type  = getMsgTypeLabel(ctx)
 
-  const body = [
-    `${color.dim('❖')} ${color.bold('Hora')}      ${themes.success(time)}`,
-    `${color.dim('❖')} ${color.bold('Usuario')}   ${color.cyan(ctx.pushName)} ${color.dim('(' + formatJid(ctx.sender) + ')')}`,
-    `${color.dim('❖')} ${color.bold('Chat')}      ${ctx.isGroup ? color.magenta('Grupo') : themes.warning('Privado')} ${color.dim(formatJid(ctx.jid))}`,
-    `${color.dim('❖')} ${color.bold('Texto')}     ${ctx.text.slice(0, 60)}${ctx.text.length > 60 ? color.dim('...') : ''}`,
-    `${color.dim('❖')} ${color.bold('Tipo')}      ${getTypeColor(type)}${isCmd ? ' ' + color.bold(color.magenta(`CMD: ${ctx.command}`)) : ''}`,
-    `${color.dim('❖')} ${color.bold('Owner')}     ${ctx.isOwner ? themes.success('✔ Si') : themes.error('✗ No')}`,
-  ].join('\n')
+  // La caja ANSI multi-línea completa solo para comandos reales — armarla Y
+  // pintarla (console.log es SÍNCRONO en una consola real de Windows) en
+  // CADA mensaje, incluida toda la charla común que no le habla al bot, es
+  // trabajo síncrono real en el único hilo del event loop de Node por cada
+  // uno de esos mensajes. En un bot con 400+ grupos activos la charla común
+  // es la inmensa mayoría del volumen — esto retrasaba el procesamiento de
+  // TODO lo demás en curso ese mismo tick, no solo el log. Python igual
+  // persiste cada mensaje (logMessage/pending, fire-and-forget más abajo)
+  // así que no se pierde nada de trazabilidad real, solo se achica lo que
+  // se pinta en vivo en consola para lo que no es un comando.
+  if (isCmd) {
+    const body = [
+      `${color.dim('❖')} ${color.bold('Hora')}      ${themes.success(time)}`,
+      `${color.dim('❖')} ${color.bold('Usuario')}   ${color.cyan(ctx.pushName)} ${color.dim('(' + formatJid(ctx.sender) + ')')}`,
+      `${color.dim('❖')} ${color.bold('Chat')}      ${ctx.isGroup ? color.magenta('Grupo') : themes.warning('Privado')} ${color.dim(formatJid(ctx.jid))}`,
+      `${color.dim('❖')} ${color.bold('Texto')}     ${ctx.text.slice(0, 60)}${ctx.text.length > 60 ? color.dim('...') : ''}`,
+      `${color.dim('❖')} ${color.bold('Tipo')}      ${getTypeColor(type)} ${color.bold(color.magenta(`CMD: ${ctx.command}`))}`,
+      `${color.dim('❖')} ${color.bold('Owner')}     ${ctx.isOwner ? themes.success('✔ Si') : themes.error('✗ No')}`,
+    ].join('\n')
 
-  const header = ascii.box(body, {
-    title:       'WinsiBot',
-    titleAlign:  'center',
-    borderStyle: 'rounded',
-    padding:     1,
-  })
+    const header = ascii.box(body, {
+      title:       'WinsiBot',
+      titleAlign:  'center',
+      borderStyle: 'rounded',
+      padding:     1,
+    })
 
-  console.log(header)
+    console.log(header)
+  } else {
+    console.log(
+      `${color.dim('❖')} ${themes.success(time)} ${color.dim(formatJid(ctx.jid))} ${color.cyan(ctx.pushName)} ${color.dim('·')} ${getTypeColor(type)}`,
+    )
+  }
 
   // ─── todo lo demas es fire and forget — no bloquear el handler ────────────
   setImmediate(() => {

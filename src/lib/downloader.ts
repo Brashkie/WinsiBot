@@ -38,6 +38,37 @@ const audioResultCache = registerCache('ytAudioResult', createCache<DownloadResu
 const audioInFlight = new Map<string, Promise<DownloadResult>>()
 const normalizeAudioKey = (q: string) => q.trim().toLowerCase()
 
+// Mismo problema, mismo remedio, ahora para video (#ytvideo/#tiktok/#ig) —
+// el contenido en tendencia (un TikTok viral, un video que varios en el
+// mismo grupo mandan a la vez) disparaba una descarga+merge de yt-dlp
+// COMPLETA por cada pedido idéntico, la operación más pesada de las tres
+// (video+audio, no solo audio). maxSize más chico que el de audio a
+// propósito — un buffer de video pesa varias veces más que uno de audio.
+const videoResultCache = registerCache('videoResult', createCache<DownloadResult>({ ttl: 10 * 60_000, maxSize: 15 }))
+const videoInFlight = new Map<string, Promise<DownloadResult>>()
+
+async function withVideoDedup(
+  key:  string,
+  run:  () => Promise<DownloadResult>,
+): Promise<DownloadResult> {
+  const cached = videoResultCache.get(key)
+  if (cached) return cached
+
+  const inFlight = videoInFlight.get(key)
+  if (inFlight) return inFlight
+
+  const promise = run().then(result => {
+    videoResultCache.set(key, result)
+    return result
+  })
+  videoInFlight.set(key, promise)
+  try {
+    return await promise
+  } finally {
+    videoInFlight.delete(key)
+  }
+}
+
 // ─── Path a yt-dlp ────────────────────────────────────────────────────────────
 function getYtdlp(): string {
   const venvExe = join(process.cwd(), 'python', 'venv', 'Scripts', 'yt-dlp.exe')
@@ -124,65 +155,74 @@ export async function downloadYoutubeAudio(query: string): Promise<DownloadResul
 
 // ─── Descargar video de YouTube ───────────────────────────────────────────────
 export async function downloadYoutubeVideo(query: string, quality = '360'): Promise<DownloadResult> {
-  const ytdlp   = getYtdlp()
-  const ffmpeg  = getFfmpegDir()
-  const tmpDir  = await getTmpDir()
-  const outFile = join(tmpDir, `${randomUUID()}.mp4`)
+  const key = `yt:${quality}:${query.trim().toLowerCase()}`
+  return withVideoDedup(key, async () => {
+    const ytdlp   = getYtdlp()
+    const ffmpeg  = getFfmpegDir()
+    const tmpDir  = await getTmpDir()
+    const outFile = join(tmpDir, `${randomUUID()}.mp4`)
 
-  const isUrl  = query.startsWith('http')
-  const target = isUrl ? query : `ytsearch1:${query}`
-  const ffmpegFlag = ffmpeg ? `--ffmpeg-location "${ffmpeg}"` : ''
+    const isUrl  = query.startsWith('http')
+    const target = isUrl ? query : `ytsearch1:${query}`
+    const ffmpegFlag = ffmpeg ? `--ffmpeg-location "${ffmpeg}"` : ''
 
-  try {
-    await downloadQueue.enqueue(() => execAsync(
-      `"${ytdlp}" ${ffmpegFlag} -f "bestvideo[height<=${quality}][ext=mp4]+bestaudio[ext=m4a]/best[height<=${quality}][ext=mp4]/best" -o "${outFile}" "${target}" --no-playlist --max-filesize 50m --merge-output-format mp4`,
-      { timeout: 120_000 }
-    ), 120_000)
-    const buffer = await readFile(outFile)
-    return { buffer, filename: outFile, ext: 'mp4' }
-  } finally {
-    if (existsSync(outFile)) await unlink(outFile).catch(() => {})
-  }
+    try {
+      await downloadQueue.enqueue(() => execAsync(
+        `"${ytdlp}" ${ffmpegFlag} -f "bestvideo[height<=${quality}][ext=mp4]+bestaudio[ext=m4a]/best[height<=${quality}][ext=mp4]/best" -o "${outFile}" "${target}" --no-playlist --max-filesize 50m --merge-output-format mp4`,
+        { timeout: 120_000 }
+      ), 120_000)
+      const buffer = await readFile(outFile)
+      return { buffer, filename: outFile, ext: 'mp4' }
+    } finally {
+      if (existsSync(outFile)) await unlink(outFile).catch(() => {})
+    }
+  })
 }
 
 // ─── Descargar TikTok ─────────────────────────────────────────────────────────
 export async function downloadTikTok(url: string): Promise<DownloadResult> {
-  const ytdlp   = getYtdlp()
-  const ffmpeg  = getFfmpegDir()
-  const tmpDir  = await getTmpDir()
-  const outFile = join(tmpDir, `${randomUUID()}.mp4`)
-  const ffmpegFlag = ffmpeg ? `--ffmpeg-location "${ffmpeg}"` : ''
+  const key = `tiktok:${url.trim().toLowerCase()}`
+  return withVideoDedup(key, async () => {
+    const ytdlp   = getYtdlp()
+    const ffmpeg  = getFfmpegDir()
+    const tmpDir  = await getTmpDir()
+    const outFile = join(tmpDir, `${randomUUID()}.mp4`)
+    const ffmpegFlag = ffmpeg ? `--ffmpeg-location "${ffmpeg}"` : ''
 
-  try {
-    await downloadQueue.enqueue(() => execAsync(
-      `"${ytdlp}" ${ffmpegFlag} -o "${outFile}" "${url}" --no-playlist --max-filesize 50m`,
-      { timeout: 60_000 }
-    ), 60_000)
-    const buffer = await readFile(outFile)
-    return { buffer, filename: outFile, ext: 'mp4' }
-  } finally {
-    if (existsSync(outFile)) await unlink(outFile).catch(() => {})
-  }
+    try {
+      await downloadQueue.enqueue(() => execAsync(
+        `"${ytdlp}" ${ffmpegFlag} -o "${outFile}" "${url}" --no-playlist --max-filesize 50m`,
+        { timeout: 60_000 }
+      ), 60_000)
+      const buffer = await readFile(outFile)
+      return { buffer, filename: outFile, ext: 'mp4' }
+    } finally {
+      if (existsSync(outFile)) await unlink(outFile).catch(() => {})
+    }
+  })
 }
 
 // ─── Descargar Instagram ──────────────────────────────────────────────────────
 export async function downloadInstagram(url: string): Promise<DownloadResult> {
-  const ytdlp   = getYtdlp()
-  const ffmpeg  = getFfmpegDir()
-  const tmpDir  = await getTmpDir()
-  const outFile = join(tmpDir, `${randomUUID()}.mp4`)
-  const ffmpegFlag = ffmpeg ? `--ffmpeg-location "${ffmpeg}"` : ''
+  const key = `ig:${url.trim().toLowerCase()}`
+  return withVideoDedup(key, async () => {
+    const ytdlp   = getYtdlp()
+    const ffmpeg  = getFfmpegDir()
+    const tmpDir  = await getTmpDir()
+    const outFile = join(tmpDir, `${randomUUID()}.mp4`)
+    const ffmpegFlag = ffmpeg ? `--ffmpeg-location "${ffmpeg}"` : ''
 
-  try {
-    await downloadQueue.enqueue(() => execAsync(
-      `"${ytdlp}" ${ffmpegFlag} -o "${outFile}" "${url}" --no-playlist --max-filesize 50m`,
-      { timeout: 60_000 }
-    ), 60_000)
-    const buffer = await readFile(outFile)
-    return { buffer, filename: outFile, ext: 'mp4' }
-  } finally {
-    if (existsSync(outFile)) await unlink(outFile).catch(() => {})
-  }
+    try {
+      await downloadQueue.enqueue(() => execAsync(
+        `"${ytdlp}" ${ffmpegFlag} -o "${outFile}" "${url}" --no-playlist --max-filesize 50m`,
+        { timeout: 60_000 }
+      ), 60_000)
+      const buffer = await readFile(outFile)
+      return { buffer, filename: outFile, ext: 'mp4' }
+    } finally {
+      if (existsSync(outFile)) await unlink(outFile).catch(() => {})
+    }
+  })
 }
 
 // ─── Descargar buffer desde URL ───────────────────────────────────────────────

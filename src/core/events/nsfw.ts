@@ -1,6 +1,7 @@
 import type { WASocket } from '@whiskeysockets/baileys'
 import { getGroupConfig } from './index.js'
 import { analyzeIntent } from '@lib/pythonBridge.js'
+import { getNumber } from '@lib/jid_utils.js'
 
 // ─────────────────────────────────────────────────────────────────────────────
 //  nsfw — Rust NLP (nsfw intent) → delete + aviso
@@ -40,7 +41,7 @@ export async function handleNSFW(
 
   await sock.sendMessage(jid, { delete: msgKey }).catch(() => {})
 
-  const num = sender.replace('@s.whatsapp.net', '').replace('@lid', '').replace(/[^0-9]/g, '')
+  const num = getNumber(sender)
   await sock.sendMessage(jid, {
     text:     `🔞 @${num} el contenido NSFW no está permitido en este grupo.`,
     mentions: [sender],

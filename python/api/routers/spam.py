@@ -1,3 +1,4 @@
+import asyncio
 from fastapi import APIRouter
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel
@@ -17,9 +18,16 @@ class SenderRequest(BaseModel):
 
 @router.post('/check')
 async def spam_check(req: SpamCheckRequest):
+    # Uvicorn corre con --workers 1 — un solo event loop para TODA la API.
+    # Este endpoint se llama en CADA mensaje (rateLimit.ts, no solo comandos),
+    # es el path más caliente de toda la API — llamar check_message() directo
+    # acá bloqueaba ese único hilo por cada mensaje, en cascada bajo ráfaga
+    # (mismo patrón ya corregido en ml.py/fast.py, pero éste había quedado
+    # afuera). asyncio.to_thread lo saca del hilo del event loop.
     try:
         from ml.spam_guard import check_message
-        result = check_message(
+        result = await asyncio.to_thread(
+            check_message,
             req.sender, req.text,
             req.max_hits, req.window_ms,
             req.max_repeats, req.flood_window_ms,

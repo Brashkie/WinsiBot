@@ -1,6 +1,7 @@
+import { getUserData } from '@core/events/index.js'
+import { getNumber } from '@lib/jid_utils.js'
+import { safeSend } from '@lib/media_sender.js'
 import type { Command } from '../../../types/index.js'
-import { warnUser, getOrCreateUser } from '@lib/pythonBridge.js'
-import { pythonPost } from '@lib/pythonBridge.js'
 
 const command: Command = {
   name: 'ban',
@@ -11,19 +12,42 @@ const command: Command = {
 
   async execute({ sock, jid, msg, args }) {
     const quoted = msg.message?.extendedTextMessage?.contextInfo
-    const target = quoted?.participant
-      ?? args[0]?.replace('@', '') + '@s.whatsapp.net'
+    const mentioned = quoted?.mentionedJid?.[0] ?? quoted?.participant
+    // Si no hay mención/cita, el target viene del primer argumento de texto
+    // (!ban @usuario razón) — el resto de args, después de ese, es la razón.
+    const target =
+      mentioned ?? (args[0]?.startsWith('@') ? args[0].replace('@', '') + '@s.whatsapp.net' : null)
+    const reason = (mentioned ? args : args.slice(1)).join(' ').trim()
 
     if (!target) {
-      await sock.sendMessage(jid, { text: '❌ Menciona o cita a alguien.' }, { quoted: msg })
+      await safeSend(() =>
+        sock.sendMessage(
+          jid,
+          {
+            text: '§ Menciona o cita a alguien.',
+          },
+          { quoted: msg },
+        ),
+      )
       return
     }
 
-    await pythonPost(`/api/v1/users/${encodeURIComponent(target)}/ban`, {})
-    await sock.sendMessage(jid, {
-      text: `🚫 Usuario @${target.replace('@s.whatsapp.net', '')} baneado.`,
-      mentions: [target],
-    }, { quoted: msg })
+    const number = getNumber(target)
+    const user = getUserData(target, '')
+
+    user.banned = true
+    user.banReason = reason || 'Sin especificar'
+
+    await safeSend(() =>
+      sock.sendMessage(
+        jid,
+        {
+          text: `✔ @${number} baneado${reason ? `\n§ Motivo: ${reason}` : ''}`,
+          mentions: [target],
+        },
+        { quoted: msg },
+      ),
+    )
   },
 }
 

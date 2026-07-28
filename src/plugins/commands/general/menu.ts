@@ -31,9 +31,14 @@ const command: Command = {
   category: 'general',
 
   async execute({ sock, jid, msg, prefix }) {
-    const categories = new Map<string, number>()
+    // commandRegistry tiene una entrada por CADA alias además del nombre
+    // real (así resuelve #s y #sticker al mismo comando) — iterar
+    // .values() directo cuenta un comando con 3 alias como 4. Deduplicar
+    // por objeto antes de contar, mismo patrón que category.ts/infobot.ts.
+    const unique = [...new Map([...commandRegistry.values()].map(c => [c.name, c])).values()]
 
-    for (const cmd of commandRegistry.values()) {
+    const categories = new Map<string, number>()
+    for (const cmd of unique) {
       categories.set(cmd.category, (categories.get(cmd.category) ?? 0) + 1)
     }
 
@@ -43,7 +48,7 @@ const command: Command = {
 
     let text = `╭═══《𖣐 *${config.botName}* 𖣐》═══⊷❍\n`
     text    += `‖  𝕳𝖊𝖕𝖊𝖎𝖓 𝕺𝖋𝖎𝖈𝖎𝖆𝖑 𝖝 𝕭𝖗𝖆𝖘𝖍𝖐𝖎𝖊\n`
-    text    += `‖  ${now}  ·  ${commandRegistry.size} comandos\n`
+    text    += `‖  ${now}  ·  ${unique.length} comandos\n`
     text    += `╰═════════════════⊷\n`
 
     for (const [cat, count] of categories) {

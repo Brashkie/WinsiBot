@@ -9,7 +9,7 @@ const bar = (cur: number, max: number, len = 8) => {
 
 const command: Command = {
   name: 'xp',
-  aliases: ['exp', 'experiencia', 'stats', 'nivel'],
+  aliases: ['exp', 'experiencia', 'nivel'],
   description: 'Ver estadisticas RPG',
   category: 'rpg',
   cooldown: 5,

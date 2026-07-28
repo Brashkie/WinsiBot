@@ -1,7 +1,7 @@
 {
   "name": "winsi-bot",
-  "version": "8.6.0",
-  "description": "WinsiBot v8.6.0 — High-performance WhatsApp bot with multi-language architecture (TypeScript + Rust + Python), advanced AI, RPG economy, and resilience for very active groups. Bad MAC cleanup is now scoped per-group instead of wiping every Signal session account-wide, the socket-leak behind repeated forced unlinks is fixed, and a personal sticker collection was added (#savesticker/#stickers/#delsticker).",
+  "version": "8.7.0",
+  "description": "WinsiBot v8.7.0 — High-performance WhatsApp bot with multi-language architecture (TypeScript + Rust + Python), advanced AI, RPG economy, and resilience for very active groups. Every group setting is now its own command (#antilink, #antispam, etc.), 12 real bugs from silently-broken commands were found and fixed (#ban, name/alias collisions, crossed cooldowns), and 6 Python endpoints no longer block the whole API on every message.",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
   "type": "module",

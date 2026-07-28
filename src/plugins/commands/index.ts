@@ -38,5 +38,9 @@ export async function loadCommands(): Promise<void> {
     }
   }
 
-  logger.info(`✅ ${commandRegistry.size} comandos cargados`)
+  // commandRegistry.size cuenta name+aliases por separado (un comando con 3
+  // alias son 4 entradas) — deduplicar por objeto para loguear el número real
+  // de comandos originales, no de claves de resolución.
+  const uniqueCount = new Set(commandRegistry.values()).size
+  logger.info(`✅ ${uniqueCount} comandos cargados (${commandRegistry.size} entradas con alias)`)
 }

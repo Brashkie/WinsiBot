@@ -1,5 +1,6 @@
 import type { WASocket } from '@whiskeysockets/baileys'
 import { getGroupConfig } from './index.js'
+import { getNumber } from '@lib/jid_utils.js'
 
 export async function handleDeleteUpdate(
   sock:    WASocket,
@@ -12,7 +13,7 @@ export async function handleDeleteUpdate(
   if (!config.antidelete) return
 
   const participant = message.participant ?? message.remoteJid
-  const num         = participant.replace('@s.whatsapp.net', '').replace('@lid', '').replace(/[^0-9]/g, '')
+  const num         = getNumber(participant)
 
   await sock.sendMessage(chatId, {
     text:     `◈ Mensaje eliminado por @${num}`,

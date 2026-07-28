@@ -1,6 +1,6 @@
 <div align="center">
 
-<img src="https://capsule-render.vercel.app/api?type=waving&color=0:6C63FF,100:00C9FF&height=180&section=header&text=WinsiBot&fontSize=62&fontColor=ffffff&fontAlignY=38&desc=v8.6.0%20%E2%80%94%20Enterprise%20WhatsApp%20Bot&descAlignY=58&descSize=18" width="100%"/>
+<img src="https://capsule-render.vercel.app/api?type=waving&color=0:6C63FF,100:00C9FF&height=180&section=header&text=WinsiBot&fontSize=62&fontColor=ffffff&fontAlignY=38&desc=v8.7.0%20%E2%80%94%20Enterprise%20WhatsApp%20Bot&descAlignY=58&descSize=18" width="100%"/>
 
 <br/>
 
@@ -10,7 +10,7 @@
 [![Rust](https://img.shields.io/badge/Rust-1.75%2B-CE422B?style=for-the-badge&logo=rust&logoColor=white)](https://rust-lang.org)
 
 [![License](https://img.shields.io/badge/License-GPL--3.0-blue?style=flat-square)](LICENSE)
-[![Version](https://img.shields.io/badge/Version-8.6.0-6C63FF?style=flat-square)](CHANGELOG.md)
+[![Version](https://img.shields.io/badge/Version-8.7.0-6C63FF?style=flat-square)](CHANGELOG.md)
 [![Platform](https://img.shields.io/badge/Platform-Windows%20%7C%20Linux-lightgrey?style=flat-square)](https://github.com/Brashkie/WinsiBot)
 [![PRs Welcome](https://img.shields.io/badge/PRs-welcome-brightgreen?style=flat-square)](https://github.com/Brashkie/WinsiBot/pulls)
 
@@ -18,7 +18,7 @@
 
 > Bot de WhatsApp de alto rendimiento con arquitectura multi-lenguaje de tres capas.<br/>
 > Diseñado para **10,000+ grupos simultáneos**, miles de mensajes por hora y múltiples instancias.<br/>
-> v8.6.0 — La limpieza de Bad MAC ya no borra las sesiones Signal de TODA la cuenta por el problema de un solo grupo (causa real detrás de la desvinculación forzada recurrente), se cerró la fuga de sockets que quedaban abiertos en cada reconexión, y la precarga de grupos ya no se repite en cada una. Además: colección personal de stickers (`#savesticker`/`#stickers`/`#delsticker`), fix de reproducción de los videos de evolución de Dragon City, y `#rw` bajó a 20 min de cooldown.
+> v8.7.0 — Cada configuración de grupo (antilink, antispam, welcome...) es ahora su propio comando, con tarjeta de estado incluida. Auditado el registro completo de comandos: 10 estaban rotos por colisión silenciosa de nombre/alias (`!info`, `!stats`, `!trade` y más respondían a otra cosa), más `#ban` sin efecto real y cooldowns cruzados entre `#invertir`/`#roulette` — todos corregidos. Además: 6 endpoints de Python que bloqueaban toda la API por un solo pedido pesado, y `#bots` nuevo (resumen de sub-bots por categoría).
 
 <br/>
 
@@ -66,20 +66,19 @@
 | 🐍 **Services** | Python / FastAPI / Celery | IA avanzada (Ollama + GPT + Claude + Gemini), watchdog, health checks |
 | ⚙️ **Session** | Rust / Axum | Escritura atómica de creds, 10 snapshots rotativos, tracker Bad MAC, rate limiter, delivery SQLite |
 
-### Novedades en v8.6.0
+### Novedades en v8.7.0
 
 | Área | Cambio |
 |------|--------|
-| **Fix: Bad MAC — la limpieza de sesiones era global, aunque el problema fuera de un solo grupo** | Cualquier limpieza (aunque fuera de un solo grupo) borraba **todas** las sesiones Signal de la cuenta entera, forzando renegociación simultánea en los 400+ grupos y retroalimentando el propio problema — confirmado en producción: 10 limpiezas "globales" en una sola sesión de 6.5h. Ahora la limpieza por grupo solo borra las claves de ESE grupo; el borrado de cuenta completa queda reservado para cuando el umbral realmente global se dispara |
-| **Fix: reconexión dejaba el socket viejo abierto del lado de WhatsApp** | Cada reconexión (Bad MAC, watchdog zombie, corte de red) dejaba la conexión anterior abierta a nivel de WhatsApp mientras se abría una nueva con las mismas credenciales — justo el patrón que los sistemas antiabuso detectan y castigan con desvinculación forzada. Corregido, más una condición de carrera donde dos reconexiones casi simultáneas podían dejar al bot sin ningún intento programado |
-| **Fix: precarga completa de grupos se repetía en cada reconexión** | Con reconexiones seguidas, una ráfaga pesada de requests a WhatsApp en cada una — sospechada como posible causa de que WhatsApp empezara a limitar la entrega de mensajes. Ahora se salta si ya se precargó en los últimos 30 minutos |
-| **Fix: sistema de subida de nivel duplicado ignoraba `autolevelup`** | Un segundo sistema de nivel, paralelo al centralizado, explicaba por qué el aviso seguía apareciendo con el toggle apagado |
-| **Nuevo: colección personal de stickers** | `#savesticker`, `#stickers [nombre]`, `#delsticker` — guardá, buscá y borrá stickers de tu propia colección |
-| **Dragon City — fix de reproducción de videos de evolución** | Los videos de evolución no se reproducían de forma confiable en WhatsApp (formato VP9); reencodeados a H.264/MP4 al vuelo. De paso, animación real de "huevo temblando" al incubar |
-| **`#ytmp3`/`#ytaudio`/`#playaudio` — cola separada y caché** | Ya no compite por los mismos cupos que la descarga de video; pedidos duplicados de la misma canción comparten una sola descarga |
-| **Rust — resiliencia adicional** | I/O bloqueante restante movida fuera del runtime async, techo de 30s en requests colgados, logs con rotación real (antes crecían sin límite) |
-| **`ansimax` actualizado a 1.4.10 — tablas ASCII reales** | Scripts internos migrados a `ascii.table()`; de paso se corrigió un bug donde el test de comparación de NLP nunca mandaba su API key a Rust y fallaba en silencio |
-| **`#rw`** | Cooldown bajado de 29 a 20 min |
+| **Cada configuración de grupo es ahora su propio comando** | Las ~30 opciones de `#on`/`#off` (antilink, antispam, welcome, etc.) tienen cada una su propio comando con `enable`/`disable`, tarjeta de estado incluida. De paso se corrigió que `#antilink`/`#mute` standalone escribían en un store que la moderación real nunca leía — el toggle no hacía nada |
+| **Fix: `#ban` no baneaba a nadie de verdad** | Mismo bug que `#antilink`/`#mute` — escribía en un store que nadie lee. Reescrito, y ahora acepta un motivo (`!ban @usuario razón`) |
+| **Fix: 10 comandos rotos por colisión silenciosa de nombre/alias** | `!info`, `!stats`, `!regalo`, `!trade` y 6 más respondían al comando equivocado — dos archivos registraban la misma palabra y uno pisaba al otro sin aviso. Auditado el registro completo (634 nombres+alias), las 10 vuelven a responder a lo que dicen |
+| **Fix: `#invertir` y `#roulette` compartían el mismo cooldown por error** | Usar uno bloqueaba el otro con un "espera" falso. Cada uno tiene ahora su propia clave |
+| **Nuevo: `#bots`** | Resumen de sub-bots activos por categoría (Principal/VIP/Premium/Pro/Pro Max/Free) + cuál está activo en el grupo actual |
+| **`#crime`/`#slut`** | Cooldowns bajados a 15/10 min |
+| **Descargas de video — caché + deduplicado** | `#ytvideo`/`#tiktok`/`#ig` ya no repiten una descarga completa por cada pedido idéntico de contenido en tendencia |
+| **Python — 6 endpoints que bloqueaban toda la API** | `/spam/check` (llamado en cada mensaje), búsqueda de imágenes, `/anime/*`, `/imagefx/lego` y `/groups/*` corrían directo en el único hilo de Uvicorn — un pedido pesado congelaba cualquier otro endpoint mientras tanto. Movidos a un hilo aparte |
+| **Consola — menos trabajo síncrono por mensaje** | El log detallado con caja ANSI se armaba e imprimía en CADA mensaje, no solo comandos — ahora la charla común usa una línea compacta |
 
 **[📜 Ver el historial completo de versiones →](CHANGELOG.md)**
 
@@ -196,7 +195,7 @@
 
 ```
 ╔══════════════════════════════════════════════════════════════════════════════╗
-║                           WinsiBot v8.6.0                                    ║
+║                           WinsiBot v8.7.0                                    ║
 ╠════════════════════╦═══════════════════════╦═══════════════════════════════╣
 ║   TypeScript        ║       Python           ║           Rust                ║
 ║   Node.js :4001     ║                        ║                               ║
