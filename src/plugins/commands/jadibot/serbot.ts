@@ -1,15 +1,17 @@
 import type { Command } from '../../../types/index.js'
 import {
   makeWASocket,
-  useMultiFileAuthState,
   makeCacheableSignalKeyStore,
   fetchLatestBaileysVersion,
+  downloadMediaMessage,
   DisconnectReason,
 } from '@whiskeysockets/baileys'
+import { useMultiFileAuthStateCBOR } from '@lib/authStateCbor.js'
 import { safeSend } from '@lib/media_sender.js'
 import { handleMessage } from '@core/handler.js'
 import { getGroupMetadata } from '@core/groupCache.js'
 import { logger } from '@core/logger.js'
+import { config } from '@config'
 import { color, themes } from 'ansimax'
 import pino from 'pino'
 import qrcode from 'qrcode'
@@ -76,6 +78,7 @@ export interface SubBot {
   phone:                string
   jid:                  string
   name:                 string
+  customName?:          string   // ver #serbot setname — sobrescribe el nombre de perfil de WhatsApp
   sock:                 any
   status:               'connecting' | 'connected' | 'disconnected'
   connectedAt:          number
@@ -194,8 +197,43 @@ function getSubPath(phone: string): string {
   return path.join(SUB_DIR, phone)
 }
 
+function getSubMediaDir(phone: string): string {
+  return path.join(getSubPath(phone), 'media')
+}
+
 function sessionIdFor(phone: string): string {
   return `subbot-${phone}`
+}
+
+// ─── meta.json — nombre y medios personalizados por sub-bot ──────────────────
+
+function readMeta(phone: string): Record<string, any> {
+  try {
+    return JSON.parse(fs.readFileSync(path.join(getSubPath(phone), 'meta.json'), 'utf-8'))
+  } catch {
+    return {}
+  }
+}
+
+function writeMeta(phone: string, patch: Record<string, any>): void {
+  const current = readMeta(phone)
+  try {
+    fs.mkdirSync(getSubPath(phone), { recursive: true })
+    fs.writeFileSync(
+      path.join(getSubPath(phone), 'meta.json'),
+      JSON.stringify({ ...current, ...patch }, null, 2),
+    )
+  } catch {}
+}
+
+// Encuentra a qué sub-bot pertenece un socket dado — usado por setname/setmedia
+// para saber cuál personalizar sin pedirle el número al usuario (el comando
+// corre DESDE la propia sesión de WhatsApp de ese sub-bot).
+function findPhoneBySock(sock: any): string | null {
+  for (const [phone, bot] of subBots) {
+    if (bot.sock === sock) return phone
+  }
+  return null
 }
 
 // ─── Iniciar sub-bot ──────────────────────────────────────────────────────────
@@ -230,7 +268,7 @@ export async function startSubBot(
   }
 
   const version             = await getBaileysVersion()
-  const { state, saveCreds } = await useMultiFileAuthState(subPath)
+  const { state, saveCreds } = await useMultiFileAuthStateCBOR(subPath)
 
   // Referencia mutable para que cachedGroupMetadata (abajo) pueda usar el
   // socket una vez creado — Baileys solo la invoca después de construir el
@@ -247,7 +285,7 @@ export async function startSubBot(
     },
     browser: method === 'code'
       ? ['Windows', 'Chrome', '110.0.5585.95']
-      : ['WinsiBot-SubBot', 'Chrome', '2.0.0'],
+      : [`${config.botName}-SubBot`, 'Chrome', '2.0.0'],
     generateHighQualityLinkPreview: true,
     // Mismo fix que el bot principal — evita que Baileys vuelva a pedir
     // groupMetadata a WhatsApp en cada mensaje enviado (causa de los
@@ -372,8 +410,13 @@ export async function startSubBot(
 
     // ─── Conectado ─────────────────────────────────────────────────────────
     if (connection === 'open') {
-      const name = subSock.user?.name ?? phone
-      const sjid = subSock.user?.id   ?? `${phone}@s.whatsapp.net`
+      // customName (ver #serbot setname) gana sobre el nombre de perfil real
+      // de WhatsApp — así un operador puede tener el sub-bot mostrando
+      // "MiTienda Sub" aunque el perfil de WhatsApp diga otra cosa.
+      const customName = readMeta(phone).customName as string | undefined
+      const waName      = subSock.user?.name ?? phone
+      const name        = customName ?? waName
+      const sjid        = subSock.user?.id   ?? `${phone}@s.whatsapp.net`
 
       // El número real del dispositivo ya conectado — no el "phone" que abrió
       // el flujo, que puede venir de un @lid (identificador opaco, no un
@@ -386,6 +429,7 @@ export async function startSubBot(
         phone,
         jid:           sjid,
         name,
+        ...(customName ? { customName } : {}),
         sock:          subSock,
         status:        'connected',
         connectedAt:   Date.now(),
@@ -399,12 +443,7 @@ export async function startSubBot(
       console.log(`  ${themes.success('◈')} ${color.bold('Sub-bot')}  ${color.dim('+' + realPhone)}  ${themes.success('conectado')}`)
       await rustSetState(sessionId, 'Connected').catch(() => {})
 
-      try {
-        fs.writeFileSync(
-          path.join(subPath, 'meta.json'),
-          JSON.stringify({ phone, name, method, chatJid, ownerJid, connectedAt: new Date().toISOString() }, null, 2)
-        )
-      } catch {}
+      writeMeta(phone, { phone, name: waName, method, chatJid, ownerJid, connectedAt: new Date().toISOString() })
 
       for (const k of [qrMsg?.key, codeMsg?.key]) {
         if (k) safeSend(() => sock.sendMessage(chatJid, { delete: k })).catch(() => {})
@@ -419,6 +458,7 @@ export async function startSubBot(
           ` Método:  *${method === 'code' ? 'Código' : 'QR'}*`,
           ``,
           `§ Para desconectarte escribe *!stopbot*`,
+          `§ Para personalizar: *!serbot setname <nombre>* / *!serbot setmedia <clave>* (respondiendo a una imagen/video)`,
         ].join('\n'),
       }, { quoted: msg })).catch(() => {})
     }
@@ -549,12 +589,12 @@ export async function restoreSubBots(mainSock: any): Promise<void> {
   let failed   = 0
 
   for (const phone of folders) {
-    const credsPath = path.join(getSubPath(phone), 'creds.json')
-    if (!fs.existsSync(credsPath)) continue
+    const hasCreds = fs.existsSync(path.join(getSubPath(phone), 'creds.json'))
+      || fs.existsSync(path.join(getSubPath(phone), 'creds.cbor'))
+    if (!hasCreds) continue
 
     try {
-      const metaRaw = fs.readFileSync(path.join(getSubPath(phone), 'meta.json'), 'utf-8')
-      const meta    = JSON.parse(metaRaw)
+      const meta     = readMeta(phone)
       const method   = (meta?.method  ?? 'qr') as 'qr' | 'code'
       const chatJid  = meta?.chatJid  ?? `${phone}@s.whatsapp.net`
       const ownerJid = meta?.ownerJid ?? `${phone}@s.whatsapp.net`
@@ -651,7 +691,7 @@ function buildListText(prefix: string): string {
 const command: Command = {
   name:        'serbot',
   aliases:     ['jadibot', 'subbot', 'listbots', 'botslist'],
-  description: 'Conviértete en sub-bot  |  serbot lista — ver activos',
+  description: 'Conviértete en sub-bot  |  lista/setname/setmedia',
   category:    'jadibot',
 
   async execute({ sock, jid, msg, args, sender, isGroup, isOwner, command: cmd, prefix }) {
@@ -662,6 +702,81 @@ const command: Command = {
       await safeSend(() => sock.sendMessage(jid, {
         text: buildListText(prefix),
       }, { quoted: msg }))
+      return
+    }
+
+    // ─── Personalizar nombre — solo desde la propia sesión del sub-bot ───────
+    if (sub === 'setname' || sub === 'nombre') {
+      const phone = findPhoneBySock(sock)
+      if (!phone) {
+        await safeSend(() => sock.sendMessage(jid, {
+          text: `✗ Este comando se usa escribiéndole directamente al sub-bot que querés personalizar, no al bot principal.`,
+        }, { quoted: msg }))
+        return
+      }
+
+      const name = args.slice(1).join(' ').trim()
+      if (!name) {
+        await safeSend(() => sock.sendMessage(jid, {
+          text: `✗ Uso: *${prefix}serbot setname <nombre>*`,
+        }, { quoted: msg }))
+        return
+      }
+
+      writeMeta(phone, { customName: name })
+      const bot = subBots.get(phone)
+      if (bot) subBots.set(phone, { ...bot, name, customName: name })
+
+      await safeSend(() => sock.sendMessage(jid, {
+        text: `✔ Nombre del sub-bot cambiado a *${name}*.`,
+      }, { quoted: msg }))
+      return
+    }
+
+    // ─── Personalizar medios — respondiendo a una imagen/video ──────────────
+    if (sub === 'setmedia' || sub === 'media') {
+      const phone = findPhoneBySock(sock)
+      if (!phone) {
+        await safeSend(() => sock.sendMessage(jid, {
+          text: `✗ Este comando se usa escribiéndole directamente al sub-bot que querés personalizar, no al bot principal.`,
+        }, { quoted: msg }))
+        return
+      }
+
+      const key = (args[1] ?? '').trim().toLowerCase().replace(/[^a-z0-9_-]/g, '')
+      if (!key) {
+        await safeSend(() => sock.sendMessage(jid, {
+          text: `✗ Uso: *${prefix}serbot setmedia <clave>*  (respondiendo a una imagen/video — ej. \`menu\`, \`CoinsBras\`)`,
+        }, { quoted: msg }))
+        return
+      }
+
+      const quoted = msg.message?.extendedTextMessage?.contextInfo?.quotedMessage
+      const target = quoted ?? msg.message
+      const imgOrVid = target?.imageMessage ?? target?.videoMessage
+      if (!imgOrVid) {
+        await safeSend(() => sock.sendMessage(jid, {
+          text: `✗ Respondé a una imagen o video con *${prefix}serbot setmedia <clave>*.`,
+        }, { quoted: msg }))
+        return
+      }
+
+      try {
+        const buffer = await downloadMediaMessage({ ...msg, message: target } as any, 'buffer', {}) as Buffer
+        const ext    = target?.videoMessage ? 'mp4' : 'jpg'
+        const dir    = getSubMediaDir(phone)
+        fs.mkdirSync(dir, { recursive: true })
+        fs.writeFileSync(path.join(dir, `${key}.${ext}`), buffer)
+
+        await safeSend(() => sock.sendMessage(jid, {
+          text: `✔ Medio guardado como *${key}* — se usará en vez del compartido para este sub-bot.`,
+        }, { quoted: msg }))
+      } catch (err) {
+        logger.warn({ err, phone }, 'Sub-bot: setmedia falló')
+        await safeSend(() => sock.sendMessage(jid, {
+          text: `✗ No se pudo guardar el medio.`,
+        }, { quoted: msg }))
+      }
       return
     }
 
@@ -690,11 +805,7 @@ const command: Command = {
       }, { quoted: msg }))
 
       for (const [phone, bot] of targets) {
-        let chatJid = jid
-        try {
-          const meta = JSON.parse(fs.readFileSync(path.join(getSubPath(phone), 'meta.json'), 'utf-8'))
-          chatJid = meta?.chatJid ?? jid
-        } catch {}
+        const chatJid = readMeta(phone).chatJid ?? jid
 
         startSubBot(phone, bot.method, sock, chatJid, null, bot.ownerJid, 0, true).catch(err => {
           logger.warn({ err, phone }, 'Sub-bot: reconexión manual falló')

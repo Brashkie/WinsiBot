@@ -2,15 +2,7 @@ import type { Command } from '../../../types/index.js'
 import { commandRegistry } from '../index.js'
 import { sendWithMedia } from '@lib/media_sender.js'
 import { config } from '@config'
-
-const CATEGORY_SYMBOLS: Record<string, string> = {
-  general:    '◈', media:      '▣', music:      '♪',
-  scraper:    '◎', ai:         '◇', admin:      '▲',
-  fun:        '◉', util:       '▧', downloader: '▼',
-  sticker:    '◆', roleplay:   '♡', nsfw:       '▣',
-  info:       '§', jadibot:    '⊕', rpg:        '⚔',
-  owner:      '◉',
-}
+import { CATEGORY_SYMBOLS } from './categorySymbols.js'
 
 const command: Command = {
   name: 'categoria',

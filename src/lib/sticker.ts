@@ -2,6 +2,7 @@ import { StickerTypes, createSticker } from 'wa-sticker-formatter'
 import { readFile } from 'fs/promises'
 import { getTempPath } from './utils.js'
 import { writeFile } from 'fs/promises'
+import { config } from '@config'
 
 interface StickerOptions {
   pack?: string
@@ -18,7 +19,7 @@ export async function makeSticker(
   const sticker = await createSticker(
     await readFile(inputPath),
     {
-      pack: opts.pack ?? 'WinsiBot',
+      pack: opts.pack ?? config.botName,
       author: opts.author ?? 'Hepein',
       type: opts.animated ? StickerTypes.FULL : StickerTypes.DEFAULT,
       quality: 50,
@@ -38,7 +39,7 @@ export async function makeStickerFromUrl(
   const output = getTempPath('webp')
 
   const sticker = await createSticker(buf, {
-    pack: opts.pack ?? 'WinsiBot',
+    pack: opts.pack ?? config.botName,
     author: opts.author ?? 'Hepein',
     type: opts.animated ? StickerTypes.FULL : StickerTypes.DEFAULT,
     quality: 50,

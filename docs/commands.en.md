@@ -1,10 +1,10 @@
 <div align="center">
 
-# 📖 Command Reference — WinsiBot v8.7.0
+# 📖 Command Reference — WinsiBot v8.8.0
 
 [![Commands](https://img.shields.io/badge/Commands-190%2B-6C63FF?style=for-the-badge)](.)
 [![Categories](https://img.shields.io/badge/Categories-19-00C9FF?style=for-the-badge)](.)
-[![Version](https://img.shields.io/badge/Version-8.7.0-brightgreen?style=flat-square)](../README.en.md)
+[![Version](https://img.shields.io/badge/Version-8.8.0-brightgreen?style=flat-square)](../README.en.md)
 
 [🇪🇸 Versión en español →](commands.md) &nbsp;·&nbsp; [💰 Economy guide →](economy.en.md) &nbsp;·&nbsp; [← Back to README](../README.en.md)
 
@@ -463,7 +463,7 @@
 
 | Command | Aliases | Cooldown | Permission | Description |
 |---------|---------|:--------:|:----------:|-------------|
-| `serbot` | `jadibot`, `subbot`, `listbots` | — | 👤 | Become a sub-bot · `serbot lista` to list active (one-by-one detail) · `serbot reconectar` (👑) forces an immediate retry of every disconnected sub-bot |
+| `serbot` | `jadibot`, `subbot`, `listbots` | — | 👤 | Become a sub-bot · `serbot lista` to list active (one-by-one detail) · `serbot reconectar` (👑) forces an immediate retry of every disconnected sub-bot · `serbot setname <name>` changes the sub-bot's displayed name · `serbot setmedia <key>` (reply to an image/video) saves media of its own for that sub-bot — both are run from the sub-bot's own WhatsApp session, not from the main bot |
 | `stopbot` | `salirbot`, `desconectarbot`, `pararbot` | — | 👤 | Disconnect as a sub-bot |
 | `bots` | `botsactivos`, `statsbots` | — | 👤 | Summary of active sub-bots by category (Principal/VIP/Premium/Pro/Pro Max/Free) + which one is active in this group |
 
@@ -471,9 +471,13 @@
 !serbot
 !serbot lista
 !serbot reconectar
+!serbot setname MyStore Sub
+!serbot setmedia menu        (reply to an image or video)
 !stopbot
 !bots
 ```
+
+> `setname`/`setmedia` are per-sub-bot customization: if you don't set your own media with `setmedia`, that sub-bot keeps using the main bot's shared media (`#menu`, `#hug`, etc.) exactly as before.
 
 ---
 

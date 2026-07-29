@@ -25,7 +25,7 @@ const command: Command = {
     const files = readdirSync(sessionDir)
 
     for (const file of files) {
-      if (file === 'creds.json') continue
+      if (file === 'creds.json' || file === 'creds.cbor') continue
       try {
         unlinkSync(join(sessionDir, file))
         deleted++
@@ -37,7 +37,7 @@ const command: Command = {
         `✔ *Sesión limpiada*`,
         ``,
         `§ Archivos eliminados: ${deleted}`,
-        `§ creds.json conservado`,
+        `§ credenciales conservadas`,
       ].join('\n'),
     }, { quoted: msg }))
   },

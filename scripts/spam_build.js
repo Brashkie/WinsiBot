@@ -1,7 +1,8 @@
 import { spawn } from 'child_process'
 import { join } from 'path'
+import { venvPythonPath } from './_platform.js'
 
-const python = join(process.cwd(), 'python', 'venv', 'Scripts', 'python.exe')
+const python = venvPythonPath()
 const script = join(process.cwd(), 'python', 'cython_ext', 'spam_guard_build.py')
 const cwd    = join(process.cwd(), 'python', 'cython_ext')
 

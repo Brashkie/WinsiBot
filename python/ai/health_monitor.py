@@ -5,6 +5,7 @@ Detecta errores, anomalias y problemas en tiempo real
 
 import asyncio
 import json
+import cbor2
 import time
 import httpx
 import psutil
@@ -146,11 +147,19 @@ def check_session() -> HealthCheck:
         return HealthCheck('session', 'error', 'Carpeta auth no existe')
 
     creds = auth_dir / 'creds.json'
+    is_cbor = False
     if not creds.exists():
-        return HealthCheck('session', 'error', 'creds.json no encontrado')
+        creds = auth_dir / 'creds.cbor'
+        is_cbor = True
+        if not creds.exists():
+            return HealthCheck('session', 'error', 'credenciales no encontradas (creds.json/creds.cbor)')
 
     try:
-        data = json.loads(creds.read_text(encoding='utf-8'))
+        if is_cbor:
+            with open(creds, 'rb') as f:
+                data = cbor2.load(f)
+        else:
+            data = json.loads(creds.read_text(encoding='utf-8'))
         if not data.get('me', {}).get('id'):
             return HealthCheck('session', 'error', 'Session invalida — campo me.id ausente')
 

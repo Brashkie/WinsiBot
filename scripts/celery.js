@@ -1,14 +1,15 @@
 import { spawn } from 'child_process'
 import { join } from 'path'
+import { venvPythonPath, IS_WINDOWS } from './_platform.js'
 
-const python  = join(process.cwd(), 'python', 'venv', 'Scripts', 'python.exe')
+const python  = venvPythonPath()
 const cwd     = join(process.cwd(), 'python')
 
 // El pool "prefork" (default de Celery) usa multiprocessing al estilo POSIX
 // (fork + semáforos/locks compartidos vía billiard) que Windows no soporta
 // bien — produce WinError 5/6 al azar en los workers. "solo" corre todo en
 // un solo proceso sin esas primitivas, evitando el bug por completo.
-const isWindows = process.platform === 'win32'
+const isWindows = IS_WINDOWS
 
 const proc = spawn(python, [
   '-m', 'celery',

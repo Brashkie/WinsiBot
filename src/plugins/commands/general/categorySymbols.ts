@@ -1,0 +1,18 @@
+export const CATEGORY_SYMBOLS: Record<string, string> = {
+  general:    '◈',
+  media:      '▣',
+  music:      '♪',
+  scraper:    '◎',
+  ai:         '◇',
+  admin:      '▲',
+  fun:        '◉',
+  util:       '▧',
+  downloader: '▼',
+  sticker:    '◆',
+  roleplay:   '♡',
+  nsfw:       '▣',
+  info:       '§',
+  jadibot:    '⊕',
+  rpg:        '⚔',
+  owner:      '◉',
+}

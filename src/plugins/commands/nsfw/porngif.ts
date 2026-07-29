@@ -1,6 +1,7 @@
 import type { Command } from '../../../types/index.js'
 import { getGroupConfig, getUserData, chargeEmbers } from '@core/events.js'
 import axios from 'axios'
+import { config } from '@config'
 
 const VIDEOS_URL = 'https://raw.githubusercontent.com/Brashkie/module/refs/heads/main/nsfw/video/adult.json'
 const EMBER_COST = 1
@@ -17,8 +18,8 @@ const command: Command = {
 
   async execute({ sock, jid, msg, prefix, sender }) {
     // verificar si nsfw esta activado en el grupo
-    const config = getGroupConfig(jid)
-    if (!config.nsfw) {
+    const groupConfig = getGroupConfig(jid)
+    if (!groupConfig.nsfw) {
       await sock.sendMessage(jid, {
         text: `✗ Los comandos NSFW estan desactivados en este grupo.\n\nPide a un admin que active:\n> ${prefix}on nsfw`,
       }, { quoted: msg })
@@ -43,7 +44,7 @@ const command: Command = {
 
     const [videos] = await Promise.all([
       axios.get<string[]>(VIDEOS_URL, {
-        headers: { 'User-Agent': 'Mozilla/5.0 (compatible; WinsiBot/1.0)' },
+        headers: { 'User-Agent': `Mozilla/5.0 (compatible; ${config.botName}/1.0)` },
         timeout: 15_000,
       }).then(r => r.data).catch(() => null),
       (async () => {

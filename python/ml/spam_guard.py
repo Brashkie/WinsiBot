@@ -4,11 +4,23 @@ Carga spam_guard.dll y expone API limpia
 """
 
 import ctypes
+import sys
 import threading
 import time
 from pathlib import Path
 
-_DLL_PATH = Path(__file__).parent.parent / 'cython_ext' / 'spam_guard.dll'
+# Nombre de la librería compilada según SO — antes solo buscaba el .dll de
+# Windows, así que en Linux/macOS _DLL_PATH.exists() siempre daba False y
+# el filtro rápido de spam/flood quedaba desactivado en silencio (_load()
+# devuelve None, y todo el código de más abajo ya sabe caer a "allowed").
+if sys.platform == 'win32':
+    _LIB_NAME = 'spam_guard.dll'
+elif sys.platform == 'darwin':
+    _LIB_NAME = 'spam_guard.dylib'
+else:
+    _LIB_NAME = 'spam_guard.so'
+
+_DLL_PATH = Path(__file__).parent.parent / 'cython_ext' / _LIB_NAME
 _lib:      ctypes.CDLL | None = None
 _lock:     threading.Lock     = threading.Lock()
 

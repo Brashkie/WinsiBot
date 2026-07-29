@@ -1,6 +1,7 @@
 import axios from 'axios'
 import { load } from 'cheerio'
 import { downloadBuffer } from './downloader.js'
+import { config } from '@config'
 
 // ─────────────────────────────────────────────────────────────────────────────
 //  rule34video.com no tiene API pública — esto scrapea el mismo endpoint
@@ -11,7 +12,7 @@ import { downloadBuffer } from './downloader.js'
 // ─────────────────────────────────────────────────────────────────────────────
 
 const BASE_URL = 'https://rule34video.com'
-const UA       = 'Mozilla/5.0 (compatible; WinsiBot/1.0)'
+const UA       = `Mozilla/5.0 (compatible; ${config.botName}/1.0)`
 
 export interface Rule34VideoSearchResult {
   title:      string

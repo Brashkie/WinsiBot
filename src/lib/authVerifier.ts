@@ -18,12 +18,21 @@
  *   - Todos los buffers de clave deben ser exactamente 32 bytes
  *
  * Qué NO modifica:
- *   - creds.json — si está corrupto el bot necesita QR nuevo (se reporta pero no se borra)
- *   - Archivos de app-state-sync (solo se validan como JSON)
+ *   - creds.json/creds.cbor — si está corrupto el bot necesita QR nuevo (se reporta pero no se borra)
+ *   - Archivos de app-state-sync (solo se validan como parseables)
+ *
+ * Formatos soportados:
+ *   Lee tanto .json (BufferJSON de Baileys — Buffers envueltos en
+ *   {type:'Buffer',data:base64}) como .cbor (authStateCbor.ts — Buffers
+ *   nativos, sin envoltorio). extractBytes() normaliza cualquiera de las dos
+ *   formas (más el Buffer.toJSON() nativo de Node que usa el backup de Rust)
+ *   a un Buffer real antes de validar — el resto de la lógica de verificación
+ *   es igual sin importar de qué formato vino el archivo.
  */
 
 import { readdir, readFile, writeFile, unlink } from 'fs/promises'
 import { join } from 'path'
+import { encode as cborEncode, decode as cborDecode } from 'cbor-x'
 import { logger } from '@core/logger.js'
 import {
   Curve25519,
@@ -70,11 +79,45 @@ function isNodeBufferJson(v: unknown): v is { type: 'Buffer'; data: number[] } {
   )
 }
 
-// Decodificación estricta: signalis-core Base64.decode() lanza en base64
-// malformado (caracteres inválidos, padding incorrecto), a diferencia de
-// Buffer.from(str, 'base64') que ignora silenciosamente los bytes corruptos.
-function decodeBuffer(bb: BaileysBuffer): Buffer {
-  return Base64.decode(bb.data)
+// Extrae los bytes crudos de un campo sin importar de qué formato vino:
+//   - Buffer/Uint8Array real (.cbor — cbor-x decodifica bytes nativos así)
+//   - {type:'Buffer', data: base64} (.json — BufferJSON de Baileys)
+//   - {type:'Buffer', data: [n,n,...]} (Buffer.toJSON() nativo de Node —
+//     usado por el backup de Rust, que serializa con JSON.stringify plano)
+// Base64.decode() de signalis-core es estricto (lanza en base64 malformado),
+// a diferencia de Buffer.from(str,'base64') que ignora bytes corruptos.
+function extractBytes(value: unknown): Buffer | null {
+  if (Buffer.isBuffer(value)) return value
+  if (value instanceof Uint8Array) return Buffer.from(value)
+  if (isBaileysBuffer(value)) {
+    try { return Base64.decode(value.data) } catch { return null }
+  }
+  if (isNodeBufferJson(value)) return Buffer.from(value.data)
+  return null
+}
+
+// Recorre un objeto (p. ej. creds recuperados de Rust) y convierte cualquier
+// Buffer envuelto ({type:'Buffer',data:...} en cualquiera de sus dos formas)
+// a un Buffer real — necesario antes de guardar en CBOR, que si no
+// preservaría el envoltorio literal en vez de los bytes que representa.
+function normalizeCredsBuffers(value: any): any {
+  const asBuf = extractBytes(value)
+  if (asBuf) return asBuf
+  if (Array.isArray(value)) return value.map(normalizeCredsBuffers)
+  if (value !== null && typeof value === 'object') {
+    const out: Record<string, any> = {}
+    for (const k of Object.keys(value)) out[k] = normalizeCredsBuffers(value[k])
+    return out
+  }
+  return value
+}
+
+// Lee y parsea un archivo de auth sin importar su formato de serialización.
+function readAuthFile(path: string): Promise<Record<string, any>> {
+  if (path.endsWith('.cbor')) {
+    return readFile(path).then(buf => cborDecode(buf))
+  }
+  return readFile(path, 'utf-8').then(content => JSON.parse(content))
 }
 
 // Valida un campo opcional codificado en base64 (string plano, sin envoltorio
@@ -94,11 +137,8 @@ function isValidB64Field(value: unknown, allowedSizes: number[]): boolean {
 // ─── Verificar par de claves Curve25519 ──────────────────────────────────────
 // El núcleo del verificador: Curve25519 es determinista — dado el private,
 // el public SIEMPRE es el mismo. Si no coinciden, la clave está corrupta.
-function verifyKeyPair(priv: BaileysBuffer, pub: BaileysBuffer): boolean {
+function verifyKeyPairBytes(privBuf: Buffer, pubBuf: Buffer): boolean {
   try {
-    const privBuf = decodeBuffer(priv)
-    const pubBuf  = decodeBuffer(pub)
-
     if (privBuf.length !== CURVE25519_PRIVATE_KEY_SIZE) return false
     if (pubBuf.length  !== CURVE25519_PUBLIC_KEY_SIZE)  return false
 
@@ -116,8 +156,8 @@ function verifyCreds(raw: Record<string, any>): { ok: boolean; failed: string[] 
   // Pares de claves en creds que podemos verificar con Curve25519
   const keyPairFields: Array<{
     path:    string
-    private: BaileysBuffer | undefined
-    public:  BaileysBuffer | undefined
+    private: unknown
+    public:  unknown
   }> = [
     {
       path:    'noiseKey',
@@ -142,24 +182,22 @@ function verifyCreds(raw: Record<string, any>): { ok: boolean; failed: string[] 
   ]
 
   for (const field of keyPairFields) {
-    if (!isBaileysBuffer(field.private) || !isBaileysBuffer(field.public)) {
-      failed.push(`${field.path} — estructura inválida (no es BaileysBuffer)`)
+    const privBuf = extractBytes(field.private)
+    const pubBuf  = extractBytes(field.public)
+    if (!privBuf || !pubBuf) {
+      failed.push(`${field.path} — estructura inválida (no se pudo extraer el buffer)`)
       continue
     }
-    if (!verifyKeyPair(field.private, field.public)) {
+    if (!verifyKeyPairBytes(privBuf, pubBuf)) {
       failed.push(`${field.path} — publicFromPrivate no coincide (corrupto)`)
     }
   }
 
   // signedPreKey signature debe existir y tener 64 bytes
-  if (isBaileysBuffer(raw.signedPreKey?.signature)) {
-    try {
-      const sig = decodeBuffer(raw.signedPreKey.signature)
-      if (sig.length !== 64) {
-        failed.push(`signedPreKey.signature — tamaño inválido (${sig.length} bytes, esperado 64)`)
-      }
-    } catch {
-      failed.push('signedPreKey.signature — base64 inválido (corrupto)')
+  const sigBytes = extractBytes(raw.signedPreKey?.signature)
+  if (sigBytes) {
+    if (sigBytes.length !== 64) {
+      failed.push(`signedPreKey.signature — tamaño inválido (${sigBytes.length} bytes, esperado 64)`)
     }
   } else {
     failed.push('signedPreKey.signature — falta o inválido')
@@ -168,26 +206,24 @@ function verifyCreds(raw: Record<string, any>): { ok: boolean; failed: string[] 
   return { ok: failed.length === 0, failed }
 }
 
-// ─── Verificar pre-key-N.json ─────────────────────────────────────────────────
+// ─── Verificar pre-key-N.json/.cbor ───────────────────────────────────────────
 function verifyPreKey(raw: Record<string, any>): boolean {
-  if (!isBaileysBuffer(raw.private) || !isBaileysBuffer(raw.public)) return false
-  return verifyKeyPair(raw.private, raw.public)
+  const privBuf = extractBytes(raw.private)
+  const pubBuf  = extractBytes(raw.public)
+  if (!privBuf || !pubBuf) return false
+  return verifyKeyPairBytes(privBuf, pubBuf)
 }
 
-// ─── Verificar sender-key-*.json ──────────────────────────────────────────────
-// El archivo completo es un BaileysBuffer (base64) que al decodificarse da un
-// string UTF-8 con un array JSON de estados SenderKeyRecord de libsignal. Los
-// buffers ANIDADOS (senderChainKey.seed, senderSigningKey.public) usan el
-// formato Buffer.toJSON() de Node (array de bytes), no base64.
-function verifySenderKey(raw: Record<string, any>): boolean {
-  if (!isBaileysBuffer(raw)) return false
-
-  let decoded: Buffer
-  try {
-    decoded = Base64.decode(raw.data)
-  } catch {
-    return false
-  }
+// ─── Verificar sender-key-*.json/.cbor ────────────────────────────────────────
+// El archivo completo es un Buffer (base64-envuelto en .json, nativo en .cbor)
+// que al decodificarse da un string UTF-8 con un array JSON de estados
+// SenderKeyRecord de libsignal. Los buffers ANIDADOS (senderChainKey.seed,
+// senderSigningKey.public) usan el formato Buffer.toJSON() de Node (array de
+// bytes) — esa es la serialización propia de libsignal, independiente de si
+// el archivo que lo contiene es .json o .cbor por fuera.
+function verifySenderKey(raw: unknown): boolean {
+  const decoded = extractBytes(raw)
+  if (!decoded) return false
 
   let text: string
   try {
@@ -278,7 +314,7 @@ export async function verifyAuthDir(authDir: string): Promise<VerifyReport> {
 
   let files: string[]
   try {
-    files = (await readdir(authDir)).filter(f => f.endsWith('.json'))
+    files = (await readdir(authDir)).filter(f => f.endsWith('.json') || f.endsWith('.cbor'))
   } catch {
     logger.warn(`[authVerifier] ${authDir} no existe o no es accesible`)
     return report
@@ -287,10 +323,11 @@ export async function verifyAuthDir(authDir: string): Promise<VerifyReport> {
   report.totalFiles = files.length
 
   for (const file of files) {
-    const path = join(authDir, file)
+    const path      = join(authDir, file)
+    const isCreds   = file === 'creds.json' || file === 'creds.cbor'
     let raw: Record<string, any>
 
-    // ── Parsear JSON ──────────────────────────────────────────────────────────
+    // ── Parsear (JSON o CBOR según extensión) ─────────────────────────────────
     // Reintento único tras una breve espera antes de dar por corrupto un
     // archivo: este verificador puede correr varias veces por hora (cada
     // reconexión), leyendo cientos de archivos cada vez — un glitch
@@ -300,22 +337,20 @@ export async function verifyAuthDir(authDir: string): Promise<VerifyReport> {
     // de Signal perfectamente válida, forzando un Bad MAC innecesario con
     // ese contacto.
     try {
-      const content = await readFile(path, 'utf-8')
-      raw = JSON.parse(content)
+      raw = await readAuthFile(path)
     } catch {
       await new Promise(r => setTimeout(r, 150))
       try {
-        const content = await readFile(path, 'utf-8')
-        raw = JSON.parse(content)
+        raw = await readAuthFile(path)
       } catch {
         report.unparseable.push(file)
-        // Archivos con JSON inválido (truncado, corrupto) → eliminar excepto creds
-        if (file !== 'creds.json') {
+        // Archivos ilegibles (truncados, corruptos) → eliminar excepto creds
+        if (!isCreds) {
           await unlink(path).catch(() => {})
           report.deleted.push(file)
-          logger.warn(`[authVerifier] ${file} — JSON inválido (confirmado tras reintento) → eliminado`)
+          logger.warn(`[authVerifier] ${file} — inválido (confirmado tras reintento) → eliminado`)
         } else {
-          logger.error('[authVerifier] creds.json — JSON inválido → necesita re-autenticación (QR)')
+          logger.error(`[authVerifier] ${file} — inválido → necesita re-autenticación (QR)`)
           report.credsStatus = 'corrupted'
         }
         continue
@@ -323,26 +358,26 @@ export async function verifyAuthDir(authDir: string): Promise<VerifyReport> {
     }
 
     // ── Verificar por tipo ────────────────────────────────────────────────────
-    if (file === 'creds.json') {
+    if (isCreds) {
       const { ok, failed } = verifyCreds(raw)
       if (ok) {
         report.credsStatus = 'ok'
         report.valid++
-        logger.debug('[authVerifier] creds.json — OK')
+        logger.debug(`[authVerifier] ${file} — OK`)
       } else {
         report.corrupted.push(file)
         for (const f of failed) {
-          logger.warn(`[authVerifier] creds.json → ${f}`)
+          logger.warn(`[authVerifier] ${file} → ${f}`)
         }
         // Intentar restaurar desde Rust antes de rendirse y pedir QR
         const restored = await _restoreCredsFromRust(path)
         if (restored) {
           report.credsStatus = 'ok'
           report.valid++
-          logger.info(`[authVerifier] creds.json restaurado desde Rust (${restored}) — sin QR necesario`)
+          logger.info(`[authVerifier] ${file} restaurado desde Rust (${restored}) — sin QR necesario`)
         } else {
           report.credsStatus = 'corrupted'
-          logger.error('[authVerifier] creds.json corrupto y sin backup en Rust — borra /auth y reinicia para nuevo QR')
+          logger.error(`[authVerifier] ${file} corrupto y sin backup en Rust — borra /auth y reinicia para nuevo QR`)
         }
       }
       continue
@@ -423,12 +458,22 @@ async function _restoreCredsFromRust(credsPath: string): Promise<string | null> 
       return null
     }
 
-    // Escribir de vuelta a auth/creds.json (escritura atómica vía tmp)
-    const content = JSON.stringify(backup.creds, null, 2)
-    const tmp     = credsPath + '.tmp'
-    await writeFile(tmp, content, 'utf-8')
+    // Escribir de vuelta a auth/creds.json o creds.cbor (escritura atómica vía tmp).
+    // session.ts guarda el backup en Rust con JSON.stringify plano (sin
+    // BufferJSON) — sus Buffers vienen como Buffer.toJSON() nativo
+    // ({type:'Buffer',data:[...]}), no como Buffers reales. Si el destino es
+    // .cbor hay que normalizarlos primero: si no, CBOR guardaría el
+    // envoltorio literal en vez de los bytes, y Baileys recibiría un objeto
+    // en lugar de un Buffer la próxima vez que arranque.
+    const tmp = credsPath + '.tmp'
+    if (credsPath.endsWith('.cbor')) {
+      await writeFile(tmp, cborEncode(normalizeCredsBuffers(backup.creds)))
+    } else {
+      const content = JSON.stringify(backup.creds, null, 2)
+      await writeFile(tmp, content, 'utf-8')
+    }
 
-    // rename atómico — si falla a mitad no deja creds.json vacío
+    // rename atómico — si falla a mitad no deja creds.json/.cbor vacío
     const { rename } = await import('fs/promises')
     await rename(tmp, credsPath)
 
@@ -449,7 +494,7 @@ export async function verifyAndReport(authDir: string): Promise<void> {
 
   const summary = `[authVerifier] ${r.totalFiles} archivos — ` +
     `${r.valid} OK, ${r.corrupted.length} corruptos, ` +
-    `${r.unparseable.length} JSON inválidos, ${r.deleted.length} eliminados`
+    `${r.unparseable.length} ilegibles, ${r.deleted.length} eliminados`
 
   if (r.corrupted.length === 0 && r.unparseable.length === 0) {
     logger.info(summary)

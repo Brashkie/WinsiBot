@@ -27,7 +27,7 @@ const command: Command = {
         : `_Tu billetera está vacía — ¡trabaja con \`${prefix}work\`!_`,
     ].join('\n')
 
-    const media = await findMedia('CoinsBras')
+    const media = await findMedia('CoinsBras', sock)
 
     if (media.type === 'image' && media.buffer) {
       await safeSend(() => sock.sendMessage(jid, {

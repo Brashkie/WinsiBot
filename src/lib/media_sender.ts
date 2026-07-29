@@ -8,6 +8,19 @@ const MEDIA_DIR   = join(process.cwd(), 'media')
 const MAX_RETRIES = 3
 const RETRY_DELAY = 1500
 
+// Carpeta de medios propia de un sub-bot (imágenes/videos que #serbot setmedia
+// guardó para ESE número) — si existe y tiene el archivo pedido, gana sobre
+// MEDIA_DIR compartido. Se deriva del propio número conectado del socket, sin
+// necesidad de importar el registro de sub-bots (evitaría un ciclo con
+// serbot.ts, que ya importa de este archivo).
+function subMediaDirFor(sock?: WASocket): string | null {
+  const id = sock?.user?.id
+  if (!id) return null
+  const phone = id.split('@')[0]?.split(':')[0]?.replace(/[^0-9]/g, '')
+  if (!phone) return null
+  return join(process.cwd(), 'data', 'subbots', phone, 'media')
+}
+
 const RETRYABLE = [
   'Connection Closed', 'Connection Lost', 'ETIMEDOUT',
   'Stream Errored', 'ECONNRESET', 'socket hang up',
@@ -100,7 +113,7 @@ export async function broadcastSend(
 type MediaType = 'video' | 'image' | 'gif' | null
 interface MediaResult { type: MediaType; buffer: Buffer | null }
 
-export async function findMedia(name: string): Promise<MediaResult> {
+export async function findMedia(name: string, sock?: WASocket): Promise<MediaResult> {
   const exts: Array<[string, Exclude<MediaType, null>]> = [
     [`${name}.mp4`,  'video'],
     [`${name}.gif`,  'gif'],
@@ -109,19 +122,23 @@ export async function findMedia(name: string): Promise<MediaResult> {
     [`${name}.png`,  'image'],
     [`${name}.webp`, 'image'],
   ]
-  for (const [file, type] of exts) {
-    try {
-      const path = join(MEDIA_DIR, file)
-      await access(path)
-      return { type, buffer: await readFile(path) }
-    } catch {}
+
+  const overrideDir = subMediaDirFor(sock)
+  for (const dir of overrideDir ? [overrideDir, MEDIA_DIR] : [MEDIA_DIR]) {
+    for (const [file, type] of exts) {
+      try {
+        const path = join(dir, file)
+        await access(path)
+        return { type, buffer: await readFile(path) }
+      } catch {}
+    }
   }
   return { type: null, buffer: null }
 }
 
-export async function findMediaRandom(name: string): Promise<MediaResult> {
+async function findMediaRandomIn(dir: string, name: string): Promise<MediaResult | null> {
   try {
-    const files   = await readdir(MEDIA_DIR)
+    const files   = await readdir(dir)
     const pattern = new RegExp(`^${name}\\d*$`)
     const validExts = ['mp4', 'gif', 'jpg', 'jpeg', 'png', 'webp']
 
@@ -131,7 +148,7 @@ export async function findMediaRandom(name: string): Promise<MediaResult> {
       return validExts.includes(ext) && pattern.test(base)
     })
 
-    if (!matches.length) return findMedia(name)
+    if (!matches.length) return null
 
     const chosen = matches[Math.floor(Math.random() * matches.length)]!
     const ext    = chosen.split('.').pop()?.toLowerCase() ?? ''
@@ -142,10 +159,20 @@ export async function findMediaRandom(name: string): Promise<MediaResult> {
       : null
 
     if (!type) return { type: null, buffer: null }
-    return { type, buffer: await readFile(join(MEDIA_DIR, chosen)) }
+    return { type, buffer: await readFile(join(dir, chosen)) }
   } catch {
-    return findMedia(name)
+    return null
   }
+}
+
+export async function findMediaRandom(name: string, sock?: WASocket): Promise<MediaResult> {
+  const overrideDir = subMediaDirFor(sock)
+  if (overrideDir) {
+    const fromOverride = await findMediaRandomIn(overrideDir, name)
+    if (fromOverride) return fromOverride
+  }
+  const fromShared = await findMediaRandomIn(MEDIA_DIR, name)
+  return fromShared ?? findMedia(name, sock)
 }
 
 // ─── sendWithMedia ────────────────────────────────────────────────────────────
@@ -160,7 +187,7 @@ export async function sendWithMedia(
 ): Promise<void> {
   const opts    = quoted ? { quoted } : {}
   const mention = mentions ? { mentions } : {}
-  const media   = random ? await findMediaRandom(name) : await findMedia(name)
+  const media   = random ? await findMediaRandom(name, sock) : await findMedia(name, sock)
 
   if (media.type === 'video' && media.buffer) {
     return safeSend(() => sock.sendMessage(jid, { video: media.buffer!, caption: text, gifPlayback: false, ...mention }, opts))

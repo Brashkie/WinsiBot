@@ -18,7 +18,9 @@ import axios from 'axios'
 import ffmpegStatic from 'ffmpeg-static'
 import { decode } from '@msgpack/msgpack'
 import { translate } from '@vitalets/google-translate-api'
+import { exeName } from './platform.js'
 import { createCache, registerCache } from './cacheManager.js'
+import { config } from '@config'
 import type { DragonCatalog, DragonDef } from '../types/index.js'
 
 const execAsync = promisify(exec)
@@ -35,7 +37,7 @@ export async function getDragons(): Promise<DragonDef[]> {
   const res  = await axios.get<ArrayBuffer>(SOURCE_URL, {
     timeout:      15_000,
     responseType: 'arraybuffer',
-    headers:      { 'User-Agent': 'Mozilla/5.0 (compatible; WinsiBot/1.0)' },
+    headers:      { 'User-Agent': `Mozilla/5.0 (compatible; ${config.botName}/1.0)` },
   })
   const data     = decode(new Uint8Array(res.data)) as DragonCatalog
   const dragones = data.personajes ?? []
@@ -150,7 +152,7 @@ async function getTmpDir(): Promise<string> {
 }
 
 function getFfmpegPath(): string {
-  const binDir = join(process.cwd(), 'bin', 'ffmpeg.exe')
+  const binDir = join(process.cwd(), 'bin', exeName('ffmpeg'))
   if (existsSync(binDir)) return binDir
   return ffmpegStatic ?? 'ffmpeg'
 }

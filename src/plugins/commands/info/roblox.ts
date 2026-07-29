@@ -1,8 +1,9 @@
 import type { Command } from '../../../types/index.js'
 import { safeSend } from '@lib/media_sender.js'
 import axios from 'axios'
+import { config } from '@config'
 
-const UA = 'Mozilla/5.0 (compatible; WinsiBot/1.0)'
+const UA = `Mozilla/5.0 (compatible; ${config.botName}/1.0)`
 
 interface RobloxUserInfo {
   id:               number

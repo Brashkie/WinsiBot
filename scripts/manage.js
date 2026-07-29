@@ -1,9 +1,10 @@
 import { spawn } from 'child_process'
 import { join } from 'path'
 import { existsSync } from 'fs'
+import { venvPythonPath, systemPython } from './_platform.js'
 
-const venvPython = join(process.cwd(), 'python', 'venv', 'Scripts', 'python.exe')
-const python     = existsSync(venvPython) ? venvPython : 'python'
+const venvPython = venvPythonPath()
+const python     = existsSync(venvPython) ? venvPython : systemPython()
 const script     = join(process.cwd(), 'python', 'terminal', 'manage.py')
 
 // Pasar todos los argumentos extra (ej: "reset-qr", "status", etc.)

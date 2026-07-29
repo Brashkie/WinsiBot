@@ -3,6 +3,7 @@ import { makeSticker } from '@lib/sticker.js'
 import { downloadMediaMessage } from '@whiskeysockets/baileys'
 import { getTempPath, cleanTemp } from '@lib/utils.js'
 import { writeFile, readFile } from 'fs/promises'
+import { config } from '@config'
 
 const command: Command = {
   name: 'sticker',
@@ -32,7 +33,7 @@ const command: Command = {
     const tmpIn = getTempPath(ext)
     await writeFile(tmpIn, buf)
 
-    const [pack = 'WinsiBot', author = 'Hepein'] = args
+    const [pack = config.botName, author = 'Hepein'] = args
 
     const stickerPath = await makeSticker(tmpIn, {
       pack,

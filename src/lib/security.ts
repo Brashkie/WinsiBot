@@ -6,16 +6,6 @@ import { analyzeIntent, checkSpamText, warnUser as _warnUserAPI } from './python
 //  L1 = in-memory (sub-ms) → L2 = Rust NLP (< 1ms) → L3 = Python Cython.
 // ─────────────────────────────────────────────────────────────────────────────
 
-// ─── Ban list (in-memory L1) ──────────────────────────────────────────────────
-
-const _banned = new Set<string>()
-
-export function banUser(jid: string): void     { _banned.add(jid) }
-export function unbanUser(jid: string): void   { _banned.delete(jid) }
-export function isBanned(jid: string): boolean { return _banned.has(jid) }
-export function getBanned(): string[]          { return [..._banned] }
-export function clearBans(): void              { _banned.clear() }
-
 // ─── Content analysis (Rust NLP → Python → local regex) ──────────────────────
 
 export type ContentIntent =

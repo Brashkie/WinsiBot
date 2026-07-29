@@ -1,10 +1,10 @@
 <div align="center">
 
-# 📖 Referencia de Comandos — WinsiBot v8.7.0
+# 📖 Referencia de Comandos — WinsiBot v8.8.0
 
 [![Comandos](https://img.shields.io/badge/Comandos-190%2B-6C63FF?style=for-the-badge)](.)
 [![Categorías](https://img.shields.io/badge/Categorías-19-00C9FF?style=for-the-badge)](.)
-[![Versión](https://img.shields.io/badge/Versión-8.7.0-brightgreen?style=flat-square)](../README.md)
+[![Versión](https://img.shields.io/badge/Versión-8.8.0-brightgreen?style=flat-square)](../README.md)
 
 [🇬🇧 English version →](commands.en.md) &nbsp;·&nbsp; [💰 Guía de economía →](economy.md) &nbsp;·&nbsp; [← Volver al README](../README.md)
 
@@ -463,7 +463,7 @@
 
 | Comando | Aliases | Cooldown | Permiso | Descripción |
 |---------|---------|:--------:|:-------:|-------------|
-| `serbot` | `jadibot`, `subbot`, `listbots` | — | 👤 | Conviértete en sub-bot · `serbot lista` para ver activos (detalle uno por uno) · `serbot reconectar` (👑) fuerza el reintento de todos los caídos |
+| `serbot` | `jadibot`, `subbot`, `listbots` | — | 👤 | Conviértete en sub-bot · `serbot lista` para ver activos (detalle uno por uno) · `serbot reconectar` (👑) fuerza el reintento de todos los caídos · `serbot setname <nombre>` cambia el nombre mostrado del sub-bot · `serbot setmedia <clave>` (respondiendo a una imagen/video) guarda un medio propio para ese sub-bot — ambos se escriben desde la propia sesión de WhatsApp del sub-bot, no desde el bot principal |
 | `stopbot` | `salirbot`, `desconectarbot`, `pararbot` | — | 👤 | Desconectarte como sub-bot |
 | `bots` | `botsactivos`, `statsbots` | — | 👤 | Resumen de sub-bots activos por categoría (Principal/VIP/Premium/Pro/Pro Max/Free) + cuál está activo en este grupo |
 
@@ -471,9 +471,13 @@
 !serbot
 !serbot lista
 !serbot reconectar
+!serbot setname MiTienda Sub
+!serbot setmedia menu        (respondiendo a una imagen o video)
 !stopbot
 !bots
 ```
+
+> `setname`/`setmedia` son personalización por sub-bot: si no configurás un medio propio con `setmedia`, ese sub-bot sigue usando los medios compartidos del bot principal (`#menu`, `#hug`, etc.) igual que siempre.
 
 ---
 

@@ -38,7 +38,7 @@ export async function searchRule34(tags: string, limit = 100): Promise<Rule34Pos
   const res = await axios.get<Rule34Post[] | { post?: Rule34Post[] } | string>(BASE_URL, {
     params,
     timeout: 15_000,
-    headers: { 'User-Agent': 'Mozilla/5.0 (compatible; WinsiBot/1.0)' },
+    headers: { 'User-Agent': `Mozilla/5.0 (compatible; ${config.botName}/1.0)` },
   })
 
   const data = res.data

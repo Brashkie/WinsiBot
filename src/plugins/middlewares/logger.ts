@@ -60,7 +60,7 @@ export async function loggerMiddleware(ctx: BotContext): Promise<boolean> {
     ].join('\n')
 
     const header = ascii.box(body, {
-      title:       'WinsiBot',
+      title:       config.botName,
       titleAlign:  'center',
       borderStyle: 'rounded',
       padding:     1,

@@ -50,7 +50,7 @@ const command: Command = {
       `> Nombre   » Brashkie`,
       `> Alias    » Hepein Oficial 𒁈`,
       `> GitHub   » github.com/Brashkie`,
-      `> Proyecto » WinsiBot v8.0.0`,
+      `> Proyecto » ${config.botName} v8.0.0`,
       ``,
       ` ◈ *BOT*`,
       `> Version  » v8.0.0`,
@@ -66,7 +66,7 @@ const command: Command = {
       `> RAM RSS  » ${rssRam}`,
       ``,
       `(つ▀¯▀)つ══════════`,
-      `> § WinsiBot — Hepein Oficial 𒁈`,
+      `> § ${config.botName} — Hepein Oficial 𒁈`,
     ]
 
     const text = lines.join('\n')

@@ -1,6 +1,7 @@
 import type { Command } from '../../../types/index.js'
 import { createSticker, StickerTypes } from 'wa-sticker-formatter'
 import axios from 'axios'
+import { config } from '@config'
 
 interface StickerPackResponse {
   result?: string[]
@@ -72,7 +73,7 @@ const command: Command = {
         const buf = Buffer.from(imgRes.data)
 
         const webp = await createSticker(buf, {
-          pack:    'WinsiBot',
+          pack:    config.botName,
           author:  'Hepein',
           type:    StickerTypes.DEFAULT,
           quality: 50,

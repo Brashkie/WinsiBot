@@ -9,6 +9,7 @@ mod db;
 mod lock_manager;
 mod metrics;
 mod nlp;
+mod platform;
 mod rate_limiter;
 mod routes;
 mod session_id;
@@ -129,13 +130,21 @@ async fn main() {
         )
         .init();
 
-    let cfg = config::Config::load();
+    let cfg      = config::Config::load();
+    let platform = platform::detect();
 
     tracing::info!(
         port         = cfg.port,
         sessions_dir = %cfg.sessions_dir,
         db_path      = %cfg.db_path,
         "winsibot-session-api v{} iniciando", env!("CARGO_PKG_VERSION")
+    );
+    tracing::info!(
+        os     = platform.os,
+        arch   = platform.arch,
+        family = platform.family,
+        cores  = platform.cores,
+        "plataforma detectada — {}", platform.summary()
     );
 
     // Crear directorio para la DB si no existe

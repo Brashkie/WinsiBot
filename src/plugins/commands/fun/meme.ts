@@ -1,5 +1,6 @@
 import type { Command } from '../../../types/index.js'
 import axios from 'axios'
+import { config } from '@config'
 
 const MEME_JSON = 'https://raw.githubusercontent.com/Brashkie/module/refs/heads/main/public/random/meme.json'
 
@@ -41,7 +42,7 @@ const command: Command = {
     } as any)
 
     const res = await axios.get<string[]>(MEME_JSON, {
-      headers: { 'User-Agent': 'Mozilla/5.0 (compatible; WinsiBot/1.0)' },
+      headers: { 'User-Agent': `Mozilla/5.0 (compatible; ${config.botName}/1.0)` },
       timeout: 15_000,
     })
 

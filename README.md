@@ -1,6 +1,6 @@
 <div align="center">
 
-<img src="https://capsule-render.vercel.app/api?type=waving&color=0:6C63FF,100:00C9FF&height=180&section=header&text=WinsiBot&fontSize=62&fontColor=ffffff&fontAlignY=38&desc=v8.7.0%20%E2%80%94%20Enterprise%20WhatsApp%20Bot&descAlignY=58&descSize=18" width="100%"/>
+<img src="https://capsule-render.vercel.app/api?type=waving&color=0:6C63FF,100:00C9FF&height=180&section=header&text=WinsiBot&fontSize=62&fontColor=ffffff&fontAlignY=38&desc=v8.8.0%20%E2%80%94%20Enterprise%20WhatsApp%20Bot&descAlignY=58&descSize=18" width="100%"/>
 
 <br/>
 
@@ -10,15 +10,15 @@
 [![Rust](https://img.shields.io/badge/Rust-1.75%2B-CE422B?style=for-the-badge&logo=rust&logoColor=white)](https://rust-lang.org)
 
 [![License](https://img.shields.io/badge/License-GPL--3.0-blue?style=flat-square)](LICENSE)
-[![Version](https://img.shields.io/badge/Version-8.7.0-6C63FF?style=flat-square)](CHANGELOG.md)
-[![Platform](https://img.shields.io/badge/Platform-Windows%20%7C%20Linux-lightgrey?style=flat-square)](https://github.com/Brashkie/WinsiBot)
+[![Version](https://img.shields.io/badge/Version-8.8.0-6C63FF?style=flat-square)](CHANGELOG.md)
+[![Platform](https://img.shields.io/badge/Platform-Windows%20%7C%20Linux%20%7C%20macOS%20%7C%20Android-lightgrey?style=flat-square)](https://github.com/Brashkie/WinsiBot)
 [![PRs Welcome](https://img.shields.io/badge/PRs-welcome-brightgreen?style=flat-square)](https://github.com/Brashkie/WinsiBot/pulls)
 
 <br/>
 
 > Bot de WhatsApp de alto rendimiento con arquitectura multi-lenguaje de tres capas.<br/>
-> Diseñado para **10,000+ grupos simultáneos**, miles de mensajes por hora y múltiples instancias.<br/>
-> v8.7.0 — Cada configuración de grupo (antilink, antispam, welcome...) es ahora su propio comando, con tarjeta de estado incluida. Auditado el registro completo de comandos: 10 estaban rotos por colisión silenciosa de nombre/alias (`!info`, `!stats`, `!trade` y más respondían a otra cosa), más `#ban` sin efecto real y cooldowns cruzados entre `#invertir`/`#roulette` — todos corregidos. Además: 6 endpoints de Python que bloqueaban toda la API por un solo pedido pesado, y `#bots` nuevo (resumen de sub-bots por categoría).
+> Sin límite artificial de grupos, pensado para miles de mensajes por hora y múltiples instancias.<br/>
+> v8.8.0 — Ahora corre en Linux, macOS y Android (Termux), no solo Windows. El nombre del bot y el canal ya no están hardcodeados — se configuran por `.env`. Se quitó el límite artificial de "10,000 grupos" del marketing. La sesión de WhatsApp pasa de JSON a CBOR (más compacta, más rápida), extendido a todo el stack (TS/Python/Rust) para no perder ninguna herramienta de recuperación existente. Sub-bots con nombre y medios propios, `#menu` rediseñado para listar comandos reales, y limpieza de 9 archivos muertos.
 
 <br/>
 
@@ -66,19 +66,18 @@
 | 🐍 **Services** | Python / FastAPI / Celery | IA avanzada (Ollama + GPT + Claude + Gemini), watchdog, health checks |
 | ⚙️ **Session** | Rust / Axum | Escritura atómica de creds, 10 snapshots rotativos, tracker Bad MAC, rate limiter, delivery SQLite |
 
-### Novedades en v8.7.0
+### Novedades en v8.8.0
 
 | Área | Cambio |
 |------|--------|
-| **Cada configuración de grupo es ahora su propio comando** | Las ~30 opciones de `#on`/`#off` (antilink, antispam, welcome, etc.) tienen cada una su propio comando con `enable`/`disable`, tarjeta de estado incluida. De paso se corrigió que `#antilink`/`#mute` standalone escribían en un store que la moderación real nunca leía — el toggle no hacía nada |
-| **Fix: `#ban` no baneaba a nadie de verdad** | Mismo bug que `#antilink`/`#mute` — escribía en un store que nadie lee. Reescrito, y ahora acepta un motivo (`!ban @usuario razón`) |
-| **Fix: 10 comandos rotos por colisión silenciosa de nombre/alias** | `!info`, `!stats`, `!regalo`, `!trade` y 6 más respondían al comando equivocado — dos archivos registraban la misma palabra y uno pisaba al otro sin aviso. Auditado el registro completo (634 nombres+alias), las 10 vuelven a responder a lo que dicen |
-| **Fix: `#invertir` y `#roulette` compartían el mismo cooldown por error** | Usar uno bloqueaba el otro con un "espera" falso. Cada uno tiene ahora su propia clave |
-| **Nuevo: `#bots`** | Resumen de sub-bots activos por categoría (Principal/VIP/Premium/Pro/Pro Max/Free) + cuál está activo en el grupo actual |
-| **`#crime`/`#slut`** | Cooldowns bajados a 15/10 min |
-| **Descargas de video — caché + deduplicado** | `#ytvideo`/`#tiktok`/`#ig` ya no repiten una descarga completa por cada pedido idéntico de contenido en tendencia |
-| **Python — 6 endpoints que bloqueaban toda la API** | `/spam/check` (llamado en cada mensaje), búsqueda de imágenes, `/anime/*`, `/imagefx/lego` y `/groups/*` corrían directo en el único hilo de Uvicorn — un pedido pesado congelaba cualquier otro endpoint mientras tanto. Movidos a un hilo aparte |
-| **Consola — menos trabajo síncrono por mensaje** | El log detallado con caja ANSI se armaba e imprimía en CADA mensaje, no solo comandos — ahora la charla común usa una línea compacta |
+| **Multiplataforma de verdad — Linux, macOS, Android (Termux)** | 8 scripts (`celery`, `health`, `monitor`, `api`, `spam:build`, `py:lint`, `py:format`, `manage`) tenían rutas de Windows hardcodeadas sin rama para Unix. Centralizado en `src/lib/platform.ts`/`scripts/_platform.js`. De paso: el filtro nativo de spam/flood se desactivaba en silencio fuera de Windows (buscaba solo `.dll`) — ahora elige `.dll`/`.so`/`.dylib` según el SO real |
+| **Branding configurable** | El nombre del bot y el canal ya no están hardcodeados — salen de `.env` (`BOT_NAME`, `NEWSLETTER_JID`). La línea de crédito se mantiene fija a propósito |
+| **Sin límite artificial de grupos** | El README afirmaba "10,000+ grupos" sin que existiera ningún contador real en el código — corregido. `MAX_CONTACTS` ahora configurable por `.env` |
+| **Sesión de WhatsApp: JSON → CBOR** | `creds.json` y el resto de la sesión pasan a binario nativo (sin el ~33% de inflado de base64) — migración automática sin downtime. Extendido a todo lo que leía sesión en JSON (verificador de integridad, backup, reconexión de sub-bots, y del lado de Python/Rust) para no perder ninguna herramienta de recuperación existente |
+| **Sub-bots con nombre y medios propios** | Nuevo `#serbot setname <nombre>` y `#serbot setmedia <clave>` (respondiendo a una imagen/video) |
+| **`#menu` rediseñado** | Ahora lista comandos reales (no solo conteos) — RPG y Roleplay completas siempre, el resto por `#menu todo` |
+| **Rust — detección de plataforma** | Nuevo `platform.rs`: SO/arquitectura/núcleos al arrancar y en `/health`, para cuando esto corra en varios servidores |
+| **Limpieza** | 9 archivos muertos borrados, `CATEGORY_SYMBOLS` duplicado consolidado en uno solo |
 
 **[📜 Ver el historial completo de versiones →](CHANGELOG.md)**
 
@@ -115,7 +114,7 @@
 - Cola priorizada: `urgent` → `normal` → `broadcast`
 - Tracking de entrega: enviado → entregado → leído
 - Detección de Bad MAC flood por grupo + auto-limpieza
-- 10,000+ grupos sin degradación de rendimiento
+- Sin límite artificial de grupos, sin degradación de rendimiento
 - Máximo 25 handlers concurrentes (semáforo)
 
 </td>
@@ -195,7 +194,7 @@
 
 ```
 ╔══════════════════════════════════════════════════════════════════════════════╗
-║                           WinsiBot v8.7.0                                    ║
+║                           WinsiBot v8.8.0                                    ║
 ╠════════════════════╦═══════════════════════╦═══════════════════════════════╣
 ║   TypeScript        ║       Python           ║           Rust                ║
 ║   Node.js :4001     ║                        ║                               ║
@@ -237,7 +236,9 @@
 | PHP | 8.1+ | ❌ | panel web opcional |
 | FFmpeg | 6.x | ❌ | conversión de media |
 
-**Sistemas operativos soportados:** Windows 10/11 · Ubuntu 20.04+ · Debian 11+
+**Sistemas operativos soportados:** Windows 10/11 · Ubuntu 20.04+ · Debian 11+ · macOS 12+ · Android (Termux)
+
+> **Nota de plataforma:** en Termux/Android y en Linux/macOS sin GUI, Ollama, PHP (panel web) y el servidor local de Redis son opcionales igual que en Windows — el bot degrada bien sin ellos. `npm run cython:build` y `npm run spam:build` ya detectan el compilador C disponible (`gcc`/`clang`) en cualquiera de los tres sistemas.
 
 > **Ollama:** Descarga un modelo antes de iniciar — `ollama pull llama3` o `ollama pull mistral`. El bot intenta Ollama primero y cae en las APIs cloud automáticamente si no está disponible.
 
@@ -296,6 +297,8 @@ PREFIX="!,.,#,/"                        # Prefijos que activan comandos
 BOT_NAME=WinsiBot                        # Nombre del bot
 OWNER_JID=51999999999@s.whatsapp.net     # Tu número (código de país, sin +)
 SESSION_PATH=./auth                      # Carpeta de sesión de WhatsApp
+NEWSLETTER_JID=                          # Opcional — tu canal de WhatsApp, para el "Ver canal" del menú
+MAX_CONTACTS=20000                       # Máximo de contactos en caché antes de rotar los más antiguos
 NODE_ENV=production                      # development | production
 LOG_LEVEL=info                           # silent | info | debug | error
 
@@ -343,6 +346,8 @@ RUST_LOG=winsibot_session_api=info
 | Variable | Default | Descripción |
 |----------|---------|-------------|
 | `PREFIX` | `"!,.,#,/"` | Prefijos separados por coma |
+| `NEWSLETTER_JID` | — | Canal propio para el "Ver canal" del menú (opcional) |
+| `MAX_CONTACTS` | `20000` | Contactos en caché antes de rotar los más antiguos |
 | `WEBHOOK_PORT` | `4001` | Puerto del receiver HTTP |
 | `SESSION_API_URL` | `http://127.0.0.1:3001` | URL de la Session API Rust |
 | `REDIS_URL` | `redis://localhost:6379` | Conexión a Redis |
@@ -815,7 +820,7 @@ Sí, mediante el sistema **JadiBot** (`!jadibot`). Cada sub-bot tiene su propia 
 <details>
 <summary><b>¿Cuántos grupos puede manejar?</b></summary>
 
-Diseñado para **10,000+ grupos simultáneos**. El rate limiter de Rust y el tracker Bad MAC por grupo usan estructuras `HashMap` diseñadas para alta cardinalidad con limpieza automática cada 5,000 llamadas.
+No hay ningún límite artificial de grupos en el código. El rate limiter de Rust y el tracker Bad MAC por grupo usan estructuras `HashMap`/`DashMap` diseñadas para alta cardinalidad, con limpieza automática cada 5,000 llamadas — el techo real depende de los recursos (RAM/CPU) de la máquina donde corra el bot, no de un contador fijo.
 
 </details>
 

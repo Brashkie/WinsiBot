@@ -40,7 +40,7 @@ from rich          import box
 sys.path.insert(0, str(Path(__file__).parent.parent))
 from session.manager import (
     backup_session, restore_last_session, check_session_health,
-    clean_old_backups, log_event, get_session_logs,
+    clean_old_backups, log_event, get_session_logs, get_signal_files,
     AUTH_DIR, BACKUP_DIR,
 )
 
@@ -151,7 +151,7 @@ def cmd_status():
 
     # Archivos Signal
     if AUTH_DIR.exists():
-        sfiles = list(AUTH_DIR.glob('session-*.json')) + list(AUTH_DIR.glob('sender-key-*.json'))
+        sfiles = get_signal_files(AUTH_DIR)
         if sfiles:
             _warn(f'{len(sfiles)} archivos Signal presentes (posible Bad MAC)')
         else:
@@ -171,9 +171,9 @@ def cmd_diagnose():
     health = check_session_health()
     if health['healthy']:
         jid  = health.get('jid', '').split(':')[0]
-        _ok(f'creds.json válido  →  {health.get("name", "?")} (+{jid.split("@")[0]})')
+        _ok(f'credenciales válidas  →  {health.get("name", "?")} (+{jid.split("@")[0]})')
     else:
-        _err(f'creds.json: {health["reason"]}')
+        _err(f'credenciales: {health["reason"]}')
         issues.append(('error', f'creds: {health["reason"]}'))
 
     if AUTH_DIR.exists():
@@ -314,7 +314,7 @@ def cmd_repair(silent: bool = False):
 
     # Paso 1: limpiar archivos Signal si existen
     if AUTH_DIR.exists():
-        sfiles = list(AUTH_DIR.glob('session-*.json')) + list(AUTH_DIR.glob('sender-key-*.json'))
+        sfiles = get_signal_files(AUTH_DIR)
         if sfiles:
             _info(f'Encontrados {len(sfiles)} archivos Signal — intentando limpiar via Rust...')
             rust = _rust('POST', '/sessions/signal/clear')
@@ -331,7 +331,7 @@ def cmd_repair(silent: bool = False):
     else:
         _err('auth/ no existe')
 
-    # Paso 2: verificar creds.json
+    # Paso 2: verificar credenciales (creds.json o creds.cbor)
     health = check_session_health()
     if not health['healthy']:
         _warn(f'Sesión no válida: {health["reason"]}')
@@ -351,7 +351,7 @@ def cmd_repair(silent: bool = False):
                     cmd_reset_qr()
                     return
     else:
-        _ok('creds.json válido')
+        _ok('credenciales válidas')
 
     if repaired:
         _ok('Reparación completada')
@@ -376,7 +376,7 @@ def cmd_reset_signal():
         _warn('auth/ no existe — nada que limpiar')
         return
 
-    sfiles = list(AUTH_DIR.glob('session-*.json')) + list(AUTH_DIR.glob('sender-key-*.json'))
+    sfiles = get_signal_files(AUTH_DIR)
     if not sfiles:
         _ok('Sin archivos Signal presentes')
         return

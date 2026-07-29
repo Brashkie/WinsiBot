@@ -54,7 +54,7 @@ export async function handleParticipantsUpdate(
             // continúa el bloque de cita si alguna línea no lo tiene.
             ...body.split('\n').map(line => `> ${line}`),
             ...footerLines(),
-            `╰─ WinsiBot`,
+            `╰─ ${botConfig.botName}`,
           ].join('\n')
         }
         await sendWithMedia(sock, id, caption, 'WinsiBot', undefined, false, [participant]).catch(() => {})
@@ -76,7 +76,7 @@ export async function handleParticipantsUpdate(
             `│`,
             `> ${DEFAULT_BYE_BODY}`,
             ...footerLines(),
-            `╰─ WinsiBot`,
+            `╰─ ${botConfig.botName}`,
           ].join('\n')
         }
         await sendWithMedia(sock, id, caption, 'WinsiBot', undefined, false, [participant]).catch(() => {})

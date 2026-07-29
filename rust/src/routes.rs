@@ -78,6 +78,7 @@ pub async fn health(State(state): State<AppState>) -> Json<serde_json::Value> {
         "activeSessions": sessions.len(),
         "sessions":      sessions,
         "locksInMemory": state.locks.active_count(),
+        "platform":      crate::platform::detect(),
         "ts":            Utc::now(),
     }))
 }
@@ -485,13 +486,18 @@ pub async fn clear_signal_sessions(
             let name = entry.file_name();
             let name_str = name.to_string_lossy();
 
+            // El bot puede guardar la sesión como .json o .cbor (ver
+            // authStateCbor.ts) — el nombre/prefijo del archivo es el mismo
+            // en ambos casos, solo cambia la extensión.
+            let is_session_ext = name_str.ends_with(".json") || name_str.ends_with(".cbor");
+
             let is_signal_file = match &group_prefix {
-                // Scopeado a un grupo: solo sus propios sender-key-*.json.
-                Some(prefix) => name_str.starts_with(prefix.as_str()) && name_str.ends_with(".json"),
+                // Scopeado a un grupo: solo sus propios sender-key-*.
+                Some(prefix) => name_str.starts_with(prefix.as_str()) && is_session_ext,
                 // Sin scope: comportamiento global histórico (toda la cuenta).
                 None => {
-                    (name_str.starts_with("session-") && name_str.ends_with(".json"))
-                        || (name_str.starts_with("sender-key-") && name_str.ends_with(".json"))
+                    is_session_ext
+                        && (name_str.starts_with("session-") || name_str.starts_with("sender-key-"))
                 }
             };
 

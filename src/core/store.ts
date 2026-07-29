@@ -5,6 +5,7 @@ import { writeFile, readFile, mkdir, rename } from 'fs/promises'
 import { existsSync } from 'fs'
 import { logger } from './logger.js'
 import { setGroupMetadata } from './groupCache.js'
+import { config } from '@config'
 
 // ─── Tipos ────────────────────────────────────────────────────────────────────
 export interface StoreContact {
@@ -34,8 +35,9 @@ interface StoreData {
 // Los mensajes de grupos NO se almacenan — son voluminosos y la mayoría de
 // comandos no necesita historial; solo usan el mensaje actual del contexto.
 const MAX_MSGS_PER_CHAT = 20
-// Rotar contactos cuando superan este límite (LRU aproximado)
-const MAX_CONTACTS      = 20_000
+// Rotar contactos cuando superan este límite (LRU aproximado) — configurable
+// por env (MAX_CONTACTS), ver src/config.ts
+const MAX_CONTACTS      = config.maxContacts
 
 // ─── Store ────────────────────────────────────────────────────────────────────
 class WinsiStore {

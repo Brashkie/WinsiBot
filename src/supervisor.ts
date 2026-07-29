@@ -1,5 +1,6 @@
 import 'dotenv/config'
-import { spawn, type ChildProcess } from 'child_process'
+import { config } from '@config'
+import { type ChildProcess, spawn } from 'child_process'
 
 // ─────────────────────────────────────────────────────────────────────────────
 //  supervisor.ts — capa liviana por encima del bot para que sobreviva meses
@@ -94,6 +95,6 @@ process.on('SIGTERM', () => {
   child?.kill('SIGTERM')
 })
 
-console.log('[supervisor] iniciando WinsiBot supervisado...')
+console.log(`[supervisor] iniciando ${config.botName} supervisado...`)
 startChild()
 setInterval(checkHang, HANG_CHECK_MS).unref()

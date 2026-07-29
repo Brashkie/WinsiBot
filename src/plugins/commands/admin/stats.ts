@@ -1,5 +1,6 @@
 import type { Command } from '../../../types/index.js'
 import { getBotStats, getTopCommands } from '@lib/pythonBridge.js'
+import { config } from '@config'
 
 const command: Command = {
   name: 'stats',
@@ -24,7 +25,7 @@ const command: Command = {
       .map((c, i) => `  ${i + 1}. ${c.command} — ${c.count}x`)
       .join('\n')
 
-    const text = `📊 *Estadisticas de WinsiBot*
+    const text = `📊 *Estadisticas de ${config.botName}*
 
 👥 Usuarios: *${stats.total_users}*
 💬 Mensajes totales: *${stats.total_messages}*

@@ -8,6 +8,7 @@ import type { WASocket, WAMessage } from '@whiskeysockets/baileys'
 import axios              from 'axios'
 import { fileTypeFromBuffer } from 'file-type'
 import { extractMentions } from './utils.js'
+import { config } from '@config'
 
 // ─────────────────────────────────────────────────────────────────────────────
 //  WinsiBot — INTERACTIVE MESSAGES
@@ -16,15 +17,13 @@ import { extractMentions } from './utils.js'
 //  NLP pre-check via Rust · retry automático en relayMessage.
 // ─────────────────────────────────────────────────────────────────────────────
 
-// ─── Newsletter IDs para reply con forwarding ─────────────────────────────────
-
-const NL = [
-  { id: '120363197223158904@newsletter', name: '🎯 WinsiBot Canal 1' },
-  { id: '120363420749165706@newsletter', name: '🔥 WinsiBot Canal 2' },
-  { id: '120363418424557294@newsletter', name: '⚡ WinsiBot Canal 3' },
-  { id: '120363402823922168@newsletter', name: '🌐 WinsiBot Canal 4' },
-]
-const _nl = () => NL[Math.floor(Math.random() * NL.length)]!
+// ─── Newsletter ID para reply con forwarding ──────────────────────────────────
+// Antes eran 4 canales de Brashkie hardcodeados — ahora sale de
+// config.newsletterJid (NEWSLETTER_JID en .env), opcional. Sin canal propio
+// configurado, _nl() devuelve null y los que lo usan mandan el mensaje sin
+// el contexto de "reenviado desde canal" (mensaje normal, sin ese adorno).
+const _nl = (): { id: string; name: string } | null =>
+  config.newsletterJid ? { id: config.newsletterJid, name: `🎯 ${config.botName}` } : null
 
 // ─── Tipos públicos ───────────────────────────────────────────────────────────
 
@@ -179,13 +178,15 @@ export async function sendReply(
       text,
       contextInfo: {
         mentionedJid: extractMentions(text),
-        isForwarded:  true,
-        forwardingScore: 1,
-        forwardedNewsletterMessageInfo: {
-          newsletterJid:   nl.id,
-          newsletterName:  nl.name,
-          serverMessageId: Math.floor(Math.random() * 900) + 100,
-        },
+        ...(nl ? {
+          isForwarded:  true,
+          forwardingScore: 1,
+          forwardedNewsletterMessageInfo: {
+            newsletterJid:   nl.id,
+            newsletterName:  nl.name,
+            serverMessageId: Math.floor(Math.random() * 900) + 100,
+          },
+        } : {}),
       },
     } as any,
     quoted ? { quoted } : {},

@@ -10,6 +10,8 @@ import axios from 'axios'
 import ffmpegStatic from 'ffmpeg-static'
 import { Queue } from './queue.js'
 import { createCache, registerCache } from './cacheManager.js'
+import { venvBinPath, exeName } from './platform.js'
+import { config } from '@config'
 
 const execAsync = promisify(exec)
 
@@ -71,8 +73,8 @@ async function withVideoDedup(
 
 // ─── Path a yt-dlp ────────────────────────────────────────────────────────────
 function getYtdlp(): string {
-  const venvExe = join(process.cwd(), 'python', 'venv', 'Scripts', 'yt-dlp.exe')
-  const localExe = join(process.cwd(), 'yt-dlp.exe')
+  const venvExe  = venvBinPath('yt-dlp')
+  const localExe = join(process.cwd(), exeName('yt-dlp'))
   if (existsSync(venvExe))  return venvExe
   if (existsSync(localExe)) return localExe
   return 'yt-dlp'
@@ -230,7 +232,7 @@ export async function downloadBuffer(url: string): Promise<Buffer> {
   const res = await axios.get<ArrayBuffer>(url, {
     responseType: 'arraybuffer',
     timeout:      15_000,
-    headers: { 'User-Agent': 'Mozilla/5.0 (compatible; WinsiBot/1.0)' },
+    headers: { 'User-Agent': `Mozilla/5.0 (compatible; ${config.botName}/1.0)` },
   })
   return Buffer.from(res.data)
 }

@@ -108,6 +108,8 @@ export interface BotConfig {
   xblApiKey?:           string
   logLevel:             string
   isDev:                boolean
+  newsletterJid?:       string
+  maxContacts:          number
 }
 
 // ─── Jobs (BullMQ) ────────────────────────────────────────────────────────────

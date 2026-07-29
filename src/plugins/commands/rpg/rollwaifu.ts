@@ -4,6 +4,7 @@ import { decode } from '@msgpack/msgpack'
 import { downloadBuffer } from '@lib/downloader.js'
 import { createCache, registerCache } from '@lib/cacheManager.js'
 import { userData } from '@core/events/index.js'
+import { config } from '@config'
 
 function ownerName(jid: string): string {
   return userData.get(jid)?.name || jid.replace(/@s\.whatsapp\.net|@lid/g, '').replace(/[^0-9]/g, '')
@@ -157,7 +158,7 @@ export async function getCharacters(source: string): Promise<RollCharacter[]> {
   const res  = await axios.get<ArrayBuffer>(url, {
     timeout:      15_000,
     responseType: 'arraybuffer',
-    headers:      { 'User-Agent': 'Mozilla/5.0 (compatible; WinsiBot/1.0)' },
+    headers:      { 'User-Agent': `Mozilla/5.0 (compatible; ${config.botName}/1.0)` },
   })
   const data  = decode(new Uint8Array(res.data)) as RollData
   const chars = data.personajes ?? []

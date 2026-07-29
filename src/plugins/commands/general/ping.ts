@@ -1,5 +1,6 @@
 import type { Command } from '../../../types/index.js'
 import { sendWithMedia } from '@lib/media_sender.js'
+import { config } from '@config'
 
 const command: Command = {
   name: 'ping',
@@ -16,7 +17,7 @@ const command: Command = {
     const text = [
       `🏓 *Pong!* ${ms}ms`,
       ``,
-      `_WinsiBot está activo y respondiendo_`,
+      `_${config.botName} está activo y respondiendo_`,
     ].join('\n')
 
     await sendWithMedia(sock, jid, text, 'WinsiBot', msg)

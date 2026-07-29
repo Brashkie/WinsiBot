@@ -89,15 +89,16 @@ console.log(ascii.table(serviceRows, {
 console.log()
 
 const checks = [
-  { label: 'Venv Python', path: join(ROOT, 'python', 'venv'),       missing: 'npm run setup' },
-  { label: 'Bot dist/',   path: join(ROOT, 'dist', 'index.js'),     missing: 'npm run build' },
-  { label: 'Session',     path: join(ROOT, 'auth', 'creds.json'),   missing: 'npm run qr' },
-  { label: 'Rust bin',    path: join(ROOT, 'rust', 'target', 'release'), missing: 'npm run rust:build' },
+  { label: 'Venv Python', paths: [join(ROOT, 'python', 'venv')],       missing: 'npm run setup' },
+  { label: 'Bot dist/',   paths: [join(ROOT, 'dist', 'index.js')],     missing: 'npm run build' },
+  // La sesión puede vivir en creds.json o creds.cbor — ver authStateCbor.ts
+  { label: 'Session',     paths: [join(ROOT, 'auth', 'creds.json'), join(ROOT, 'auth', 'creds.cbor')], missing: 'npm run qr' },
+  { label: 'Rust bin',    paths: [join(ROOT, 'rust', 'target', 'release')], missing: 'npm run rust:build' },
 ]
 
 const checkRows = [['Chequeo', 'Estado']]
 for (const c of checks) {
-  const ok = existsSync(c.path)
+  const ok = c.paths.some(p => existsSync(p))
   checkRows.push([c.label, ok ? themes.success('OK') : themes.error(`Falta → ${c.missing}`)])
 }
 

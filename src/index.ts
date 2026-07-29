@@ -11,6 +11,7 @@ import { loadCommands } from '@plugins/commands/index.js'
 import { logger } from '@core/logger.js'
 import { config } from '@config'
 import { loadAll, saveAll, startAutoSave, stopAutoSave } from '@core/persistence.js'
+import { venvPythonPath, systemPython, exeName } from '@lib/platform.js'
 import { color, gradient, loader, ascii, themes, configure, components, BG, animate } from 'ansimax'
 
 // ffmpeg-static ya era una dependencia del proyecto, pero nada la usaba —
@@ -142,7 +143,7 @@ function killSpawnedChildren(): void {
 // ─── Graceful shutdown ────────────────────────────────────────────────────────
 function shutdownCleanly(): void {
   console.log()
-  console.log(`  ${themes.warning('◆')} ${color.bold(themes.warning('WinsiBot detenido por el usuario'))}`)
+  console.log(`  ${themes.warning('◆')} ${color.bold(themes.warning(`${config.botName} detenido por el usuario`))}`)
   console.log(`  ${color.dim('Guardando datos...')}`)
 
   killSpawnedChildren()
@@ -204,7 +205,7 @@ process.on('SIGINT', () => {
 
 process.on('SIGTERM', () => {
   console.log()
-  console.log(`  ${themes.warning('◆')} ${color.bold(themes.warning('WinsiBot detenido (SIGTERM)'))}`)
+  console.log(`  ${themes.warning('◆')} ${color.bold(themes.warning(`${config.botName} detenido (SIGTERM)`))}`)
   try { process.stdin.setRawMode(false) } catch {}
   killSpawnedChildren()
   stopAutoSave()
@@ -239,9 +240,8 @@ async function ensurePythonApi(): Promise<void> {
   if (await isPythonApiUp()) return
 
   // Buscar el ejecutable de Python del venv
-  const venvPython = join(process.cwd(), 'python', 'venv', 'Scripts', 'python.exe')
-  const sysPython  = process.platform === 'win32' ? 'python' : 'python3'
-  const python     = existsSync(venvPython) ? venvPython : sysPython
+  const venvPython = venvPythonPath()
+  const python     = existsSync(venvPython) ? venvPython : systemPython()
 
   const stopSpin = loader.spin('Iniciando Python API...')
 
@@ -332,9 +332,8 @@ async function ensureRedis(): Promise<void> {
 // ─── Celery auto-arranque (worker de tareas en background de Python) ────────
 
 async function ensureCelery(): Promise<void> {
-  const venvPython = join(process.cwd(), 'python', 'venv', 'Scripts', 'python.exe')
-  const sysPython  = process.platform === 'win32' ? 'python' : 'python3'
-  const python     = existsSync(venvPython) ? venvPython : sysPython
+  const venvPython = venvPythonPath()
+  const python     = existsSync(venvPython) ? venvPython : systemPython()
 
   // Pool "prefork" usa multiprocessing al estilo POSIX que Windows maneja mal
   // (WinError 5/6 al azar) — "solo" evita ese bug por completo en Windows.
@@ -384,9 +383,8 @@ async function isRustApiUp(): Promise<boolean> {
 async function ensureRust(): Promise<void> {
   if (await isRustApiUp()) return
 
-  const exeExt    = process.platform === 'win32' ? '.exe' : ''
   const rustDir   = join(process.cwd(), 'rust')
-  const exe       = join(rustDir, 'target', 'release', `winsibot-session-api${exeExt}`)
+  const exe       = join(rustDir, 'target', 'release', exeName('winsibot-session-api'))
   const hasBinary = existsSync(exe)
 
   const stopSpin = loader.spin('Iniciando Rust Session API...')
@@ -459,13 +457,13 @@ async function printBanner() {
   // Título con gradiente — ASCII art si está disponible, fallback a texto
   let title: string
   try {
-    title = ascii.banner('WINSIBOT', {
+    title = ascii.banner(config.botName.toUpperCase(), {
       font:         'big',
       colorFn:      (t: string) => gradient(t, MATRIX_GREENS),
       perCharColor: true,
     })
   } catch {
-    title = `  ${gradient('WinsiBot v' + getBotVersion(), MATRIX_GREENS)}`
+    title = `  ${gradient(config.botName + ' v' + getBotVersion(), MATRIX_GREENS)}`
   }
   console.log(title)
   console.log(`  ${color.dim('by Hepein Oficial')}  ${color.dim('·')}  ${themes.success('sistema en línea')}`)

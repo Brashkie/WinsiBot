@@ -1,6 +1,7 @@
 import json
 import shutil
 import hashlib
+import cbor2
 from pathlib import Path
 from datetime import datetime
 from rich.console import Console
@@ -13,8 +14,39 @@ AUTH_DIR   = _ROOT / 'auth'
 BACKUP_DIR = _ROOT / 'data' / 'session_backups'
 LOG_FILE   = _ROOT / 'data' / 'session_log.json'
 
-# archivos criticos a validar (mejora 1 — no SHA256 a todo)
-CRITICAL_FILES = ["creds.json", "app-state-sync-key-*.json"]
+# ─── creds.json o creds.cbor — el bot puede guardar la sesión en cualquiera
+# de los dos formatos (ver authStateCbor.ts) ───────────────────────────────────
+def _find_creds_file(base: Path) -> Path | None:
+    json_path = base / "creds.json"
+    if json_path.exists():
+        return json_path
+    cbor_path = base / "creds.cbor"
+    if cbor_path.exists():
+        return cbor_path
+    return None
+
+def _read_creds(base: Path) -> dict | None:
+    """Lee creds.json o creds.cbor, el que exista. None si no hay ninguno o
+    si el que hay no se puede parsear."""
+    path = _find_creds_file(base)
+    if path is None:
+        return None
+    try:
+        if path.suffix == '.cbor':
+            with open(path, 'rb') as f:
+                return cbor2.load(f)
+        return json.loads(path.read_text(encoding='utf-8'))
+    except Exception:
+        return None
+
+# Archivos de sesión Signal (session-*/sender-key-*) — en cualquiera de los
+# dos formatos. Usado por manage.py para contar/diagnosticar/limpiar.
+def get_signal_files(base: Path) -> list[Path]:
+    files: list[Path] = []
+    for pattern in ("session-*.json", "session-*.cbor",
+                     "sender-key-*.json", "sender-key-*.cbor"):
+        files.extend(base.glob(pattern))
+    return files
 
 # ─── Log ──────────────────────────────────────────────────────────────────────
 def log_event(event: str, detail: str = "", status: str = "success"):
@@ -50,17 +82,15 @@ def _file_checksum(path: Path) -> str:
     return h.hexdigest()
 
 def _get_critical_files(base: Path) -> list[Path]:
-    """Solo valida creds.json y keys — no SHA256 a todo"""
+    """Solo valida creds.json/.cbor y keys — no SHA256 a todo"""
     files = []
-    creds = base / "creds.json"
-    if creds.exists():
+    creds = _find_creds_file(base)
+    if creds:
         files.append(creds)
-    # app-state keys
-    for f in base.glob("app-state-sync-key-*.json"):
-        files.append(f)
-    # pre-key store
-    for f in base.glob("pre-key-*.json"):
-        files.append(f)
+    # app-state keys y pre-key store, en cualquiera de los dos formatos
+    for pattern in ("app-state-sync-key-*.json", "app-state-sync-key-*.cbor",
+                     "pre-key-*.json", "pre-key-*.cbor"):
+        files.extend(base.glob(pattern))
     return files
 
 def _write_checksums(backup_path: Path):
@@ -101,14 +131,13 @@ def check_session_health() -> dict:
     if not files:
         return {"healthy": False, "reason": "auth dir empty"}
 
-    creds = AUTH_DIR / "creds.json"
-    if not creds.exists():
-        return {"healthy": False, "reason": "creds.json missing"}
+    creds_path = _find_creds_file(AUTH_DIR)
+    if creds_path is None:
+        return {"healthy": False, "reason": "creds.json/creds.cbor missing"}
 
-    try:
-        data = json.loads(creds.read_text(encoding='utf-8'))
-    except Exception:
-        return {"healthy": False, "reason": "creds.json corrupt"}
+    data = _read_creds(AUTH_DIR)
+    if data is None:
+        return {"healthy": False, "reason": f"{creds_path.name} corrupt"}
 
     if not data.get("me"):
         return {"healthy": False, "reason": "campo 'me' ausente"}
