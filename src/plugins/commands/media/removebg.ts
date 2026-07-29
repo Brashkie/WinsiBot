@@ -2,7 +2,7 @@ import type { Command } from '../../../types/index.js'
 import { pythonPost } from '@lib/pythonBridge.js'
 import { downloadContentFromMessage } from '@whiskeysockets/baileys'
 
-const sleep = (ms: number) => new Promise(r => setTimeout(r, ms))
+import { sleep } from '@lib/utils.js'
 
 async function getImageFromMsg(
   msg: import('@whiskeysockets/baileys').WAMessage

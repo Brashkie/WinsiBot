@@ -1,5 +1,11 @@
 use std::env;
 
+// Techo de tamaño para un archivo/blob de sesión — antes declarado dos veces
+// por separado (atomic.rs para el tamaño en disco antes de leer, routes.rs
+// para el buffer ya en memoria), mismo valor, mismo comentario "10 MB", sin
+// nada que garantizara que se movieran juntos si alguna vez cambiaba.
+pub const MAX_SESSION_BYTES: usize = 10_000_000;
+
 #[derive(Clone, Debug)]
 pub struct Config {
     pub port:              u16,

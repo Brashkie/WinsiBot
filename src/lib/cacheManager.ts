@@ -134,13 +134,7 @@ export function registerCache<T>(
   return cache
 }
 
-export function getAllCacheStats(): Record<string, CacheStats> {
-  const out: Record<string, CacheStats> = {}
-  for (const [name, cache] of registry) out[name] = cache.stats()
-  return out
-}
-
-export function clearAllCaches(opts: { skipExempt?: boolean } = {}): string[] {
+function clearAllCaches(opts: { skipExempt?: boolean } = {}): string[] {
   const cleared: string[] = []
   for (const [name, cache] of registry) {
     if (opts.skipExempt && periodicClearExempt.has(name)) continue
@@ -148,13 +142,6 @@ export function clearAllCaches(opts: { skipExempt?: boolean } = {}): string[] {
     cleared.push(name)
   }
   return cleared
-}
-
-export function clearCache(name: string): boolean {
-  const cache = registry.get(name)
-  if (!cache) return false
-  cache.clear()
-  return true
 }
 
 // ─── Limpieza periódica completa ───────────────────────────────────────────

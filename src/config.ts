@@ -11,8 +11,11 @@ const envSchema = z.object({
   SPOTIFY_CLIENT_ID:     z.string().optional(),
   SPOTIFY_CLIENT_SECRET: z.string().optional(),
   PYTHON_API_URL:        z.string().default('http://localhost:5000'),
-  PHP_API_URL:           z.string().default('http://localhost:8080'),
-  RUST_API_URL:          z.string().default('http://localhost:3001'),
+  // .env.example documenta SESSION_API_URL/SESSION_API_KEY — RUST_API_URL no
+  // es un nombre real que nadie setea, así que leerlo dejaba a config.rustApiUrl
+  // siempre en el default aunque el operador cambiara el puerto de Rust.
+  SESSION_API_URL:       z.string().default('http://localhost:3001'),
+  SESSION_API_KEY:       z.string().default(''),
   DATABASE_URL:          z.string().optional(),
   REDIS_URL:             z.string().default('redis://localhost:6379'),
   RULE34_API_KEY:        z.string().optional(),
@@ -39,14 +42,19 @@ const env = envSchema.parse(process.env)
 // de quién hizo el bot en sí queda).
 export const CREDIT_LINE = 'Hepein Oficial x Brashkie'
 
+// User-Agent compartido para scrapers/descargas (rule34, memes, dragoncity,
+// etc.) — antes repetido literal en 10 archivos, con riesgo real de
+// desincronizarse si alguno se editaba y los demás no.
+export const USER_AGENT = `Mozilla/5.0 (compatible; ${env.BOT_NAME}/1.0)`
+
 export const config = {
   prefix: env.PREFIX.split(',').map(p => p.trim()),
   botName:      env.BOT_NAME,
   ownerJid:     env.OWNER_JID.split(',').map(j => j.trim()).filter(Boolean),
   sessionPath:  env.SESSION_PATH,
   pythonApiUrl: env.PYTHON_API_URL,
-  phpApiUrl:    env.PHP_API_URL,
-  rustApiUrl:   env.RUST_API_URL,
+  rustApiUrl:      env.SESSION_API_URL,
+  sessionApiKey:   env.SESSION_API_KEY,
   redisUrl:     env.REDIS_URL,
   logLevel:     env.LOG_LEVEL,
   isDev:        env.NODE_ENV === 'development',

@@ -302,7 +302,7 @@ function verifySession(raw: Record<string, any>): boolean {
 
 // ─── Función principal ────────────────────────────────────────────────────────
 
-export async function verifyAuthDir(authDir: string): Promise<VerifyReport> {
+async function verifyAuthDir(authDir: string): Promise<VerifyReport> {
   const report: VerifyReport = {
     totalFiles:  0,
     valid:       0,

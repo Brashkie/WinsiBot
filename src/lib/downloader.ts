@@ -11,7 +11,7 @@ import ffmpegStatic from 'ffmpeg-static'
 import { Queue } from './queue.js'
 import { createCache, registerCache } from './cacheManager.js'
 import { venvBinPath, exeName } from './platform.js'
-import { config } from '@config'
+import { USER_AGENT } from '@config'
 
 const execAsync = promisify(exec)
 
@@ -204,35 +204,12 @@ export async function downloadTikTok(url: string): Promise<DownloadResult> {
   })
 }
 
-// ─── Descargar Instagram ──────────────────────────────────────────────────────
-export async function downloadInstagram(url: string): Promise<DownloadResult> {
-  const key = `ig:${url.trim().toLowerCase()}`
-  return withVideoDedup(key, async () => {
-    const ytdlp   = getYtdlp()
-    const ffmpeg  = getFfmpegDir()
-    const tmpDir  = await getTmpDir()
-    const outFile = join(tmpDir, `${randomUUID()}.mp4`)
-    const ffmpegFlag = ffmpeg ? `--ffmpeg-location "${ffmpeg}"` : ''
-
-    try {
-      await downloadQueue.enqueue(() => execAsync(
-        `"${ytdlp}" ${ffmpegFlag} -o "${outFile}" "${url}" --no-playlist --max-filesize 50m`,
-        { timeout: 60_000 }
-      ), 60_000)
-      const buffer = await readFile(outFile)
-      return { buffer, filename: outFile, ext: 'mp4' }
-    } finally {
-      if (existsSync(outFile)) await unlink(outFile).catch(() => {})
-    }
-  })
-}
-
 // ─── Descargar buffer desde URL ───────────────────────────────────────────────
 export async function downloadBuffer(url: string): Promise<Buffer> {
   const res = await axios.get<ArrayBuffer>(url, {
     responseType: 'arraybuffer',
     timeout:      15_000,
-    headers: { 'User-Agent': `Mozilla/5.0 (compatible; ${config.botName}/1.0)` },
+    headers: { 'User-Agent': USER_AGENT },
   })
   return Buffer.from(res.data)
 }

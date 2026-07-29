@@ -1,6 +1,6 @@
 import type { Command } from '../../../types/index.js'
 
-const sleep = (ms: number) => new Promise(r => setTimeout(r, ms))
+import { sleep } from '@lib/utils.js'
 
 const command: Command = {
   name: 'sega',

@@ -145,21 +145,3 @@ def extract_entities(text: str) -> dict[str, list[str]]:
             result[key].append(ent.text)
 
     return result
-
-# ─── Detector de idioma básico ────────────────────────────────────────────────
-def detect_language(text: str) -> str:
-    """
-    Detección simple de idioma por vocabulario común.
-    """
-    ES_WORDS = {"hola", "que", "como", "esta", "para", "con", "por", "los", "las", "del"}
-    EN_WORDS = {"the", "and", "for", "with", "you", "are", "have", "this", "that", "from"}
-    PT_WORDS = {"que", "para", "com", "por", "uma", "nao", "mas", "como", "isso", "voce"}
-
-    words = set(text.lower().split())
-    es = len(words & ES_WORDS)
-    en = len(words & EN_WORDS)
-    pt = len(words & PT_WORDS)
-
-    if max(es, en, pt) == 0:
-        return "unknown"
-    return max([("es", es), ("en", en), ("pt", pt)], key=lambda x: x[1])[0]

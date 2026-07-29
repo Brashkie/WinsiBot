@@ -10,7 +10,6 @@ from .schemas import (
 )
 
 DATA_DIR    = Path("data/parquet")
-ARCHIVE_DIR = Path("data/parquet/archive")
 
 # ─── Locks por tabla ──────────────────────────────────────────────────────────
 # FastAPI corre cada request en un hilo distinto (asyncio.to_thread). Sin esto,
@@ -35,11 +34,6 @@ def _lock_for(name: str) -> threading.RLock:
 
 def _path(name: str) -> Path:
     return DATA_DIR / f"{name}.parquet"
-
-def _archive_path(name: str) -> Path:
-    ARCHIVE_DIR.mkdir(parents=True, exist_ok=True)
-    date = datetime.utcnow().strftime('%Y-%m-%d')
-    return ARCHIVE_DIR / f"{name}_{date}.parquet"
 
 def _ensure_dir():
     DATA_DIR.mkdir(parents=True, exist_ok=True)
@@ -127,12 +121,6 @@ def load_messages(limit: int = 100) -> pl.DataFrame:
     if df.is_empty():
         return df
     return df.sort("timestamp", descending=True).head(limit)
-
-def get_messages_by_sender(sender: str) -> pl.DataFrame:
-    df = load_df("messages", MESSAGE_SCHEMA)
-    if df.is_empty():
-        return df
-    return df.filter(pl.col("sender") == sender)
 
 # ─── Usuarios (cache en memoria — hot path) ────────────────────────────────────
 # getOrCreateUser/addExp corren en CADA mensaje (vía el middleware de TS, ahora
@@ -255,16 +243,6 @@ def load_all_groups() -> pl.DataFrame:
 
 # ─── Stats de comandos ────────────────────────────────────────────────────────
 
-def log_command(command: str, sender: str, jid: str, success: bool = True) -> None:
-    record = {
-        "command":   command,
-        "sender":    sender,
-        "jid":       jid,
-        "timestamp": datetime.utcnow().isoformat(),
-        "success":   success,
-    }
-    append_row(record, "command_stats", COMMAND_STATS_SCHEMA)
-
 def get_top_commands(limit: int = 10) -> list[dict]:
     df = load_df("command_stats", COMMAND_STATS_SCHEMA)
     if df.is_empty():
@@ -288,114 +266,6 @@ def get_top_users(limit: int = 10) -> list[dict]:
           .head(limit)
           .to_dicts()
     )
-
-# ─── Analytics (nuevos) ───────────────────────────────────────────────────────
-
-def get_activity_by_hour() -> list[dict]:
-    """Actividad por hora del día — útil para saber cuándo más usa el bot"""
-    df = load_df("messages", MESSAGE_SCHEMA)
-    if df.is_empty():
-        return []
-    return (
-        df.with_columns(
-            pl.col("timestamp").str.slice(11, 2).cast(pl.Int32).alias("hour")
-        )
-        .group_by("hour")
-        .agg(pl.len().alias("count"))
-        .sort("hour")
-        .to_dicts()
-    )
-
-def get_active_groups(limit: int = 10) -> list[dict]:
-    """Grupos más activos por cantidad de mensajes"""
-    df = load_df("messages", MESSAGE_SCHEMA)
-    if df.is_empty():
-        return []
-    return (
-        df.filter(pl.col("isGroup") == True)
-          .group_by("jid")
-          .agg(pl.len().alias("count"))
-          .sort("count", descending=True)
-          .head(limit)
-          .to_dicts()
-    )
-
-def get_command_success_rate() -> list[dict]:
-    """Tasa de éxito por comando"""
-    df = load_df("command_stats", COMMAND_STATS_SCHEMA)
-    if df.is_empty():
-        return []
-    return (
-        df.group_by("command")
-          .agg([
-              pl.len().alias("total"),
-              pl.col("success").sum().alias("success_count"),
-          ])
-          .with_columns(
-              (pl.col("success_count") / pl.col("total") * 100)
-              .round(1)
-              .alias("success_rate")
-          )
-          .sort("total", descending=True)
-          .to_dicts()
-    )
-
-# ─── Archive — rotar logs viejos a archivo por fecha ─────────────────────────
-
-def archive_old_messages(keep_last: int = 5000) -> int:
-    """
-    Mueve mensajes viejos a archivo diario — mantiene solo keep_last en activo.
-    Retorna cuántos se archivaron.
-    """
-    with _lock_for("messages"):
-        df = load_df("messages", MESSAGE_SCHEMA)
-        if len(df) <= keep_last:
-            return 0
-
-        sorted_df  = df.sort("timestamp", descending=True)
-        active     = sorted_df.head(keep_last)
-        to_archive = sorted_df.tail(len(df) - keep_last)
-
-        # guardar archivo
-        archive_path = _archive_path("messages")
-        if archive_path.exists():
-            existing = pl.read_parquet(str(archive_path), memory_map=False)
-            to_archive = pl.concat([existing, to_archive], how="diagonal")
-        to_archive.write_parquet(str(archive_path), compression="snappy")
-
-        # actualizar activo
-        save_df(active, "messages")
-        return len(df) - keep_last
-
-def archive_old_command_stats(keep_last: int = 10000) -> int:
-    """Rota stats de comandos viejos a archivo"""
-    with _lock_for("command_stats"):
-        df = load_df("command_stats", COMMAND_STATS_SCHEMA)
-        if len(df) <= keep_last:
-            return 0
-
-        sorted_df  = df.sort("timestamp", descending=True)
-        active     = sorted_df.head(keep_last)
-        to_archive = sorted_df.tail(len(df) - keep_last)
-
-        archive_path = _archive_path("command_stats")
-        if archive_path.exists():
-            existing = pl.read_parquet(str(archive_path), memory_map=False)
-            to_archive = pl.concat([existing, to_archive], how="diagonal")
-        to_archive.write_parquet(str(archive_path), compression="snappy")
-
-        save_df(active, "command_stats")
-        return len(df) - keep_last
-
-def cleanup_old_archives(keep_days: int = 30) -> int:
-    """Elimina archivos de más de keep_days días"""
-    if not ARCHIVE_DIR.exists():
-        return 0
-    files   = sorted(ARCHIVE_DIR.glob("*.parquet"))
-    to_del  = files[:-keep_days] if len(files) > keep_days else []
-    for f in to_del:
-        f.unlink()
-    return len(to_del)
 
 # ─── Health / Break / Alert archive ──────────────────────────────────────────
 

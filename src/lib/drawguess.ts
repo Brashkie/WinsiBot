@@ -33,7 +33,7 @@ export interface DrawGame {
 
 // ─── Word Bank ────────────────────────────────────────────────────────────────
 
-export const WORDS: readonly DrawWord[] = [
+const WORDS: readonly DrawWord[] = [
   // Animales
   { word: 'perro',     category: 'animales',    hints: ['tiene 4 patas', 'ladra', 'mejor amigo del hombre'] },
   { word: 'gato',      category: 'animales',    hints: ['tiene bigotes', 'maúlla', 'le gusta el pescado'] },

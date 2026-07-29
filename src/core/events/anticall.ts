@@ -8,10 +8,6 @@ export function setAnticall(enabled: boolean): void {
   anticallEnabled = enabled
 }
 
-export function isAnticallEnabled(): boolean {
-  return anticallEnabled
-}
-
 export async function handleCallUpdate(
   sock:  WASocket,
   calls: any[],

@@ -574,6 +574,16 @@ async function main() {
     } catch {}
 
     try {
+      // Reentrante a propósito — en cada 'ready' (primer arranque o
+      // reconexión) actualiza la referencia al socket vivo; el servidor en
+      // sí solo se levanta una vez (ver flag `started` en server.ts).
+      const { startDashboard } = await import('@dashboard/server.js')
+      startDashboard(sock)
+    } catch (err) {
+      logger.warn({ err }, 'Panel web no pudo iniciar')
+    }
+
+    try {
       const { setupBirthdayChecker } = await import('@plugins/commands/general/birthday.js')
       setupBirthdayChecker(sock)
     } catch {}

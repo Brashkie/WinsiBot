@@ -28,7 +28,7 @@ export interface AvatarInventory {
 
 // ─── Part definitions ─────────────────────────────────────────────────────────
 
-export const AVATAR_PARTS: Record<string, AvatarPart[]> = {
+const AVATAR_PARTS: Record<string, AvatarPart[]> = {
   face: [
     { id:'f1', name:'Redondo',     emoji:'😶', rarity:'common' },
     { id:'f2', name:'Ovalado',     emoji:'🙂', rarity:'common' },

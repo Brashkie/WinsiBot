@@ -3,10 +3,10 @@ import polars as pl
 from pathlib import Path
 from datetime import datetime
 
-sys.path.insert(0, str(Path(__file__).parent.parent.parent))
+sys.path.insert(0, str(Path(__file__).parent.parent))
 
-from python.data.parquet_store import load_messages, load_df
-from python.ml.models import (
+from data.parquet_store import load_messages, load_df
+from ml.models import (
     CommandIntentModel, SpamDetectorModel,
     get_intent_model, get_spam_model,
 )

@@ -14,7 +14,7 @@
       "!node_modules/**",
       "!rust/**",
       "!python/**",
-      "!php/**",
+      "!web/**",
       "!data/**",
       "!sessions/**",
       "!auth/**"

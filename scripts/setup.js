@@ -6,7 +6,11 @@ import { existsSync } from 'fs'
 import { join }       from 'path'
 import readline       from 'readline'
 
-const WIN  = process.platform === 'win32'
+const WIN    = process.platform === 'win32'
+// Termux siempre define $PREFIX apuntando a su propio userland — es la forma
+// estándar de detectarlo (process.platform no alcanza: reporta 'android' o
+// 'linux' según el build de Node, sin garantía).
+const TERMUX = !!(process.env.PREFIX && process.env.PREFIX.includes('com.termux'))
 const ROOT = process.cwd()
 const VENV = join(ROOT, 'python', 'venv')
 const VENV_PY = join(VENV, WIN ? 'Scripts/python.exe' : 'bin/python')
@@ -69,10 +73,18 @@ async function main() {
   }
 
   // 5. npm install
+  if (TERMUX) {
+    console.log('\n  ℹ️  Termux detectado — better-sqlite3 compila nativo (sin binario para Android).')
+    console.log('     Si falta algo: pkg install clang make pkg-config\n')
+  }
   step('Dependencias Node.js ...')
   const npmR = run('npm install --prefer-offline --loglevel=error')
-  if (npmR.status !== 0) warn(npmR.stderr.slice(0, 200))
-  else ok()
+  if (npmR.status !== 0) {
+    warn(npmR.stderr.slice(0, 200))
+    if (TERMUX) console.warn('     (Termux: revisá que estén instalados clang, make y pkg-config — better-sqlite3 los necesita para compilar)')
+  } else {
+    ok()
+  }
 
   // 6. TypeScript build
   step('Compilar TypeScript ...')
@@ -88,7 +100,8 @@ async function main() {
   // 7. Rust (opcional, pregunta)
   const cargoR = run('cargo --version')
   if (cargoR.status === 0) {
-    const ans = await ask('\n  ¿Compilar Rust ahora? (tarda ~2min) [s/N] ')
+    const estimate = TERMUX ? '10-30+ min en un teléfono, compila DuckDB en C++ desde cero' : 'tarda ~2min'
+    const ans = await ask(`\n  ¿Compilar Rust ahora? (${estimate}) [s/N] `)
     if (ans.toLowerCase() === 's') {
       console.log('  ◈ Compilando Rust (cargo build --release)...')
       const r = spawnSync('npm run rust:build', { shell: true, stdio: 'inherit' })

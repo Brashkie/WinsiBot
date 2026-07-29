@@ -39,7 +39,7 @@ export interface QuizProfile {
 
 // ─── Question Bank ────────────────────────────────────────────────────────────
 
-export const QUESTIONS: readonly QuizQuestion[] = [
+const QUESTIONS: readonly QuizQuestion[] = [
   // ── JavaScript ──────────────────────────────────────────────────────────────
   {
     id: 'js01', category: 'javascript', difficulty: 'fácil',

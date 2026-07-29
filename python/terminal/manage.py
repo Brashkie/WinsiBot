@@ -64,10 +64,10 @@ RUST_BASE   = os.getenv('SESSION_API_URL', 'http://127.0.0.1:3001')
 RUST_APIKEY = os.getenv('SESSION_API_KEY', '')
 
 SERVICES = {
-    'FastAPI':  'http://127.0.0.1:5000/api/v1/health',
-    'Rust API': f'{RUST_BASE}/health/live',
-    'Webhook':  'http://127.0.0.1:4001/health',
-    'PHP':      'http://127.0.0.1:8080',
+    'FastAPI':   'http://127.0.0.1:5000/api/v1/health',
+    'Rust API':  f'{RUST_BASE}/health/live',
+    'Webhook':   'http://127.0.0.1:4001/health',
+    'Dashboard': f'http://127.0.0.1:{os.getenv("DASHBOARD_PORT", "4002")}/api/health',
 }
 
 # ─── HTTP helpers ─────────────────────────────────────────────────────────────
@@ -222,13 +222,13 @@ def cmd_diagnose():
     # ── FastAPI / Webhook ─────────────────────────────────────────────────────
     console.print()
     _section('FastAPI / Webhook')
-    api = _http_get('http://127.0.0.1:5000/api/v1/health')
+    api = _http_get(SERVICES['FastAPI'])
     if api: _ok('FastAPI online')
     else:
         _warn('FastAPI offline')
         issues.append(('warn', 'FastAPI offline'))
 
-    wh = _http_get('http://127.0.0.1:4001/health')
+    wh = _http_get(SERVICES['Webhook'])
     if wh:
         connected = wh.get('connected', False)
         lbl = '[green]socket ✓[/green]' if connected else '[yellow]socket desconectado[/yellow]'

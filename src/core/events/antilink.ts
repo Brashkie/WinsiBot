@@ -78,7 +78,3 @@ export async function handleAntilink(
   return true
 }
 
-// Compatibilidad con usos anteriores
-export function containsLink(text: string): boolean {
-  return RE.wa.test(text) || RE.waChannel.test(text) || RE.generic.test(text)
-}

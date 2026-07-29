@@ -27,8 +27,8 @@ DATA_DIR   = ROOT / 'data'
 HEALTH_LOG = DATA_DIR / 'health_log.json'
 
 # ─── Config ───────────────────────────────────────────────────────────────────
-FLASK_URL    = 'http://localhost:5000'
-PHP_URL      = 'http://localhost:8080'
+FLASK_URL     = 'http://localhost:5000'
+DASHBOARD_URL = 'http://localhost:4002'
 CHECK_EVERY  = 30   # segundos entre checks
 MAX_RAM_PCT  = 92   # % RAM maxima antes de alerta (Windows usa ~80-85% idle con 16GB)
 MAX_CPU_PCT  = 90   # % CPU maxima antes de alerta
@@ -127,18 +127,18 @@ async def check_flask() -> HealthCheck:
     except Exception as e:
         return HealthCheck('flask', 'error', f'Flask error: {str(e)[:50]}')
 
-async def check_php() -> HealthCheck:
-    """Verifica que PHP panel responda"""
+async def check_dashboard() -> HealthCheck:
+    """Verifica que el panel web (Node) responda"""
     try:
         async with httpx.AsyncClient(timeout=5) as client:
-            r = await client.get(f'{PHP_URL}/health')
+            r = await client.get(f'{DASHBOARD_URL}/api/health')
             if r.status_code == 200:
-                return HealthCheck('php', 'ok', 'PHP panel online')
-            return HealthCheck('php', 'warn', f'PHP responde pero status: {r.status_code}')
+                return HealthCheck('dashboard', 'ok', 'Panel web online')
+            return HealthCheck('dashboard', 'warn', f'Panel responde pero status: {r.status_code}')
     except httpx.ConnectError:
-        return HealthCheck('php', 'warn', 'PHP panel offline — no critico')
+        return HealthCheck('dashboard', 'warn', 'Panel web offline — no critico')
     except Exception as e:
-        return HealthCheck('php', 'warn', f'PHP error: {str(e)[:50]}')
+        return HealthCheck('dashboard', 'warn', f'Panel error: {str(e)[:50]}')
 
 def check_session() -> HealthCheck:
     """Verifica integridad de la sesion de WhatsApp"""
@@ -249,8 +249,8 @@ async def check_latency() -> HealthCheck:
     """Mide latencia real de Flask en ms"""
     results = {}
     endpoints = [
-        ('flask', f'{FLASK_URL}/api/v1/health'),
-        ('php',   f'{PHP_URL}/health'),
+        ('flask',     f'{FLASK_URL}/api/v1/health'),
+        ('dashboard', f'{DASHBOARD_URL}/api/health'),
     ]
     async with httpx.AsyncClient(timeout=5) as client:
         for name, url in endpoints:
@@ -447,7 +447,7 @@ def check_process_freeze() -> HealthCheck:
 
     targets = [
         ('node',  lambda c: 'tsx' in c and 'index.ts' in c, 'http://127.0.0.1:4001/health'),
-        ('flask', lambda c: 'uvicorn' in c or 'app.py' in c, 'http://localhost:5000/api/v1/health'),
+        ('flask', lambda c: 'uvicorn' in c or 'app.py' in c, f'{FLASK_URL}/api/v1/health'),
     ]
 
     frozen = []
@@ -591,7 +591,7 @@ def calculate_score(checks: list[HealthCheck]) -> float:
         'error_rate':  2,   # ← antes era 0
         'disk':        1,
         'data':        1,
-        'php':         0,
+        'dashboard':   0,
         'python':      0,
     }
     total_weight = sum(weights.values())
@@ -638,7 +638,7 @@ async def run_health_check() -> HealthReport:
     """Ejecuta todos los checks incluyendo los 6 nuevos"""
     async_checks = await asyncio.gather(
         check_flask(),
-        check_php(),
+        check_dashboard(),
         check_latency(),
     )
     sync_checks = [

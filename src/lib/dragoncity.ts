@@ -20,12 +20,12 @@ import { decode } from '@msgpack/msgpack'
 import { translate } from '@vitalets/google-translate-api'
 import { exeName } from './platform.js'
 import { createCache, registerCache } from './cacheManager.js'
-import { config } from '@config'
+import { USER_AGENT } from '@config'
 import type { DragonCatalog, DragonDef } from '../types/index.js'
 
 const execAsync = promisify(exec)
 
-export const SOURCE_URL =
+const SOURCE_URL =
   'https://raw.githubusercontent.com/Brashkie/module-data/main/rollmedia/dragoncity.msgpack'
 
 const CATALOG_KEY = 'all'
@@ -37,7 +37,7 @@ export async function getDragons(): Promise<DragonDef[]> {
   const res  = await axios.get<ArrayBuffer>(SOURCE_URL, {
     timeout:      15_000,
     responseType: 'arraybuffer',
-    headers:      { 'User-Agent': `Mozilla/5.0 (compatible; ${config.botName}/1.0)` },
+    headers:      { 'User-Agent': USER_AGENT },
   })
   const data     = decode(new Uint8Array(res.data)) as DragonCatalog
   const dragones = data.personajes ?? []

@@ -161,11 +161,11 @@ API_PATTERNS = [
         },
     },
     {
-        'pattern':  r'ECONNREFUSED.*8080',
+        'pattern':  r'ECONNREFUSED.*4002',
         'type':     'api',
         'severity': 'medium',
-        'message':  'PHP panel caído',
-        'fix_base': 'Reiniciar PHP panel — no crítico',
+        'message':  'Panel web caído',
+        'fix_base': 'Reiniciar el bot — el panel se levanta junto con la conexión a WhatsApp, no crítico',
         'fix_ctx':  {},
     },
     {

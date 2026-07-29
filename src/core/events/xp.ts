@@ -1,4 +1,4 @@
-import { getUserData, userData, expForLevel } from './index.js'
+import { getUserData, userData } from './index.js'
 
 const XP_PER_MSG = () => Math.ceil(Math.random() * 10) + 5
 
@@ -20,11 +20,4 @@ export function addXP(sender: string, pushName: string): void {
   user.exp   += XP_PER_MSG()
   user.name   = pushName || user.name
   userData.set(sender, user)
-}
-
-export function getXPInfo(sender: string): { exp: number; level: number; needed: number; progress: number } {
-  const user   = getUserData(sender)
-  const needed = expForLevel(user.level)
-  const pct    = Math.floor((user.exp / needed) * 100)
-  return { exp: user.exp, level: user.level, needed, progress: pct }
 }

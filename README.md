@@ -1,6 +1,6 @@
 <div align="center">
 
-<img src="https://capsule-render.vercel.app/api?type=waving&color=0:6C63FF,100:00C9FF&height=180&section=header&text=WinsiBot&fontSize=62&fontColor=ffffff&fontAlignY=38&desc=v8.8.0%20%E2%80%94%20Enterprise%20WhatsApp%20Bot&descAlignY=58&descSize=18" width="100%"/>
+<img src="https://capsule-render.vercel.app/api?type=waving&color=0:6C63FF,100:00C9FF&height=180&section=header&text=WinsiBot&fontSize=62&fontColor=ffffff&fontAlignY=38&desc=v8.8.1%20%E2%80%94%20Enterprise%20WhatsApp%20Bot&descAlignY=58&descSize=18" width="100%"/>
 
 <br/>
 
@@ -10,7 +10,7 @@
 [![Rust](https://img.shields.io/badge/Rust-1.75%2B-CE422B?style=for-the-badge&logo=rust&logoColor=white)](https://rust-lang.org)
 
 [![License](https://img.shields.io/badge/License-GPL--3.0-blue?style=flat-square)](LICENSE)
-[![Version](https://img.shields.io/badge/Version-8.8.0-6C63FF?style=flat-square)](CHANGELOG.md)
+[![Version](https://img.shields.io/badge/Version-8.8.1-6C63FF?style=flat-square)](CHANGELOG.md)
 [![Platform](https://img.shields.io/badge/Platform-Windows%20%7C%20Linux%20%7C%20macOS%20%7C%20Android-lightgrey?style=flat-square)](https://github.com/Brashkie/WinsiBot)
 [![PRs Welcome](https://img.shields.io/badge/PRs-welcome-brightgreen?style=flat-square)](https://github.com/Brashkie/WinsiBot/pulls)
 
@@ -18,7 +18,7 @@
 
 > Bot de WhatsApp de alto rendimiento con arquitectura multi-lenguaje de tres capas.<br/>
 > Sin límite artificial de grupos, pensado para miles de mensajes por hora y múltiples instancias.<br/>
-> v8.8.0 — Ahora corre en Linux, macOS y Android (Termux), no solo Windows. El nombre del bot y el canal ya no están hardcodeados — se configuran por `.env`. Se quitó el límite artificial de "10,000 grupos" del marketing. La sesión de WhatsApp pasa de JSON a CBOR (más compacta, más rápida), extendido a todo el stack (TS/Python/Rust) para no perder ninguna herramienta de recuperación existente. Sub-bots con nombre y medios propios, `#menu` rediseñado para listar comandos reales, y limpieza de 9 archivos muertos.
+> v8.8.1 — Panel web nuevo (React + Vite + Tailwind + TanStack + Hono) reemplaza por completo al viejo panel PHP, con login vinculado por WhatsApp (`#login <código>`, sin contraseñas) y autogestión de sub-bots/grupos para usuarios comunes, no solo el owner. Limpieza extensa de código muerto en TypeScript, Python y scripts, fix de una URL de health-check duplicada, y documentación nueva de instalación en Termux (Android).
 
 <br/>
 
@@ -66,18 +66,16 @@
 | 🐍 **Services** | Python / FastAPI / Celery | IA avanzada (Ollama + GPT + Claude + Gemini), watchdog, health checks |
 | ⚙️ **Session** | Rust / Axum | Escritura atómica de creds, 10 snapshots rotativos, tracker Bad MAC, rate limiter, delivery SQLite |
 
-### Novedades en v8.8.0
+### Novedades en v8.8.1
 
 | Área | Cambio |
 |------|--------|
-| **Multiplataforma de verdad — Linux, macOS, Android (Termux)** | 8 scripts (`celery`, `health`, `monitor`, `api`, `spam:build`, `py:lint`, `py:format`, `manage`) tenían rutas de Windows hardcodeadas sin rama para Unix. Centralizado en `src/lib/platform.ts`/`scripts/_platform.js`. De paso: el filtro nativo de spam/flood se desactivaba en silencio fuera de Windows (buscaba solo `.dll`) — ahora elige `.dll`/`.so`/`.dylib` según el SO real |
-| **Branding configurable** | El nombre del bot y el canal ya no están hardcodeados — salen de `.env` (`BOT_NAME`, `NEWSLETTER_JID`). La línea de crédito se mantiene fija a propósito |
-| **Sin límite artificial de grupos** | El README afirmaba "10,000+ grupos" sin que existiera ningún contador real en el código — corregido. `MAX_CONTACTS` ahora configurable por `.env` |
-| **Sesión de WhatsApp: JSON → CBOR** | `creds.json` y el resto de la sesión pasan a binario nativo (sin el ~33% de inflado de base64) — migración automática sin downtime. Extendido a todo lo que leía sesión en JSON (verificador de integridad, backup, reconexión de sub-bots, y del lado de Python/Rust) para no perder ninguna herramienta de recuperación existente |
-| **Sub-bots con nombre y medios propios** | Nuevo `#serbot setname <nombre>` y `#serbot setmedia <clave>` (respondiendo a una imagen/video) |
-| **`#menu` rediseñado** | Ahora lista comandos reales (no solo conteos) — RPG y Roleplay completas siempre, el resto por `#menu todo` |
-| **Rust — detección de plataforma** | Nuevo `platform.rs`: SO/arquitectura/núcleos al arrancar y en `/health`, para cuando esto corra en varios servidores |
-| **Limpieza** | 9 archivos muertos borrados, `CATEGORY_SYMBOLS` duplicado consolidado en uno solo |
+| **Nuevo: panel web, reemplaza PHP** | `web/` (React + Vite + Tailwind + TanStack) + `src/dashboard/` (Hono + WebSocket, mismo proceso de Node). Login vinculado por WhatsApp (`#login <código>`, sin contraseñas) — usuarios comunes gestionan sus propios sub-bots y la configuración de sus grupos desde la web; el owner tiene un panel aparte con stats globales y feed de eventos en vivo |
+| **PHP eliminado por completo** | `php/`, `docker/Dockerfile.php` y las referencias que lo arrancaban — nunca estuvo realmente conectado al bot (sin autenticación, sin webhooks reales) |
+| **Limpieza — segunda pasada de código muerto en TypeScript** | `utils.ts` de 36 a 11 exports, `interactive.ts` de 745 a 338 líneas, y recortes verificados en una docena de archivos más de `lib/`/`core/` |
+| **Limpieza — scripts/ y Python** | Boilerplate de `spawn()` duplicado en 9 scripts consolidado en un helper compartido (`scripts/_spawn.js`); segunda pasada de exports muertos en `database.py`/`cache.py`/`etl.py`/`parquet_store.py` |
+| **Fix: URL de health-check duplicada** | `health_monitor.py`/`manage.py` repetían la misma URL en vez de reusar su propia constante/diccionario |
+| **Instalación en Termux documentada** | Paquetes exactos a instalar, qué esperar (compilación nativa de `better-sqlite3`, primera build de Rust lenta por el crate `duckdb`), y cómo mantener el bot corriendo en segundo plano |
 
 **[📜 Ver el historial completo de versiones →](CHANGELOG.md)**
 
@@ -97,7 +95,7 @@
 | Session Store | Rust + Axum + SQLite | Creds atómicas + delivery tracking |
 | Criptografía | `@brashkie/signalis-core` | Curve25519 / Ed25519 / HKDF / AES-GCM (Rust NAPI) |
 | Base de datos | SQLite (better-sqlite3) | userData, groupConfigs, clanes |
-| Panel web | PHP 8.1 *(opcional)* | Dashboard de administración |
+| Panel web | React + Vite + Tailwind + TanStack | Dashboard en tiempo real — admin y self-service de sub-bots/grupos |
 
 </div>
 
@@ -180,7 +178,7 @@
 - Webhook HTTP con HMAC-SHA256
 - Scheduler con jobs programables vía cron
 - CLI de mantenimiento multi-servicio
-- Panel PHP opcional para estadísticas
+- Panel web en tiempo real (React) — admin y self-service de sub-bots/grupos
 - **Mensajes interactivos**: botones nativos, listas, carrusel, álbum, sylph
 - **Respuesta automática de botones**: handler intercepta `interactiveResponseMessage`
 
@@ -194,7 +192,7 @@
 
 ```
 ╔══════════════════════════════════════════════════════════════════════════════╗
-║                           WinsiBot v8.8.0                                    ║
+║                           WinsiBot v8.8.1                                    ║
 ╠════════════════════╦═══════════════════════╦═══════════════════════════════╣
 ║   TypeScript        ║       Python           ║           Rust                ║
 ║   Node.js :4001     ║                        ║                               ║
@@ -233,12 +231,16 @@
 | Rust + Cargo | 1.75+ | ✅ | para compilar Session API |
 | Redis | 6.x | ✅ | para Celery / cola |
 | Ollama | latest | ❌ | IA local (recomendado, 16 GB RAM+) |
-| PHP | 8.1+ | ❌ | panel web opcional |
 | FFmpeg | 6.x | ❌ | conversión de media |
 
 **Sistemas operativos soportados:** Windows 10/11 · Ubuntu 20.04+ · Debian 11+ · macOS 12+ · Android (Termux)
 
-> **Nota de plataforma:** en Termux/Android y en Linux/macOS sin GUI, Ollama, PHP (panel web) y el servidor local de Redis son opcionales igual que en Windows — el bot degrada bien sin ellos. `npm run cython:build` y `npm run spam:build` ya detectan el compilador C disponible (`gcc`/`clang`) en cualquiera de los tres sistemas.
+> **Nota de plataforma:** en Termux/Android y en Linux/macOS sin GUI, Ollama y el servidor local de Redis son opcionales igual que en Windows — el bot degrada bien sin ellos. `npm run cython:build` y `npm run spam:build` ya detectan el compilador C disponible (`gcc`/`clang`) en cualquiera de los tres sistemas. El panel web (`web/`) usa el mismo Node.js ya requerido — no suma una herramienta nueva, solo un `npm install && npm run build` aparte (ver sección Instalación).
+>
+> **Dos cosas a tener en cuenta en dispositivos débiles (Termux/Android, ARM de placa única):**
+>
+> - `better-sqlite3` (dependencia de Node) no trae binario precompilado para Android — `npm install` lo compila desde código fuente, así que necesitás un compilador C/C++ instalado *antes* de correrlo (ver sección Termux más abajo).
+> - La primera compilación de Rust (`npm run rust:build`) puede tardar bastante (10–30+ min en un teléfono) porque el crate `duckdb` compila toda la librería DuckDB en C++ desde cero la primera vez. Es normal — no cierres la terminal, solo dale tiempo (y evitá que el dispositivo se duerma).
 
 > **Ollama:** Descarga un modelo antes de iniciar — `ollama pull llama3` o `ollama pull mistral`. El bot intenta Ollama primero y cae en las APIs cloud automáticamente si no está disponible.
 
@@ -269,21 +271,61 @@ cd ..
 # 4 — Compilar Session API de Rust
 npm run rust:build
 
-# 5 — Variables de entorno
+# 5 — Compilar el panel web (opcional — el bot arranca igual sin esto,
+#     el panel muestra un aviso hasta que corras este paso)
+cd web
+npm install
+npm run build
+cd ..
+
+# 6 — Variables de entorno
 # Windows
 copy .env.example .env
 copy rust\.env.example rust\.env
 # Linux / macOS
 # cp .env.example .env && cp rust/.env.example rust/.env
 
-# 6 — Editar .env con tus valores (ver sección Configuración)
+# 7 — Editar .env con tus valores (ver sección Configuración)
 
-# 7 — Iniciar todo
+# 8 — Iniciar todo
 npm run start
 ```
 
 > **Primera vez:** Si no hay sesión guardada, aparecerá un **código QR** en la terminal.  
 > Escanéalo desde WhatsApp → ⋮ → Dispositivos vinculados → Vincular dispositivo.
+
+---
+
+### Instalación en Termux (Android)
+
+Los mismos 8 pasos de arriba funcionan en Termux — esta sección solo cubre lo que es específico de Android: qué instalar antes, y cómo mantener el bot corriendo cuando cerrás la app.
+
+> Instalá Termux desde **F-Droid**, no desde Play Store — la versión de Play Store está descontinuada y desactualizada.
+
+```bash
+# 0 — Paquetes del sistema (una sola vez)
+pkg update && pkg upgrade -y
+pkg install -y nodejs-lts python rust git clang make pkg-config openssl-tool tmux
+
+# Opcional — solo si el bot va a leer/escribir en el almacenamiento compartido
+# del teléfono (fuera de su propia carpeta de datos):
+termux-setup-storage
+```
+
+Con eso instalado, seguí los 8 pasos de la sección [Instalación](#instalación) de arriba sin cambios — Termux entra por la rama "Linux / macOS" en los pasos 3 y 6.
+
+**Dos cosas que van a pasar y son normales:**
+
+- En el paso 2 (`npm install`), `better-sqlite3` va a compilar desde código fuente (Android no tiene binario precompilado) — por eso `clang`/`make`/`pkg-config` van primero en el paso 0. Si `npm install` falla mencionando `node-gyp` o un compilador no encontrado, es señal de que falta alguno de esos paquetes.
+- En el paso 4 (`npm run rust:build`), la primera compilación puede tardar 10–30+ minutos porque el crate `duckdb` compila toda la librería DuckDB en C++ desde cero. No hay forma de evitarlo la primera vez — dejalo corriendo y no cierres la sesión de Termux.
+
+**Mantener el bot corriendo en segundo plano:**
+
+- `termux-wake-lock` antes de iniciar el bot evita que Android mate el proceso al apagar la pantalla (`termux-wake-unlock` para liberarlo después).
+- Corré el bot dentro de una sesión de `tmux` (`tmux new -s winsibot`, después `npm run start`) para que el proceso siga vivo aunque cierres la app de Termux — reconectá con `tmux attach -t winsibot`.
+- Para autoarranque al reiniciar el teléfono, instalá el complemento **Termux:Boot** (F-Droid) y agregá un script en `~/.termux/boot/`.
+
+> **RAM:** Ollama (IA local) generalmente no es viable en un teléfono común — usá las APIs cloud (`OPENAI_API_KEY`/`ANTHROPIC_API_KEY`/`GEMINI_API_KEY`) en su lugar, el bot cae a ellas automáticamente si Ollama no responde.
 
 ---
 
@@ -462,7 +504,7 @@ Menú interactivo multi-servicio que orquesta Python, Rust y Node.js.
 
 | Opción | Comando | Cuándo usarlo |
 |:------:|---------|---------------|
-| 1 | `manage:status` | Ver estado de FastAPI / Rust / Webhook / PHP |
+| 1 | `manage:status` | Ver estado de FastAPI / Rust / Webhook / Panel web |
 | 2 | `manage:diagnose` | Analizar sesión, archivos Signal, Rust, logs |
 | 3 | `manage:repair` | Signal corrupto → intenta restauración sin QR → recupera backup |
 | 4 | `manage:reset-signal` | Solo borrar `session-*.json` (conserva `creds.json`) |
@@ -653,8 +695,9 @@ WinsiBot/
 │   │   ├── handler.ts                # Dispatcher de mensajes → comandos (semáforo con espera acotada)
 │   │   ├── groupCache.ts             # Cache canónico de groupMetadata (TTL + debounce/coalescing)
 │   │   ├── store.ts                  # Cache de contactos/chats (escritura atómica)
+│   │   ├── persistence.ts            # Persistencia real (users/groups/inventory/clans.json, escritura atómica)
+│   │   ├── lid_mapper.ts             # Resolución @lid ↔ número real
 │   │   ├── logger.ts                 # Pino logger
-│   │   ├── queue.ts                  # Cola de mensajes priorizada
 │   │   └── events/
 │   │       ├── index.ts              # UserData, GroupConfig, clanes, helpers globales
 │   │       ├── xp.ts                 # Sistema de experiencia / niveles
@@ -665,10 +708,9 @@ WinsiBot/
 │   │       ├── anticall.ts           # Bloqueo de llamadas
 │   │       └── nsfw.ts               # Control de contenido adulto
 │   ├── lib/
-│   │   ├── globals.ts                # Sistema de roles: owner/dev/mod/helper/prem
-│   │   ├── db.ts                     # Persistencia SQLite (userData, grupos, clanes)
-│   │   ├── ai.ts                     # Cliente IA multi-modelo: GPT · Claude · Gemini
+│   │   ├── authStateCbor.ts          # Sesión de Baileys en CBOR (creds/keys) en vez de JSON
 │   │   ├── authVerifier.ts           # Verificación Curve25519 + restauración sin QR
+│   │   ├── db.ts                     # SQLite — KV genérico (sesiones del panel web)
 │   │   ├── interactive.ts            # Mensajes interactivos: botones, listas, carrusel, álbum
 │   │   ├── gift.ts                   # Sistema de regalos (30+ items, buzón, wishlist, trueques)
 │   │   ├── pvp.ts                    # Arena PvP (ELO K=32, 9 divisiones, 5 acciones)
@@ -681,19 +723,22 @@ WinsiBot/
 │   │   ├── queue.ts                  # Cola genérica con concurrencia configurable (usada por downloader.ts)
 │   │   ├── rule34.ts                 # Cliente de la API JSON de Rule34 (imágenes/videos por tag)
 │   │   ├── cacheManager.ts           # Cache genérico con TTL, stats hits/misses, eviction LFU
-│   │   ├── media.ts                  # Procesamiento de media
 │   │   ├── media_sender.ts           # safeSend / enqueueSend / broadcastSend
 │   │   ├── rateLimiter.ts            # Token bucket rate limiter (TypeScript)
-│   │   ├── safeMessage.ts            # Envío seguro con reintentos
 │   │   ├── session.ts                # Cliente Session API de Rust
 │   │   ├── sticker.ts                # Creación de stickers
+│   │   ├── platform.ts               # Rutas/binarios por SO (Windows/Linux/macOS/Termux)
 │   │   ├── jid_utils.ts              # Utilidades de JID
 │   │   └── utils.ts                  # Helpers generales
-│   └── plugins/
-│       ├── commands/                 # 125+ comandos organizados por categoría
-│       ├── middlewares/              # Auth, anti-spam, cooldown, rate limit
-│       ├── scheduler/                # Jobs programados (node-cron)
-│       └── webhooks/                 # Receiver HTTP
+│   ├── plugins/
+│   │   ├── commands/                 # 190+ comandos organizados por categoría
+│   │   ├── middlewares/              # Auth, anti-spam, cooldown, rate limit
+│   │   ├── scheduler/                # Jobs programados (node-cron)
+│   │   └── webhooks/                 # Receiver HTTP
+│   └── dashboard/                    # Backend del panel web (Hono + WebSocket)
+│       ├── server.ts                 # API + WS + estático de web/dist
+│       ├── auth.ts                   # Login vinculando WhatsApp (#login <código>)
+│       └── routes/                   # /api/subbots, /api/groups, /api/admin
 ├── python/                           # Python — servicios auxiliares
 │   ├── api/
 │   │   └── routers/
@@ -722,7 +767,8 @@ WinsiBot/
 │       ├── tasks.rs                  # Tareas de fondo: auto-snapshot, limpieza periódica
 │       ├── analytics.rs              # Dashboard agregado (GET /analytics)
 │       └── alerts.rs                 # Webhooks Discord-compatibles en eventos del watchdog
-├── php/                              # Panel web opcional
+├── web/                               # Panel web — React + Vite + Tailwind + TanStack
+│   └── src/routes/                   # login, subbots, groups, admin (TanStack Router)
 ├── docs/
 │   ├── commands.md                   # Referencia completa de comandos (ES)
 │   └── commands.en.md                # Full command reference (EN)

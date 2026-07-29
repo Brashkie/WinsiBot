@@ -96,8 +96,8 @@ export interface BotConfig {
   ownerJid:             string[]
   sessionPath:          string
   pythonApiUrl:         string
-  phpApiUrl:            string
   rustApiUrl:           string
+  sessionApiKey:        string
   openaiKey?:           string
   spotifyClientId?:     string
   spotifyClientSecret?: string

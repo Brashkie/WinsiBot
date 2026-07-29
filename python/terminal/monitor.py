@@ -33,7 +33,6 @@ last_command_time  = 0.0
 last_response_time = 0.0
 process:           subprocess.Popen | None = None
 flask_proc:        subprocess.Popen | None = None
-php_proc:          subprocess.Popen | None = None
 warned_hang        = False
 warned_no_response = False
 session_expelled   = False
@@ -115,25 +114,6 @@ def wait_for_api(timeout: float = 15.0, interval: float = 0.4) -> bool:
             pass
         time.sleep(interval)
     return False
-
-# ─── PHP ──────────────────────────────────────────────────────────────────────
-def start_php():
-    global php_proc
-    php_dir = ROOT_DIR / "php"
-    if not php_dir.exists():
-        return
-    try:
-        php_proc = subprocess.Popen(
-            ['php', '-S', 'localhost:8080', '-t', 'public', 'public/index.php'],
-            cwd=str(php_dir),
-            stdout=subprocess.DEVNULL,
-            stderr=subprocess.DEVNULL,
-        )
-        log("[cyan]§ PHP panel iniciado (puerto 8080)[/cyan]")
-    except FileNotFoundError:
-        log("[yellow]§ PHP no encontrado — panel desactivado[/yellow]")
-    except Exception as e:
-        log(f"[yellow]§ PHP no pudo iniciar: {e}[/yellow]")
 
 # ─── Watchdog ─────────────────────────────────────────────────────────────────
 def watchdog():
@@ -315,7 +295,7 @@ def handle_exit(sig, frame):
     log_event("shutdown", "manual SIGINT")
     alert_from_watchdog("shutdown")
     backup_session()
-    for proc in [process, flask_proc, php_proc]:
+    for proc in [process, flask_proc]:
         if proc:
             try: proc.kill()
             except: pass
@@ -334,7 +314,6 @@ if __name__ == "__main__":
     # 1. iniciar servicios en paralelo
     service_threads = [
         threading.Thread(target=start_flask,         daemon=True, name='SvcAPI'),
-        threading.Thread(target=start_php,           daemon=True, name='SvcPHP'),
         threading.Thread(target=start_celery,        daemon=True, name='SvcCelery'),
         threading.Thread(target=start_health_monitor,daemon=True, name='SvcHealth'),
     ]

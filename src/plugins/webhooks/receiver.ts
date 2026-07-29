@@ -221,13 +221,3 @@ export function startWebhookReceiver(sock: WASocket): void {
   })
 }
 
-export function stopWebhookReceiver(): void {
-  _sock = null
-  if (!_server) return
-  _server.close(() => logger.info('[webhook] receiver detenido'))
-  _server = null
-}
-
-export function updateSock(sock: WASocket): void {
-  _sock = sock
-}

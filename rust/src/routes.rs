@@ -14,6 +14,7 @@ use chrono::Utc;
 use serde::{Deserialize, Serialize};
 
 use crate::{alerts, atomic, bad_mac, conversations, db, metrics, rate_limiter, session_id, snapshot, subbots, watchdog};
+use crate::config::MAX_SESSION_BYTES;
 
 // ── AppState ──────────────────────────────────────────────────────────────────
 
@@ -37,8 +38,7 @@ pub struct AppState {
 }
 
 // ── Límites de seguridad ──────────────────────────────────────────────────────
-const MAX_SESSION_BYTES: usize = 10_000_000; // 10 MB por sesión
-const MAX_BATCH:         usize = 1_000;       // items por request de track/ack
+const MAX_BATCH: usize = 1_000; // items por request de track/ack
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 

@@ -37,7 +37,7 @@ export interface GiftInventory {
 
 // ─── Catalog ─────────────────────────────────────────────────────────────────
 
-export const GIFT_CATALOG: readonly GiftItem[] = [
+const GIFT_CATALOG: readonly GiftItem[] = [
   // Common
   { id: 'flower',     name: 'Flor',            emoji: '🌸', rarity: 'common',    desc: 'Una flor fresca',                 value: 50  },
   { id: 'candy',      name: 'Dulce',            emoji: '🍬', rarity: 'common',    desc: 'Dulce delicioso',                 value: 50  },

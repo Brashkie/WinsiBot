@@ -221,7 +221,7 @@ export const userClan = new Map<string, string>() // userJid → clanTag
 // DEFAULTS
 // ─────────────────────────────────────────────────────────────────────────────
 
-export function defaultItems(): ItemInventory {
+function defaultItems(): ItemInventory {
   return {
     sword: 0,
     spada: 0,
@@ -232,7 +232,7 @@ export function defaultItems(): ItemInventory {
   }
 }
 
-export function defaultCooldowns(): Cooldowns {
+function defaultCooldowns(): Cooldowns {
   return {
     lastWork: 0,
     lastDaily: 0,
@@ -529,17 +529,10 @@ export function fmtCooldown(ms: number): string {
 // HELPERS VARIOS
 // ─────────────────────────────────────────────────────────────────────────────
 
-export function getNumber(jid: string): string {
-  return jid
-    .replace('@s.whatsapp.net', '')
-    .replace('@lid', '')
-    .replace('@g.us', '')
-    .replace(/[^0-9]/g, '')
-}
-
-export function isGroupJid(jid: string): boolean {
-  return jid.endsWith('@g.us')
-}
+// Reexportado desde jid_utils.ts — antes había dos implementaciones
+// independientes acá y en @lib/jid_utils.js con riesgo real de que
+// divergieran; esta queda como la única fuente de verdad.
+export { getNumber } from '@lib/jid_utils.js'
 
 /** EXP necesaria para pasar al siguiente nivel — crece con el nivel pero no explota.
  *  Antes era 100 * 1.5^nivel: pasado el nivel ~22 se volvía matemáticamente

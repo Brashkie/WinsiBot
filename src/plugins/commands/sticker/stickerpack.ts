@@ -7,7 +7,7 @@ interface StickerPackResponse {
   result?: string[]
 }
 
-const sleep = (ms: number) => new Promise(r => setTimeout(r, ms))
+import { sleep } from '@lib/utils.js'
 
 const command: Command = {
   name:        'stickerpack',

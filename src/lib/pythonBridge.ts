@@ -14,10 +14,13 @@ const client: AxiosInstance = axios.create({
 })
 
 // Cliente para el servidor Rust (sin reintentos — ya es sub-ms)
+// Antes mandaba process.env.RUST_API_KEY (nunca documentado en .env.example,
+// siempre vacío) — Rust rechaza con 401 cualquier x-api-key que no matchee,
+// así que TODO el camino rápido de NLP en Rust caía en silencio a Python.
 const rustClient: AxiosInstance = axios.create({
   baseURL: config.rustApiUrl,
   timeout: 300,   // 300ms máximo; si no responde, cae a Python
-  headers: { 'Content-Type': 'application/json', 'x-api-key': process.env.RUST_API_KEY ?? '' },
+  headers: { 'Content-Type': 'application/json', 'x-api-key': config.sessionApiKey },
 })
 
 // 1 solo reintento — este cliente está en el camino crítico de cada mensaje
@@ -132,41 +135,9 @@ export async function fastProcess(
   }
 }
 
-// ─── Rate limit via Cython ────────────────────────────────────────────────────
-export interface RateLimitResult {
-  allowed: boolean
-  stats:   { hits: number; sender: string; last_hit: number; time_since: number }
-}
-
-export async function checkRateLimit(
-  sender:   string,
-  maxHits = 8,
-  window  = 10.0,
-): Promise<RateLimitResult | null> {
-  const res = await pythonPost<RateLimitResult>('/api/v1/ratelimit/check', {
-    sender,
-    max_hits: maxHits,
-    window,
-  })
-  return res.data ?? null
-}
-
 export async function checkSpamText(text: string): Promise<boolean> {
   const res = await pythonPost<{ is_spam: boolean; confidence: number }>('/api/v1/ml/predict/spam', { text })
   return res.data?.is_spam ?? false
-}
-
-// ─── Cache stats ──────────────────────────────────────────────────────────────
-export interface CacheStats {
-  rate_entries:     number
-  cooldown_entries: number
-  group_entries:    number
-  msg_entries:      number
-}
-
-export async function getCacheStats(): Promise<CacheStats | null> {
-  const res = await pythonGet<CacheStats>('/api/v1/fast/cache/stats')
-  return res.data ?? null
 }
 
 // ─── Usuarios ─────────────────────────────────────────────────────────────────
@@ -200,27 +171,6 @@ export async function getOrCreateUser(
 export async function warnUser(jid: string): Promise<number> {
   const res = await pythonPost<{ warns: number }>(`/api/v1/users/${jid}/warn`, {})
   return res.data?.warns ?? 0
-}
-
-// ─── Grupos ───────────────────────────────────────────────────────────────────
-export interface GroupData {
-  jid:      string
-  name:     string
-  antilink: boolean
-  antispam: boolean
-  welcome:  boolean
-  muted:    boolean
-}
-
-export async function getOrCreateGroup(jid: string, name = ''): Promise<GroupData | null> {
-  const res = await pythonGet<GroupData>(`/api/v1/groups/${jid}`)
-  if (res.success) return res.data ?? null
-  const create = await pythonPost<GroupData>('/api/v1/groups', { jid, name })
-  return create.data ?? null
-}
-
-export async function updateGroup(data: Partial<GroupData> & { jid: string }): Promise<void> {
-  await pythonPost('/api/v1/groups', data)
 }
 
 // ─── Mensajes ─────────────────────────────────────────────────────────────────
@@ -293,11 +243,6 @@ export async function analyzeIntent(text: string): Promise<NLPIntent | null> {
 
   const res = await pythonPost<NLPIntent>('/api/v1/ml/nlp/intent', { text })
   return res.success ? res.data ?? null : null
-}
-
-export async function analyzeSimilarity(text1: string, text2: string): Promise<number> {
-  const res = await pythonPost<{ similarity: number }>('/api/v1/ml/nlp/similarity', { text1, text2 })
-  return res.data?.similarity ?? 0
 }
 
 // ─── Mensajes pendientes ──────────────────────────────────────────────────────

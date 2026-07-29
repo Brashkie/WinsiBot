@@ -28,8 +28,12 @@ import fs from 'fs'
 // (ver syncSubBotLimitToRust más abajo), esto es solo el cap local en TS.
 const MAX_SUBBOTS    = Number(process.env.SUBBOT_MAX) || 250
 const SUB_DIR        = path.join(process.cwd(), 'data', 'subbots')
-const RUST_URL       = process.env.RUST_API_URL ?? 'http://localhost:3001'
-const RUST_KEY       = process.env.RUST_API_KEY ?? ''
+// Antes leía RUST_API_URL/RUST_API_KEY de process.env directo — RUST_API_KEY
+// nunca estuvo documentado en ningún .env.example (la variable real es
+// SESSION_API_KEY, la misma que usa session.ts), así que esto mandaba un
+// x-api-key vacío en cada llamada y Rust las rechazaba con 401.
+const RUST_URL       = config.rustApiUrl
+const RUST_KEY       = config.sessionApiKey
 const RECONNECT_CAP  = 64_000       // ms — backoff cap per bot
 
 fs.mkdirSync(SUB_DIR, { recursive: true })
@@ -197,7 +201,7 @@ function getSubPath(phone: string): string {
   return path.join(SUB_DIR, phone)
 }
 
-function getSubMediaDir(phone: string): string {
+export function getSubMediaDir(phone: string): string {
   return path.join(getSubPath(phone), 'media')
 }
 
@@ -226,6 +230,15 @@ function writeMeta(phone: string, patch: Record<string, any>): void {
   } catch {}
 }
 
+// Avisa al panel web (si está corriendo) que un sub-bot cambió de estado —
+// import dinámico a propósito: serbot.ts es núcleo del bot y no debe
+// depender en tiempo de carga de que el dashboard exista o esté sano.
+function notifySubBotStatus(phone: string, status: string): void {
+  import('@dashboard/ws.js')
+    .then(({ broadcast }) => broadcast('subbot_status', { phone, status }))
+    .catch(() => {})
+}
+
 // Encuentra a qué sub-bot pertenece un socket dado — usado por setname/setmedia
 // para saber cuál personalizar sin pedirle el número al usuario (el comando
 // corre DESDE la propia sesión de WhatsApp de ese sub-bot).
@@ -234,6 +247,22 @@ function findPhoneBySock(sock: any): string | null {
     if (bot.sock === sock) return phone
   }
   return null
+}
+
+// ─── Personalización — compartida entre #serbot setname/setmedia y la API
+// del panel web (src/dashboard/routes/subbots.ts), una sola implementación
+// para las dos superficies.
+
+export function applySubBotName(phone: string, name: string): void {
+  writeMeta(phone, { customName: name })
+  const bot = subBots.get(phone)
+  if (bot) subBots.set(phone, { ...bot, name, customName: name })
+}
+
+export function applySubBotMedia(phone: string, key: string, buffer: Buffer, ext: 'mp4' | 'jpg'): void {
+  const dir = getSubMediaDir(phone)
+  fs.mkdirSync(dir, { recursive: true })
+  fs.writeFileSync(path.join(dir, `${key}.${ext}`), buffer)
 }
 
 // ─── Iniciar sub-bot ──────────────────────────────────────────────────────────
@@ -442,6 +471,7 @@ export async function startSubBot(
 
       console.log(`  ${themes.success('◈')} ${color.bold('Sub-bot')}  ${color.dim('+' + realPhone)}  ${themes.success('conectado')}`)
       await rustSetState(sessionId, 'Connected').catch(() => {})
+      notifySubBotStatus(phone, 'connected')
 
       writeMeta(phone, { phone, name: waName, method, chatJid, ownerJid, connectedAt: new Date().toISOString() })
 
@@ -481,6 +511,7 @@ export async function startSubBot(
           lastDisconnectReason: reasonText,
           lastDisconnectAt:     Date.now(),
         })
+        notifySubBotStatus(phone, 'disconnected')
       }
 
       // Permanent logout — clean up entirely
@@ -723,9 +754,7 @@ const command: Command = {
         return
       }
 
-      writeMeta(phone, { customName: name })
-      const bot = subBots.get(phone)
-      if (bot) subBots.set(phone, { ...bot, name, customName: name })
+      applySubBotName(phone, name)
 
       await safeSend(() => sock.sendMessage(jid, {
         text: `✔ Nombre del sub-bot cambiado a *${name}*.`,
@@ -764,9 +793,7 @@ const command: Command = {
       try {
         const buffer = await downloadMediaMessage({ ...msg, message: target } as any, 'buffer', {}) as Buffer
         const ext    = target?.videoMessage ? 'mp4' : 'jpg'
-        const dir    = getSubMediaDir(phone)
-        fs.mkdirSync(dir, { recursive: true })
-        fs.writeFileSync(path.join(dir, `${key}.${ext}`), buffer)
+        applySubBotMedia(phone, key, buffer, ext)
 
         await safeSend(() => sock.sendMessage(jid, {
           text: `✔ Medio guardado como *${key}* — se usará en vez del compartido para este sub-bot.`,

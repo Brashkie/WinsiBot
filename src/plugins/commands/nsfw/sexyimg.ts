@@ -1,7 +1,7 @@
 import type { Command } from '../../../types/index.js'
 import { getGroupConfig, getUserData, chargeEmbers } from '@core/events.js'
 import axios from 'axios'
-import { config } from '@config'
+import { USER_AGENT } from '@config'
 
 const IMAGES_URL = 'https://raw.githubusercontent.com/Brashkie/module/refs/heads/main/nsfw/image/sexy.json'
 const EMBER_COST = 1
@@ -31,7 +31,7 @@ const command: Command = {
     }
 
     const images = await axios.get<string[]>(IMAGES_URL, {
-      headers: { 'User-Agent': `Mozilla/5.0 (compatible; ${config.botName}/1.0)` },
+      headers: { 'User-Agent': USER_AGENT },
       timeout: 15_000,
     }).then(r => r.data).catch(() => null)
 

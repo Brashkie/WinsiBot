@@ -78,43 +78,6 @@ def restore_image(image_b64: str, method: str = 'nafnet') -> dict:
     except Exception as e:
         return { 'success': False, 'error': str(e) }
 
-# ─── Eliminar ruido adversarial ───────────────────────────────────────────────
-def remove_noise(image_b64: str) -> dict:
-    try:
-        from imgutils.restore import remove_adversarial_noise
-
-        image_data = base64.b64decode(image_b64)
-        image      = Image.open(io.BytesIO(image_data)).convert('RGB')
-        result     = remove_adversarial_noise(image)
-
-        out_buf = io.BytesIO()
-        result.save(out_buf, format='PNG')
-        out_b64 = base64.b64encode(out_buf.getvalue()).decode('utf-8')
-
-        return { 'success': True, 'image': out_b64, 'format': 'png' }
-
-    except Exception as e:
-        return { 'success': False, 'error': str(e) }
-
-# ─── Obtener tags de imagen anime ─────────────────────────────────────────────
-def get_anime_tags(image_b64: str) -> dict:
-    try:
-        from imgutils.tagging import get_wd14_tags
-
-        image_data = base64.b64decode(image_b64)
-        image      = Image.open(io.BytesIO(image_data)).convert('RGB')
-        rating, features, chars = get_wd14_tags(image)
-
-        return {
-            'success':  True,
-            'rating':   rating,
-            'features': dict(list(features.items())[:10]),
-            'chars':    chars,
-        }
-
-    except Exception as e:
-        return { 'success': False, 'error': str(e) }
-
 # ─── Detectar si imagen es anime ─────────────────────────────────────────────
 def detect_anime(image_b64: str) -> dict:
     try:

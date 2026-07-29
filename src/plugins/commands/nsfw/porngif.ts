@@ -1,12 +1,12 @@
 import type { Command } from '../../../types/index.js'
 import { getGroupConfig, getUserData, chargeEmbers } from '@core/events.js'
 import axios from 'axios'
-import { config } from '@config'
+import { USER_AGENT } from '@config'
 
 const VIDEOS_URL = 'https://raw.githubusercontent.com/Brashkie/module/refs/heads/main/nsfw/video/adult.json'
 const EMBER_COST = 1
 
-const sleep = (ms: number) => new Promise(r => setTimeout(r, ms))
+import { sleep } from '@lib/utils.js'
 
 const command: Command = {
   name: 'porn',
@@ -44,7 +44,7 @@ const command: Command = {
 
     const [videos] = await Promise.all([
       axios.get<string[]>(VIDEOS_URL, {
-        headers: { 'User-Agent': `Mozilla/5.0 (compatible; ${config.botName}/1.0)` },
+        headers: { 'User-Agent': USER_AGENT },
         timeout: 15_000,
       }).then(r => r.data).catch(() => null),
       (async () => {

@@ -19,7 +19,7 @@ export interface AssetState extends AssetDef {
 
 // ─── Activos disponibles ───────────────────────────────────────────────────────
 
-export const ASSETS: AssetDef[] = [
+const ASSETS: AssetDef[] = [
   { symbol: 'BTC',   name: 'Bitcoin WA',    emoji: '₿',  basePrice: 105_000, volatility: 0.022 },
   { symbol: 'ETH',   name: 'Ethereum WA',   emoji: 'Ξ',  basePrice: 3_500,   volatility: 0.025 },
   { symbol: 'GOLD',  name: 'Gold WA',       emoji: '🥇', basePrice: 2_400,   volatility: 0.008 },

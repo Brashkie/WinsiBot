@@ -5,9 +5,10 @@
  */
 
 import { logger } from '@core/logger.js'
+import { config } from '@config'
 
-const API_URL = process.env.SESSION_API_URL ?? 'http://127.0.0.1:3001'
-const API_KEY  = process.env.SESSION_API_KEY ?? ''
+const API_URL = config.rustApiUrl
+const API_KEY  = config.sessionApiKey
 
 const _headers = {
   'Content-Type': 'application/json',
@@ -345,21 +346,6 @@ export class SessionClient {
         logger.warn(`[session:${this.sessionId}] sin snapshots — se generará QR nuevo`)
       }
     }
-  }
-}
-
-// ─── Helpers globales ─────────────────────────────────────────────────────────
-export async function listActiveSessions(): Promise<string[]> {
-  const res = await apiFetch<{ sessions: string[] }>('/sessions')
-  return res.sessions
-}
-
-export async function ping(): Promise<boolean> {
-  try {
-    const res = await fetch(`${API_URL}/health/live`)
-    return res.ok
-  } catch {
-    return false
   }
 }
 

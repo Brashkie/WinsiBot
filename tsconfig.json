@@ -21,6 +21,7 @@
       "@core/events/*": ["./src/core/events/*"],
       "@plugins/*": ["./src/plugins/*"],
       "@lib/*": ["./src/lib/*"],
+      "@dashboard/*": ["./src/dashboard/*"],
       "@types/*": ["./src/types/*"],
       "@db/*": ["./src/database/*"],
       "@config": ["./src/config.ts"]

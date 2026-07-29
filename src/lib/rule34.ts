@@ -1,5 +1,5 @@
 import axios from 'axios'
-import { config } from '@config'
+import { config, USER_AGENT } from '@config'
 
 export interface Rule34Post {
   file_url: string
@@ -38,7 +38,7 @@ export async function searchRule34(tags: string, limit = 100): Promise<Rule34Pos
   const res = await axios.get<Rule34Post[] | { post?: Rule34Post[] } | string>(BASE_URL, {
     params,
     timeout: 15_000,
-    headers: { 'User-Agent': `Mozilla/5.0 (compatible; ${config.botName}/1.0)` },
+    headers: { 'User-Agent': USER_AGENT },
   })
 
   const data = res.data

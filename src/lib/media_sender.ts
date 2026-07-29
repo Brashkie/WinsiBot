@@ -30,7 +30,8 @@ const RETRYABLE = [
 const sleep = (ms: number) => new Promise<void>(r => setTimeout(r, ms))
 
 // ─── safeSend — respuestas directas a comandos (sin cola) ────────────────────
-// Para broadcasts o envíos masivos, usar broadcastSend o enqueueSend en su lugar.
+// Para broadcasts o envíos masivos, usar broadcastSend en su lugar (que a su
+// vez usa enqueueSend por debajo — privada, sin caso de uso directo hoy).
 export async function safeSend(fn: () => Promise<any>): Promise<any> {
   for (let attempt = 0; attempt < MAX_RETRIES; attempt++) {
     try {
@@ -48,7 +49,7 @@ export async function safeSend(fn: () => Promise<any>): Promise<any> {
 // ─── enqueueSend — envío con rate limiting + delivery tracking ───────────────
 // Usar cuando el destino es variable (loops, webhooks, subbots, notificaciones).
 // Auto-registra el mensaje en Rust para seguimiento de entrega.
-export async function enqueueSend(
+async function enqueueSend(
   jid:      string,
   fn:       () => Promise<any>,
   priority: 'urgent' | 'normal' | 'broadcast' = 'normal',

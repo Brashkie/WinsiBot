@@ -1,6 +1,7 @@
 use std::fs::{self, OpenOptions};
 use std::io::Write;
 use std::path::Path;
+use crate::config::MAX_SESSION_BYTES;
 
 pub fn atomic_write(path: &Path, data: &[u8]) -> std::io::Result<()> {
     if let Some(parent) = path.parent() {
@@ -18,14 +19,12 @@ pub fn atomic_write(path: &Path, data: &[u8]) -> std::io::Result<()> {
     Ok(())
 }
 
-const MAX_HEALTHY_BYTES: u64 = 10_000_000; // 10 MB — cap antes de parsear
-
 pub fn is_healthy(path: &Path) -> bool {
     let meta = match fs::metadata(path) {
         Ok(m) => m,
         Err(_) => return false,
     };
-    if meta.len() > MAX_HEALTHY_BYTES {
+    if meta.len() > MAX_SESSION_BYTES as u64 {
         tracing::warn!(path = %path.display(), size = meta.len(), "archivo demasiado grande para validar");
         return false;
     }

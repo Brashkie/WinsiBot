@@ -26,7 +26,7 @@ const GIFS = [
   'https://f.top4top.io/m_3518hmrom1.mp4',
 ]
 
-const sleep = (ms: number) => new Promise(r => setTimeout(r, ms))
+import { sleep } from '@lib/utils.js'
 
 const command: Command = {
   name: 'sus',

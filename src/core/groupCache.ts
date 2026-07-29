@@ -43,8 +43,3 @@ export function setGroupMetadata(jid: string, metadata: GroupMetadata): void {
   groupMetaCache.set(jid, metadata)
   lastGoodMeta.set(jid, metadata)
 }
-
-export function invalidateGroupMetadata(jid: string): void {
-  groupMetaCache.delete(jid)
-  lastGoodMeta.delete(jid)
-}

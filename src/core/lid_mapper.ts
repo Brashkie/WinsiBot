@@ -4,22 +4,6 @@ import type { WASocket } from '@whiskeysockets/baileys'
 import { winsiStore } from './store.js'
 import { getGroupParticipants } from './groupCache.js'
 
-// ─── Registrar mensaje ────────────────────────────────────────────────────────
-export function registerMessage(
-  msg: import('@whiskeysockets/baileys').WAMessage
-): void {
-  // el store ya captura esto en su bind — esta funcion es por si se necesita
-  // registrar mensajes adicionales fuera del flujo normal
-  const sender   = msg.key.participant ?? msg.key.remoteJid ?? ''
-  const pushName = msg.pushName ?? ''
-  if (!sender || !pushName) return
-
-  // forzar actualización en el store
-  const existing = winsiStore.getContact(sender) ?? { id: sender }
-  ;(winsiStore as any).data?.contacts &&
-    ((winsiStore as any).data.contacts[sender] = { ...existing, notify: pushName })
-}
-
 // ─── Grupo vía cache canónico (groupCache.ts) ─────────────────────────────────
 export async function getGroupCached(
   sock:     WASocket,

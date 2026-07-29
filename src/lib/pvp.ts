@@ -48,7 +48,7 @@ export interface ActionResult {
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
-export const MAX_HP = 100
+const MAX_HP = 100
 const ELO_K           = 32
 const CHALLENGE_TTL   = 60_000
 const ACTION_TIMEOUT  = 2 * 60_000
