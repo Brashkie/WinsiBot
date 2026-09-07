@@ -275,20 +275,6 @@ def start_health_monitor():
     except Exception as e:
         log(f"[yellow]§ Health Monitor no pudo iniciar: {e}[/yellow]")
         
-def start_celery():
-    python_exe = find_python()
-    try:
-        subprocess.Popen(
-            [python_exe, '-m', 'celery', '-A', 'api.celery_app',
-             'worker', '--loglevel=warning', '--concurrency=2'],
-            cwd    = str(ROOT_DIR / 'python'),
-            stdout = subprocess.DEVNULL,
-            stderr = subprocess.DEVNULL,
-        )
-        log("[cyan]§ Celery worker iniciado[/cyan]")
-    except Exception as e:
-        log(f"[yellow]§ Celery no pudo iniciar: {e}[/yellow]")
-
 # ─── Exit ─────────────────────────────────────────────────────────────────────
 def handle_exit(sig, frame):
     log("[yellow]◆ WinsiBot detenido[/yellow]")
@@ -314,7 +300,6 @@ if __name__ == "__main__":
     # 1. iniciar servicios en paralelo
     service_threads = [
         threading.Thread(target=start_flask,         daemon=True, name='SvcAPI'),
-        threading.Thread(target=start_celery,        daemon=True, name='SvcCelery'),
         threading.Thread(target=start_health_monitor,daemon=True, name='SvcHealth'),
     ]
     for t in service_threads:

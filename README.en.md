@@ -1,6 +1,6 @@
 <div align="center">
 
-<img src="https://capsule-render.vercel.app/api?type=waving&color=0:6C63FF,100:00C9FF&height=180&section=header&text=WinsiBot&fontSize=62&fontColor=ffffff&fontAlignY=38&desc=v8.8.1%20%E2%80%94%20Enterprise%20WhatsApp%20Bot&descAlignY=58&descSize=18" width="100%"/>
+<img src="https://capsule-render.vercel.app/api?type=waving&color=0:6C63FF,100:00C9FF&height=180&section=header&text=WinsiBot&fontSize=62&fontColor=ffffff&fontAlignY=38&desc=v8.8.2%20%E2%80%94%20Enterprise%20WhatsApp%20Bot&descAlignY=58&descSize=18" width="100%"/>
 
 <br/>
 
@@ -10,7 +10,7 @@
 [![Rust](https://img.shields.io/badge/Rust-1.75%2B-CE422B?style=for-the-badge&logo=rust&logoColor=white)](https://rust-lang.org)
 
 [![License](https://img.shields.io/badge/License-GPL--3.0-blue?style=flat-square)](LICENSE)
-[![Version](https://img.shields.io/badge/Version-8.8.1-6C63FF?style=flat-square)](CHANGELOG.md)
+[![Version](https://img.shields.io/badge/Version-8.8.2-6C63FF?style=flat-square)](CHANGELOG.md)
 [![Platform](https://img.shields.io/badge/Platform-Windows%20%7C%20Linux%20%7C%20macOS%20%7C%20Android-lightgrey?style=flat-square)](https://github.com/Brashkie/WinsiBot)
 [![PRs Welcome](https://img.shields.io/badge/PRs-welcome-brightgreen?style=flat-square)](https://github.com/Brashkie/WinsiBot/pulls)
 
@@ -18,7 +18,7 @@
 
 > High-performance WhatsApp bot with a three-layer multi-language architecture.<br/>
 > No artificial group limit, built for thousands of messages per hour and multiple instances.<br/>
-> v8.8.1 — New web dashboard (React + Vite + Tailwind + TanStack + Hono) fully replaces the old PHP panel, with WhatsApp-linked login (`#login <code>`, no passwords) and self-service sub-bot/group management for regular users, not just the owner. Large dead-code sweep across TypeScript, Python, and scripts, a duplicated health-check URL fixed, and a new Termux (Android) installation walkthrough.
+> v8.8.2 — Fewer dependencies and fewer services: Redis, Celery, `better-sqlite3` and `node-cache` are gone, all four either dead weight or replaceable by something already in the tree. Installing no longer requires a Redis server, nor compiling `better-sqlite3` from source on Termux. User persistence moves from rewriting 2.2 MB every 30 seconds to writing only what changed: from ~7.2 GB/day of disk writes down to ~0.17 GB.
 
 <br/>
 
@@ -63,19 +63,19 @@
 | Layer | Technology | Responsibility |
 |-------|-----------|----------------|
 | 🟦 **Core** | TypeScript / Node.js | WhatsApp protocol, command dispatcher, RPG, AI chat |
-| 🐍 **Services** | Python / FastAPI / Celery | Advanced AI (Ollama + GPT + Claude + Gemini), watchdog, health checks |
+| 🐍 **Services** | Python / FastAPI | Advanced AI (Ollama + GPT + Claude + Gemini), watchdog, health checks |
 | ⚙️ **Session** | Rust / Axum | Atomic creds write, 10 rotating snapshots, Bad MAC tracker, rate limiter, delivery SQLite |
 
-### What's new in v8.8.1
+### What's new in v8.8.2
 
 | Area | Change |
 |------|--------|
-| **New: web dashboard, replaces PHP** | `web/` (React + Vite + Tailwind + TanStack) + `src/dashboard/` (Hono + WebSocket, same Node process). WhatsApp-linked login (`#login <code>`, no passwords) — regular users manage their own sub-bots and group settings from the web; the owner gets a separate panel with global stats and a live event feed |
-| **PHP fully removed** | `php/`, `docker/Dockerfile.php`, and the code that started it — it was never actually wired to the bot (no auth, no real webhooks) |
-| **Cleanup — second pass of dead TypeScript code** | `utils.ts` went from 36 to 11 exports, `interactive.ts` from 745 to 338 lines, plus verified trims across a dozen more `lib/`/`core/` files |
-| **Cleanup — scripts/ and Python** | Duplicated `spawn()` boilerplate in 9 scripts consolidated into a shared helper (`scripts/_spawn.js`); second pass of dead exports in `database.py`/`cache.py`/`etl.py`/`parquet_store.py` |
-| **Fix: duplicated health-check URL** | `health_monitor.py`/`manage.py` repeated the same URL instead of reusing their own constant/dict |
-| **Termux installation documented** | Exact packages to install, what to expect (`better-sqlite3` compiles natively, first Rust build is slow because of the `duckdb` crate), and how to keep the bot running in the background |
+| **Redis and Celery removed** | They were dead weight: Celery's 8 tasks were only reachable from 3 endpoints the bot never called, and the routers actually in use call the ML modules directly. Nothing but Celery used Redis, as its broker. **`redis-server` is no longer an install requirement** |
+| **`better-sqlite3` gone — panel sessions moved to `strenor`** | SQLite set up 4 tables that sat empty; the only thing it really stored were the web panel's tokens. A dependency that compiles through `node-gyp` (from source on Termux) was being paid for 4 calls. `strenor` is NAPI-RS: stable ABI and prebuilt binaries, Termux included — and session TTL is now real |
+| **`node-cache` gone — a single cache implementation** | The 3 `NodeCache` instances moved to `cacheManager.ts`'s `Cache`. They gain a size cap and LFU eviction, which `NodeCache` lacked: `#gpt` history could grow unbounded with 2500+ users |
+| **Persistence — from ~7.2 GB/day to ~0.17 GB** | 2.6 MB were rewritten every 30 s even when nothing changed. Writes are now skipped when the content is identical, and `users.json` becomes `data/users.aof`, a log where only the user that changed gets written. Measured against the real 2557 users: 0 bytes with no changes, 48.5 KB with 50 users touched (−97.8%) |
+| **New: `npm run users:export` / `users:import` / `users:stats`** | The user table is no longer a JSON you can open in an editor — this script exports it, restores it, and reports on the log |
+| **`@brashkie/signalis-core` 0.4.0 → 0.5.1** | No code changes; verified at runtime that the API `authVerifier.ts` uses behaves identically |
 
 **[📜 See the full version history →](CHANGELOG.md)**
 
@@ -91,10 +91,11 @@
 | Language | TypeScript 5.x | End-to-end strict typing |
 | WhatsApp | Baileys 6.x | WA Web multi-device protocol |
 | Services | Python 3.11 + FastAPI | AI, watchdog, backup |
-| Tasks | Celery + Redis | Async task queue |
 | Session Store | Rust + Axum + SQLite | Atomic creds + delivery tracking |
 | Crypto | `@brashkie/signalis-core` | Curve25519 / Ed25519 / HKDF / AES-GCM (Rust NAPI) |
-| Database | SQLite (better-sqlite3) | userData, groupConfigs, clans |
+| Persistence — users | `strenor` (Rust NAPI) | `data/users.aof`, a delta log: only the user that changed gets written |
+| Persistence — rest | JSON under `data/` (`core/persistence.ts`) | groupConfigs, clans, inventory — rewritten only when they change |
+| Embedded KV | `strenor` (Rust NAPI) | Web panel sessions, with real TTL |
 | Web Panel | React + Vite + Tailwind + TanStack | Real-time dashboard — admin and self-service for sub-bots/groups |
 
 </div>
@@ -192,21 +193,21 @@
 
 ```
 ╔══════════════════════════════════════════════════════════════════════════════╗
-║                           WinsiBot v8.8.1                                    ║
+║                           WinsiBot v8.8.2                                    ║
 ╠════════════════════╦═══════════════════════╦═══════════════════════════════╣
 ║   TypeScript        ║       Python           ║           Rust                ║
 ║   Node.js :4001     ║                        ║                               ║
 ║                     ║  ┌──────────────────┐  ║  ┌───────────────────────┐   ║
 ║  ┌───────────────┐  ║  │  FastAPI :5000   │  ║  │  Session API :3001    │   ║
 ║  │  Baileys WS   │  ║  ├──────────────────┤  ║  │                       │   ║
-║  ├───────────────┤  ║  │  Celery + Redis  │  ║  │  ● atomic write       │   ║
+║  ├───────────────┤  ║  │  ML: spam/intent │  ║  │  ● atomic write       │   ║
 ║  │   Handler     │◄─╬─►│  Ollama client   │  ║  │  ● snapshots ×10      │   ║
 ║  │  (semaphore)  │  ║  │  GPT/Claude/     │  ║  │  ● bad_mac tracker    │   ║
 ║  ├───────────────┤  ║  │  Gemini fallback │  ║  │  ● rate_limiter       │   ║
 ║  │  125+ Cmds    │  ║  ├──────────────────┤  ║  │  ● watchdog heartbeat │   ║
 ║  ├───────────────┤  ║  │  Monitor         │  ║  │  ● delivery SQLite    │   ║
-║  │  lib/db.ts    │  ║  │  Watchdog        │  ║  │  ● /sessions/backup   │   ║
-║  │  (SQLite)     │  ║  └──────────────────┘  ║  └───────────────────────┘   ║
+║  │  persistence  │  ║  │  Watchdog        │  ║  │  ● /sessions/backup   │   ║
+║  │  (strenor)    │  ║  └──────────────────┘  ║  └───────────────────────┘   ║
 ║  ├───────────────┤  ║                        ║                               ║
 ║  │ authVerifier  │  ║                        ║  ┌───────────────────────┐   ║
 ║  │ Curve25519    │  ║                        ║  │   messages.db         │   ║
@@ -230,17 +231,16 @@
 | npm | 9.x | ✅ | bundled with Node |
 | Python | 3.11+ | ✅ | `python --version` |
 | Rust + Cargo | 1.75+ | ✅ | to compile Session API |
-| Redis | 6.x | ✅ | for Celery / queue |
 | Ollama | latest | ❌ | local AI (recommended, 16 GB RAM+) |
 | FFmpeg | 6.x | ❌ | media conversion |
 
 **Supported OS:** Windows 10/11 · Ubuntu 20.04+ · Debian 11+ · macOS 12+ · Android (Termux)
 
-> **Platform note:** on Termux/Android and headless Linux/macOS, Ollama and a local Redis server are optional just like on Windows — the bot degrades gracefully without them. `npm run cython:build` and `npm run spam:build` auto-detect the available C compiler (`gcc`/`clang`) on any of the three platforms. The web panel (`web/`) uses the same Node.js already required — no new tool, just a separate `npm install && npm run build` (see Installation).
+> **Platform note:** on Termux/Android and headless Linux/macOS, Ollama is optional just like on Windows — the bot degrades gracefully without it. `npm run cython:build` and `npm run spam:build` auto-detect the available C compiler (`gcc`/`clang`) on any of the three platforms. The web panel (`web/`) uses the same Node.js already required — no new tool, just a separate `npm install && npm run build` (see Installation).
 >
 > **Two things to expect on weaker devices (Termux/Android, single-board ARM):**
 >
-> - `better-sqlite3` (a Node dependency) ships no prebuilt binary for Android — `npm install` compiles it from source, so you need a C/C++ compiler installed *before* running it (see the Termux section below).
+> - Some native Node dependencies (`sharp`, `cbor-x`) ship no prebuilt binary for Android — `npm install` compiles them from source, so you need a C/C++ compiler installed *before* running it (see the Termux section below).
 > - The first Rust build (`npm run rust:build`) can take a while (10–30+ min on a phone) because the `duckdb` crate compiles the entire DuckDB C++ library from scratch the first time. That's expected — don't close the terminal, just let it run (and keep the device from sleeping).
 
 > **Ollama:** Pull a model before starting — `ollama pull llama3` or `ollama pull mistral`. The bot tries Ollama first and silently falls back to cloud APIs.
@@ -317,7 +317,7 @@ With that installed, follow the 8 steps in the [Installation](#installation) sec
 
 **Two things that will happen and are expected:**
 
-- In step 2 (`npm install`), `better-sqlite3` will compile from source (Android has no prebuilt binary) — that's why `clang`/`make`/`pkg-config` come first in step 0. If `npm install` fails mentioning `node-gyp` or a missing compiler, one of those packages is missing.
+- In step 2 (`npm install`), some native dependencies will compile from source (Android has no prebuilt binary for them) — that's why `clang`/`make`/`pkg-config` come first in step 0. If `npm install` fails mentioning `node-gyp` or a missing compiler, one of those packages is missing.
 - In step 4 (`npm run rust:build`), the first build can take 10–30+ minutes because the `duckdb` crate compiles the entire DuckDB C++ library from scratch. There's no way around it the first time — let it run and don't close the Termux session.
 
 **Keeping the bot running in the background:**
@@ -362,7 +362,6 @@ WEBHOOK_SECRET=                          # openssl rand -hex 32
 
 # ─── Python services ──────────────────────────────────────────────────────────
 PYTHON_API_URL=http://localhost:5000
-REDIS_URL=redis://localhost:6379
 API_SECRET_KEY=                          # openssl rand -hex 32
 
 # ─── Spotify (optional) ───────────────────────────────────────────────────────
@@ -393,7 +392,6 @@ RUST_LOG=winsibot_session_api=info
 | `MAX_CONTACTS` | `20000` | Cached contacts before rotating the oldest out |
 | `WEBHOOK_PORT` | `4001` | HTTP receiver port |
 | `SESSION_API_URL` | `http://127.0.0.1:3001` | Rust Session API URL |
-| `REDIS_URL` | `redis://localhost:6379` | Redis connection string |
 | `NODE_ENV` | `production` | Execution mode |
 | `LOG_LEVEL` | `info` | Pino log level |
 | `OPENAI_API_KEY` | — | GPT / DALL-E (optional) |
@@ -416,7 +414,7 @@ npm run start
 
 Builds and starts the bot **behind a lightweight supervisor** (`src/supervisor.ts`)
 that restarts it if it crashes or hangs without a heartbeat. The bot, in turn,
-brings up its own dependencies (Redis, Celery, Rust Session API, Python/FastAPI)
+brings up its own dependencies (Rust Session API, Python/FastAPI)
 if they aren't already running, and each one restarts itself if it crashes —
 each with its own status indicator, and a single Ctrl+C to shut everything down together.
 
@@ -433,7 +431,7 @@ npm run monitor         # Python monitor with auto-restart and dashboard
 
 | Script | Description |
 |--------|-------------|
-| `start` | Build and start the bot **via the supervisor** — restarts it if it crashes or hangs, and brings up Redis/Celery/Rust/Python on its own (each with its own auto-restart) |
+| `start` | Build and start the bot **via the supervisor** — restarts it if it crashes or hangs, and brings up Rust/Python on its own (each with its own auto-restart) |
 | `start:unsupervised` | Same as `start` but without the supervisor layer — runs `dist/index.js` directly |
 | `monitor` | Python monitor with auto-restart |
 | `dev` | Node.js direct — development / QR scan |
@@ -449,6 +447,9 @@ npm run monitor         # Python monitor with auto-restart and dashboard
 | `manage:backup` | Force session backup |
 | `manage:restore` | Restore from a backup |
 | `manage:logs` | View recent session log events |
+| `users:export` | Export the user table to a readable JSON |
+| `users:import` | Restore the user table from a JSON (with the bot stopped) |
+| `users:stats` | How many users there are and how big the log is |
 | `typecheck` | Type-check without compiling |
 | `lint` / `lint:fix` | Biome — lints `src/`/`scripts/` (check-only / auto-fix what's safe) |
 | `format` / `format:fix` | Biome — formats `src/`/`scripts/` (show diff only / write) |
@@ -888,7 +889,7 @@ Yes. Delivery tracking also works with Business. However, features like catalogs
 <details>
 <summary><b>Is user data lost on restart?</b></summary>
 
-No. `lib/db.ts` persists `userData`, `groupConfigs`, and clans in SQLite (`data/winsi.db`). Data loads automatically at startup.
+No. `core/persistence.ts` stores everything under `data/`: users in `users.aof` (a `strenor` append-only log where only the user that changed gets written) and `groupConfigs`/clans/inventory as JSON. It loads automatically at startup. To view or back up the user table in readable form: `npm run users:export`.
 
 </details>
 

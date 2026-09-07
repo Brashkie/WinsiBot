@@ -48,7 +48,7 @@ export interface OwnedBusiness {
 
 // ─── Stickers guardados (#savesticker/#stickers/#delsticker) ─────────────────
 // El .webp en sí vive en disco (@lib/stickerVault.ts) — acá solo la metadata
-// liviana, para no engordar users.json con binarios.
+// liviana, para no engordar el registro del usuario con binarios.
 export interface SavedSticker {
   id: string // nombre de archivo en data/stickers/<sender>/<id>.webp
   name: string // nombre que le puso el usuario — se busca por esto

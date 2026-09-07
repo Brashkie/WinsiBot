@@ -20,10 +20,8 @@ const PY_URL  = process.env.PYTHON_API_URL ?? 'http://127.0.0.1:5000'
 const PY_PORT = Number(new URL(PY_URL).port) || 5000
 
 const SERVICES = [
-  { name: 'Redis',  port: 6379, health: null },
   { name: 'FastAPI', port: PY_PORT, health: `${PY_URL}/health` },
   { name: 'Rust',   port: RUST_PORT, health: `${RUST_URL}/health/live` },
-  { name: 'Celery', port: null, health: null },
 ]
 
 function portAlive(port) {
@@ -48,31 +46,14 @@ async function healthPing(url) {
   }
 }
 
-function celeryAlive() {
-  try {
-    const cmd = WIN ? 'tasklist | findstr celery' : 'pgrep -f "celery worker"'
-    const out = execSync(cmd, { timeout: 2_000, stdio: 'pipe' }).toString()
-    return out.trim().length > 0
-  } catch {
-    return false
-  }
-}
-
 // ─── Main ────────────────────────────────────────────────────────────────────
 
 console.log(`\n  ${color.bold('WinsiBot — Estado de Servicios')}\n`)
 
 const serviceRows = [['Servicio', 'Puerto', 'Estado']]
 for (const svc of SERVICES) {
-  let alive, pingStr
-
-  if (svc.name === 'Celery') {
-    alive   = celeryAlive()
-    pingStr = ''
-  } else {
-    alive   = portAlive(svc.port)
-    pingStr = alive && svc.health ? await healthPing(svc.health) : null
-  }
+  const alive   = portAlive(svc.port)
+  const pingStr = alive && svc.health ? await healthPing(svc.health) : null
 
   const timing = pingStr ? ` (${pingStr})` : ''
   const status = alive ? themes.success(`Online${timing}`) : themes.error('Offline')

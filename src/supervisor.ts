@@ -7,7 +7,7 @@ import { type ChildProcess, spawn } from 'child_process'
 //  sin intervención manual.
 //
 //  El bot (dist/index.js) ya se auto-gestiona a sí mismo internamente
-//  (Redis/Celery/Rust/Python — ver ensureX() en index.ts), pero nada reinicia
+//  (Rust/Python — ver ensureX() en index.ts), pero nada reinicia
 //  al propio proceso Node si crashea o si el event loop se cuelga sin morir.
 //  Este proceso resuelve esas dos cosas:
 //
@@ -17,7 +17,7 @@ import { type ChildProcess, spawn } from 'child_process'
 //      (mecanismo que ya existía — ver comentario en index.ts sobre "un
 //      monitor externo puede alertar o reiniciar") y fuerza un reinicio.
 //
-//  No reemplaza nada de cómo index.ts ya supervisa a Redis/Celery/Rust/Python
+//  No reemplaza nada de cómo index.ts ya supervisa a Rust/Python
 //  — es una capa por encima, no una reescritura de la orquestación existente.
 // ─────────────────────────────────────────────────────────────────────────────
 

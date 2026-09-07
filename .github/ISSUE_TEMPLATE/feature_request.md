@@ -51,7 +51,7 @@ assignees: Brashkie
 > Marca con `x` donde crees que encaja mejor.
 
 - [ ] 🟦 TypeScript — nuevo comando en `src/plugins/commands/`
-- [ ] 🐍 Python — nuevo endpoint en FastAPI / tarea Celery
+- [ ] 🐍 Python — nuevo endpoint en FastAPI
 - [ ] ⚙️ Rust — mejora en Session API
 - [ ] 📦 Nueva dependencia npm / pip / crate
 - [ ] 🗄️ Base de datos — nueva tabla o campo en SQLite

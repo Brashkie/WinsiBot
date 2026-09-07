@@ -1,9 +1,16 @@
 import type { BotContext } from '../../types/index.js'
 import { safeSend } from '@lib/media_sender.js'
 import { commandRegistry } from '@plugins/commands/index.js'
-import NodeCache from 'node-cache'
+import { createCache, registerCache } from '@lib/cacheManager.js'
 
-const cache = new NodeCache({ stdTTL: 60, checkperiod: 30 })
+// periodicClear:false — la limpieza global cada 20min de cacheManager
+// borraría los cooldowns en curso, dejando pasar de nuevo a todo el mundo
+// justo después de barrer. Cada entrada ya expira sola con su propio TTL.
+const cache = registerCache(
+  'cooldowns',
+  createCache<number>({ ttl: 60_000, maxSize: 2_000 }),
+  { periodicClear: false },
+)
 
 function getCooldownKey(sender: string, command: string): string {
   return `cd:${sender}:${command}`
@@ -20,7 +27,7 @@ export async function cooldownMiddleware(ctx: BotContext): Promise<boolean> {
   if (ctx.isOwner) return true
 
   const key       = getCooldownKey(ctx.sender, ctx.command)
-  const remaining = cache.get<number>(key)
+  const remaining = cache.get(key)
 
   if (remaining !== undefined) {
     const secs = Math.max(1, Math.ceil((remaining - Date.now()) / 1000))
@@ -30,6 +37,7 @@ export async function cooldownMiddleware(ctx: BotContext): Promise<boolean> {
     return false
   }
 
-  cache.set(key, Date.now() + command.cooldown * 1000, command.cooldown)
+  // NodeCache tomaba el TTL en segundos como 3er argumento; acá va en ms.
+  cache.set(key, Date.now() + command.cooldown * 1000, { ttl: command.cooldown * 1000 })
   return true
 }

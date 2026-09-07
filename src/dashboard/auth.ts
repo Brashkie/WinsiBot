@@ -9,7 +9,7 @@
 // expiración por setTimeout) — mismo tipo de problema, misma solución.
 
 import { randomBytes } from 'crypto'
-import { db } from '@lib/db.js'
+import { kv } from '@lib/kv.js'
 import { config } from '@config'
 
 const CODE_TTL_MS    = 5 * 60_000
@@ -78,7 +78,7 @@ export function confirmLogin(code: string, jid: string, senderPhone: string): bo
   const token = randomBytes(32).toString('hex')
   const role: Role = config.ownerJid.includes(jid) ? 'owner' : 'user'
   const session: Session = { jid, role, createdAt: Date.now() }
-  db.kvSet(`web_session:${token}`, session)
+  kv.set(`web_session:${token}`, session, { ttl: SESSION_TTL_MS })
 
   confirmedCodes.set(normalized, token)
   setTimeout(() => confirmedCodes.delete(normalized), CONFIRM_TTL_MS).unref()
@@ -91,17 +91,13 @@ export function checkConfirmed(code: string): string | null {
   return confirmedCodes.get(code.trim().toUpperCase()) ?? null
 }
 
+// La expiración la hace el TTL del store (y su sweep de fondo) — ya no hace
+// falta comparar createdAt a mano ni borrar la sesión vencida al leerla.
 export function getSession(token: string | undefined): Session | null {
   if (!token) return null
-  const session = db.kvGet<Session>(`web_session:${token}`)
-  if (!session) return null
-  if (Date.now() - session.createdAt > SESSION_TTL_MS) {
-    db.kvDelete(`web_session:${token}`)
-    return null
-  }
-  return session
+  return kv.get<Session>(`web_session:${token}`)
 }
 
 export function destroySession(token: string): void {
-  db.kvDelete(`web_session:${token}`)
+  kv.del(`web_session:${token}`)
 }

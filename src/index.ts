@@ -3,7 +3,6 @@ import readline from 'readline'
 import { spawn, type ChildProcess } from 'child_process'
 import { join } from 'path'
 import { existsSync, readFileSync } from 'fs'
-import { createConnection } from 'net'
 import ffmpegStatic from 'ffmpeg-static'
 import { winsiSocket } from '@core/socket.js'
 import { handleMessage, getActiveHandlerCount } from '@core/handler.js'
@@ -124,12 +123,12 @@ process.on('uncaughtException', (err) => {
   process.exit(1)
 })
 
-// ─── Procesos hijos auto-gestionados (Redis/Celery/Rust/Python) ──────────────
+// ─── Procesos hijos auto-gestionados (Rust/Python) ──────────────────────────
 // El bot levanta sus propias dependencias igual que ya hacía con Python — un
 // solo árbol de procesos, un solo lugar donde se limpia todo al salir.
 const spawnedChildren: ChildProcess[] = []
 
-// Evita que el reinicio automático de Redis/Celery/Rust dispare un respawn
+// Evita que el reinicio automático de Rust/Python dispare un respawn
 // espurio cuando la muerte del proceso fue provocada por nosotros al apagar.
 let _shuttingDown = false
 
@@ -278,93 +277,6 @@ async function ensurePythonApi(): Promise<void> {
   } else {
     stopSpin('Python API tardó demasiado — continuando sin ella', false)
   }
-}
-
-// ─── Redis auto-arranque (opcional — sin caché distribuida si no está) ───────
-
-function isPortOpen(port: number, host = '127.0.0.1', timeoutMs = 2_000): Promise<boolean> {
-  return new Promise((resolve) => {
-    const sock = createConnection({ port, host })
-    const done = (ok: boolean) => { sock.destroy(); resolve(ok) }
-    sock.once('connect', () => done(true))
-    sock.once('error',   () => done(false))
-    sock.setTimeout(timeoutMs, () => done(false))
-  })
-}
-
-function urlPort(url: string, fallback: number): number {
-  try { return Number(new URL(url).port) || fallback } catch { return fallback }
-}
-
-const REDIS_PORT = urlPort(process.env.REDIS_URL ?? '', 6379)
-
-async function ensureRedis(): Promise<void> {
-  if (await isPortOpen(REDIS_PORT)) return
-
-  const stopSpin = loader.spin('Iniciando Redis...')
-
-  const proc = spawn('redis-server', [], { stdio: ['ignore', 'ignore', 'ignore'] })
-  spawnedChildren.push(proc)
-
-  proc.on('error', () => {
-    stopSpin('Redis no está instalado — se sigue sin caché distribuida', false)
-  })
-
-  // Reiniciar Redis si muere inesperadamente (exit code != 0), salvo que
-  // el propio bot esté apagándose (killSpawnedChildren ya lo mató a propósito).
-  proc.on('exit', (code) => {
-    if (!_shuttingDown && code !== 0 && code !== null) {
-      logger.warn(`Redis terminó con código ${code} — reiniciando en 3s`)
-      setTimeout(() => ensureRedis().catch(() => {}), 3_000)
-    }
-  })
-
-  const deadline = Date.now() + 4_000
-  let up = false
-  while (Date.now() < deadline) {
-    if (await isPortOpen(REDIS_PORT, '127.0.0.1', 500)) { up = true; break }
-    await new Promise(r => setTimeout(r, 300))
-  }
-  if (up) stopSpin('Redis listo', true)
-  else    stopSpin('Redis no disponible — se sigue sin caché distribuida', false)
-}
-
-// ─── Celery auto-arranque (worker de tareas en background de Python) ────────
-
-async function ensureCelery(): Promise<void> {
-  const venvPython = venvPythonPath()
-  const python     = existsSync(venvPython) ? venvPython : systemPython()
-
-  // Pool "prefork" usa multiprocessing al estilo POSIX que Windows maneja mal
-  // (WinError 5/6 al azar) — "solo" evita ese bug por completo en Windows.
-  const poolArgs = process.platform === 'win32' ? ['--pool=solo'] : ['--concurrency=2']
-
-  const stopSpin = loader.spin('Iniciando Celery...')
-
-  const proc = spawn(python, [
-    '-m', 'celery', '-A', 'api.celery_app', 'worker',
-    '--loglevel=warning', ...poolArgs,
-  ], {
-    cwd:   join(process.cwd(), 'python'),
-    stdio: ['ignore', 'ignore', 'ignore'],
-  })
-  spawnedChildren.push(proc)
-
-  let exited = false
-  proc.on('error', (err) => {
-    exited = true
-    stopSpin(`Celery no pudo iniciar: ${err.message}`, false)
-  })
-  proc.on('exit', (code) => {
-    if (!exited && !_shuttingDown && code !== 0 && code !== null) {
-      logger.warn(`Celery terminó con código ${code} — reiniciando en 3s`)
-      setTimeout(() => ensureCelery().catch(() => {}), 3_000)
-    }
-    exited = true
-  })
-
-  await new Promise(r => setTimeout(r, 3_000))
-  if (!exited) stopSpin('Celery listo', true)
 }
 
 // ─── Rust Session API auto-arranque ──────────────────────────────────────────
@@ -532,11 +444,8 @@ async function printConnected(jid: string, cmdCount: number) {
 async function main() {
   await printBanner()
 
-  // Redis → Celery → Rust → Python, en ese orden porque Celery depende de
-  // Redis como broker. El bot levanta sus propias dependencias igual para
-  // las cuatro — un solo árbol de procesos, un solo lugar donde se limpian.
-  await ensureRedis()
-  await ensureCelery()
+  // Rust → Python. El bot levanta sus propias dependencias — un solo árbol de
+  // procesos, un solo lugar donde se limpian.
   await ensureRust()
   await ensurePythonApi()
 

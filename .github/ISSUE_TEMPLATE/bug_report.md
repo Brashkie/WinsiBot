@@ -71,7 +71,6 @@ Pega aquí
 | Rust | `rustc --version` → |
 | WinsiBot | v8.1.0 |
 | Baileys | `npm list @whiskeysockets/baileys` → |
-| Redis activo | Sí / No |
 
 ---
 
@@ -80,7 +79,7 @@ Pega aquí
 > Marca con `x` donde aplica.
 
 - [ ] 🟦 TypeScript / Core (handler, comandos, eventos)
-- [ ] 🐍 Python (monitor, FastAPI, Celery, watchdog)
+- [ ] 🐍 Python (monitor, FastAPI, watchdog)
 - [ ] ⚙️ Rust (Session API, snapshots, atomic write)
 - [ ] 🔐 Sesión / QR / Reconexión
 - [ ] 🤖 IA (GPT, Claude, Gemini)

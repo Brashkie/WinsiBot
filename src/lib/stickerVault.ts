@@ -1,10 +1,11 @@
 // stickerVault.ts — Favoritos personales de stickers (#savesticker / #stickers / #delsticker)
 //
 // Los .webp se guardan en disco (data/stickers/<sender>/<id>.webp), NO en
-// UserData — ese objeto se serializa entero a users.json cada 30s
-// (persistence.ts), y meter binarios ahí lo haría cada vez más pesado de
-// leer/escribir con cada usuario que guarde stickers. UserData solo guarda
-// metadata liviana (id, nombre, fecha) — ver SavedSticker en events/index.ts.
+// UserData — cada usuario se reescribe entero en el log de deltas cada vez
+// que cambia cualquier cosa suya (persistence.ts), así que meter binarios ahí
+// haría que ganar 5 de XP arrastrase todos sus stickers al log. UserData solo
+// guarda metadata liviana (id, nombre, fecha) — ver SavedSticker en
+// events/index.ts.
 
 import { writeFile, unlink, mkdir, readFile } from 'fs/promises'
 import { existsSync } from 'fs'

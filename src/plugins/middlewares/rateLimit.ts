@@ -1,11 +1,23 @@
 import type { BotContext } from '../../types/index.js'
 import { pythonPost } from '@lib/pythonBridge.js'
 import { safeSend } from '@lib/media_sender.js'
-import NodeCache from 'node-cache'
+import { createCache, registerCache } from '@lib/cacheManager.js'
 
 // ─── Cache local primer nivel ─────────────────────────────────────────────────
-const localCache = new NodeCache({ stdTTL: 5 })
-const spamCache  = new NodeCache({ stdTTL: 30 })
+// TTLs en ms (NodeCache los tomaba en segundos: 5 y 30).
+// periodicClear:false en ambas — son control de flujo, no caché de datos: el
+// barrido global cada 20min de cacheManager reiniciaría el contador de todos
+// los que estén floodeando en ese momento. Su TTL propio ya las mantiene chicas.
+const localCache = registerCache(
+  'rateLimitHits',
+  createCache<number[]>({ ttl: 5_000, maxSize: 2_000 }),
+  { periodicClear: false },
+)
+const spamCache = registerCache(
+  'spamCounters',
+  createCache<number>({ ttl: 30_000, maxSize: 2_000 }),
+  { periodicClear: false },
+)
 
 // ─── Rate limit local sin Python ──────────────────────────────────────────────
 // maxHits subió de 5 a 12 (mismos 5s de ventana) — el límite "real" ya lo pone
@@ -18,7 +30,7 @@ const spamCache  = new NodeCache({ stdTTL: 30 })
 function localRateLimit(sender: string, maxHits = 12, windowMs = 5000): boolean {
   const key  = `rl:${sender}`
   const now  = Date.now()
-  const hits = (localCache.get<number[]>(key) ?? [])
+  const hits = (localCache.get(key) ?? [])
     .filter(t => now - t < windowMs)
 
   if (hits.length >= maxHits) return false
@@ -96,7 +108,7 @@ export async function rateLimitMiddleware(ctx: BotContext): Promise<boolean> {
   const localOk = localRateLimit(sender)
   if (!localOk) {
     const spamKey   = `spam:${sender}`
-    const spamCount = (spamCache.get<number>(spamKey) ?? 0) + 1
+    const spamCount = (spamCache.get(spamKey) ?? 0) + 1
     spamCache.set(spamKey, spamCount)
 
     if (spamCount % 3 === 1) {
@@ -114,7 +126,7 @@ export async function rateLimitMiddleware(ctx: BotContext): Promise<boolean> {
 
     if (!guard.allowed) {
       const spamKey   = `sg:${sender}`
-      const sgCount   = (spamCache.get<number>(spamKey) ?? 0) + 1
+      const sgCount   = (spamCache.get(spamKey) ?? 0) + 1
       spamCache.set(spamKey, sgCount)
 
       // avisar según tipo

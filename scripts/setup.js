@@ -74,14 +74,14 @@ async function main() {
 
   // 5. npm install
   if (TERMUX) {
-    console.log('\n  ℹ️  Termux detectado — better-sqlite3 compila nativo (sin binario para Android).')
+    console.log('\n  ℹ️  Termux detectado — algunas dependencias nativas (sharp, cbor-x) compilan desde fuente.')
     console.log('     Si falta algo: pkg install clang make pkg-config\n')
   }
   step('Dependencias Node.js ...')
   const npmR = run('npm install --prefer-offline --loglevel=error')
   if (npmR.status !== 0) {
     warn(npmR.stderr.slice(0, 200))
-    if (TERMUX) console.warn('     (Termux: revisá que estén instalados clang, make y pkg-config — better-sqlite3 los necesita para compilar)')
+    if (TERMUX) console.warn('     (Termux: revisá que estén instalados clang, make y pkg-config — las dependencias nativas los necesitan para compilar)')
   } else {
     ok()
   }

@@ -102,7 +102,6 @@ export interface BotConfig {
   spotifyClientId?:     string
   spotifyClientSecret?: string
   databaseUrl?:         string
-  redisUrl?:            string
   rule34ApiKey?:        string
   rule34UserId?:        string
   xblApiKey?:           string

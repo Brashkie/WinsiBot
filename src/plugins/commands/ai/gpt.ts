@@ -1,9 +1,12 @@
 import type { Command } from '../../../types/index.js'
 import OpenAI from 'openai'
 import { config } from '@config'
-import NodeCache from 'node-cache'
+import { createCache, registerCache } from '@lib/cacheManager.js'
 
-const historyCache = new NodeCache({ stdTTL: 300 })
+// stdTTL de NodeCache iba en segundos; la Cache del cacheManager usa ms.
+// maxSize acota el historial a los 300 usuarios más activos — NodeCache no
+// tenía tope y con 2500+ usuarios el historial podía crecer sin límite.
+const historyCache = registerCache('gptHistory', createCache<Message[]>({ ttl: 300_000, maxSize: 300 }))
 const MAX_REPLY    = 4000   // límite práctico para WhatsApp
 const MAX_PROMPT   = 2000   // evitar tokens innecesarios
 
@@ -29,7 +32,7 @@ const command: Command = {
 
     // Limpiar historial
     if (cmd === 'gptreset') {
-      historyCache.del(sender)
+      historyCache.delete(sender)
       await sock.sendMessage(jid, { text: '🗑 Historial borrado.' }, { quoted: msg })
       return
     }
@@ -49,7 +52,7 @@ const command: Command = {
       return
     }
 
-    const history: Message[] = historyCache.get<Message[]>(sender) ?? [
+    const history: Message[] = historyCache.get(sender) ?? [
       {
         role:    'system',
         content: `Eres ${config.botName}, asistente de WhatsApp inteligente y conciso. `
