@@ -10,6 +10,7 @@ import { loadCommands } from '@plugins/commands/index.js'
 import { logger } from '@core/logger.js'
 import { config } from '@config'
 import { loadAll, saveAll, startAutoSave, stopAutoSave } from '@core/persistence.js'
+import { sessionClient } from '@lib/session.js'
 import { venvPythonPath, systemPython, exeName } from '@lib/platform.js'
 import { color, gradient, loader, ascii, themes, configure, components, BG, animate } from 'ansimax'
 
@@ -139,12 +140,34 @@ function killSpawnedChildren(): void {
   }
 }
 
+// sessionClient.save() encola las creds con un debounce de 5s (ver session.ts),
+// así que al apagar puede haber hasta 5 segundos de credenciales sin respaldar
+// en Rust. flushNow() fuerza esa última escritura — su propio doc-comment ya
+// decía "usar en graceful shutdown", pero no lo llamaba nadie. Ese respaldo es
+// el que lee authVerifier.readBackup() para recuperar cuando la sesión en disco
+// está corrupta: justo el momento en que interesa que esté al día.
+//
+// Va SIEMPRE antes de killSpawnedChildren(): escribe por HTTP contra Rust, y
+// killSpawnedChildren() mata ese proceso.
+//
+// Techo de 2s porque /write hace un fsync() real y en Windows con antivirus
+// puede tardar más (ver FETCH_TIMEOUT_MS en lib/session.ts). El supervisor
+// manda SIGKILL a los 5s de SIGTERM, y esperar el flush arriesgaría perder
+// también saveAll(), que importa más.
+function flushSessionCapped(): Promise<void> {
+  return Promise.race([
+    sessionClient.flushNow().catch(() => {}),
+    new Promise<void>(resolve => setTimeout(resolve, 2_000)),
+  ])
+}
+
 // ─── Graceful shutdown ────────────────────────────────────────────────────────
 function shutdownCleanly(): void {
   console.log()
   console.log(`  ${themes.warning('◆')} ${color.bold(themes.warning(`${config.botName} detenido por el usuario`))}`)
   console.log(`  ${color.dim('Guardando datos...')}`)
 
+  void flushSessionCapped().finally(() => {
   killSpawnedChildren()
   stopAutoSave()
 
@@ -163,6 +186,7 @@ function shutdownCleanly(): void {
         process.exit(0)
       })
     })
+  })
 }
 
 let _askingExit = false
@@ -206,9 +230,11 @@ process.on('SIGTERM', () => {
   console.log()
   console.log(`  ${themes.warning('◆')} ${color.bold(themes.warning(`${config.botName} detenido (SIGTERM)`))}`)
   try { process.stdin.setRawMode(false) } catch {}
-  killSpawnedChildren()
-  stopAutoSave()
-  saveAll().catch(() => {}).finally(() => process.exit(0))
+  void flushSessionCapped().finally(() => {
+    killSpawnedChildren()
+    stopAutoSave()
+    saveAll().catch(() => {}).finally(() => process.exit(0))
+  })
 })
 
 // ─── Python API auto-arranque ─────────────────────────────────────────────────
@@ -481,6 +507,17 @@ async function main() {
       const { restoreSubBots } = await import('@plugins/commands/jadibot/serbot.js')
       await restoreSubBots(sock)
     } catch {}
+
+    // Reenviar lo que quedó encolado sin salir (crash o cuelgue a mitad de una
+    // operación de economía). Va después de restoreSubBots para no competir con
+    // el arranque, y es seguro en reconexiones: replayOutbox solo toma lo que
+    // lleva más de 60s encolado. Ver sendCritical en lib/media_sender.ts.
+    try {
+      const { replayOutbox } = await import('@lib/media_sender.js')
+      await replayOutbox(sock)
+    } catch (err) {
+      logger.warn({ err }, 'Outbox: replay falló')
+    }
 
     try {
       // Reentrante a propósito — en cada 'ready' (primer arranque o

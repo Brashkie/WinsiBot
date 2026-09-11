@@ -15,6 +15,7 @@ use std::sync::{Arc, Mutex};
 
 use chrono::Utc;
 use rusqlite::{params, Connection};
+use serde::Deserialize;
 
 pub type Db = Arc<Mutex<Connection>>;
 
@@ -37,7 +38,8 @@ pub fn open(path: &str) -> Result<Db, rusqlite::Error> {
              sent_at     INTEGER NOT NULL,
              updated_at  INTEGER,
              is_group    INTEGER NOT NULL DEFAULT 0,
-             retry_count INTEGER NOT NULL DEFAULT 0
+             retry_count INTEGER NOT NULL DEFAULT 0,
+             payload     TEXT
          );
          CREATE INDEX IF NOT EXISTS idx_outbox_status_sent ON outbox (status, sent_at);
          CREATE INDEX IF NOT EXISTS idx_outbox_jid         ON outbox (jid);
@@ -54,6 +56,17 @@ pub fn open(path: &str) -> Result<Db, rusqlite::Error> {
         ",
     )?;
 
+    // Migración para bases creadas antes de que outbox tuviera payload: el
+    // CREATE TABLE de arriba lleva IF NOT EXISTS, así que a una tabla ya
+    // existente no le añade la columna. ALTER falla con "duplicate column
+    // name" si ya está, que es exactamente el caso normal — se ignora.
+    if let Err(e) = conn.execute("ALTER TABLE outbox ADD COLUMN payload TEXT", []) {
+        let msg = e.to_string();
+        if !msg.contains("duplicate column name") {
+            tracing::warn!(error = %msg, "no se pudo añadir outbox.payload");
+        }
+    }
+
     tracing::info!(path, "SQLite abierta (WAL)");
     Ok(Arc::new(Mutex::new(conn)))
 }
@@ -67,6 +80,26 @@ pub struct TrackItem {
     #[serde(default = "default_type")]
     pub msg_type: String,
     pub ts:       i64,
+}
+
+#[derive(Debug, Deserialize)]
+pub struct EnqueueItem {
+    pub id:       String,
+    pub jid:      String,
+    #[serde(default = "default_type")]
+    pub msg_type: String,
+    /// Lo necesario para reconstruir el envío (JSON serializado por el llamador).
+    pub payload:  String,
+}
+
+#[derive(Debug, serde::Serialize)]
+pub struct QueuedMsg {
+    pub id:          String,
+    pub jid:         String,
+    pub msg_type:    String,
+    pub payload:     String,
+    pub retry_count: i64,
+    pub queued_at:   i64,
 }
 
 fn default_type() -> String { "text".into() }
@@ -122,6 +155,95 @@ pub fn track(db: &Db, items: &[TrackItem]) -> Result<usize, rusqlite::Error> {
     }
     tx.commit()?;
     tracing::debug!(n, "mensajes registrados en outbox");
+    Ok(n)
+}
+
+/// Estado "encolado, todavía no enviado". El resto de la escala la define ack():
+/// -1 fallido, 0 enviado, 1 entregado, 2 leído, 3 reproducido. Un mensaje en
+/// QUEUED nunca llegó a salir, así que es el único que tiene sentido reenviar.
+pub const STATUS_QUEUED: i64 = -2;
+
+/// Encolar ANTES de enviar, con el contenido necesario para reenviarlo.
+///
+/// Esto es lo que convierte la tabla en un outbox de verdad: track() registra
+/// después de enviar y sin payload, así que sirve para saber si un mensaje se
+/// entregó, pero no para recuperarlo si el proceso murió antes de mandarlo.
+/// El caso real es "se descontó el dinero y el mensaje nunca salió".
+pub fn enqueue(db: &Db, items: &[EnqueueItem]) -> Result<usize, rusqlite::Error> {
+    let mut conn = db.lock().unwrap();
+    let tx = conn.transaction()?;
+    let now = Utc::now().timestamp();
+    let mut n = 0usize;
+    for m in items {
+        let is_group = m.jid.ends_with("@g.us") as i32;
+        n += tx.execute(
+            "INSERT OR IGNORE INTO outbox (id, jid, msg_type, status, sent_at, is_group, payload)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)",
+            params![m.id, m.jid, m.msg_type, STATUS_QUEUED, now, is_group, m.payload],
+        )?;
+    }
+    tx.commit()?;
+    tracing::debug!(n, "mensajes encolados en outbox");
+    Ok(n)
+}
+
+/// Mensajes que quedaron encolados sin llegar a enviarse — para reenviar al
+/// arrancar. `max_retries` descarta los que ya se reintentaron demasiado: sin
+/// ese tope, un mensaje que siempre falla se reintentaría en cada arranque
+/// para siempre (es el caso que resuelve una dead-letter queue).
+pub fn unsent(db: &Db, limit: i64, max_retries: i64) -> Result<Vec<QueuedMsg>, rusqlite::Error> {
+    let conn = db.lock().unwrap();
+    let mut stmt = conn.prepare(
+        "SELECT id, jid, msg_type, payload, retry_count, sent_at
+           FROM outbox
+          WHERE status = ?1 AND retry_count < ?2 AND payload IS NOT NULL
+          ORDER BY sent_at ASC
+          LIMIT ?3",
+    )?;
+    let rows = stmt.query_map(params![STATUS_QUEUED, max_retries, limit], |r| {
+        Ok(QueuedMsg {
+            id:          r.get(0)?,
+            jid:         r.get(1)?,
+            msg_type:    r.get(2)?,
+            payload:     r.get(3)?,
+            retry_count: r.get(4)?,
+            queued_at:   r.get(5)?,
+        })
+    })?;
+    rows.collect()
+}
+
+/// Marcar como realmente enviado (QUEUED -> 0) y soltar el payload, que ya no
+/// hace falta: guardarlo indefinidamente haría crecer la base sin motivo.
+pub fn mark_sent(db: &Db, ids: &[String]) -> Result<usize, rusqlite::Error> {
+    let mut conn = db.lock().unwrap();
+    let tx  = conn.transaction()?;
+    let now = Utc::now().timestamp();
+    let mut n = 0usize;
+    for id in ids {
+        n += tx.execute(
+            "UPDATE outbox SET status = 0, updated_at = ?1, payload = NULL
+              WHERE id = ?2 AND status = ?3",
+            params![now, id, STATUS_QUEUED],
+        )?;
+    }
+    tx.commit()?;
+    Ok(n)
+}
+
+/// Suma uno al contador de reintentos — lo llama el replay antes de reintentar,
+/// para que un mensaje que siempre falla acabe cayendo del listado de unsent().
+pub fn bump_retry(db: &Db, ids: &[String]) -> Result<usize, rusqlite::Error> {
+    let mut conn = db.lock().unwrap();
+    let tx = conn.transaction()?;
+    let mut n = 0usize;
+    for id in ids {
+        n += tx.execute(
+            "UPDATE outbox SET retry_count = retry_count + 1 WHERE id = ?1",
+            params![id],
+        )?;
+    }
+    tx.commit()?;
     Ok(n)
 }
 
@@ -220,15 +342,6 @@ pub fn cleanup(db: &Db, days: i64) -> Result<usize, rusqlite::Error> {
 // category: "subbot" | "watchdog" | "session" — event: texto libre corto.
 // detail: JSON serializado opcional con contexto adicional.
 
-#[derive(Debug, serde::Serialize)]
-pub struct AuditEntry {
-    pub id:       i64,
-    pub ts:       i64,
-    pub category: String,
-    pub event:    String,
-    pub detail:   Option<String>,
-}
-
 pub fn audit_log(
     db:       &Db,
     category: &str,
@@ -243,40 +356,3 @@ pub fn audit_log(
     Ok(())
 }
 
-/// Últimos `limit` eventos, los más recientes primero. `category` filtra si se indica.
-pub fn get_audit(
-    db:       &Db,
-    limit:    i64,
-    category: Option<&str>,
-) -> Result<Vec<AuditEntry>, rusqlite::Error> {
-    let conn = db.lock().unwrap();
-
-    let mut stmt = if category.is_some() {
-        conn.prepare(
-            "SELECT id, ts, category, event, detail FROM audit_log
-             WHERE category = ?2 ORDER BY id DESC LIMIT ?1",
-        )?
-    } else {
-        conn.prepare(
-            "SELECT id, ts, category, event, detail FROM audit_log
-             ORDER BY id DESC LIMIT ?1",
-        )?
-    };
-
-    let map_row = |row: &rusqlite::Row| -> rusqlite::Result<AuditEntry> {
-        Ok(AuditEntry {
-            id:       row.get(0)?,
-            ts:       row.get(1)?,
-            category: row.get(2)?,
-            event:    row.get(3)?,
-            detail:   row.get(4)?,
-        })
-    };
-
-    let rows: Vec<_> = if let Some(cat) = category {
-        stmt.query_map(params![limit, cat], map_row)?.collect()
-    } else {
-        stmt.query_map(params![limit], map_row)?.collect()
-    };
-    rows.into_iter().collect()
-}

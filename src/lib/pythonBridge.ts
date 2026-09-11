@@ -4,6 +4,7 @@ import axios, { type AxiosInstance } from 'axios'
 import axiosRetry from 'axios-retry'
 import { config } from '@config'
 import { logger } from '@core/logger.js'
+import { pythonCircuit } from '@lib/circuitBreaker.js'
 import type { PythonApiResponse } from '../types/index.js'
 
 // ─── Clientes HTTP ────────────────────────────────────────────────────────────
@@ -34,19 +35,38 @@ axiosRetry(client, {
   retryCondition: (err) => axiosRetry.isNetworkOrIdempotentRequestError(err),
 })
 
+// ─── Circuito ─────────────────────────────────────────────────────────────────
+// Solo cuentan como fallo del SERVICIO los errores de red, los timeouts y los
+// 5xx. Un 4xx significa que la petición estaba mal, no que Python se cayó:
+// contarlo abriría el circuito por un bug nuestro y dejaría sin IA a todo el
+// bot. Ver lib/circuitBreaker.ts.
+function isServiceFailure(err: any): boolean {
+  const status = err?.response?.status
+  if (typeof status === 'number') return status >= 500
+  return true   // sin respuesta = red caída, timeout o DNS
+}
+
+/** Respuesta inmediata cuando el circuito está abierto — sin tocar la red. */
+function circuitOpenResponse<T>(): PythonApiResponse<T> {
+  return { success: false, error: 'Python API no disponible (circuito abierto)' } as PythonApiResponse<T>
+}
+
 // ─── Base ─────────────────────────────────────────────────────────────────────
 export async function pythonPost<T>(
   endpoint:  string,
   data:      Record<string, unknown>,
   timeoutMs?: number,
 ): Promise<PythonApiResponse<T>> {
+  if (!pythonCircuit.canAttempt()) return circuitOpenResponse<T>()
   try {
     const res = await client.post<PythonApiResponse<T>>(
       endpoint, data,
       timeoutMs != null ? { timeout: timeoutMs } : undefined,
     )
+    pythonCircuit.recordSuccess()
     return res.data
   } catch (err: any) {
+    if (isServiceFailure(err)) pythonCircuit.recordFailure()
     if (err?.code === 'ECONNREFUSED' || err?.cause?.code === 'ECONNREFUSED') {
       return { success: false, error: 'Flask offline' }
     }
@@ -64,10 +84,13 @@ export async function pythonGet<T>(
   endpoint: string,
   params?:  Record<string, string>,
 ): Promise<PythonApiResponse<T>> {
+  if (!pythonCircuit.canAttempt()) return circuitOpenResponse<T>()
   try {
     const res = await client.get<PythonApiResponse<T>>(endpoint, { params })
+    pythonCircuit.recordSuccess()
     return res.data
   } catch (err: any) {
+    if (isServiceFailure(err)) pythonCircuit.recordFailure()
     if (err?.code === 'ECONNREFUSED' || err?.cause?.code === 'ECONNREFUSED') {
       return { success: false, error: 'Flask offline' }
     }

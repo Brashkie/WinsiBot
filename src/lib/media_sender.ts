@@ -1,8 +1,9 @@
 import { readFile, access, readdir } from 'fs/promises'
 import { join } from 'path'
-import type { WASocket, WAMessage } from '@whiskeysockets/baileys'
+import { generateMessageID, type WASocket, type WAMessage } from '@whiskeysockets/baileys'
 import { rateLimiter } from './rateLimiter.js'
 import { sessionClient } from './session.js'
+import { logger } from '@core/logger.js'
 
 const MEDIA_DIR   = join(process.cwd(), 'media')
 const MAX_RETRIES = 3
@@ -77,6 +78,111 @@ async function enqueueSend(
     }
     return result
   }, priority)
+}
+
+// ─── sendCritical — envío con outbox, para lo que no puede perderse ─────────
+//
+// El problema que resuelve: el bot descuenta dinero, modifica el inventario o
+// registra una transferencia, y muere antes de mandar la confirmación. Queda
+// el estado cambiado y el usuario sin respuesta, sin forma de saber qué pasó.
+//
+//   encolar (persistente)  →  enviar  →  marcar enviado
+//
+// Si el proceso muere en cualquier punto, al arrancar `replayOutbox()` reenvía
+// lo que quedó encolado. El id se genera acá con generateMessageID() de Baileys
+// y se le pasa al envío, así que el mismo identificador vale para el outbox y
+// para el seguimiento de entrega — no hay dos espacios de ids.
+//
+// Sobre la ventana residual, para no prometer de más: el texto de estos
+// mensajes casi siempre depende del resultado del cambio ("ahora tenés ¥X"),
+// así que en la práctica se llama DESPUÉS de aplicarlo, no antes. Queda una
+// ventana entre el cambio y el encolado — pero son dos llamadas síncronas en
+// memoria (microsegundos), contra la ventana que había antes, que era toda la
+// latencia de red del envío (cientos de ms, o segundos con WhatsApp lento).
+// El riesgo no desaparece: se reduce en varios órdenes de magnitud.
+//
+// No usar para todo: guardar el contenido de cada mensaje saliente haría
+// crecer la base sin motivo. Es para economía, compras, transferencias,
+// regalos, apuestas y acciones administrativas.
+//
+// Solo texto (con menciones): el payload tiene que poder reconstruirse desde
+// JSON, así que medios y botones quedan fuera a propósito.
+export interface CriticalContent {
+  text:      string
+  mentions?: string[]
+}
+
+export async function sendCritical(
+  sock:    WASocket,
+  jid:     string,
+  content: CriticalContent,
+  opts:    { quoted?: WAMessage } = {},
+): Promise<any> {
+  const id = generateMessageID()
+
+  // Si Rust no responde, se sigue adelante sin garantía en vez de bloquear al
+  // usuario: un comando que no contesta es peor que uno sin red de seguridad.
+  let queued = false
+  try {
+    await sessionClient.enqueueOutbox([{ id, jid, payload: JSON.stringify(content) }])
+    queued = true
+  } catch (err) {
+    logger.warn({ err, jid }, 'sendCritical: no se pudo encolar — se envía sin garantía')
+  }
+
+  try {
+    const res = await safeSend(() =>
+      sock.sendMessage(jid, content, { messageId: id, ...(opts.quoted && { quoted: opts.quoted }) }),
+    )
+    if (queued) await sessionClient.markOutboxSent([id]).catch(() => {})
+    return res
+  } catch (err) {
+    // Queda en el outbox con estado "encolado": replayOutbox() lo reintentará
+    // en el próximo arranque. No se marca como enviado a propósito.
+    logger.warn({ err, jid, id }, 'sendCritical: envío falló — queda en el outbox')
+    throw err
+  }
+}
+
+// ─── replayOutbox — reenvía al arrancar lo que quedó a medias ───────────────
+export async function replayOutbox(sock: WASocket): Promise<{ resent: number; failed: number }> {
+  let pending: Awaited<ReturnType<typeof sessionClient.outboxUnsent>>
+  try {
+    pending = await sessionClient.outboxUnsent()
+  } catch {
+    return { resent: 0, failed: 0 }   // Rust caído — no es un error del bot
+  }
+  // Solo lo que lleva un rato encolado. replayOutbox() corre en cada 'ready',
+  // y 'ready' se dispara también en cada reconexión: sin este filtro, un
+  // sendCritical() en vuelo —ya encolado, todavía sin marcar como enviado— se
+  // reenviaría por duplicado si justo en ese instante hay una reconexión. Un
+  // envío normal se marca en milisegundos, así que 60s no deja pasar nada real.
+  const MIN_AGE_SECS = 60
+  const nowSecs = Math.floor(Date.now() / 1000)
+  const stale = pending.filter(m => nowSecs - m.queued_at >= MIN_AGE_SECS)
+  if (!stale.length) return { resent: 0, failed: 0 }
+
+  logger.info(`Outbox: ${stale.length} mensajes quedaron sin enviar — reintentando`)
+
+  let resent = 0, failed = 0
+  for (const m of stale) {
+    // El reintento se cuenta ANTES de intentar: si el envío cuelga o el proceso
+    // muere acá, en el próximo arranque el contador ya subió y el mensaje
+    // acabará cayendo del listado en vez de reintentarse para siempre.
+    await sessionClient.bumpOutboxRetry([m.id]).catch(() => {})
+    try {
+      const content = JSON.parse(m.payload)
+      await safeSend(() => sock.sendMessage(m.jid, content, { messageId: m.id }))
+      await sessionClient.markOutboxSent([m.id]).catch(() => {})
+      resent++
+    } catch (err) {
+      logger.warn({ err, id: m.id, jid: m.jid, retry: m.retry_count }, 'Outbox: reenvío falló')
+      failed++
+    }
+  }
+
+  logger.info(`Outbox: ${resent} reenviados, ${failed} fallidos`)
+  return { resent, failed }
 }
 
 // ─── broadcastSend — envío masivo a múltiples JIDs ───────────────────────────

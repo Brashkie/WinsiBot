@@ -54,24 +54,6 @@ pub fn recover(path: &Path) -> Option<String> {
     None
 }
 
-/// Lista todos los snapshots con estado (válido / corrupto).
-/// Solo devuelve el número y estado — nunca rutas del sistema de archivos.
-pub fn list(path: &Path) -> Vec<String> {
-    (1..=MAX).filter_map(|i| {
-        let s = snap(path, i);
-        if !s.exists() { return None; }
-        let meta = fs::metadata(&s).ok()?;
-        if meta.len() > 10_000_000 {
-            return Some(format!("#{i} [✗ demasiado grande]"));
-        }
-        let healthy = fs::read(&s)
-            .ok()
-            .and_then(|b| serde_json::from_slice::<serde_json::Value>(&b).ok())
-            .is_some();
-        Some(format!("#{i} [{}]", if healthy { "✓ válido" } else { "✗ corrupto" }))
-    }).collect()
-}
-
 /// Metadatos del snapshot más reciente (snapshot #1).
 /// Usado por el endpoint /healthy para observabilidad.
 #[derive(Serialize)]

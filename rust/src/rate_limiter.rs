@@ -135,10 +135,6 @@ impl RateLimiter {
         (allowed, remaining, reset_ms)
     }
 
-    /// Total de senders rastreados actualmente.
-    pub fn tracked_count(&self) -> usize {
-        self.inner.len()
-    }
 }
 
 // ── Request body ──────────────────────────────────────────────────────────────
@@ -181,16 +177,3 @@ pub async fn rate_check(
     )
 }
 
-// ── GET /rate/stats ───────────────────────────────────────────────────────────
-pub async fn rate_stats(
-    State(state): State<AppState>,
-) -> Json<serde_json::Value> {
-    let tracked = state.rate_limiter.tracked_count();
-    Json(serde_json::json!({
-        "ok":           true,
-        "trackedSenders": tracked,
-        "limit":        RATE_LIMIT,
-        "window_s":     WINDOW_SECS,
-        "ts":           Utc::now(),
-    }))
-}

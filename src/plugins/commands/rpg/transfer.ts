@@ -1,6 +1,7 @@
 import type { Command } from '../../../types/index.js'
 import type { WASocket } from '@whiskeysockets/baileys'
 import { getUserData, patchUserData } from '@core/events.js'
+import { sendCritical } from '@lib/media_sender.js'
 
 type Item = 'money' | 'diamonds' | 'exp'
 
@@ -54,7 +55,8 @@ export async function handleTransferConfirm(
   patchUserData(sender, { [p.item]: (from[p.item] as number) - p.amount } as any)
   patchUserData(p.to,   { [p.item]: (to[p.item]   as number) + p.amount } as any)
 
-  await sock.sendMessage(jid, {
+  // sendCritical: los recursos ya se movieron entre las dos cuentas.
+  await sendCritical(sock, jid, {
     text: `*TRANSFERENCIA* ✓\n\n> ${p.amount} ${LABELS[p.item]} → @${p.to.split('@')[0]}`,
     mentions: [p.to],
   })

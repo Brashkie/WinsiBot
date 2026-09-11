@@ -1,15 +1,15 @@
 /// conversations.rs
-/// DuckDB-backed AI conversation storage.
+/// Almacenamiento SQLite de conversaciones para la IA.
 /// Routes: POST /ai/learn, GET /ai/context/{sender}, POST /ai/export
 ///
-/// Conexión DuckDB COMPARTIDA (Arc<Mutex<Connection>>, mismo patrón que
+/// Conexión SQLite COMPARTIDA (Arc<Mutex<Connection>>, mismo patrón que
 /// db::Db para SQLite) — antes cada llamada a estos tres endpoints abría una
 /// conexión nueva desde cero (Connection::open) contra el mismo archivo.
 /// GET /ai/context/:sender está en el camino crítico de CADA respuesta de IA
 /// (Node lo llama con presupuesto de 300ms antes de generar la respuesta) —
-/// abrir el archivo de DuckDB entero en cada mensaje, bajo carga real con
+/// abrir el archivo entero en cada mensaje, bajo carga real con
 /// miles de mensajes/hora, es overhead evitable que además compite por el
-/// lock de escritura de DuckDB con llamadas concurrentes a bad_mac.rs (mismo
+/// lock de escritura con llamadas concurrentes a bad_mac.rs (mismo
 /// archivo). Una sola conexión, serializada con un mutex, es más barata que
 /// reabrir el archivo y elimina esa contención entre módulos.
 
@@ -18,7 +18,7 @@ use axum::{
     response::Json,
 };
 use chrono::Utc;
-use duckdb::{params, Connection};
+use rusqlite::{params, Connection};
 use serde::{Deserialize, Serialize};
 use std::sync::{Arc, Mutex};
 
@@ -62,14 +62,18 @@ pub struct ContextParams {
 
 // ── Init ──────────────────────────────────────────────────────────────────────
 
-pub fn init(path: &str) -> Result<ConvDb, duckdb::Error> {
+pub fn init(path: &str) -> Result<ConvDb, rusqlite::Error> {
     if let Some(parent) = std::path::Path::new(path).parent() {
         let _ = std::fs::create_dir_all(parent);
     }
     let conn = Connection::open(path)?;
+    // WAL + NORMAL: mismo criterio que db.rs. A diferencia de DuckDB, SQLite en
+    // WAL admite lectores concurrentes mientras hay un escritor.
+    let _ = conn.pragma_update(None, "journal_mode", "WAL");
+    let _ = conn.pragma_update(None, "synchronous", "NORMAL");
     let r = conn.execute_batch("
         CREATE TABLE IF NOT EXISTS conversations (
-            id        VARCHAR DEFAULT gen_random_uuid(),
+            id        INTEGER PRIMARY KEY AUTOINCREMENT,
             sender    VARCHAR NOT NULL,
             gjid      VARCHAR NOT NULL DEFAULT '',
             text      VARCHAR NOT NULL,
@@ -78,20 +82,20 @@ pub fn init(path: &str) -> Result<ConvDb, duckdb::Error> {
             mode      VARCHAR NOT NULL DEFAULT 'amable',
             ts        BIGINT  NOT NULL,
             len       INTEGER NOT NULL DEFAULT 0,
-            has_emoji BOOLEAN NOT NULL DEFAULT false
+            has_emoji INTEGER NOT NULL DEFAULT 0
         );
         CREATE TABLE IF NOT EXISTS user_style (
             sender        VARCHAR PRIMARY KEY,
             total_msgs    BIGINT  NOT NULL DEFAULT 0,
-            avg_len       DOUBLE  NOT NULL DEFAULT 0.0,
-            emoji_freq    DOUBLE  NOT NULL DEFAULT 0.0,
-            question_freq DOUBLE  NOT NULL DEFAULT 0.0,
+            avg_len       REAL    NOT NULL DEFAULT 0.0,
+            emoji_freq    REAL    NOT NULL DEFAULT 0.0,
+            question_freq REAL    NOT NULL DEFAULT 0.0,
             common_words  VARCHAR NOT NULL DEFAULT '[]',
             updated_at    BIGINT  NOT NULL DEFAULT 0
         );
     ");
     if let Err(e) = r {
-        tracing::warn!("DuckDB schema init error: {}", e);
+        tracing::warn!("SQLite schema init error (conversations): {}", e);
     }
     Ok(Arc::new(Mutex::new(conn)))
 }
@@ -274,30 +278,5 @@ pub async fn ai_context(
             "style":   style,
         })),
         _ => Json(serde_json::json!({ "ok": true, "history": [], "style": null })),
-    }
-}
-
-// ── POST /ai/export ───────────────────────────────────────────────────────────
-
-pub async fn ai_export(
-    State(state): State<AppState>,
-) -> Json<serde_json::Value> {
-    let conv_db = state.conv_db.clone();
-    let path    = state.conv_db_path.clone();
-
-    let res = tokio::task::spawn_blocking(move || -> Result<String, String> {
-        let conn = conv_db.lock().map_err(|e| e.to_string())?;
-        let out  = path.replace(".duckdb", "_conversations.parquet")
-                       .replace('\\', "/");
-        conn.execute_batch(&format!(
-            "COPY conversations TO '{out}' (FORMAT PARQUET, COMPRESSION ZSTD)"
-        )).map_err(|e| e.to_string())?;
-        Ok(out)
-    }).await;
-
-    match res {
-        Ok(Ok(p))  => Json(serde_json::json!({ "ok": true,  "path": p })),
-        Ok(Err(e)) => Json(serde_json::json!({ "ok": false, "error": e })),
-        Err(e)     => Json(serde_json::json!({ "ok": false, "error": e.to_string() })),
     }
 }

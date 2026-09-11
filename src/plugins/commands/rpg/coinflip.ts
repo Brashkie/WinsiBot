@@ -3,7 +3,7 @@ import {
   getUserData, patchUserData,
   isOnCooldown, setCooldown, getCooldownLeft, fmtCooldown,
 } from '@core/events.js'
-import { safeSend } from '@lib/media_sender.js'
+import { safeSend, sendCritical } from '@lib/media_sender.js'
 
 const CD = 20_000  // 20s entre tiradas
 
@@ -73,9 +73,12 @@ const command: Command = {
     const resultLabel = result.charAt(0).toUpperCase() + result.slice(1)
     const choiceLabel = choice.charAt(0).toUpperCase() + choice.slice(1)
 
+    // sendCritical en ambas ramas: la apuesta ya se resolvió y el saldo ya se
+    // ajustó. Sin el mensaje, el usuario no sabe si ganó o perdió aunque el
+    // dinero ya se movió — el outbox lo reenvía si el proceso muere acá.
     if (won) {
       patchUserData(sender, { money: user.money + amount })
-      await safeSend(() => sock.sendMessage(jid, {
+      await sendCritical(sock, jid, {
         text: [
           `╭─「 🪙 COINFLIP 」`,
           `│`,
@@ -84,10 +87,10 @@ const command: Command = {
           `> ¡Ganaste! +¥${(amount * 2).toLocaleString()}`,
           `╰─`,
         ].join('\n'),
-      }, { quoted: msg }))
+      }, { quoted: msg })
     } else {
       patchUserData(sender, { money: Math.max(0, user.money - amount) })
-      await safeSend(() => sock.sendMessage(jid, {
+      await sendCritical(sock, jid, {
         text: [
           `╭─「 🪙 COINFLIP 」`,
           `│`,
@@ -96,7 +99,7 @@ const command: Command = {
           `> Perdiste -¥${amount.toLocaleString()}`,
           `╰─`,
         ].join('\n'),
-      }, { quoted: msg }))
+      }, { quoted: msg })
     }
   },
 }

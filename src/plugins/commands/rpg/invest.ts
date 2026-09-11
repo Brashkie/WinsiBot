@@ -1,5 +1,6 @@
 import type { Command } from '../../../types/index.js'
-import { safeSend } from '@lib/media_sender.js'
+import { safeSend, sendCritical } from '@lib/media_sender.js'
+import { logger } from '@core/logger.js'
 import { getUserData, patchUserData, isOnCooldown, setCooldown, getCooldownLeft, fmtCooldown } from '@core/events.js'
 import { market, resolveSymbol, fmtPrice, fmtPct, trendArrow, TIMEFRAMES } from '@lib/market.js'
 
@@ -64,7 +65,15 @@ async function resolveBet(bet: Bet): Promise<void> {
     `╰─`,
   ].join('\n')
 
-  await safeSend(() => bet.sock.sendMessage(bet.chatJid, { text })).catch(() => {})
+  // sendCritical: la apuesta ya se resolvió y el saldo ya se ajustó arriba.
+  // Antes esto era safeSend(...).catch(() => {}) — si el envío fallaba, el
+  // usuario no se enteraba NUNCA del resultado de su inversión, el dinero ya
+  // se había movido, y el error se tragaba sin dejar ni un log. Ahora queda en
+  // el outbox y se reenvía al arrancar; el catch solo evita una promesa
+  // rechazada sin manejar (esto corre desde un setTimeout).
+  await sendCritical(bet.sock, bet.chatJid, { text }).catch(err =>
+    logger.warn({ err, sender: bet.sender }, 'invest: no se pudo avisar el resultado — queda en el outbox'),
+  )
 }
 
 // ─── Comando ──────────────────────────────────────────────────────────────────

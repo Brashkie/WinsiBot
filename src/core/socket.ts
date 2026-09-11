@@ -7,6 +7,7 @@ import {
   handleParticipantsUpdate,
   handleViewOnce,
 } from '@core/events.js'
+import { alreadyProcessed } from '@core/dedup.js'
 import { getGroupMetadata } from '@core/groupCache.js'
 import { winsiStore } from '@core/store.js'
 import type { Boom } from '@hapi/boom'
@@ -514,6 +515,15 @@ export class WinsiSocket extends EventEmitter3<WinsiEvents> {
           // ─── Bad MAC flood detection — por grupo, aislado ──────────────────
           // Un grupo con flood NO afecta a los demás grupos.
           this._handleBadMac(groupJid)
+          continue
+        }
+
+        // Descartar re-entregas: el mismo mensaje puede llegar otra vez como
+        // 'append' tras una reconexión (ventana de 5 min, arriba) o en el sync
+        // posterior a un reinicio. Sin esto, un comando de economía dentro de
+        // esa ventana se ejecuta dos veces. Ver core/dedup.ts.
+        if (alreadyProcessed('main', msg.key.id)) {
+          logger.debug({ id: msg.key.id, type }, 'mensaje duplicado descartado')
           continue
         }
 

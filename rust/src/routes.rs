@@ -27,7 +27,6 @@ pub struct AppState {
     pub auth_dir:      String,
     pub locks:         LockManager,
     pub db:            db::Db,
-    pub conv_db_path:  String,
     pub conv_db:       conversations::ConvDb,
     pub bad_mac:       bad_mac::BadMacTracker,
     pub rate_limiter:  rate_limiter::RateLimiter,
@@ -290,26 +289,6 @@ pub async fn recover(
 
 // ── GET /snapshots?sessionId=bot1 ─────────────────────────────────────────────
 
-pub async fn list_snapshots(
-    State(state): State<AppState>,
-    Query(q): Query<SessionQuery>,
-) -> Result<Json<serde_json::Value>, (StatusCode, Json<serde_json::Value>)> {
-    let path = resolve_path(&state.sessions_dir, &q.session_id)?;
-    let list = tokio::task::spawn_blocking({
-        let path = path.clone();
-        move || snapshot::list(&path)
-    })
-    .await
-    .map_err(|e| err(StatusCode::INTERNAL_SERVER_ERROR, format!("tarea interna falló: {e}")))?;
-    tracing::debug!(session = %q.session_id, count = list.len(), "snapshots listados");
-    Ok(Json(serde_json::json!({
-        "ok":       true,
-        "sessionId": q.session_id,
-        "snapshots": list,
-        "ts":       Utc::now(),
-    })))
-}
-
 // ── GET /healthy?sessionId=bot1 ───────────────────────────────────────────────
 
 pub async fn is_healthy(
@@ -569,6 +548,103 @@ pub struct TrackBody {
     messages: Vec<db::TrackItem>,
 }
 
+// ── Outbox: encolar ANTES de enviar ──────────────────────────────────────────
+// messages_track registra DESPUÉS del envío y sin contenido, así que sirve
+// para medir entregas pero no para recuperar un mensaje que nunca salió. Estos
+// tres endpoints cierran ese hueco para las operaciones que no pueden perderse
+// (economía, compras, transferencias): encolar → enviar → marcar enviado, y al
+// arrancar reenviar lo que quedó a medias.
+
+#[derive(Deserialize)]
+pub struct EnqueueBody {
+    messages: Vec<db::EnqueueItem>,
+}
+
+#[derive(Deserialize)]
+pub struct SentBody {
+    ids: Vec<String>,
+}
+
+#[derive(Deserialize)]
+pub struct UnsentQuery {
+    #[serde(default = "default_unsent_limit")]
+    limit:       i64,
+    #[serde(default = "default_max_retries")]
+    max_retries: i64,
+}
+
+fn default_unsent_limit() -> i64 { 100 }
+fn default_max_retries() -> i64 { 3 }
+
+pub async fn outbox_enqueue(
+    State(state): State<AppState>,
+    Json(body): Json<EnqueueBody>,
+) -> (StatusCode, Json<serde_json::Value>) {
+    if body.messages.is_empty() {
+        return (StatusCode::BAD_REQUEST, Json(serde_json::json!({ "ok": false, "error": "lista vacía" })));
+    }
+    if body.messages.len() > MAX_BATCH {
+        return (StatusCode::BAD_REQUEST, Json(serde_json::json!({
+            "ok": false,
+            "error": format!("lote demasiado grande ({} items, máx {})", body.messages.len(), MAX_BATCH),
+        })));
+    }
+    let db = state.db.clone();
+    match tokio::task::spawn_blocking(move || db::enqueue(&db, &body.messages)).await {
+        Ok(Ok(n))  => (StatusCode::OK, Json(serde_json::json!({ "ok": true, "queued": n }))),
+        Ok(Err(e)) => {
+            tracing::error!(error = %e, "outbox_enqueue DB error");
+            (StatusCode::INTERNAL_SERVER_ERROR, Json(serde_json::json!({ "ok": false, "error": e.to_string() })))
+        }
+        Err(e) => (StatusCode::INTERNAL_SERVER_ERROR, Json(serde_json::json!({ "ok": false, "error": e.to_string() }))),
+    }
+}
+
+pub async fn outbox_unsent(
+    State(state): State<AppState>,
+    Query(q): Query<UnsentQuery>,
+) -> (StatusCode, Json<serde_json::Value>) {
+    let db = state.db.clone();
+    match tokio::task::spawn_blocking(move || db::unsent(&db, q.limit, q.max_retries)).await {
+        Ok(Ok(rows)) => (StatusCode::OK, Json(serde_json::json!({ "ok": true, "messages": rows }))),
+        Ok(Err(e))   => {
+            tracing::error!(error = %e, "outbox_unsent DB error");
+            (StatusCode::INTERNAL_SERVER_ERROR, Json(serde_json::json!({ "ok": false, "error": e.to_string() })))
+        }
+        Err(e) => (StatusCode::INTERNAL_SERVER_ERROR, Json(serde_json::json!({ "ok": false, "error": e.to_string() }))),
+    }
+}
+
+pub async fn outbox_sent(
+    State(state): State<AppState>,
+    Json(body): Json<SentBody>,
+) -> (StatusCode, Json<serde_json::Value>) {
+    if body.ids.is_empty() {
+        return (StatusCode::BAD_REQUEST, Json(serde_json::json!({ "ok": false, "error": "lista vacía" })));
+    }
+    let db = state.db.clone();
+    match tokio::task::spawn_blocking(move || db::mark_sent(&db, &body.ids)).await {
+        Ok(Ok(n))  => (StatusCode::OK, Json(serde_json::json!({ "ok": true, "marked": n }))),
+        Ok(Err(e)) => (StatusCode::INTERNAL_SERVER_ERROR, Json(serde_json::json!({ "ok": false, "error": e.to_string() }))),
+        Err(e)     => (StatusCode::INTERNAL_SERVER_ERROR, Json(serde_json::json!({ "ok": false, "error": e.to_string() }))),
+    }
+}
+
+pub async fn outbox_retry(
+    State(state): State<AppState>,
+    Json(body): Json<SentBody>,
+) -> (StatusCode, Json<serde_json::Value>) {
+    if body.ids.is_empty() {
+        return (StatusCode::BAD_REQUEST, Json(serde_json::json!({ "ok": false, "error": "lista vacía" })));
+    }
+    let db = state.db.clone();
+    match tokio::task::spawn_blocking(move || db::bump_retry(&db, &body.ids)).await {
+        Ok(Ok(n))  => (StatusCode::OK, Json(serde_json::json!({ "ok": true, "bumped": n }))),
+        Ok(Err(e)) => (StatusCode::INTERNAL_SERVER_ERROR, Json(serde_json::json!({ "ok": false, "error": e.to_string() }))),
+        Err(e)     => (StatusCode::INTERNAL_SERVER_ERROR, Json(serde_json::json!({ "ok": false, "error": e.to_string() }))),
+    }
+}
+
 pub async fn messages_track(
     State(state): State<AppState>,
     Json(body): Json<TrackBody>,
@@ -660,86 +736,3 @@ pub async fn messages_pending(
     }
 }
 
-// ── GET /messages/stats?hours=24 ─────────────────────────────────────────────
-
-#[derive(Deserialize)]
-pub struct StatsQuery {
-    #[serde(default = "default_hours")]
-    hours: i64,
-}
-fn default_hours() -> i64 { 24 }
-
-pub async fn messages_stats(
-    State(state): State<AppState>,
-    Query(q): Query<StatsQuery>,
-) -> (StatusCode, Json<serde_json::Value>) {
-    let hours = q.hours.clamp(1, 8_760); // 1 hora – 1 año
-    let db    = state.db.clone();
-    match tokio::task::spawn_blocking(move || db::get_stats(&db, hours)).await {
-        Ok(Ok(s)) => (StatusCode::OK, Json(serde_json::json!({
-            "ok":           true,
-            "hours":        hours,
-            "total":        s.total,
-            "sent":         s.sent,
-            "delivered":    s.delivered,
-            "read":         s.read,
-            "failed":       s.failed,
-            "delivery_pct": format!("{:.1}", s.delivery_pct),
-            "read_pct":     format!("{:.1}", s.read_pct),
-            "ts":           Utc::now(),
-        }))),
-        Ok(Err(e)) => (StatusCode::INTERNAL_SERVER_ERROR, Json(serde_json::json!({ "ok": false, "error": e.to_string() }))),
-        Err(e)     => (StatusCode::INTERNAL_SERVER_ERROR, Json(serde_json::json!({ "ok": false, "error": e.to_string() }))),
-    }
-}
-
-// ── DELETE /messages/cleanup?days=7 ──────────────────────────────────────────
-
-#[derive(Deserialize)]
-pub struct CleanupQuery {
-    #[serde(default = "default_days")]
-    days: i64,
-}
-fn default_days() -> i64 { 7 }
-
-pub async fn messages_cleanup(
-    State(state): State<AppState>,
-    Query(q): Query<CleanupQuery>,
-) -> (StatusCode, Json<serde_json::Value>) {
-    let days = q.days.clamp(1, 3_650); // 1 día – 10 años
-    let db   = state.db.clone();
-    match tokio::task::spawn_blocking(move || db::cleanup(&db, days)).await {
-        Ok(Ok(n)) => (StatusCode::OK, Json(serde_json::json!({ "ok": true, "deleted": n, "days": days, "ts": Utc::now() }))),
-        Ok(Err(e)) => (StatusCode::INTERNAL_SERVER_ERROR, Json(serde_json::json!({ "ok": false, "error": e.to_string() }))),
-        Err(e)     => (StatusCode::INTERNAL_SERVER_ERROR, Json(serde_json::json!({ "ok": false, "error": e.to_string() }))),
-    }
-}
-
-// ── GET /audit?limit=100&category=subbot ─────────────────────────────────────
-
-#[derive(Deserialize)]
-pub struct AuditQuery {
-    #[serde(default = "default_audit_limit")]
-    limit:    i64,
-    category: Option<String>,
-}
-fn default_audit_limit() -> i64 { 100 }
-
-pub async fn get_audit(
-    State(state): State<AppState>,
-    Query(q): Query<AuditQuery>,
-) -> (StatusCode, Json<serde_json::Value>) {
-    let limit = q.limit.clamp(1, 1_000);
-    let db    = state.db.clone();
-    let cat   = q.category.clone();
-    match tokio::task::spawn_blocking(move || db::get_audit(&db, limit, cat.as_deref())).await {
-        Ok(Ok(list)) => (StatusCode::OK, Json(serde_json::json!({
-            "ok":      true,
-            "count":   list.len(),
-            "entries": list,
-            "ts":      Utc::now(),
-        }))),
-        Ok(Err(e)) => (StatusCode::INTERNAL_SERVER_ERROR, Json(serde_json::json!({ "ok": false, "error": e.to_string() }))),
-        Err(e)     => (StatusCode::INTERNAL_SERVER_ERROR, Json(serde_json::json!({ "ok": false, "error": e.to_string() }))),
-    }
-}

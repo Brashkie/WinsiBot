@@ -8,6 +8,7 @@ import {
 } from '@whiskeysockets/baileys'
 import { useMultiFileAuthStateCBOR } from '@lib/authStateCbor.js'
 import { safeSend } from '@lib/media_sender.js'
+import { alreadyProcessed } from '@core/dedup.js'
 import { handleMessage } from '@core/handler.js'
 import { getGroupMetadata } from '@core/groupCache.js'
 import { logger } from '@core/logger.js'
@@ -586,6 +587,13 @@ export async function startSubBot(
           const ts = Number(m.messageTimestamp ?? 0) * 1000
           if (!ts || Date.now() - ts > 5 * 60_000) continue
         }
+
+        // Re-entregas: mismo filtro que el bot principal (ver core/dedup.ts).
+        // El scope es el número de ESTE sub-bot, no uno compartido: los ids de
+        // mensaje son globales de WhatsApp, y en un grupo donde también está el
+        // bot principal el mensaje llega a los dos — con un espacio de claves
+        // común, el segundo en llegar lo descartaría y dejaría de responder.
+        if (alreadyProcessed(phone, m.key?.id)) continue
 
         const bot = subBots.get(phone)
         if (bot) {

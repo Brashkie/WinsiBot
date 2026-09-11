@@ -5,6 +5,7 @@ import {
   checkLevelUp, levelUpLine,
 } from '@core/events.js'
 import { randomNumber as rand } from '@lib/utils.js'
+import { sendCritical } from '@lib/media_sender.js'
 import { LevelingManager } from '@lib/leveling.js'
 
 const command: Command = {
@@ -63,7 +64,10 @@ const command: Command = {
       isPrem,
     )
 
-    await sock.sendMessage(jid, {
+    // sendCritical: la recompensa ya se acreditó y el cooldown diario ya se
+    // consumió. Si el mensaje se pierde, el usuario cree que no reclamó y ya
+    // no puede volver a hacerlo hasta mañana — el outbox lo reenvía.
+    await sendCritical(sock, jid, {
       text: [
         `「🎴」Reclamaste tu recompensa diaria — *Día ${meta.streak.days}* 🔥${brokeLine}`,
         ``,

@@ -1,6 +1,6 @@
 <div align="center">
 
-<img src="https://capsule-render.vercel.app/api?type=waving&color=0:6C63FF,100:00C9FF&height=180&section=header&text=WinsiBot&fontSize=62&fontColor=ffffff&fontAlignY=38&desc=v8.8.2%20%E2%80%94%20Enterprise%20WhatsApp%20Bot&descAlignY=58&descSize=18" width="100%"/>
+<img src="https://capsule-render.vercel.app/api?type=waving&color=0:6C63FF,100:00C9FF&height=180&section=header&text=WinsiBot&fontSize=62&fontColor=ffffff&fontAlignY=38&desc=v8.9.0%20%E2%80%94%20Enterprise%20WhatsApp%20Bot&descAlignY=58&descSize=18" width="100%"/>
 
 <br/>
 
@@ -10,7 +10,7 @@
 [![Rust](https://img.shields.io/badge/Rust-1.75%2B-CE422B?style=for-the-badge&logo=rust&logoColor=white)](https://rust-lang.org)
 
 [![License](https://img.shields.io/badge/License-GPL--3.0-blue?style=flat-square)](LICENSE)
-[![Version](https://img.shields.io/badge/Version-8.8.2-6C63FF?style=flat-square)](CHANGELOG.md)
+[![Version](https://img.shields.io/badge/Version-8.9.0-6C63FF?style=flat-square)](CHANGELOG.md)
 [![Platform](https://img.shields.io/badge/Platform-Windows%20%7C%20Linux%20%7C%20macOS%20%7C%20Android-lightgrey?style=flat-square)](https://github.com/Brashkie/WinsiBot)
 [![PRs Welcome](https://img.shields.io/badge/PRs-welcome-brightgreen?style=flat-square)](https://github.com/Brashkie/WinsiBot/pulls)
 
@@ -18,7 +18,7 @@
 
 > Bot de WhatsApp de alto rendimiento con arquitectura multi-lenguaje de tres capas.<br/>
 > Sin límite artificial de grupos, pensado para miles de mensajes por hora y múltiples instancias.<br/>
-> v8.8.2 — Menos dependencias y menos servicios: se fueron Redis, Celery, `better-sqlite3` y `node-cache`, los cuatro peso muerto o reemplazables por algo que ya estaba. Instalar el bot ya no requiere un servidor Redis ni compilar `better-sqlite3` desde fuente en Termux. La persistencia de usuarios pasa de reescribir 2.2 MB cada 30 segundos a escribir solo lo que cambió: de ~7.2 GB al día contra el disco a ~0.17 GB.
+> v8.9.0 — Fuera DuckDB: era la causa de que la primera compilación de Rust tardara 10–30 min, y con MSVC 14.51 ya ni terminaba. Sus dos tablas pasan a `rusqlite` y el build limpio baja a **3 m 19 s**. Limpieza a fondo de código muerto verificado — 9 rutas de Rust, 3 routers de Python, 5 métodos de TypeScript — y un bug encontrado por el camino: el respaldo de credenciales nunca hacía su última escritura al apagar.
 
 <br/>
 
@@ -66,16 +66,21 @@
 | 🐍 **Services** | Python / FastAPI | IA avanzada (Ollama + GPT + Claude + Gemini), watchdog, health checks |
 | ⚙️ **Session** | Rust / Axum | Escritura atómica de creds, 10 snapshots rotativos, tracker Bad MAC, rate limiter, delivery SQLite |
 
-### Novedades en v8.8.2
+### Novedades en v8.9.0
 
 | Área | Cambio |
 |------|--------|
-| **Redis y Celery eliminados** | Eran peso muerto: las 8 tareas de Celery solo se alcanzaban desde 3 endpoints que el bot nunca llamaba, y los routers que sí se usan llaman a los módulos de ML directamente. Redis no lo usaba nadie más que Celery como broker. **`redis-server` deja de ser un requisito de instalación** |
-| **`better-sqlite3` fuera — sesiones del panel a `strenor`** | SQLite montaba 4 tablas que estaban vacías; lo único que guardaba de verdad eran los tokens del panel. Se pagaba una dependencia que compila con `node-gyp` (en Termux, desde fuente) por 4 llamadas. `strenor` es NAPI-RS: ABI estable y binarios precompilados, Termux incluido — y ahora el TTL de sesión es real |
-| **`node-cache` fuera — una sola implementación de caché** | Las 3 instancias de `NodeCache` pasan a la `Cache` de `cacheManager.ts`. Ganan tope de tamaño y evicción LFU, que `NodeCache` no tenía: el historial de `#gpt` podía crecer sin límite con 2500+ usuarios |
-| **Persistencia — de ~7.2 GB/día a ~0.17 GB** | Se reescribían 2.6 MB cada 30 s aunque nadie tocara nada. Ahora se descarta la escritura si el contenido no cambió, y `users.json` pasa a `data/users.aof`, un log donde solo se escribe el usuario que cambió. Medido con 2557 usuarios reales: 0 bytes sin cambios, 48.5 KB con 50 usuarios tocados (−97.8%) |
-| **Nuevo: `npm run users:export` / `users:import` / `users:stats`** | El padrón ya no es un JSON que se abra con un editor — este script lo exporta, lo restaura y da estadísticas del log |
-| **`@brashkie/signalis-core` 0.4.0 → 0.5.1** | Sin cambios de código; verificado en runtime que la API que usa `authVerifier.ts` se comporta igual |
+| **Outbox: los mensajes de operaciones críticas ya no se pierden en un crash** | Si el bot descontaba dinero y moría antes de mandar la confirmación, quedaba el estado cambiado y el usuario sin respuesta. La tabla `outbox` de Rust existía pero era un medidor de entregas: registraba **después** de enviar y **sin contenido**, así que no había nada que reenviar. Ahora `sendCritical()` encola → envía → marca enviado, y al arrancar `replayOutbox()` reenvía lo que quedó a medias. Con dead-letter: lo que falla 3 veces sale del reintento pero queda en la base para inspeccionarlo |
+| **Chaos testing (`npm run chaos`)** | 27 comprobaciones en 8 escenarios que rompen cosas de verdad contra el código compilado: tormentas de re-entregas, reinicio a mitad, logs corruptos, dependencias caídas, el event loop bloqueado 1.8s y un crash entre cobrar y confirmar. Sirve para pasar de "creo que aguanta" a "probamos sus modos de fallo" |
+| **Load shedding** | Con el bot saturado, en vez de intentar procesar todo hasta morir se sacrifica lo prescindible: DEGRADADO tira IA/descargas/música/NSFW, CRÍTICO tira también el juego. Moderación, admin y owner nunca caen. La señal es el **lag del event loop** — lo único que detecta la saturación de Node cuando CPU y RAM se ven normales |
+| **Circuit breakers** | Con Python o Rust caídas, cada mensaje pagaba el timeout completo antes de fallar igual — las dos están en el camino crítico. Ahora tras N fallos el circuito se abre y falla al instante: de **242 ms a 0.01 ms** por llamada. Un 429 de `/rate/check` (bloqueo intencional) no cuenta como fallo: lo que se mide es si el servicio contesta |
+| **Aplicado a 9 comandos** | Transferencias (`pay`, `transfer`, `rob`), recompensas de cooldown largo (`daily`, `weekly`, `monthly`) y apuestas resueltas (`coinflip`, `roulette`, `invest`). Los otros 21 comandos con economía se dejaron igual a propósito: cooldowns cortos o cambios verificables con `#bal`. De paso, `transfer` y `rob` enviaban esquivando el rate limiter |
+| **Fix: el mismo mensaje podía ejecutarse dos veces** | `socket.ts` acepta `type === 'append'` (re-entregas post-sync, ventana de 5 min) y el buffer de eventos de Baileys se activa en **cada** reconexión — habituales por Bad MAC. No había ninguna protección por id de mensaje: un `#daily` seguido de una reconexión dentro de esos 5 minutos se ejecutaba dos veces. Nuevo `core/dedup.ts`, con el registro **en disco** (un `Set` en memoria se pierde justo en el caso del reinicio) y separado **por instancia**, porque los ids son globales de WhatsApp y un mensaje de grupo llega al bot principal y a cada sub-bot |
+| **DuckDB eliminado** | Era la razón de que la primera compilación de Rust tardara 10–30 min — y con MSVC 14.51 ya ni terminaba. Solo lo usaban un contador de Bad MAC y un log de conversaciones, que caben en `rusqlite` (ya estaba en el proyecto). `cargo check` pasó de **fallar** a 15 s, y un build de release limpio a **3 m 19 s**. Se va también `rust/build.rs`, que existía solo para él |
+| **Fix: el respaldo de credenciales perdía su última escritura** | `sessionClient.save()` tiene un debounce de 5 s y su doc decía "llamá a `flushNow()` antes de salir" — pero no lo llamaba nadie. El respaldo en Rust quedaba hasta 5 s por detrás del disco, justo el que se usa para recuperar cuando la sesión está corrupta. Conectado al apagado, antes de matar el proceso de Rust y con techo de 2 s |
+| **Código muerto: 9 rutas de Rust** | `/ai/export`, `/badmac/export`, `/badmac/reset`, `/badmac/stats`, `/rate/stats`, `/audit`, `/snapshots`, `/messages/stats`, `/messages/cleanup` — ninguna con un solo llamador. Con sus handlers, structs y helpers. **Rust compila sin un solo warning** |
+| **Código muerto: Python y TypeScript** | Fuera `routers/groups.py`, `ratelimit.py` y `cache.py`, y 5 métodos sin uso de `lib/session.ts` (de 352 a 306 líneas) |
+| **Un motor de persistencia menos** | De 6 a 5: strenor, JSON, rusqlite, SQLAlchemy y Parquet |
 
 **[📜 Ver el historial completo de versiones →](CHANGELOG.md)**
 
@@ -193,7 +198,7 @@
 
 ```
 ╔══════════════════════════════════════════════════════════════════════════════╗
-║                           WinsiBot v8.8.2                                    ║
+║                           WinsiBot v8.9.0                                    ║
 ╠════════════════════╦═══════════════════════╦═══════════════════════════════╣
 ║   TypeScript        ║       Python           ║           Rust                ║
 ║   Node.js :4001     ║                        ║                               ║
@@ -240,7 +245,7 @@
 > **Dos cosas a tener en cuenta en dispositivos débiles (Termux/Android, ARM de placa única):**
 >
 > - Algunas dependencias nativas de Node (`sharp`, `cbor-x`) no traen binario precompilado para Android — `npm install` las compila desde código fuente, así que necesitás un compilador C/C++ instalado *antes* de correrlo (ver sección Termux más abajo).
-> - La primera compilación de Rust (`npm run rust:build`) puede tardar bastante (10–30+ min en un teléfono) porque el crate `duckdb` compila toda la librería DuckDB en C++ desde cero la primera vez. Es normal — no cierres la terminal, solo dale tiempo (y evitá que el dispositivo se duerma).
+> - La primera compilación de Rust (`npm run rust:build`) tarda unos minutos (~3 min en un PC de escritorio; bastante más en un teléfono) porque compila todo el árbol de dependencias con LTO. Es normal — no cierres la terminal, solo dale tiempo (y evitá que el dispositivo se duerma).
 
 > **Ollama:** Descarga un modelo antes de iniciar — `ollama pull llama3` o `ollama pull mistral`. El bot intenta Ollama primero y cae en las APIs cloud automáticamente si no está disponible.
 
@@ -317,7 +322,7 @@ Con eso instalado, seguí los 8 pasos de la sección [Instalación](#instalació
 **Dos cosas que van a pasar y son normales:**
 
 - En el paso 2 (`npm install`), algunas dependencias nativas van a compilar desde código fuente (Android no tiene binario precompilado para ellas) — por eso `clang`/`make`/`pkg-config` van primero en el paso 0. Si `npm install` falla mencionando `node-gyp` o un compilador no encontrado, es señal de que falta alguno de esos paquetes.
-- En el paso 4 (`npm run rust:build`), la primera compilación puede tardar 10–30+ minutos porque el crate `duckdb` compila toda la librería DuckDB en C++ desde cero. No hay forma de evitarlo la primera vez — dejalo corriendo y no cierres la sesión de Termux.
+- En el paso 4 (`npm run rust:build`), la primera compilación tarda unos minutos (~3 min en un PC; más en un teléfono) porque compila todas las dependencias con LTO. Dejalo corriendo y no cierres la sesión de Termux.
 
 **Mantener el bot corriendo en segundo plano:**
 
@@ -446,6 +451,7 @@ npm run monitor         # Monitor Python con auto-restart y dashboard
 | `manage:backup` | Forzar backup de sesión |
 | `manage:restore` | Restaurar desde backup |
 | `manage:logs` | Ver logs recientes |
+| `chaos` | Provoca fallos a propósito y verifica que el bot aguanta (`npm run chaos dedup` filtra por escenario) |
 | `users:export` | Exportar el padrón de usuarios a un JSON legible |
 | `users:import` | Restaurar el padrón desde un JSON (con el bot parado) |
 | `users:stats` | Cuántos usuarios hay y cuánto ocupa el log |
@@ -603,17 +609,14 @@ headers = { "x-webhook-signature": f"sha256={sig}" }
 | `GET /health` | Estado general + sesiones activas |
 | `GET /health/live` | Liveness (Docker / K8s) |
 | `GET /health/ready` | Readiness |
-| `GET /messages/stats?hours=24` | Tasa de delivery en las últimas N horas |
 | `GET /messages/pending?minutes=5` | Mensajes sin confirmar entrega |
-| `GET /badmac/stats` | Contadores Bad MAC por grupo |
-| `GET /rate/stats` | Buckets del rate limiter por sender |
 | `GET /watchdog/status` | Heartbeat de Node.js — 503 si Node murió |
 | `GET /sessions/backup?sessionId=main` | Mejor backup disponible (restauración sin QR) |
 
-### Estadísticas de delivery
+### Mensajes sin confirmar entrega
 
 ```bash
-curl -H "x-api-key: TU_CLAVE" http://127.0.0.1:3001/messages/stats
+curl -H "x-api-key: TU_CLAVE" http://127.0.0.1:3001/messages/pending
 ```
 
 ```json
@@ -642,27 +645,24 @@ curl -H "x-api-key: TU_CLAVE" http://127.0.0.1:3001/messages/stats
 | `GET` | `/read` | Leer creds actuales |
 | `POST` | `/snapshot` | Forzar rotación de snapshot |
 | `POST` | `/recover` | Restaurar desde el mejor snapshot válido |
-| `GET` | `/snapshots` | Listar snapshots con estado de salud |
 | `GET` | `/healthy` | Salud de sesión + detección de corrupción |
 | `GET` | `/sessions` | Listar IDs de sesión activos |
 | `POST` | `/sessions/signal/clear` | Eliminar archivos Signal (fix Bad MAC) |
 | `GET` | `/sessions/backup` | Devolver mejor creds válido para restauración sin QR |
 | `POST` | `/badmac/report` | Reportar evento Bad MAC para un JID de grupo (cooldown escalonado) |
-| `POST` | `/badmac/reset` | Resetear contador Bad MAC de un grupo |
-| `GET` | `/badmac/stats` | Todos los contadores, reincidencia y cooldown actual por grupo |
-| `POST` | `/badmac/export` | Exportar historial de Bad MAC a Parquet (DuckDB) |
 | `POST` | `/rate/check` | Verificar si un sender está dentro del rate limit |
-| `GET` | `/rate/stats` | Todos los buckets por sender + uso |
 | `POST` | `/watchdog/ping` | Ping de heartbeat desde Node.js |
 | `GET` | `/watchdog/status` | Vivo/muerto + tiempo último ping + conteo |
 | `POST` | `/nlp/fast` | Detección NLP de palabras clave en Rust |
-| `POST` | `/ai/learn` | Guardar turno de conversación IA (DuckDB) |
+| `POST` | `/ai/learn` | Guardar turno de conversación IA (SQLite) |
 | `GET` | `/ai/context/:sender` | Recuperar contexto de conversación |
 | `POST` | `/messages/track` | Trackear IDs de mensajes salientes |
 | `POST` | `/messages/ack` | Actualizar estado de entrega en lote |
 | `GET` | `/messages/pending` | Mensajes sin confirmación de entrega |
-| `GET` | `/messages/stats` | Estadísticas de delivery |
-| `DELETE` | `/messages/cleanup` | Eliminar registros más viejos de N días |
+| `POST` | `/outbox/enqueue` | Encolar un envío ANTES de mandarlo, con su contenido |
+| `GET` | `/outbox/unsent` | Lo que quedó encolado sin salir — para reenviar al arrancar |
+| `POST` | `/outbox/sent` | Marcar como enviado de verdad (libera el contenido) |
+| `POST` | `/outbox/retry` | Sumar un reintento (dead-letter tras N intentos) |
 
 </details>
 
@@ -694,6 +694,8 @@ WinsiBot/
 │   ├── core/
 │   │   ├── socket.ts                 # Conexión WebSocket a WhatsApp
 │   │   ├── handler.ts                # Dispatcher de mensajes → comandos (semáforo con espera acotada)
+│   │   ├── dedup.ts                  # Descarta re-entregas del mismo mensaje (por instancia, sobrevive reinicios)
+│   ├── loadShedding.ts           # Degrada por lag del event loop — nunca tira moderación ni admin
 │   │   ├── groupCache.ts             # Cache canónico de groupMetadata (TTL + debounce/coalescing)
 │   │   ├── store.ts                  # Cache de contactos/chats (escritura atómica)
 │   │   ├── persistence.ts            # Persistencia real (users/groups/inventory/clans.json, escritura atómica)
@@ -723,7 +725,8 @@ WinsiBot/
 │   │   ├── downloader.ts             # yt-dlp wrapper (YouTube audio/video, TikTok, Instagram) — máx 3 concurrentes
 │   │   ├── queue.ts                  # Cola genérica con concurrencia configurable (usada por downloader.ts)
 │   │   ├── rule34.ts                 # Cliente de la API JSON de Rule34 (imágenes/videos por tag)
-│   │   ├── cacheManager.ts           # Cache genérico con TTL, stats hits/misses, eviction LFU
+│   │   ├── circuitBreaker.ts             # Corta las llamadas a un servicio caído (closed/open/half-open)
+│   ├── cacheManager.ts           # Cache genérico con TTL, stats hits/misses, eviction LFU
 │   │   ├── media_sender.ts           # safeSend / enqueueSend / broadcastSend
 │   │   ├── rateLimiter.ts            # Token bucket rate limiter (TypeScript)
 │   │   ├── session.ts                # Cliente Session API de Rust
@@ -752,11 +755,10 @@ WinsiBot/
 │       ├── monitor.py                # Watchdog principal con auto-restart
 │       └── manage.py                 # CLI de mantenimiento interactivo
 ├── rust/                             # Rust — Session API v5.1.0
-│   ├── build.rs                      # Fix linker Windows (rstrtmgr.lib para DuckDB)
 │   └── src/
 │       ├── main.rs                   # Entry point (Axum) — graceful shutdown + compresión gzip
 │       ├── routes.rs                 # Handlers HTTP + AppState
-│       ├── bad_mac.rs                # Tracker Bad MAC por grupo — sliding window log, cooldown escalonado, persistencia DuckDB/SQLite
+│       ├── bad_mac.rs                # Tracker Bad MAC por grupo — sliding window log, cooldown escalonado, persistencia SQLite
 │       ├── rate_limiter.rs           # Rate limiter por sender (15 msgs / 10s)
 │       ├── watchdog.rs               # Heartbeat de Node.js — tracking de muerte/recuperación
 │       ├── snapshot.rs               # 10 snapshots rotativos + read_best_valid()

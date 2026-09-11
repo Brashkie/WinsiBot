@@ -3,6 +3,7 @@ import { commandRegistry } from '@plugins/commands/index.js'
 import { applyMiddlewares } from '@plugins/middlewares/index.js'
 import { config } from '@config'
 import { logger } from './logger.js'
+import { registerSemaphore, shouldShed, priorityOf, loadLevel } from './loadShedding.js'
 import { color, themes } from 'ansimax'
 import type { BotContext } from '../types/index.js'
 import { handleNotFound } from '@plugins/commands/general/notfound.js'
@@ -92,6 +93,15 @@ function releaseSlot(): void {
     waiter.resolve(true)
   }
 }
+
+// El load shedding usa la ocupación del semáforo como una de sus dos señales
+// (la otra es el lag del event loop). Se inyecta en vez de importarse desde
+// allá para no crear un ciclo entre handler.ts y loadShedding.ts.
+registerSemaphore(() => ({
+  active:  _activeHandlers,
+  max:     MAX_CONCURRENT,
+  waiting: _slotWaiters.length,
+}))
 
 // ─── Extraer texto del mensaje ────────────────────────────────────────────────
 function extractText(msg: WAMessage): string {
@@ -692,6 +702,20 @@ export async function handleMessage(msg: WAMessage, sock: WASocket): Promise<voi
 
     if (!command) {
       await handleNotFound(ctx)
+      return
+    }
+
+    // ─── Load shedding ────────────────────────────────────────────────────────
+    // Con el bot saturado, sacrificar lo prescindible antes que morir con todo
+    // dentro. No se responde nada a propósito: generar más mensajes salientes
+    // justo cuando estamos ahogados empeora la carga y el riesgo de que
+    // WhatsApp lea el patrón como abuso. Moderación, admin y owner nunca caen.
+    // Ver core/loadShedding.ts.
+    if (shouldShed(priorityOf(command.category))) {
+      logger.warn(
+        { command: ctx.command, category: command.category, level: loadLevel() },
+        'comando descartado por carga',
+      )
       return
     }
 

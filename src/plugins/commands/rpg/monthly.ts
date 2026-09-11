@@ -5,6 +5,7 @@ import {
   checkLevelUp, levelUpLine,
 } from '@core/events.js'
 import { randomNumber as rand, randomChoice as pick } from '@lib/utils.js'
+import { sendCritical } from '@lib/media_sender.js'
 
 const CD = 5 * 24 * 60 * 60_000
 
@@ -46,7 +47,9 @@ const command: Command = {
     const leveled = checkLevelUp(sender)
     const lvlLine = levelUpLine(leveled, jid)
 
-    await sock.sendMessage(jid, {
+    // sendCritical: la recompensa más valiosa del juego, con el cooldown más
+    // largo. Perder este mensaje es lo peor que puede pasarle a un usuario.
+    await sendCritical(sock, jid, {
       text: `*RECOMPENSA MENSUAL* ${isPrem ? '★' : ''}
 
 > +${exp} XP

@@ -6,7 +6,7 @@ import {
   patchUserData,
   setCooldown,
 } from '@core/events.js'
-import { safeSend } from '@lib/media_sender.js'
+import { safeSend, sendCritical } from '@lib/media_sender.js'
 import { randomNumber as rand } from '@lib/utils.js'
 import type { Command } from '../../../types/index.js'
 
@@ -190,7 +190,10 @@ const command: Command = {
           `╰─`,
         ].join('\n')
 
-    await safeSend(() => sock.sendMessage(jid, { text }, { quoted: msg }))
+    // sendCritical: la apuesta ya se resolvió y el saldo ya se ajustó. Sin
+    // este mensaje el usuario no sabe si ganó o perdió, pero el dinero ya se
+    // movió — el outbox lo reenvía si el proceso muere acá.
+    await sendCritical(sock, jid, { text }, { quoted: msg })
   },
 }
 

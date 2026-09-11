@@ -4,6 +4,7 @@ import {
   isOnCooldown, setCooldown, getCooldownLeft, fmtCooldown,
 } from '@core/events.js'
 import { randomNumber as rand } from '@lib/utils.js'
+import { sendCritical } from '@lib/media_sender.js'
 
 const CD      = 2 * 60 * 60_000
 const MAX_ROB = 4_000
@@ -52,7 +53,10 @@ const command: Command = {
     patchUserData(target, { money: Math.max(0, victim.money - amount) })
     setCooldown(sender, 'lastRob')
 
-    await sock.sendMessage(jid, {
+    // sendCritical: el dinero ya se movió entre las dos cuentas y el cooldown
+    // de 2h ya se consumió — perder este mensaje deja al usuario sin saber si
+    // el robo salió o no, con el cooldown gastado igual.
+    await sendCritical(sock, jid, {
       text: `*ROB* ✓\n> Le robaste *¥${amount}* a @${target.split('@')[0]}\n_Próximo robo en 2h_`,
       mentions: [target],
     }, { quoted: msg })

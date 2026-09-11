@@ -1,6 +1,6 @@
 import type { Command } from '../../../types/index.js'
 import { getUserData, patchUserData } from '@core/events.js'
-import { safeSend } from '@lib/media_sender.js'
+import { safeSend, sendCritical } from '@lib/media_sender.js'
 
 // Transferencia rápida de BrasCoins desde billetera
 // Uso: !pay <monto> @mencionar
@@ -60,14 +60,17 @@ const command: Command = {
 
     const newBalance = from.money - amount
 
-    await safeSend(() => sock.sendMessage(jid, {
+    // sendCritical: el dinero YA cambió de manos en las dos cuentas. Si el
+    // proceso muere antes de que salga esta confirmación, el outbox la reenvía
+    // al arrancar — ver sendCritical en lib/media_sender.ts.
+    await sendCritical(sock, jid, {
       text: [
         `✧ Transferiste *¥${amount.toLocaleString()} CodPoints* a @${target.split('@')[0]}`,
         ``,
         `Ahora tienes *¥${newBalance.toLocaleString()} CodPoints* en la billetera.`,
       ].join('\n'),
       mentions: [target],
-    }, { quoted: msg }))
+    }, { quoted: msg })
   },
 }
 

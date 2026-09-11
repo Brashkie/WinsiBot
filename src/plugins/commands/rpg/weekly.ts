@@ -5,6 +5,7 @@ import {
   checkLevelUp, levelUpLine,
 } from '@core/events.js'
 import { randomChoice as pick } from '@lib/utils.js'
+import { sendCritical } from '@lib/media_sender.js'
 
 const CD = 3 * 24 * 60 * 60_000
 
@@ -45,7 +46,8 @@ const command: Command = {
     const leveled = checkLevelUp(sender)
     const lvlLine = levelUpLine(leveled, jid)
 
-    await sock.sendMessage(jid, {
+    // sendCritical: recompensa acreditada y cooldown de 3 días ya consumido.
+    await sendCritical(sock, jid, {
       text: `> +${exp} XP  ·  +¥${money.toLocaleString()} BrasCoins\n> +${diamonds} 💎  ·  +${sword} ⚔️  ·  +${sp} ✨${lvlLine}\n\n_Próxima recompensa en 3 días_`,
     }, { quoted: msg })
   },

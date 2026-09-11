@@ -45,9 +45,9 @@ impl Config {
         let db_path = env::var("DB_PATH")
             .unwrap_or_else(|_| "./data/messages.db".into());
 
-        // Ruta del archivo DuckDB para conversaciones de IA
+        // Ruta del archivo SQLite para conversaciones de IA
         let conv_db_path = env::var("CONV_DB_PATH")
-            .unwrap_or_else(|_| "./data/ai_conversations.duckdb".into());
+            .unwrap_or_else(|_| "./data/ai_conversations.db".into());
 
         // Webhook opcional (Discord-compatible) para alertas de watchdog muerto/recuperado
         let alert_webhook_url = env::var("ALERT_WEBHOOK_URL").ok().filter(|s| !s.is_empty());

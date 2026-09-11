@@ -5,6 +5,7 @@
  */
 
 import { logger } from '@core/logger.js'
+import { rustCircuit } from '@lib/circuitBreaker.js'
 import { config } from '@config'
 
 const API_URL = config.rustApiUrl
@@ -37,8 +38,20 @@ const FETCH_TIMEOUT_MS = 3_000
 async function apiFetch<T>(
   path: string, init?: RequestInit, opts?: { allowNon2xx?: boolean; timeoutMs?: number },
 ): Promise<T> {
+  // Circuito abierto: fallar ya, sin pagar el timeout. Con Rust caído esto se
+  // nota en cada mensaje — checkRate() está en el camino crítico del handler.
+  if (!rustCircuit.canAttempt()) throw new Error('Rust API no disponible (circuito abierto)')
+
   const ctrl = new AbortController()
   const timer = setTimeout(() => ctrl.abort(), opts?.timeoutMs ?? FETCH_TIMEOUT_MS)
+
+  // Lo que mide el circuito es si Rust CONTESTA, no si nos gustó la respuesta.
+  // Un 429 de /rate/check (bloqueo intencional, ver allowNon2xx arriba) o un
+  // error de negocio significan que Rust está vivo: contarlos abriría el
+  // circuito justo cuando el rate limiter está haciendo su trabajo. Solo
+  // cuenta como caída no llegar a tener respuesta — timeout, conexión
+  // rechazada, DNS.
+  let responded = false
   try {
     const res  = await fetch(`${API_URL}${path}`, {
       ...init,
@@ -46,14 +59,30 @@ async function apiFetch<T>(
       headers: { ..._headers, ...init?.headers },
     })
     const json = (await res.json()) as T & { ok: boolean; error?: string }
+    responded = true
+    rustCircuit.recordSuccess()
+
     if (!json.ok || (!opts?.allowNon2xx && !res.ok)) throw new Error(json.error ?? `HTTP ${res.status}`)
     return json
+  } catch (err) {
+    if (!responded) rustCircuit.recordFailure()
+    throw err
   } finally {
     clearTimeout(timer)
   }
 }
 
 // ─── Tipos ────────────────────────────────────────────────────────────────────
+/** Un mensaje encolado que todavía no llegó a salir — candidato a reenvío. */
+export interface QueuedMsg {
+  id:          string
+  jid:         string
+  msg_type:    string
+  payload:     string
+  retry_count: number
+  queued_at:   number
+}
+
 export interface SnapMeta {
   path:      string
   sizeBytes: number
@@ -95,16 +124,6 @@ export interface PendingMsg {
   sent_at:     number
   elapsed_sec: number
   is_group:    boolean
-}
-
-export interface DeliveryStats {
-  total:        number
-  sent:         number
-  delivered:    number
-  read:         number
-  failed:       number
-  delivery_pct: string
-  read_pct:     string
 }
 
 // ─── Cliente de sesión ────────────────────────────────────────────────────────
@@ -182,15 +201,6 @@ export class SessionClient {
     return apiFetch<HealthResult>(`/healthy?sessionId=${this.sessionId}`)
   }
 
-  async isHealthy(): Promise<boolean> {
-    try {
-      const h = await this.health()
-      return h.healthy
-    } catch {
-      return false
-    }
-  }
-
   async recover(): Promise<string | null> {
     try {
       const res = await apiFetch<{ message: string }>('/recover', {
@@ -201,11 +211,6 @@ export class SessionClient {
     } catch {
       return null
     }
-  }
-
-  async snapshots(): Promise<string[]> {
-    const res = await apiFetch<{ snapshots: string[] }>(`/snapshots?sessionId=${this.sessionId}`)
-    return res.snapshots
   }
 
   /**
@@ -252,18 +257,6 @@ export class SessionClient {
   }
 
   /**
-   * Resetea el contador Bad MAC de un grupo (después de hacer clear manual).
-   */
-  async resetBadMac(jid: string): Promise<void> {
-    try {
-      await apiFetch('/badmac/reset', {
-        method: 'POST',
-        body:   JSON.stringify({ jid }),
-      })
-    } catch { /* silencioso */ }
-  }
-
-  /**
    * Verifica si un sender puede enviar mensajes (rate limiting).
    * Límite: 15 mensajes / 10s por sender.
    * Falla abierto: si Rust no responde, siempre permite.
@@ -307,22 +300,48 @@ export class SessionClient {
     })
   }
 
+  // ─── Outbox ───────────────────────────────────────────────────────────────
+  // trackMessages() registra DESPUÉS de enviar y sin contenido: mide entregas,
+  // pero no recupera un mensaje que nunca salió. Estos tres cierran ese hueco
+  // para lo que no puede perderse (economía, compras, transferencias).
+
+  /** Encola ANTES de enviar, con lo necesario para reconstruir el envío. */
+  async enqueueOutbox(items: Array<{ id: string; jid: string; msgType?: string; payload: string }>): Promise<void> {
+    if (!items.length) return
+    await apiFetch('/outbox/enqueue', {
+      method: 'POST',
+      body:   JSON.stringify({
+        messages: items.map(i => ({ id: i.id, jid: i.jid, msg_type: i.msgType ?? 'text', payload: i.payload })),
+      }),
+    })
+  }
+
+  /** Lo que quedó encolado sin enviarse — para reenviar al arrancar. */
+  async outboxUnsent(limit = 100, maxRetries = 3): Promise<QueuedMsg[]> {
+    const res = await apiFetch<{ messages: QueuedMsg[] }>(
+      `/outbox/unsent?limit=${limit}&max_retries=${maxRetries}`
+    )
+    return res.messages ?? []
+  }
+
+  /** Marca como enviado de verdad y suelta el payload. */
+  async markOutboxSent(ids: string[]): Promise<void> {
+    if (!ids.length) return
+    await apiFetch('/outbox/sent', { method: 'POST', body: JSON.stringify({ ids }) })
+  }
+
+  /** Suma un reintento — para que lo que siempre falla acabe cayendo del listado. */
+  async bumpOutboxRetry(ids: string[]): Promise<void> {
+    if (!ids.length) return
+    await apiFetch('/outbox/retry', { method: 'POST', body: JSON.stringify({ ids }) })
+  }
+
   /** Mensajes enviados hace >N minutos sin confirmación de entrega. */
   async getPendingMessages(minutes = 5, limit = 100): Promise<PendingMsg[]> {
     const res = await apiFetch<{ pending: PendingMsg[] }>(
       `/messages/pending?minutes=${minutes}&limit=${limit}`
     )
     return res.pending
-  }
-
-  /** Estadísticas de delivery de las últimas N horas. */
-  async getDeliveryStats(hours = 24): Promise<DeliveryStats> {
-    return apiFetch<DeliveryStats>(`/messages/stats?hours=${hours}`)
-  }
-
-  /** Limpiar registros más viejos de N días. */
-  async cleanupMessages(days = 7): Promise<void> {
-    await apiFetch(`/messages/cleanup?days=${days}`, { method: 'DELETE' })
   }
 
   /**

@@ -23,7 +23,7 @@ use axum::{
     middleware,
     middleware::Next,
     response::Response,
-    routing::{delete, get, post, put},
+    routing::{get, post, put},
     Router,
 };
 use routes::AppState;
@@ -156,10 +156,10 @@ async fn main() {
 
     let database = db::open(&cfg.db_path).expect("no se pudo abrir SQLite");
 
-    // Conexión DuckDB única, compartida entre conversations.rs y bad_mac.rs
+    // Conexión SQLite única, compartida entre conversations.rs y bad_mac.rs
     // (mismo archivo) — ver comentario al inicio de conversations.rs.
     let conv_db = conversations::init(&cfg.conv_db_path)
-        .expect("no se pudo abrir DuckDB de conversaciones");
+        .expect("no se pudo abrir la DB de conversaciones");
     bad_mac::init_schema(&conv_db);
 
     let state = AppState {
@@ -167,7 +167,6 @@ async fn main() {
         auth_dir:      cfg.auth_dir.clone(),
         locks:         lock_manager::LockManager::new(),
         db:            database,
-        conv_db_path:  cfg.conv_db_path.clone(),
         conv_db:       conv_db.clone(),
         bad_mac:       bad_mac::BadMacTracker::new(),
         rate_limiter:  rate_limiter::RateLimiter::new(),
@@ -200,38 +199,33 @@ async fn main() {
         .route("/read",                   get(routes::read))
         .route("/snapshot",               post(routes::snapshot_route))
         .route("/recover",                post(routes::recover))
-        .route("/snapshots",              get(routes::list_snapshots))
         .route("/healthy",                get(routes::is_healthy))
         .route("/sessions",               get(routes::list_sessions))
         .route("/sessions/signal/clear",  post(routes::clear_signal_sessions))
         .route("/sessions/backup",        get(routes::read_backup))
         // ─── NLP fast-path ───────────────────────────────────────────────────
         .route("/nlp/fast",               post(nlp::nlp_fast))
-        // ─── AI conversations (DuckDB) ────────────────────────────────────────
+        // ─── AI conversations (SQLite) ────────────────────────────────────────
         .route("/ai/learn",               post(conversations::ai_learn))
         .route("/ai/context/:sender",     get(conversations::ai_context))
-        .route("/ai/export",              post(conversations::ai_export))
         // ─── Bad MAC per-group tracker ────────────────────────────────────────
         .route("/badmac/report",          post(bad_mac::report_bad_mac))
-        .route("/badmac/reset",           post(bad_mac::reset_bad_mac))
-        .route("/badmac/stats",           get(bad_mac::bad_mac_stats))
-        .route("/badmac/export",          post(bad_mac::export_bad_mac))
         // ─── Rate limiter per-sender ──────────────────────────────────────────
         .route("/rate/check",             post(rate_limiter::rate_check))
-        .route("/rate/stats",             get(rate_limiter::rate_stats))
         // ─── Watchdog — heartbeat desde Node.js ────────────────────────────────
         .route("/watchdog/ping",          post(watchdog::ping))
         .route("/watchdog/status",        get(watchdog::status))
         // ─── Métricas internas y dashboard agregado ───────────────────────────
         .route("/metrics",                get(metrics::get_metrics))
         .route("/analytics",              get(analytics::analytics))
-        .route("/audit",                  get(routes::get_audit))
         // ─── Message delivery tracking ────────────────────────────────────────
         .route("/messages/track",         post(routes::messages_track))
         .route("/messages/ack",           post(routes::messages_ack))
         .route("/messages/pending",       get(routes::messages_pending))
-        .route("/messages/stats",         get(routes::messages_stats))
-        .route("/messages/cleanup",       delete(routes::messages_cleanup))
+        .route("/outbox/enqueue",         post(routes::outbox_enqueue))
+        .route("/outbox/unsent",          get(routes::outbox_unsent))
+        .route("/outbox/sent",            post(routes::outbox_sent))
+        .route("/outbox/retry",           post(routes::outbox_retry))
         // ─── Sub-bots (100 cap, DashMap, quota, cooldown) ─────────────────────
         .route("/subbots/register",       post(subbots::register))
         .route("/subbots/stats",          get(subbots::stats))

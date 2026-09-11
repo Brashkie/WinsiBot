@@ -1,7 +1,7 @@
 {
   "name": "winsi-bot",
-  "version": "8.8.2",
-  "description": "WinsiBot v8.8.2 — High-performance WhatsApp bot with multi-language architecture (TypeScript + Rust + Python), advanced AI, RPG economy, and resilience for very active groups. This release drops four dependencies: Redis and Celery (dead weight — the bot never called a single Celery task), better-sqlite3 (replaced by strenor for web-panel sessions, with real TTL and no node-gyp build on Termux) and node-cache (folded into the existing cache layer, which adds the size cap NodeCache lacked). User persistence moves from rewriting 2.2 MB every 30 seconds to an append-only delta log (data/users.aof): ~7.2 GB/day of disk writes down to ~0.17 GB, with automatic migration and export/import scripts. signalis-core updated to 0.5.1. Installing no longer requires a Redis server.",
+  "version": "8.9.0",
+  "description": "WinsiBot v8.9.0 — High-performance WhatsApp bot with multi-language architecture (TypeScript + Rust + Python), advanced AI, RPG economy, and resilience for very active groups. This release adds two guarantees against lost and duplicated operations. A real outbox: Rust's table recorded deliveries AFTER the fact and without content, so a crash between 'money deducted' and 'confirmation sent' left no trace; it now carries the payload and a queued state, and sendCritical() queues, sends and marks, with replayOutbox() resending on startup and a dead letter after 3 attempts. Applied to the 9 commands where losing the message hurts: transfers (pay/transfer/rob), long-cooldown rewards (daily/weekly/monthly) and settled bets (coinflip/roulette/invest). And message idempotency: Baileys re-delivers messages as 'append' after every reconnect, so a #daily followed by a reconnect ran twice — core/dedup.ts now drops re-deliveries, on disk and scoped per bot instance. Also drops DuckDB (a clean Rust build goes from 10-30 min, and failing outright under MSVC 14.51, to 3m19s), removes 9 dead Rust routes, 3 Python routers and 5 TypeScript client methods, and fixes the credentials backup never doing its final write on shutdown.",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
   "type": "module",
@@ -50,6 +50,7 @@
     "code": "node dist/index.js code",
     "test": "vitest",
     "test:coverage": "vitest run --coverage",
+    "chaos": "node scripts/chaos.js",
     "typecheck": "tsc --noEmit",
     "clean": "rimraf dist",
     "health": "node scripts/health.js",
