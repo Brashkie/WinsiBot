@@ -9,6 +9,7 @@ import {
 import { useMultiFileAuthStateCBOR } from '@lib/authStateCbor.js'
 import { safeSend } from '@lib/media_sender.js'
 import { alreadyProcessed } from '@core/dedup.js'
+import { wrapEgress } from '@core/egress.js'
 import { handleMessage } from '@core/handler.js'
 import { getGroupMetadata } from '@core/groupCache.js'
 import { logger } from '@core/logger.js'
@@ -326,6 +327,12 @@ export async function startSubBot(
     },
   })
   subSockRef = subSock
+
+  // Mismo embudo de salida que el bot principal: todo sendMessage de este
+  // sub-bot pasa por el rate limiter. El limitador es COMPARTIDO a propósito —
+  // el techo lo pone la cuenta y la conexión, no cada instancia por su cuenta,
+  // así que veinte sub-bots no pueden multiplicar por veinte el tráfico.
+  wrapEgress(subSock, phone)
 
   subBots.set(phone, {
     phone,

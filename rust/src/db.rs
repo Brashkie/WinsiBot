@@ -53,6 +53,26 @@ pub fn open(path: &str) -> Result<Db, rusqlite::Error> {
          );
          CREATE INDEX IF NOT EXISTS idx_audit_ts       ON audit_log (ts);
          CREATE INDEX IF NOT EXISTS idx_audit_category ON audit_log (category);
+
+         -- Contadores del bot. Node los incrementa en memoria (gratis, por
+         -- mensaje) y vuelca el acumulado cada tanto; acá solo se suman. Antes
+         -- esto era una fila por mensaje en un .parquet de Python, escrita con
+         -- una llamada HTTP por mensaje, y solo se usaba para contar filas.
+         CREATE TABLE IF NOT EXISTS bot_counters (
+             day      TEXT NOT NULL,   -- YYYY-MM-DD (UTC)
+             metric   TEXT NOT NULL,   -- 'messages' | 'commands'
+             count    INTEGER NOT NULL DEFAULT 0,
+             PRIMARY KEY (day, metric)
+         );
+
+         -- Uso por comando, para el top. El `command_stats.parquet` que leía
+         -- Python para esto NUNCA existió: nadie lo escribía, así que el top
+         -- de comandos salía vacío siempre.
+         CREATE TABLE IF NOT EXISTS command_counters (
+             command  TEXT PRIMARY KEY,
+             count    INTEGER NOT NULL DEFAULT 0,
+             last_at  INTEGER NOT NULL
+         );
         ",
     )?;
 
@@ -356,3 +376,102 @@ pub fn audit_log(
     Ok(())
 }
 
+
+// ─── Contadores del bot ──────────────────────────────────────────────────────
+// El conteo caliente ocurre en memoria dentro de Node (un ++ por mensaje, sin
+// red). Acá solo llega el acumulado cada tanto, así que estas funciones corren
+// una vez por minuto y no una vez por mensaje.
+
+#[derive(Debug, Deserialize)]
+pub struct CounterBump {
+    /// 'messages' | 'commands'
+    pub metric: String,
+    pub count:  i64,
+}
+
+#[derive(Debug, Deserialize)]
+pub struct CommandBump {
+    pub command: String,
+    pub count:   i64,
+}
+
+/// Suma el lote acumulado. Se usa UPSERT para que sumar sea atómico: si dos
+/// vuelcos coinciden, ninguno pisa al otro.
+pub fn bump_counters(
+    db:       &Db,
+    day:      &str,
+    metrics:  &[CounterBump],
+    commands: &[CommandBump],
+) -> Result<(), rusqlite::Error> {
+    let mut conn = db.lock().unwrap();
+    let tx  = conn.transaction()?;
+    let now = Utc::now().timestamp();
+
+    for m in metrics {
+        if m.count <= 0 { continue }
+        tx.execute(
+            "INSERT INTO bot_counters (day, metric, count) VALUES (?1, ?2, ?3)
+             ON CONFLICT(day, metric) DO UPDATE SET count = count + ?3",
+            params![day, m.metric, m.count],
+        )?;
+    }
+    for c in commands {
+        if c.count <= 0 { continue }
+        tx.execute(
+            "INSERT INTO command_counters (command, count, last_at) VALUES (?1, ?2, ?3)
+             ON CONFLICT(command) DO UPDATE SET count = count + ?2, last_at = ?3",
+            params![c.command, c.count, now],
+        )?;
+    }
+    tx.commit()?;
+    Ok(())
+}
+
+#[derive(Debug, serde::Serialize)]
+pub struct BotCounters {
+    pub total_messages:  i64,
+    pub total_commands:  i64,
+    pub messages_today:  i64,
+    pub commands_today:  i64,
+}
+
+pub fn get_counters(db: &Db, today: &str) -> Result<BotCounters, rusqlite::Error> {
+    let conn = db.lock().unwrap();
+
+    let sum = |metric: &str| -> Result<i64, rusqlite::Error> {
+        conn.query_row(
+            "SELECT COALESCE(SUM(count), 0) FROM bot_counters WHERE metric = ?1",
+            params![metric], |r| r.get(0),
+        )
+    };
+    let today_of = |metric: &str| -> Result<i64, rusqlite::Error> {
+        conn.query_row(
+            "SELECT COALESCE(count, 0) FROM bot_counters WHERE metric = ?1 AND day = ?2",
+            params![metric, today], |r| r.get(0),
+        ).or(Ok(0))
+    };
+
+    Ok(BotCounters {
+        total_messages: sum("messages")?,
+        total_commands: sum("commands")?,
+        messages_today: today_of("messages")?,
+        commands_today: today_of("commands")?,
+    })
+}
+
+#[derive(Debug, serde::Serialize)]
+pub struct TopCommand {
+    pub command: String,
+    pub count:   i64,
+}
+
+pub fn top_commands(db: &Db, limit: i64) -> Result<Vec<TopCommand>, rusqlite::Error> {
+    let conn = db.lock().unwrap();
+    let mut stmt = conn.prepare(
+        "SELECT command, count FROM command_counters ORDER BY count DESC LIMIT ?1",
+    )?;
+    let rows = stmt.query_map(params![limit], |r| {
+        Ok(TopCommand { command: r.get(0)?, count: r.get(1)? })
+    })?;
+    rows.collect()
+}

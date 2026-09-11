@@ -36,9 +36,14 @@ const sleep = (ms: number) => new Promise<void>(r => setTimeout(r, ms))
 export async function safeSend(fn: () => Promise<any>): Promise<any> {
   for (let attempt = 0; attempt < MAX_RETRIES; attempt++) {
     try {
-      // Solo el bucket global (sin cola ni límite por-JID) — protege el techo
-      // de envíos salientes sin agregar latencia perceptible a una respuesta.
-      return await rateLimiter.direct(fn)
+      // Ya NO aplica el rate limiter acá: desde que existe el embudo de salida
+      // (core/egress.ts), sock.sendMessage pasa por el limitador SIEMPRE, se
+      // llame a través de safeSend o directo. Hacerlo también acá contaría dos
+      // veces el mismo envío y frenaría el bot a la mitad de su techo real.
+      //
+      // Lo que safeSend sigue aportando, y por eso no desaparece, son los
+      // reintentos ante errores de red transitorios (ver RETRYABLE).
+      return await fn()
     } catch (err: any) {
       const msg = String(err?.message ?? err ?? '')
       if (!RETRYABLE.some(e => msg.includes(e)) || attempt === MAX_RETRIES - 1) throw err

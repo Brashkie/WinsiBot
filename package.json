@@ -1,7 +1,7 @@
 {
   "name": "winsi-bot",
-  "version": "8.9.0",
-  "description": "WinsiBot v8.9.0 — High-performance WhatsApp bot with multi-language architecture (TypeScript + Rust + Python), advanced AI, RPG economy, and resilience for very active groups. This release adds two guarantees against lost and duplicated operations. A real outbox: Rust's table recorded deliveries AFTER the fact and without content, so a crash between 'money deducted' and 'confirmation sent' left no trace; it now carries the payload and a queued state, and sendCritical() queues, sends and marks, with replayOutbox() resending on startup and a dead letter after 3 attempts. Applied to the 9 commands where losing the message hurts: transfers (pay/transfer/rob), long-cooldown rewards (daily/weekly/monthly) and settled bets (coinflip/roulette/invest). And message idempotency: Baileys re-delivers messages as 'append' after every reconnect, so a #daily followed by a reconnect ran twice — core/dedup.ts now drops re-deliveries, on disk and scoped per bot instance. Also drops DuckDB (a clean Rust build goes from 10-30 min, and failing outright under MSVC 14.51, to 3m19s), removes 9 dead Rust routes, 3 Python routers and 5 TypeScript client methods, and fixes the credentials backup never doing its final write on shutdown.",
+  "version": "8.10.0",
+  "description": "WinsiBot v8.10.0 — High-performance WhatsApp bot with multi-language architecture (TypeScript + Rust + Python), advanced AI, RPG economy, and resilience for very active groups. Reliability release. New guarantees: message idempotency (Baileys re-delivers after every reconnect, so a #daily could run twice), a real outbox with dead-letter for economy commands, circuit breakers on Python and Rust (242ms to 0.01ms per call when a service is down), load shedding driven by event-loop lag, and a chaos-testing suite (27 checks, 8 scenarios). The egress funnel now covers 100% of sends instead of 38% — 524 calls bypassed the rate limiter entirely — and fixes a race where the minimum delay between messages stopped applying during bursts, exactly when it mattered. Much less surface: DuckDB gone (clean Rust build from 10-30 min, and failing outright, down to 3m19s), Redis and Celery gone, and Python down from 16 routers to 7, 59 files to 37, 16 dependencies to 9, with zero HTTP calls per message.",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
   "type": "module",
@@ -42,6 +42,7 @@
     "check": "biome check src/ scripts/",
     "check:fix": "biome check --write src/ scripts/",
     "rust:lint": "cd rust && cargo clippy --release",
+    "rust:bench": "cd rust && cargo bench",
     "py:lint": "node scripts/py_lint.js",
     "py:lint:fix": "node scripts/py_lint.js --fix",
     "py:format": "node scripts/py_format.js",

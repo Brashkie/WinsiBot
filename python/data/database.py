@@ -1,6 +1,17 @@
 """
-WinsiBot — Database
-SQLite centralizado para todos los datos del bot
+WinsiBot — Conexión SQLite para Python
+
+Ya NO es "la base de datos central del bot": ese papel lo tienen el userData de
+Node (persistido en data/users.aof) y las tablas de Rust (outbox, contadores,
+audit). Acá quedaba un esquema de 9 tablas —users, group_config, inventory,
+trades, health_logs, break_logs, alert_logs, session_events, pending_messages—
+que NO usaba nadie: el estado real vive en los otros dos sitios, y
+pending_messages pertenecía a un sistema ya eliminado. El archivo winsibot.db
+pesaba 0 bytes, señal de que nunca llegó a escribirse nada.
+
+Lo único que sigue vivo es la conexión: ai/personality.py la pide para crear y
+mantener su propia tabla `personality_config`. Cuando personality migre a Rust,
+este archivo se va con él.
 """
 
 import sqlite3
@@ -42,160 +53,13 @@ def transaction():
         conn.rollback()
         raise
 
-# ─── Schema ───────────────────────────────────────────────────────────────────
-SCHEMA = """
--- ── Usuarios ─────────────────────────────────────────────────────────────────
-CREATE TABLE IF NOT EXISTS users (
-    sender      TEXT PRIMARY KEY,
-    push_name   TEXT DEFAULT '',
-    exp         INTEGER DEFAULT 0,
-    level       INTEGER DEFAULT 1,
-    money       INTEGER DEFAULT 0,
-    diamonds    INTEGER DEFAULT 0,
-    premium     INTEGER DEFAULT 0,
-    banned      INTEGER DEFAULT 0,
-    ban_reason  TEXT DEFAULT '',
-    registered  INTEGER DEFAULT 0,
-    reg_name    TEXT DEFAULT '',
-    reg_age     INTEGER DEFAULT 0,
-    reg_code    TEXT DEFAULT '',
-    last_spam   INTEGER DEFAULT 0,
-    created_at  TEXT DEFAULT (datetime('now')),
-    updated_at  TEXT DEFAULT (datetime('now'))
-);
-
--- ── Grupos config ─────────────────────────────────────────────────────────────
-CREATE TABLE IF NOT EXISTS group_config (
-    jid         TEXT PRIMARY KEY,
-    muted       INTEGER DEFAULT 0,
-    antilink    INTEGER DEFAULT 0,
-    antispam    INTEGER DEFAULT 0,
-    modoadmin   INTEGER DEFAULT 0,
-    welcome     INTEGER DEFAULT 0,
-    goodbye     INTEGER DEFAULT 0,
-    updated_at  TEXT DEFAULT (datetime('now'))
-);
-
--- ── Inventario gacha ─────────────────────────────────────────────────────────
-CREATE TABLE IF NOT EXISTS inventory (
-    id          INTEGER PRIMARY KEY AUTOINCREMENT,
-    owner_jid   TEXT NOT NULL,
-    char_name   TEXT NOT NULL,
-    char_data   TEXT NOT NULL,   -- JSON del personaje
-    obtained_at TEXT DEFAULT (datetime('now')),
-    UNIQUE(owner_jid, char_name)
-);
-
--- ── Trade requests ────────────────────────────────────────────────────────────
-CREATE TABLE IF NOT EXISTS trades (
-    id          INTEGER PRIMARY KEY AUTOINCREMENT,
-    from_jid    TEXT NOT NULL,
-    to_jid      TEXT NOT NULL,
-    char_name   TEXT NOT NULL,
-    status      TEXT DEFAULT 'pending',  -- pending|accepted|rejected|expired
-    expires_at  TEXT NOT NULL,
-    created_at  TEXT DEFAULT (datetime('now'))
-);
-
--- ── Health logs ───────────────────────────────────────────────────────────────
-CREATE TABLE IF NOT EXISTS health_logs (
-    id          INTEGER PRIMARY KEY AUTOINCREMENT,
-    timestamp   TEXT NOT NULL,
-    status      TEXT NOT NULL,
-    score       REAL NOT NULL,
-    checks      TEXT NOT NULL,   -- JSON
-    alerts      TEXT NOT NULL,   -- JSON
-    created_at  TEXT DEFAULT (datetime('now'))
-);
-
--- ── Break logs ────────────────────────────────────────────────────────────────
-CREATE TABLE IF NOT EXISTS break_logs (
-    id             INTEGER PRIMARY KEY AUTOINCREMENT,
-    break_id       TEXT NOT NULL,
-    type           TEXT NOT NULL,
-    severity       TEXT NOT NULL,
-    message        TEXT NOT NULL,
-    pattern        TEXT NOT NULL,
-    suggested_fix  TEXT DEFAULT '',
-    context        TEXT DEFAULT '',
-    group_id       TEXT DEFAULT '',
-    frequency      REAL DEFAULT 0,
-    count          INTEGER DEFAULT 1,
-    resolved       INTEGER DEFAULT 0,
-    first_seen     TEXT NOT NULL,
-    last_seen      TEXT NOT NULL,
-    UNIQUE(break_id)
-);
-
--- ── Alert logs ────────────────────────────────────────────────────────────────
-CREATE TABLE IF NOT EXISTS alert_logs (
-    id          INTEGER PRIMARY KEY AUTOINCREMENT,
-    alert_id    TEXT NOT NULL,
-    level       TEXT NOT NULL,
-    source      TEXT NOT NULL,
-    title       TEXT NOT NULL,
-    message     TEXT NOT NULL,
-    count       INTEGER DEFAULT 1,
-    resolved    INTEGER DEFAULT 0,
-    timestamp   TEXT NOT NULL,
-    last_seen   TEXT NOT NULL,
-    UNIQUE(alert_id)
-);
-
--- ── Session events ────────────────────────────────────────────────────────────
-CREATE TABLE IF NOT EXISTS session_events (
-    id          INTEGER PRIMARY KEY AUTOINCREMENT,
-    event       TEXT NOT NULL,
-    detail      TEXT DEFAULT '',
-    created_at  TEXT DEFAULT (datetime('now'))
-);
-
--- ── Pending messages ──────────────────────────────────────────────────────────
-CREATE TABLE IF NOT EXISTS pending_messages (
-    id          INTEGER PRIMARY KEY AUTOINCREMENT,
-    jid         TEXT NOT NULL,
-    sender      TEXT NOT NULL,
-    text        TEXT DEFAULT '',
-    msg_data    TEXT NOT NULL,   -- JSON del mensaje
-    processed   INTEGER DEFAULT 0,
-    created_at  TEXT DEFAULT (datetime('now'))
-);
-
--- ── Índices ───────────────────────────────────────────────────────────────────
-CREATE INDEX IF NOT EXISTS idx_users_sender      ON users(sender);
-CREATE INDEX IF NOT EXISTS idx_inventory_owner   ON inventory(owner_jid);
-CREATE INDEX IF NOT EXISTS idx_health_ts         ON health_logs(timestamp);
-CREATE INDEX IF NOT EXISTS idx_break_id          ON break_logs(break_id);
-CREATE INDEX IF NOT EXISTS idx_alert_id          ON alert_logs(alert_id);
-CREATE INDEX IF NOT EXISTS idx_session_event     ON session_events(event);
-CREATE INDEX IF NOT EXISTS idx_pending_jid       ON pending_messages(jid);
-CREATE INDEX IF NOT EXISTS idx_pending_processed ON pending_messages(processed);
-"""
 
 def init_db() -> None:
-    conn = get_conn()
-    conn.executescript(SCHEMA)
-    conn.commit()
+    """Abre la conexión (y crea el archivo si no existe).
 
-# ─── Users ────────────────────────────────────────────────────────────────────
-def get_user(sender: str) -> dict:
-    conn = get_conn()
-    row  = conn.execute('SELECT * FROM users WHERE sender = ?', (sender,)).fetchone()
-    if row:
-        return dict(row)
-    # crear usuario nuevo
-    conn.execute('INSERT OR IGNORE INTO users (sender) VALUES (?)', (sender,))
-    conn.commit()
-    return dict(conn.execute('SELECT * FROM users WHERE sender = ?', (sender,)).fetchone())
-
-def update_user(sender: str, **kwargs) -> None:
-    if not kwargs:
-        return
-    kwargs['updated_at'] = datetime.utcnow().isoformat()
-    cols = ', '.join(f'{k} = ?' for k in kwargs)
-    vals = list(kwargs.values()) + [sender]
-    with transaction() as conn:
-        conn.execute(f'UPDATE users SET {cols} WHERE sender = ?', vals)
-
-# ─── Init ─────────────────────────────────────────────────────────────────────
-init_db()
+    Ya no crea tablas: cada módulo que necesite una la declara él mismo con
+    CREATE TABLE IF NOT EXISTS, como hace ai/personality.py. Un esquema
+    central de tablas que nadie usaba solo servía para dar la impresión de
+    que ahí vivían datos del bot.
+    """
+    get_conn()

@@ -124,112 +124,9 @@ export async function pythonDelete<T>(
   }
 }
 
-// ─── Fast Process via Cython ──────────────────────────────────────────────────
-export interface FastProcessResult {
-  cmd:      string
-  args:     string[]
-  prefix:   string
-  is_group: boolean
-  is_owner: boolean
-  allowed:  boolean
-  hits:     number
-  has_cmd:  boolean
-}
-
-export async function fastProcess(
-  text:      string,
-  prefixes:  string[],
-  sender:    string,
-  jid:       string,
-  ownerJids: string[],
-): Promise<FastProcessResult | null> {
-  try {
-    const res = await Promise.race([
-      pythonPost<FastProcessResult>('/api/v1/fast/process', {
-        text, prefixes, sender, jid,
-        owner_jids: ownerJids,
-        max_hits: 8, ttl: 10,
-      }),
-      new Promise<null>(r => setTimeout(() => r(null), 200)), // ← max 200ms
-    ])
-    return res?.data ?? null
-  } catch {
-    return null
-  }
-}
-
 export async function checkSpamText(text: string): Promise<boolean> {
   const res = await pythonPost<{ is_spam: boolean; confidence: number }>('/api/v1/ml/predict/spam', { text })
   return res.data?.is_spam ?? false
-}
-
-// ─── Usuarios ─────────────────────────────────────────────────────────────────
-export interface UserData {
-  jid:       string
-  pushName:  string
-  isOwner:   boolean
-  banned:    boolean
-  warns:     number
-  exp:       number
-  level:     number
-  premium:   boolean
-  createdAt: string
-  updatedAt: string
-}
-
-export async function getOrCreateUser(
-  jid:      string,
-  pushName: string,
-  isOwner:  boolean,
-  addExp  = true,
-): Promise<UserData | null> {
-  const res = await pythonPost<UserData>('/api/v1/users', {
-    jid, pushName, isOwner,
-    addExp,
-    expAmount: 5,
-  })
-  return res.success ? res.data ?? null : null
-}
-
-export async function warnUser(jid: string): Promise<number> {
-  const res = await pythonPost<{ warns: number }>(`/api/v1/users/${jid}/warn`, {})
-  return res.data?.warns ?? 0
-}
-
-// ─── Mensajes ─────────────────────────────────────────────────────────────────
-export async function logMessage(data: {
-  id:       string
-  jid:      string
-  sender:   string
-  pushName: string
-  text:     string
-  command:  string
-  isGroup:  boolean
-  isOwner:  boolean
-}): Promise<void> {
-  await pythonPost('/api/v1/messages', data)
-}
-
-// ─── Stats ────────────────────────────────────────────────────────────────────
-export interface BotStats {
-  total_messages: number
-  total_users:    number
-  total_commands: number
-  messages_today: number
-  commands_today: number
-  banned_users:   number
-  premium_users:  number
-  generated_at:   string
-}
-
-export async function getBotStats(): Promise<BotStats | null> {
-  const res = await pythonGet<BotStats>('/api/v1/stats')
-  return res.success ? res.data ?? null : null
-}
-
-export async function getTopCommands(): Promise<Array<{ command: string; count: number }>> {
-  const res = await pythonGet<Array<{ command: string; count: number }>>('/api/v1/stats/top-commands')
-  return res.data ?? []
 }
 
 // ─── NLP ──────────────────────────────────────────────────────────────────────
@@ -266,35 +163,6 @@ export async function analyzeIntent(text: string): Promise<NLPIntent | null> {
 
   const res = await pythonPost<NLPIntent>('/api/v1/ml/nlp/intent', { text })
   return res.success ? res.data ?? null : null
-}
-
-// ─── Mensajes pendientes ──────────────────────────────────────────────────────
-export interface PendingMessage {
-  id:        string
-  jid:       string
-  sender:    string
-  text:      string
-  command:   string
-  timestamp: string
-  processed: boolean
-}
-
-export async function getPendingCount(minutes = 30): Promise<number> {
-  const res = await pythonGet<{ count: number }>('/api/v1/pending/count', {
-    minutes: String(minutes),
-  })
-  return res.data?.count ?? 0
-}
-
-export async function getPendingMessages(minutes = 30): Promise<PendingMessage[]> {
-  const res = await pythonGet<PendingMessage[]>('/api/v1/pending', {
-    minutes: String(minutes),
-  })
-  return res.data ?? []
-}
-
-export async function markPendingProcessed(ids: string[]): Promise<void> {
-  await pythonPost('/api/v1/pending/processed', { ids })
 }
 
 // ─── AI conversaciones (DuckDB via Rust) ──────────────────────────────────────

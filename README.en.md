@@ -1,6 +1,6 @@
 <div align="center">
 
-<img src="https://capsule-render.vercel.app/api?type=waving&color=0:6C63FF,100:00C9FF&height=180&section=header&text=WinsiBot&fontSize=62&fontColor=ffffff&fontAlignY=38&desc=v8.9.0%20%E2%80%94%20Enterprise%20WhatsApp%20Bot&descAlignY=58&descSize=18" width="100%"/>
+<img src="https://capsule-render.vercel.app/api?type=waving&color=0:6C63FF,100:00C9FF&height=180&section=header&text=WinsiBot&fontSize=62&fontColor=ffffff&fontAlignY=38&desc=v8.10.0%20%E2%80%94%20Enterprise%20WhatsApp%20Bot&descAlignY=58&descSize=18" width="100%"/>
 
 <br/>
 
@@ -10,7 +10,7 @@
 [![Rust](https://img.shields.io/badge/Rust-1.75%2B-CE422B?style=for-the-badge&logo=rust&logoColor=white)](https://rust-lang.org)
 
 [![License](https://img.shields.io/badge/License-GPL--3.0-blue?style=flat-square)](LICENSE)
-[![Version](https://img.shields.io/badge/Version-8.9.0-6C63FF?style=flat-square)](CHANGELOG.md)
+[![Version](https://img.shields.io/badge/Version-8.10.0-6C63FF?style=flat-square)](CHANGELOG.md)
 [![Platform](https://img.shields.io/badge/Platform-Windows%20%7C%20Linux%20%7C%20macOS%20%7C%20Android-lightgrey?style=flat-square)](https://github.com/Brashkie/WinsiBot)
 [![PRs Welcome](https://img.shields.io/badge/PRs-welcome-brightgreen?style=flat-square)](https://github.com/Brashkie/WinsiBot/pulls)
 
@@ -18,7 +18,7 @@
 
 > High-performance WhatsApp bot with a three-layer multi-language architecture.<br/>
 > No artificial group limit, built for thousands of messages per hour and multiple instances.<br/>
-> v8.9.0 — DuckDB is gone: it was why the first Rust build took 10–30 min, and with MSVC 14.51 it no longer finished at all. Its two tables move to `rusqlite` and a clean build drops to **3 m 19 s**. Thorough removal of verified dead code — 9 Rust routes, 3 Python routers, 5 TypeScript methods — plus a bug found along the way: the credentials backup never made its final write on shutdown.
+> v8.10.0 — A reliability release. New guarantees against losing and duplicating operations: message idempotency (Baileys re-delivers on every reconnect, so a `#daily` could run twice), a real outbox with dead-letter for economy commands, circuit breakers, load shedding driven by event-loop lag, and a chaos-testing suite. The **egress funnel** goes from covering 38% of sends to 100% — 524 calls bypassed the rate limiter — and a race is fixed where the minimum delay between messages stopped applying during bursts. Plus far less surface: DuckDB gone, Redis and Celery gone, and Python down from 16 routers to 7, 59 files to 37, and 16 dependencies to 9, with zero HTTP calls per message.
 
 <br/>
 
@@ -66,11 +66,20 @@
 | 🐍 **Services** | Python / FastAPI | Advanced AI (Ollama + GPT + Claude + Gemini), watchdog, health checks |
 | ⚙️ **Session** | Rust / Axum | Atomic creds write, 10 rotating snapshots, Bad MAC tracker, rate limiter, delivery SQLite |
 
-### What's new in v8.9.0
+### What's new in v8.10.0
 
 | Area | Change |
 |------|--------|
 | **Outbox: critical-operation messages no longer vanish in a crash** | If the bot deducted money and died before sending the confirmation, the state change stood and the user got nothing. Rust's `outbox` table existed but was a delivery meter: it recorded **after** sending and **without content**, so there was nothing to resend. Now `sendCritical()` queues → sends → marks sent, and on startup `replayOutbox()` resends whatever was left hanging. With a dead letter: anything that fails 3 times drops out of the retry loop but stays in the database for inspection |
+| **Egress funnel (38% → 100%)** | 524 of 850 sends bypassed the rate limiter, and the **per-chat** limit almost never applied. Now `sendMessage` is wrapped once at socket creation: everything goes through the limiter — sub-bots included, and whatever gets written tomorrow |
+| **Fix: the minimum delay failed during bursts** | With concurrent sends, two messages went out in the same millisecond despite the 300 ms minimum — it protected at rest and not when it mattered. Measured: 0 ms before, 298 ms now |
+| **Python: from 59 files to 37** | Model retraining (`/ml/train`) is gone — the bot never called it and it read an already-frozen dataset; `polars` and 4 modules go with it. Of `ml`'s 8 endpoints the bot only used two. **11,425 lines → 9,506** and **16 dependencies → 9** |
+| **Stats without Python** | Every message cost **two** HTTP calls to Python to write a row that was only ever counted. Now it's an in-memory `++` (95 ns) flushed to Rust once a minute. And the top-commands list **works for the first time**: it read a `.parquet` nobody wrote |
+| **`/pending` removed** | A record was written for every message so that on startup they'd be counted, read and marked processed — without ever being used. A decorative counter costing one HTTP call per message |
+| **Fix: `#warn` counted in the wrong store** | Warnings were stored in Python while TS's `UserData` already had an unused `warns` field. Same pattern as the `#ban` bug from 8.7.0 |
+| **`fast/process` removed** | It ran on EVERY message (up to 500 ms of waiting) to obtain `is_owner` — which TS already computes synchronously and with broader coverage — and `allowed`, a third rate limit. Duplicated work, not something to migrate |
+| **Criterion benchmarks** | `npm run rust:bench`. The hot path measured properly: `check` 145-245 ns depending on load, `spam_check` 129-138 ns, and a 4 KB message costs the same as a short one. Against the 1-3 **ms** of the removed HTTP round-trip |
+| **SpamGuard from Python to Rust** | Every command made **two** HTTP round-trips for nearly the same question: `/rate/check` to Rust and `/spam/check` to Python (which wrapped a C library via `ctypes`). The logic — sliding window, escalating blocks and repeated-text detection — now lives in `rate_limiter.rs`, with the same contract. Python leaves the critical path of every command |
 | **Chaos testing (`npm run chaos`)** | 27 checks across 8 scenarios that break things for real against the compiled code: re-delivery storms, a restart mid-storm, corrupted logs, downed dependencies, the event loop blocked for 1.8s, and a crash between charging and confirming. It turns "I think it holds up" into "we tested its failure modes" |
 | **Load shedding** | Under saturation, instead of trying to process everything until it dies, the bot sheds what it can spare: DEGRADED drops AI/downloads/music/NSFW, CRITICAL also drops the game. Moderation, admin and owner never drop. The signal is **event loop lag** — the only thing that detects Node saturation when CPU and RAM look normal |
 | **Circuit breakers** | With Python or Rust down, every message paid the full timeout before failing anyway — both sit on the critical path. Now after N failures the circuit opens and fails instantly: from **242 ms to 0.01 ms** per call. A 429 from `/rate/check` (an intentional block) doesn't count as a failure: what's measured is whether the service answers |
@@ -198,7 +207,7 @@
 
 ```
 ╔══════════════════════════════════════════════════════════════════════════════╗
-║                           WinsiBot v8.9.0                                    ║
+║                           WinsiBot v8.10.0                                   ║
 ╠════════════════════╦═══════════════════════╦═══════════════════════════════╣
 ║   TypeScript        ║       Python           ║           Rust                ║
 ║   Node.js :4001     ║                        ║                               ║
@@ -652,6 +661,7 @@ curl -H "x-api-key: YOUR_KEY" http://127.0.0.1:3001/messages/pending
 | `GET` | `/sessions/backup` | Return best valid creds for QR-free restore |
 | `POST` | `/badmac/report` | Report a Bad MAC event for a group JID (escalating cooldown) |
 | `POST` | `/rate/check` | Check if sender is within rate limit |
+| `POST` | `/spam/check` | Combined check: frequency + repeated text + escalating block |
 | `POST` | `/watchdog/ping` | Node.js heartbeat ping |
 | `GET` | `/watchdog/status` | Alive/dead + last ping time + ping count |
 | `POST` | `/nlp/fast` | Rust-side NLP keyword detection |

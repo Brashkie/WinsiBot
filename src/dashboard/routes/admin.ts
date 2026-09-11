@@ -1,31 +1,24 @@
 import { Hono } from 'hono'
-import { getBotStats, getTopCommands } from '@lib/pythonBridge.js'
+import { buildStatsReport } from '@lib/botStatsReport.js'
 import { subBots } from '@plugins/commands/jadibot/serbot.js'
 
 export const adminRoutes = new Hono()
 
+// Las cifras vienen de buildStatsReport (userData en memoria + contadores de
+// Rust), no de Python. Ver lib/botStatsReport.ts para la fuente de cada una.
 adminRoutes.get('/stats', async (c) => {
-  const [stats, topCommands] = await Promise.all([getBotStats(), getTopCommands()])
-
+  const s = await buildStatsReport()
   const activeSubbots = [...subBots.values()].filter(b => b.status === 'connected').length
 
-  if (!stats) {
-    return c.json({
-      totalUsers: 0, totalMessages: 0, totalCommands: 0,
-      messagesToday: 0, commandsToday: 0, bannedUsers: 0, premiumUsers: 0,
-      activeSubbots, topCommands: [],
-    })
-  }
-
   return c.json({
-    totalUsers:    stats.total_users,
-    totalMessages: stats.total_messages,
-    totalCommands: stats.total_commands,
-    messagesToday: stats.messages_today,
-    commandsToday: stats.commands_today,
-    bannedUsers:   stats.banned_users,
-    premiumUsers:  stats.premium_users,
+    totalUsers:    s.total_users,
+    totalMessages: s.total_messages,
+    totalCommands: s.total_commands,
+    messagesToday: s.messages_today,
+    commandsToday: s.commands_today,
+    bannedUsers:   s.banned_users,
+    premiumUsers:  s.premium_users,
     activeSubbots,
-    topCommands,
+    topCommands:   s.top_commands,
   })
 })

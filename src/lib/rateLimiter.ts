@@ -113,8 +113,10 @@ export class WinsiRateLimiter {
   }
 
   /**
-   * Encolar un envío con rate limiting completo.
-   * Usar para broadcasts, notificaciones programadas, cualquier envío masivo.
+   * Encola un envío con prioridad. NO consume tokens: los límites los aplica
+   * el embudo (directForJid) sobre cada sock.sendMessage. Lo que aporta la
+   * cola es el orden —urgent antes que broadcast— y un envío a la vez, para
+   * que un broadcast masivo no se intercale con respuestas a comandos.
    */
   enqueue(
     jid:      string,
@@ -134,17 +136,48 @@ export class WinsiRateLimiter {
   }
 
   /**
-   * Envío directo sin cola (respuestas a comandos) — solo aplica bucket global.
-   * No bloquea la cola de broadcasts.
+   * ÚNICO punto donde se consumen tokens. Lo llama el embudo de salida
+   * (core/egress.ts) por cada sock.sendMessage, venga de donde venga: aplica
+   * el techo global, el bucket del chat destino y el retraso mínimo.
+   *
+   * El límite por chat es el que evita floodear un grupo concreto —3 de ráfaga
+   * y 1/s en grupos, 2 y uno cada 4s en privado— y hasta el embudo casi nunca
+   * llegaba a aplicarse: el 62% de los envíos iban por `sock.sendMessage`
+   * directo sin ningún control, y el resto por safeSend, que solo miraba el
+   * bucket global.
+   *
+   * No encola: espera su turno y sale. Encolar respuestas a comandos añadiría
+   * latencia y podría reordenarlas.
    */
-  async direct(fn: () => Promise<any>): Promise<any> {
-    // Esperar global sin encolar
+  async directForJid(jid: string, fn: () => Promise<any>): Promise<any> {
     while (!this.global.tryConsume()) {
       await sleep(this.global.waitMs())
     }
-    const elapsed = Date.now() - this.lastSend
-    if (elapsed < MIN_DELAY_MS) await sleep(MIN_DELAY_MS - elapsed)
-    this.lastSend = Date.now()
+    if (jid) {
+      const bkt = this.bucket(jid)
+      while (!bkt.tryConsume()) {
+        await sleep(bkt.waitMs())
+      }
+    }
+
+    // El turno se RESERVA antes de dormir, no después.
+    //
+    // La versión anterior hacía "leer lastSend → dormir la diferencia →
+    // escribir lastSend", y con envíos concurrentes (que es el caso normal:
+    // varios grupos respondiendo a la vez) dos llamadas leían el mismo
+    // lastSend antes de que ninguna lo actualizara, dormían lo mismo y salían
+    // en el MISMO milisegundo — el retraso mínimo no se aplicaba justo en las
+    // ráfagas, que es cuando hace falta. Confirmado midiendo: seis envíos
+    // concurrentes salían dos a dos con 0 ms de separación.
+    //
+    // Reservando primero, cada llamada se agenda después de la anterior y la
+    // secuencia queda escalonada de verdad.
+    const now       = Date.now()
+    const scheduled = Math.max(now, this.lastSend + MIN_DELAY_MS)
+    this.lastSend   = scheduled
+    const wait      = scheduled - now
+    if (wait > 0) await sleep(wait)
+
     return withSendTimeout(fn)
   }
 
@@ -155,22 +188,15 @@ export class WinsiRateLimiter {
     while (this.queue.length > 0) {
       const item = this.queue.shift()!
 
-      // Esperar global
-      while (!this.global.tryConsume()) {
-        await sleep(this.global.waitMs())
-      }
-
-      // Esperar per-JID
-      const bkt = this.bucket(item.jid)
-      while (!bkt.tryConsume()) {
-        await sleep(bkt.waitMs())
-      }
-
-      // Delay mínimo entre mensajes
-      const elapsed = Date.now() - this.lastSend
-      if (elapsed < MIN_DELAY_MS) await sleep(MIN_DELAY_MS - elapsed)
-      this.lastSend = Date.now()
-
+      // Acá NO se consumen tokens. Desde que existe el embudo de salida
+      // (core/egress.ts), los buckets —global y por-JID— los aplica
+      // directForJid() sobre CADA sock.sendMessage, venga de donde venga. Si
+      // esta cola también los consumiera, un broadcast pagaría el límite dos
+      // veces y saldría a la mitad de la velocidad permitida.
+      //
+      // Lo que esta cola sigue aportando, y por eso no desaparece: orden por
+      // prioridad (urgent antes que broadcast) y un envío a la vez, para que
+      // un broadcast masivo no se intercale con las respuestas a comandos.
       try {
         item.resolve(await withSendTimeout(item.fn))
       } catch (err: any) {

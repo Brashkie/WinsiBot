@@ -1,6 +1,6 @@
 <div align="center">
 
-<img src="https://capsule-render.vercel.app/api?type=waving&color=0:6C63FF,100:00C9FF&height=180&section=header&text=WinsiBot&fontSize=62&fontColor=ffffff&fontAlignY=38&desc=v8.9.0%20%E2%80%94%20Enterprise%20WhatsApp%20Bot&descAlignY=58&descSize=18" width="100%"/>
+<img src="https://capsule-render.vercel.app/api?type=waving&color=0:6C63FF,100:00C9FF&height=180&section=header&text=WinsiBot&fontSize=62&fontColor=ffffff&fontAlignY=38&desc=v8.10.0%20%E2%80%94%20Enterprise%20WhatsApp%20Bot&descAlignY=58&descSize=18" width="100%"/>
 
 <br/>
 
@@ -10,7 +10,7 @@
 [![Rust](https://img.shields.io/badge/Rust-1.75%2B-CE422B?style=for-the-badge&logo=rust&logoColor=white)](https://rust-lang.org)
 
 [![License](https://img.shields.io/badge/License-GPL--3.0-blue?style=flat-square)](LICENSE)
-[![Version](https://img.shields.io/badge/Version-8.9.0-6C63FF?style=flat-square)](CHANGELOG.md)
+[![Version](https://img.shields.io/badge/Version-8.10.0-6C63FF?style=flat-square)](CHANGELOG.md)
 [![Platform](https://img.shields.io/badge/Platform-Windows%20%7C%20Linux%20%7C%20macOS%20%7C%20Android-lightgrey?style=flat-square)](https://github.com/Brashkie/WinsiBot)
 [![PRs Welcome](https://img.shields.io/badge/PRs-welcome-brightgreen?style=flat-square)](https://github.com/Brashkie/WinsiBot/pulls)
 
@@ -18,7 +18,7 @@
 
 > Bot de WhatsApp de alto rendimiento con arquitectura multi-lenguaje de tres capas.<br/>
 > Sin límite artificial de grupos, pensado para miles de mensajes por hora y múltiples instancias.<br/>
-> v8.9.0 — Fuera DuckDB: era la causa de que la primera compilación de Rust tardara 10–30 min, y con MSVC 14.51 ya ni terminaba. Sus dos tablas pasan a `rusqlite` y el build limpio baja a **3 m 19 s**. Limpieza a fondo de código muerto verificado — 9 rutas de Rust, 3 routers de Python, 5 métodos de TypeScript — y un bug encontrado por el camino: el respaldo de credenciales nunca hacía su última escritura al apagar.
+> v8.10.0 — Versión de fiabilidad. Garantías nuevas contra perder y duplicar operaciones: idempotencia de mensajes (Baileys los re-entrega en cada reconexión, así que un `#daily` podía ejecutarse dos veces), outbox con dead-letter para los comandos de economía, circuit breakers, load shedding por lag del event loop y una suite de chaos testing. El **embudo de salida** pasa de cubrir el 38% de los envíos al 100% — 524 llamadas esquivaban el rate limiter — y se corrige un fallo por el que el retraso mínimo entre mensajes dejaba de aplicarse justo en las ráfagas. Y mucha menos superficie: fuera DuckDB, fuera Redis y Celery, y Python de 16 routers a 7, de 59 archivos a 37 y de 16 dependencias a 9, sin una sola llamada HTTP por mensaje.
 
 <br/>
 
@@ -66,11 +66,22 @@
 | 🐍 **Services** | Python / FastAPI | IA avanzada (Ollama + GPT + Claude + Gemini), watchdog, health checks |
 | ⚙️ **Session** | Rust / Axum | Escritura atómica de creds, 10 snapshots rotativos, tracker Bad MAC, rate limiter, delivery SQLite |
 
-### Novedades en v8.9.0
+### Novedades en v8.10.0
 
 | Área | Cambio |
 |------|--------|
 | **Outbox: los mensajes de operaciones críticas ya no se pierden en un crash** | Si el bot descontaba dinero y moría antes de mandar la confirmación, quedaba el estado cambiado y el usuario sin respuesta. La tabla `outbox` de Rust existía pero era un medidor de entregas: registraba **después** de enviar y **sin contenido**, así que no había nada que reenviar. Ahora `sendCritical()` encola → envía → marca enviado, y al arrancar `replayOutbox()` reenvía lo que quedó a medias. Con dead-letter: lo que falla 3 veces sale del reintento pero queda en la base para inspeccionarlo |
+| **Embudo de salida (38% → 100%)** | 524 de 850 envíos esquivaban el rate limiter, y el límite **por chat** casi nunca se aplicaba. Ahora `sendMessage` se envuelve una vez al crear el socket: todo pasa por el limitador, también en los sub-bots y también el código que se escriba mañana |
+| **Fix: el retraso mínimo fallaba en ráfagas** | Con envíos concurrentes, dos mensajes salían en el mismo milisegundo pese al mínimo de 300 ms — protegía en reposo y no cuando importaba. Medido: 0 ms antes, 298 ms ahora |
+| **Python: de 59 archivos a 37** | Fuera el reentrenamiento de modelos (`/ml/train`), que el bot nunca llamó y que leía un dataset ya congelado; con él se van `polars` y 4 módulos. De los 8 endpoints de `ml` el bot solo usaba dos. **11.425 líneas → 9.506** y **16 dependencias → 9** |
+| **Python: 6 dependencias menos** | `flask`, `flask-cors`, `pandas`, `openai`, `python-dotenv` y `gunicorn` no tenían un solo import. De 16 a 10. Y `data/database.py` declaraba 9 tablas que no usaba nadie: de 200 a 65 líneas |
+| **Logs con historia útil** | Rust rotaba cada minuto guardando 20 archivos: solo quedaban 20 minutos de historia. Ahora es diaria con 14 días. El volumen nunca fue el problema — los 20 archivos sumaban 4 KB |
+| **Estadísticas sin Python** | Cada mensaje costaba **dos** llamadas HTTP a Python para escribir una fila que solo se usaba para contarla. Ahora es un `++` en memoria (95 ns) que se vuelca a Rust una vez por minuto. Y el top de comandos **funciona por primera vez**: leía un `.parquet` que nadie escribía |
+| **`/pending` eliminado** | Se escribía un registro por cada mensaje para que al arrancar se contaran, se leyeran y se marcaran como procesados — sin usarlos. Un contador decorativo que costaba una llamada HTTP por mensaje |
+| **Fix: `#warn` contaba en el store equivocado** | Las advertencias se guardaban en Python mientras `UserData` de TS ya tenía `warns` sin usar. Mismo patrón que el bug de `#ban` de la 8.7.0 |
+| **`fast/process` eliminado** | Se llamaba en CADA mensaje (hasta 500 ms de espera) para obtener `is_owner` — que TS ya calcula síncrono y con más cobertura — y `allowed`, un tercer rate limit. Era trabajo duplicado, no algo que migrar |
+| **Benchmarks con Criterion** | `npm run rust:bench`. El camino caliente medido en serio: `check` 145-245 ns según carga, `spam_check` 129-138 ns, y un mensaje de 4 KB cuesta igual que uno corto. Contra los 1-3 **ms** del round-trip HTTP eliminado |
+| **SpamGuard de Python a Rust** | Cada comando hacía **dos** round-trips HTTP para casi la misma pregunta: `/rate/check` a Rust y `/spam/check` a Python (que envolvía una librería C con `ctypes`). La lógica — ventana deslizante, bloqueo progresivo y texto repetido — vive ahora en `rate_limiter.rs`, con el mismo contrato. Python sale del camino crítico de cada comando |
 | **Chaos testing (`npm run chaos`)** | 27 comprobaciones en 8 escenarios que rompen cosas de verdad contra el código compilado: tormentas de re-entregas, reinicio a mitad, logs corruptos, dependencias caídas, el event loop bloqueado 1.8s y un crash entre cobrar y confirmar. Sirve para pasar de "creo que aguanta" a "probamos sus modos de fallo" |
 | **Load shedding** | Con el bot saturado, en vez de intentar procesar todo hasta morir se sacrifica lo prescindible: DEGRADADO tira IA/descargas/música/NSFW, CRÍTICO tira también el juego. Moderación, admin y owner nunca caen. La señal es el **lag del event loop** — lo único que detecta la saturación de Node cuando CPU y RAM se ven normales |
 | **Circuit breakers** | Con Python o Rust caídas, cada mensaje pagaba el timeout completo antes de fallar igual — las dos están en el camino crítico. Ahora tras N fallos el circuito se abre y falla al instante: de **242 ms a 0.01 ms** por llamada. Un 429 de `/rate/check` (bloqueo intencional) no cuenta como fallo: lo que se mide es si el servicio contesta |
@@ -198,7 +209,7 @@
 
 ```
 ╔══════════════════════════════════════════════════════════════════════════════╗
-║                           WinsiBot v8.9.0                                    ║
+║                           WinsiBot v8.10.0                                   ║
 ╠════════════════════╦═══════════════════════╦═══════════════════════════════╣
 ║   TypeScript        ║       Python           ║           Rust                ║
 ║   Node.js :4001     ║                        ║                               ║
@@ -460,6 +471,7 @@ npm run monitor         # Monitor Python con auto-restart y dashboard
 | `format` / `format:fix` | Biome — formateo de `src/`/`scripts/` (solo mostrar diff / escribir) |
 | `check` / `check:fix` | Biome — lint + formato + orden de imports en un solo paso |
 | `rust:lint` | `cargo clippy` sobre la Session API de Rust |
+| `rust:bench` | Benchmarks de Criterion sobre el camino caliente (informes HTML en `rust/target/criterion/`) |
 | `py:lint` / `py:lint:fix` | Ruff — linter de `python/` (requiere `pip install -r python/requirements-dev.txt`) |
 | `py:format` | Ruff — formateo de `python/` |
 | `lint:all` | Corre `lint` + `rust:lint` + `py:lint` de una |
@@ -651,6 +663,7 @@ curl -H "x-api-key: TU_CLAVE" http://127.0.0.1:3001/messages/pending
 | `GET` | `/sessions/backup` | Devolver mejor creds válido para restauración sin QR |
 | `POST` | `/badmac/report` | Reportar evento Bad MAC para un JID de grupo (cooldown escalonado) |
 | `POST` | `/rate/check` | Verificar si un sender está dentro del rate limit |
+| `POST` | `/spam/check` | Check combinado: frecuencia + texto repetido + bloqueo progresivo |
 | `POST` | `/watchdog/ping` | Ping de heartbeat desde Node.js |
 | `GET` | `/watchdog/status` | Vivo/muerto + tiempo último ping + conteo |
 | `POST` | `/nlp/fast` | Detección NLP de palabras clave en Rust |
@@ -696,6 +709,8 @@ WinsiBot/
 │   │   ├── handler.ts                # Dispatcher de mensajes → comandos (semáforo con espera acotada)
 │   │   ├── dedup.ts                  # Descarta re-entregas del mismo mensaje (por instancia, sobrevive reinicios)
 │   ├── loadShedding.ts           # Degrada por lag del event loop — nunca tira moderación ni admin
+│   ├── botStats.ts               # Contadores en memoria, volcados a Rust cada minuto
+│   ├── egress.ts                 # Embudo de salida — TODO sendMessage pasa por el rate limiter
 │   │   ├── groupCache.ts             # Cache canónico de groupMetadata (TTL + debounce/coalescing)
 │   │   ├── store.ts                  # Cache de contactos/chats (escritura atómica)
 │   │   ├── persistence.ts            # Persistencia real (users/groups/inventory/clans.json, escritura atómica)

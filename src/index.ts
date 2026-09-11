@@ -11,6 +11,7 @@ import { logger } from '@core/logger.js'
 import { config } from '@config'
 import { loadAll, saveAll, startAutoSave, stopAutoSave } from '@core/persistence.js'
 import { sessionClient } from '@lib/session.js'
+import { flush as flushBotStats } from '@core/botStats.js'
 import { venvPythonPath, systemPython, exeName } from '@lib/platform.js'
 import { color, gradient, loader, ascii, themes, configure, components, BG, animate } from 'ansimax'
 
@@ -156,7 +157,12 @@ function killSpawnedChildren(): void {
 // también saveAll(), que importa más.
 function flushSessionCapped(): Promise<void> {
   return Promise.race([
-    sessionClient.flushNow().catch(() => {}),
+    // Los contadores del último minuto van con las creds: los dos escriben
+    // contra Rust y los dos se perderían si se matara el proceso antes.
+    Promise.all([
+      sessionClient.flushNow().catch(() => {}),
+      flushBotStats().catch(() => {}),
+    ]).then(() => {}),
     new Promise<void>(resolve => setTimeout(resolve, 2_000)),
   ])
 }
@@ -440,26 +446,12 @@ async function printConnected(jid: string, cmdCount: number) {
   }))
   console.log()
 
-  const { getPendingCount, getPendingMessages, markPendingProcessed } = await import('@lib/pythonBridge.js')
-
-  const stopPending = loader.spin('Verificando mensajes pendientes...')
-  let pendingCount = 0
-  try {
-    pendingCount = await getPendingCount(30)
-  } catch {
-    pendingCount = 0
-  }
-  stopPending(
-    pendingCount > 0 ? `${pendingCount} mensajes pendientes` : 'Sin mensajes pendientes',
-    true,
-  )
-
-  if (pendingCount > 0) {
-    const pending = await getPendingMessages(30).catch(() => [])
-    if (pending.length > 0) {
-      await markPendingProcessed(pending.map(p => p.id)).catch(() => {})
-    }
-  }
+  // Acá se consultaba /api/v1/pending de Python: contaba los "mensajes
+  // pendientes", los leía y los marcaba como procesados... sin hacer NADA con
+  // ellos. Era un contador decorativo para este banner, y sostenerlo costaba
+  // una llamada HTTP a Python por CADA mensaje del bot (la tercera del
+  // middleware logger). Quien sí recupera trabajo a medias tras un reinicio es
+  // replayOutbox(), que reenvía mensajes de verdad — ver lib/media_sender.ts.
 
   console.log()
   console.log(`  ${color.dim('listo — bot activo')}`)

@@ -1,5 +1,6 @@
 import type { Command } from '../../../types/index.js'
-import { getBotStats, getTopCommands } from '@lib/pythonBridge.js'
+import { buildStatsReport } from '@lib/botStatsReport.js'
+import { safeSend } from '@lib/media_sender.js'
 import { config } from '@config'
 
 const command: Command = {
@@ -10,35 +11,27 @@ const command: Command = {
   ownerOnly: true,
 
   async execute({ sock, jid, msg }) {
-    const [stats, topCmds] = await Promise.all([
-      getBotStats(),
-      getTopCommands(),
-    ])
+    const s = await buildStatsReport(5)
 
-    if (!stats) {
-      await sock.sendMessage(jid, { text: '❌ No se pudieron obtener las estadisticas.' }, { quoted: msg })
-      return
-    }
-
-    const topList = topCmds
+    const topList = s.top_commands
       .slice(0, 5)
       .map((c, i) => `  ${i + 1}. ${c.command} — ${c.count}x`)
       .join('\n')
 
     const text = `📊 *Estadisticas de ${config.botName}*
 
-👥 Usuarios: *${stats.total_users}*
-💬 Mensajes totales: *${stats.total_messages}*
-⚡ Comandos totales: *${stats.total_commands}*
-📅 Mensajes hoy: *${stats.messages_today}*
-🔥 Comandos hoy: *${stats.commands_today}*
-🚫 Baneados: *${stats.banned_users}*
-💎 Premium: *${stats.premium_users}*
+👥 Usuarios: *${s.total_users}*
+💬 Mensajes totales: *${s.total_messages}*
+⚡ Comandos totales: *${s.total_commands}*
+📅 Mensajes hoy: *${s.messages_today}*
+🔥 Comandos hoy: *${s.commands_today}*
+🚫 Baneados: *${s.banned_users}*
+💎 Premium: *${s.premium_users}*
 
 🏆 *Top comandos:*
-${topList || '  Sin datos'}`
+${topList || '  Sin datos'}${s.degraded ? '\n\n_⚠ Contadores no disponibles — solo se muestran los datos de usuarios_' : ''}`
 
-    await sock.sendMessage(jid, { text }, { quoted: msg })
+    await safeSend(() => sock.sendMessage(jid, { text }, { quoted: msg }))
   },
 }
 

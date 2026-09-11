@@ -1,22 +1,8 @@
-mod alerts;
-mod analytics;
-mod atomic;
-mod auth;
-mod bad_mac;
-mod config;
-mod conversations;
-mod db;
-mod lock_manager;
-mod metrics;
-mod nlp;
-mod platform;
-mod rate_limiter;
-mod routes;
-mod session_id;
-mod snapshot;
-mod subbots;
-mod tasks;
-mod watchdog;
+// Los módulos viven en la lib (src/lib.rs) para que benches y tests puedan
+// importarlos; el binario los reutiliza desde ahí.
+use winsibot_session_api::{
+    analytics, auth, bad_mac, config, conversations, db, lock_manager, metrics, nlp, platform, rate_limiter, routes, session_id, snapshot, subbots, tasks, watchdog,
+};
 
 use axum::{
     extract::{Request, State},
@@ -108,11 +94,20 @@ async fn main() {
     // borran solos, sin tarea de limpieza aparte. `non_blocking` además saca
     // la escritura a disco del hilo que atiende requests — antes cada línea
     // de log escribía sincrónicamente ahí mismo.
+    // Rotación DIARIA, no por minuto. Con MINUTELY y 20 archivos solo quedaban
+    // los últimos ~20 minutos: si el bot fallaba de madrugada y se miraba por
+    // la mañana, el log ya no existía — justo cuando hace falta. Y no era un
+    // problema de espacio: medido, los 20 archivos sumaban 28 líneas y 4 KB,
+    // así que lo que se estaba ahorrando no existía.
+    //
+    // 14 días de historia, un archivo por día (fácil de encontrar: "el log del
+    // martes"). Si algún día se dispara por un bucle de errores, solo crece ese
+    // archivo y max_log_files sigue acotando el total.
     let file_appender = tracing_appender::rolling::Builder::new()
-        .rotation(tracing_appender::rolling::Rotation::MINUTELY)
+        .rotation(tracing_appender::rolling::Rotation::DAILY)
         .filename_prefix("winsibot")
         .filename_suffix("log")
-        .max_log_files(20)
+        .max_log_files(14)
         .build("./logs")
         .expect("no se pudo inicializar el log rotativo");
     let (non_blocking_file, _log_guard) = tracing_appender::non_blocking(file_appender);
@@ -212,6 +207,7 @@ async fn main() {
         .route("/badmac/report",          post(bad_mac::report_bad_mac))
         // ─── Rate limiter per-sender ──────────────────────────────────────────
         .route("/rate/check",             post(rate_limiter::rate_check))
+        .route("/spam/check",             post(rate_limiter::spam_check))
         // ─── Watchdog — heartbeat desde Node.js ────────────────────────────────
         .route("/watchdog/ping",          post(watchdog::ping))
         .route("/watchdog/status",        get(watchdog::status))
@@ -226,6 +222,9 @@ async fn main() {
         .route("/outbox/unsent",          get(routes::outbox_unsent))
         .route("/outbox/sent",            post(routes::outbox_sent))
         .route("/outbox/retry",           post(routes::outbox_retry))
+        .route("/stats/bump",             post(routes::stats_bump))
+        .route("/stats/counters",         get(routes::stats_counters))
+        .route("/stats/top-commands",     get(routes::stats_top_commands))
         // ─── Sub-bots (100 cap, DashMap, quota, cooldown) ─────────────────────
         .route("/subbots/register",       post(subbots::register))
         .route("/subbots/stats",          get(subbots::stats))

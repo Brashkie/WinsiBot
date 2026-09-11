@@ -300,6 +300,73 @@ export class SessionClient {
     })
   }
 
+  /**
+   * Check combinado de frecuencia + texto repetido + bloqueo progresivo.
+   * Antes vivía en Python (que envolvía spam_guard.c con ctypes); ahora está
+   * en rate_limiter.rs, junto al rate limiter que ya existía.
+   *
+   * Timeout corto (1s) a propósito: corre en el camino crítico de cada
+   * comando, y más vale dejar pasar el mensaje que hacer esperar al usuario.
+   * A diferencia de /rate/check, este endpoint devuelve 200 incluso al
+   * bloquear — un bloqueo es una respuesta normal, no un fallo del servicio.
+   */
+  async spamCheck(
+    sender: string,
+    text:   string,
+    opts:   { maxHits: number; windowMs: number; maxRepeats: number; floodWindowMs: number },
+  ): Promise<{ allowed: boolean; reason: string; cooldown_ms: number }> {
+    const res = await apiFetch<{ allowed: boolean; reason: string; cooldown_ms: number }>(
+      '/spam/check',
+      {
+        method: 'POST',
+        body:   JSON.stringify({
+          sender,
+          text,
+          max_hits:        opts.maxHits,
+          window_ms:       opts.windowMs,
+          max_repeats:     opts.maxRepeats,
+          flood_window_ms: opts.floodWindowMs,
+        }),
+      },
+      { timeoutMs: 1_000 },
+    )
+    return { allowed: res.allowed, reason: res.reason, cooldown_ms: res.cooldown_ms }
+  }
+
+  // ─── Contadores del bot ───────────────────────────────────────────────────
+
+  /** Vuelca el acumulado de un lote. Lo llama core/botStats.ts cada minuto. */
+  async bumpStats(
+    day:      string,
+    metrics:  Array<{ metric: string; count: number }>,
+    commands: Array<{ command: string; count: number }>,
+  ): Promise<void> {
+    await apiFetch('/stats/bump', {
+      method: 'POST',
+      body:   JSON.stringify({ day, metrics, commands }),
+    })
+  }
+
+  async statsCounters(): Promise<{
+    total_messages: number
+    total_commands: number
+    messages_today: number
+    commands_today: number
+  }> {
+    const res = await apiFetch<{ counters: {
+      total_messages: number; total_commands: number
+      messages_today: number; commands_today: number
+    } }>('/stats/counters')
+    return res.counters
+  }
+
+  async statsTopCommands(limit = 10): Promise<Array<{ command: string; count: number }>> {
+    const res = await apiFetch<{ commands: Array<{ command: string; count: number }> }>(
+      `/stats/top-commands?limit=${limit}`,
+    )
+    return res.commands ?? []
+  }
+
   // ─── Outbox ───────────────────────────────────────────────────────────────
   // trackMessages() registra DESPUÉS de enviar y sin contenido: mide entregas,
   // pero no recupera un mensaje que nunca salió. Estos tres cierran ese hueco

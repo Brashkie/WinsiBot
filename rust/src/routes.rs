@@ -736,3 +736,71 @@ pub async fn messages_pending(
     }
 }
 
+
+// ── Contadores del bot ───────────────────────────────────────────────────────
+// Sustituyen a /api/v1/stats y /api/v1/stats/top-commands de Python, que leían
+// .parquet alimentados con una llamada HTTP por CADA mensaje. Ahora Node cuenta
+// en memoria y vuelca el acumulado cada tanto, así que estos endpoints se
+// llaman una vez por minuto, no una vez por mensaje.
+//
+// Los totales de USUARIOS (cuántos hay, baneados, premium) no están acá a
+// propósito: viven en el userData de Node, en memoria, y contarlos ahí es
+// instantáneo y exacto. Duplicarlos en Rust solo daría dos cifras que se
+// desincronizan.
+
+#[derive(Deserialize)]
+pub struct CountersBody {
+    /// Día al que imputar el lote (YYYY-MM-DD). Lo manda Node porque es quien
+    /// sabe en qué día local ocurrieron los mensajes.
+    day:      String,
+    #[serde(default)]
+    metrics:  Vec<db::CounterBump>,
+    #[serde(default)]
+    commands: Vec<db::CommandBump>,
+}
+
+#[derive(Deserialize)]
+pub struct TopQuery {
+    #[serde(default = "default_top_limit")]
+    limit: i64,
+}
+fn default_top_limit() -> i64 { 10 }
+
+pub async fn stats_bump(
+    State(state): State<AppState>,
+    Json(body): Json<CountersBody>,
+) -> (StatusCode, Json<serde_json::Value>) {
+    let db = state.db.clone();
+    match tokio::task::spawn_blocking(move || {
+        db::bump_counters(&db, &body.day, &body.metrics, &body.commands)
+    }).await {
+        Ok(Ok(()))  => (StatusCode::OK, Json(serde_json::json!({ "ok": true }))),
+        Ok(Err(e))  => {
+            tracing::error!(error = %e, "stats_bump DB error");
+            (StatusCode::INTERNAL_SERVER_ERROR, Json(serde_json::json!({ "ok": false, "error": e.to_string() })))
+        }
+        Err(e) => (StatusCode::INTERNAL_SERVER_ERROR, Json(serde_json::json!({ "ok": false, "error": e.to_string() }))),
+    }
+}
+
+pub async fn stats_counters(State(state): State<AppState>) -> (StatusCode, Json<serde_json::Value>) {
+    let today = Utc::now().format("%Y-%m-%d").to_string();
+    let db    = state.db.clone();
+    match tokio::task::spawn_blocking(move || db::get_counters(&db, &today)).await {
+        Ok(Ok(c))  => (StatusCode::OK, Json(serde_json::json!({ "ok": true, "counters": c }))),
+        Ok(Err(e)) => (StatusCode::INTERNAL_SERVER_ERROR, Json(serde_json::json!({ "ok": false, "error": e.to_string() }))),
+        Err(e)     => (StatusCode::INTERNAL_SERVER_ERROR, Json(serde_json::json!({ "ok": false, "error": e.to_string() }))),
+    }
+}
+
+pub async fn stats_top_commands(
+    State(state): State<AppState>,
+    Query(q): Query<TopQuery>,
+) -> (StatusCode, Json<serde_json::Value>) {
+    let db = state.db.clone();
+    match tokio::task::spawn_blocking(move || db::top_commands(&db, q.limit)).await {
+        Ok(Ok(rows)) => (StatusCode::OK, Json(serde_json::json!({ "ok": true, "commands": rows }))),
+        Ok(Err(e))   => (StatusCode::INTERNAL_SERVER_ERROR, Json(serde_json::json!({ "ok": false, "error": e.to_string() }))),
+        Err(e)       => (StatusCode::INTERNAL_SERVER_ERROR, Json(serde_json::json!({ "ok": false, "error": e.to_string() }))),
+    }
+}

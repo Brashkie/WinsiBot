@@ -8,6 +8,7 @@ import {
   handleViewOnce,
 } from '@core/events.js'
 import { alreadyProcessed } from '@core/dedup.js'
+import { wrapEgress } from '@core/egress.js'
 import { getGroupMetadata } from '@core/groupCache.js'
 import { winsiStore } from '@core/store.js'
 import type { Boom } from '@hapi/boom'
@@ -275,6 +276,11 @@ export class WinsiSocket extends EventEmitter3<WinsiEvents> {
         return getGroupMetadata(this.sock, jid)
       },
     })
+
+    // Embudo de salida: a partir de acá TODO sock.sendMessage pasa por el rate
+    // limiter, se haya escrito con safeSend o no. Va inmediatamente después de
+    // crear el socket, antes de que nada pueda usarlo. Ver core/egress.ts.
+    wrapEgress(this.sock, 'main')
 
     winsiStore.bind(this.sock)
 

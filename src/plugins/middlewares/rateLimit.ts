@@ -1,5 +1,5 @@
 import type { BotContext } from '../../types/index.js'
-import { pythonPost } from '@lib/pythonBridge.js'
+import { sessionClient } from '@lib/session.js'
 import { safeSend } from '@lib/media_sender.js'
 import { createCache, registerCache } from '@lib/cacheManager.js'
 
@@ -56,36 +56,30 @@ function localSpamCheck(text: string): boolean {
   return false
 }
 
-// ─── SpamGuard C — check combinado rate + flood ───────────────────────────────
+// ─── SpamGuard — check combinado rate + flood, ahora en Rust ──────────────────
+// Antes esto iba a Python (/api/v1/spam/check), que envolvía con ctypes la
+// librería C de python/cython_ext/spam_guard.c. La lógica está ahora en
+// rust/src/rate_limiter.rs, junto al rate limiter que ya vivía ahí: eran dos
+// servicios distintos respondiendo casi la misma pregunta, y este chequeo corre
+// en el camino crítico de CADA comando, así que eran dos round-trips HTTP por
+// comando en vez de uno. Mismos parámetros y mismo contrato de respuesta, para
+// que el comportamiento afinado del middleware no cambie.
 async function spamGuardCheck(
   sender: string,
   text:   string,
 ): Promise<{ allowed: boolean; reason: string; cooldown_ms: number }> {
   try {
-    // Este chequeo corre en el camino crítico de CADA comando (ver abajo).
-    // check_message() del lado Python es una llamada a una lib C in-process
-    // (microsegundos en el caso normal) — 1s ya es generosísimo para eso.
-    // Sin este timeout explícito, pythonPost usaba el default de 5s del
-    // cliente (+ 1 reintento con backoff si Python está lento), pudiendo
-    // demorar 10+ segundos la respuesta de CUALQUIER comando cuando Python
-    // está ocupado/degradado, en vez de fallar rápido y dejar pasar el mensaje.
-    const res = await pythonPost<{
-      allowed:     boolean
-      reason:      string
-      cooldown_ms: number
-      code:        number
-    }>('/api/v1/spam/check', {
-      sender,
-      text,
-      max_hits:        8,
-      window_ms:       5000,
-      max_repeats:     3,
-      flood_window_ms: 30000,
-    }, 1_000)
-    return res?.data ?? { allowed: true, reason: 'ok', cooldown_ms: 0 }
+    return await sessionClient.spamCheck(sender, text, {
+      maxHits:       8,
+      windowMs:      5000,
+      maxRepeats:    3,
+      floodWindowMs: 30000,
+    })
   } catch {
-    // si Flask no responde — permitir para no bloquear al usuario
-    return { allowed: true, reason: 'flask_unavailable', cooldown_ms: 0 }
+    // Rust caído o circuito abierto — fallar ABIERTO para no dejar al usuario
+    // sin bot. El filtro local de arriba (localRateLimit) sigue actuando como
+    // red de respaldo mientras tanto.
+    return { allowed: true, reason: 'guard_unavailable', cooldown_ms: 0 }
   }
 }
 

@@ -7,7 +7,7 @@ import { registerSemaphore, shouldShed, priorityOf, loadLevel } from './loadShed
 import { color, themes } from 'ansimax'
 import type { BotContext } from '../types/index.js'
 import { handleNotFound } from '@plugins/commands/general/notfound.js'
-import { pythonGet, pythonPost, fastProcess, analyzeIntent, learnConversation, getAIContext } from '@lib/pythonBridge.js'
+import { pythonGet, pythonPost, analyzeIntent, learnConversation, getAIContext } from '@lib/pythonBridge.js'
 import { hepein } from '@lib/hepein.js'
 import { safeSend } from '@lib/media_sender.js'
 import {
@@ -459,14 +459,6 @@ export async function handleMessage(msg: WAMessage, sock: WASocket): Promise<voi
       }
     }
 
-    // fastProcess (Python/Cython) hace su propio chequeo de owner con el
-    // `sender` que se le pase — si le mandamos el @lid en vez del número
-    // real, su `is_owner` sale false y pisa el `base.isOwner` (correcto) de
-    // abajo, porque `fast?.is_owner ?? base.isOwner` solo cae al fallback
-    // cuando fast es null/undefined, no cuando es `false`. Mandarle el
-    // número real (si Baileys lo dio) evita ese pisado.
-    const senderForFast = getOwnerCandidateId(msg, base.isGroup) || base.sender
-
     // resolveGroupRoles depende de getGroupParticipants → en un cache miss
     // (TTL 5min, 400+ grupos activos) es un IQ en vivo a WhatsApp, sin límite
     // propio — y defaultQueryTimeoutMs del socket es 60s. Sin este race, un
@@ -475,7 +467,7 @@ export async function handleMessage(msg: WAMessage, sock: WASocket): Promise<voi
     // recién ahí soltara el cupo del semáforo. 2s alcanza de sobra para el
     // caso normal (cache hit = síncrono) y deja el peor caso acotado; la
     // consulta real sigue en curso de fondo y llena el cache para la próxima.
-    const [rolesResult, fastResult] = await Promise.allSettled([
+    const rolesResult = await Promise.allSettled([
       base.isGroup
         ? Promise.race([
             resolveGroupRoles(sock, base.jid, base.sender),
@@ -483,33 +475,30 @@ export async function handleMessage(msg: WAMessage, sock: WASocket): Promise<voi
               setTimeout(() => r({ isAdmin: false, isBotAdmin: false, botAliases: [] }), 2_000)),
           ])
         : Promise.resolve({ isAdmin: false, isBotAdmin: false, botAliases: [] }),
-      Promise.race([
-        fastProcess(base.text, config.prefix, senderForFast, base.jid, config.ownerJid),
-        new Promise<null>(r => setTimeout(() => r(null), 500)),
-      ]),
-    ])
+    ]).then(([r]) => r)
 
     const roles = rolesResult.status === 'fulfilled'
       ? rolesResult.value
       : { isAdmin: false, isBotAdmin: false, botAliases: [] as string[] }
 
-    const fast = fastResult.status === 'fulfilled' ? fastResult.value : null
-
-    // OR, no reemplazo: `base.isOwner` (TS, síncrono) y `fast.is_owner`
-    // (Python/Cython, puede fallar o quedar corto por diferencias de
-    // normalización) son dos intentos de detectar lo mismo. Si cualquiera
-    // de los dos dice que sí, es owner — nunca dejar que uno "quite" un
-    // owner que el otro sí detectó bien.
+    // Antes acá corría también fastProcess() (Python/Cython), que devolvía
+    // `is_owner` y `allowed`. Los dos eran redundantes:
+    //
+    //  · `is_owner` — buildBase() ya lo calcula síncrono y con MÁS cobertura:
+    //    misma normalización, más `ownerCandidateNum` (el número real que
+    //    Baileys expone cuando el grupo usa @lid). De hecho a fastProcess se
+    //    le pasaba ese número ya resuelto por TS para que llegara al mismo
+    //    resultado, y después se hacía OR con el propio — circular.
+    //  · `allowed` — un tercer rate limit, después del de Rust (checkRate,
+    //    unas líneas más arriba) y el local del middleware.
+    //
+    // A cambio costaba un round-trip HTTP a Python en CADA mensaje (no solo
+    // comandos) con hasta 500ms de espera en el camino crítico, y ya había
+    // causado un bug real pisando el isOwner correcto.
     const ctx: BotContext = {
       ...base,
       isAdmin:    roles.isAdmin,
       isBotAdmin: roles.isBotAdmin,
-      isOwner:    base.isOwner || (fast?.is_owner ?? false),
-    }
-
-    if (fast && !fast.allowed && !ctx.isOwner) {
-      console.log(`  ${themes.error('◈')} ${color.bold(themes.error('Bloqueado'))}  ${color.dim(base.sender.replace('@s.whatsapp.net','').replace('@lid',''))}  ${color.dim('fast.allowed=false')}`)
-      return
     }
 
     const passed = await applyMiddlewares(ctx)

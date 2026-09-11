@@ -1,9 +1,7 @@
 import type { BotContext } from '../../types/index.js'
 import { color, themes, ascii } from 'ansimax'
 import moment from 'moment-timezone'
-import { getOrCreateUser, logMessage } from '@lib/pythonBridge.js'
-import { pythonPost } from '@lib/pythonBridge.js'
-import { randomUUID } from 'crypto'
+import { countMessage } from '@core/botStats.js'
 import { config } from '@config'
 
 function formatJid(jid: string): string {
@@ -73,31 +71,11 @@ export async function loggerMiddleware(ctx: BotContext): Promise<boolean> {
     )
   }
 
-  // ─── todo lo demas es fire and forget — no bloquear el handler ────────────
-  setImmediate(() => {
-    const msgId = randomUUID()
-
-    getOrCreateUser(ctx.sender, ctx.pushName, ctx.isOwner).catch(() => {})
-
-    logMessage({
-      id:       msgId,
-      jid:      ctx.jid,
-      sender:   ctx.sender,
-      pushName: ctx.pushName,
-      text:     ctx.text.slice(0, 200),
-      command:  ctx.command,
-      isGroup:  ctx.isGroup,
-      isOwner:  ctx.isOwner,
-    }).catch(() => {})
-
-    pythonPost('/api/v1/pending', {
-      id:      msgId,
-      jid:     ctx.jid,
-      sender:  ctx.sender,
-      text:    ctx.text.slice(0, 200),
-      command: ctx.command,
-    }).catch(() => {})
-  })
+  // Antes acá salían dos llamadas HTTP a Python por CADA mensaje
+  // (getOrCreateUser y logMessage) para escribir una fila en un .parquet que
+  // solo se usaba para contar filas. Ahora es un ++ en memoria; el acumulado
+  // se vuelca a Rust una vez por minuto. Ver core/botStats.ts.
+  countMessage(ctx.command || undefined)
 
   return true
 }

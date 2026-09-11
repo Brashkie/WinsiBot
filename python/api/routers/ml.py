@@ -5,29 +5,21 @@ from pydantic import BaseModel
 
 router = APIRouter()
 
+# Quedan los DOS endpoints que el bot llama de verdad. Los otros seis
+# (/predict/intent, /predict/sentiment, /nlp/analyze, /nlp/similarity,
+# /nlp/entities y /train) no tenían un solo llamador, y con ellos se fueron
+# ml/models.py y ml/train.py — que eran los únicos que usaban `polars`, más el
+# dataset messages.parquet, que además ya no se alimentaba desde que los
+# contadores del bot pasaron a Rust: reentrenar habría usado datos congelados.
+#
 # Uvicorn corre con --workers 1 (un solo event loop para toda la API) — llamar
 # estos modelos/NLP directo dentro de un handler async bloquea ese único hilo
 # mientras corre la predicción. analyzeIntent() del bot llama /nlp/intent en
 # casi cada mensaje de grupo; sin asyncio.to_thread, una ráfaga de mensajes
-# encola TODOS los demás endpoints detrás (confirmado en producción: una
-# ráfaga tras reconectar tiró ECONNABORTED en /pending, /users, /messages,
-# /fast/process, etc. — no solo en los endpoints de este archivo).
+# encola TODOS los demás endpoints detrás (confirmado en producción).
 
 class TextRequest(BaseModel):
     text: str
-
-class IntentRequest(BaseModel):
-    text: str
-
-class SimilarityRequest(BaseModel):
-    text1: str
-    text2: str
-
-class ImageRequest(BaseModel):
-    image:    str
-    scale:    int = 2
-    bg_color: str = 'transparent'
-    method:   str = 'nafnet'
 
 @router.post('/predict/spam')
 async def predict_spam(req: TextRequest):
@@ -42,67 +34,11 @@ async def predict_spam(req: TextRequest):
     except Exception as e:
         return JSONResponse({ 'success': False, 'error': str(e) }, status_code=500)
 
-@router.post('/predict/intent')
-async def predict_intent(req: IntentRequest):
-    try:
-        from ml.models import get_intent_model
-        result = await asyncio.to_thread(lambda: get_intent_model().predict(req.text))
-        return { 'success': True, 'data': result }
-    except Exception as e:
-        return JSONResponse({ 'success': False, 'error': str(e) }, status_code=500)
-
-@router.post('/predict/sentiment')
-async def predict_sentiment(req: TextRequest):
-    try:
-        from ml.models import get_sentiment_model
-        result = await asyncio.to_thread(lambda: get_sentiment_model().predict(req.text))
-        return { 'success': True, 'data': result }
-    except Exception as e:
-        return JSONResponse({ 'success': False, 'error': str(e) }, status_code=500)
-
-@router.post('/nlp/analyze')
-async def nlp_analyze(req: TextRequest):
-    try:
-        from ml.nlp import analyze_text
-        result = await asyncio.to_thread(analyze_text, req.text)
-        return { 'success': True, 'data': result }
-    except Exception as e:
-        return JSONResponse({ 'success': False, 'error': str(e) }, status_code=500)
-
 @router.post('/nlp/intent')
 async def nlp_intent(req: TextRequest):
     try:
         from ml.nlp import extract_intent
         result = await asyncio.to_thread(extract_intent, req.text)
-        return { 'success': True, 'data': result }
-    except Exception as e:
-        return JSONResponse({ 'success': False, 'error': str(e) }, status_code=500)
-
-@router.post('/nlp/similarity')
-async def nlp_similarity(req: SimilarityRequest):
-    try:
-        from ml.nlp import text_similarity
-        result = await asyncio.to_thread(text_similarity, req.text1, req.text2)
-        return { 'success': True, 'data': { 'similarity': result } }
-    except Exception as e:
-        return JSONResponse({ 'success': False, 'error': str(e) }, status_code=500)
-
-@router.post('/nlp/entities')
-async def nlp_entities(req: TextRequest):
-    try:
-        from ml.nlp import extract_entities
-        result = await asyncio.to_thread(extract_entities, req.text)
-        return { 'success': True, 'data': result }
-    except Exception as e:
-        return JSONResponse({ 'success': False, 'error': str(e) }, status_code=500)
-
-@router.post('/train')
-async def train_models():
-    try:
-        from ml.train import train_all
-        # Entrenamiento puede tardar segundos/minutos — con más razón no
-        # puede correr en el event loop principal.
-        result = await asyncio.to_thread(train_all, verbose=False)
         return { 'success': True, 'data': result }
     except Exception as e:
         return JSONResponse({ 'success': False, 'error': str(e) }, status_code=500)
