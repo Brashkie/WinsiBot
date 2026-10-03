@@ -7,13 +7,14 @@ import { registerSemaphore, shouldShed, priorityOf, loadLevel } from './loadShed
 import { color, themes } from 'ansimax'
 import type { BotContext } from '../types/index.js'
 import { handleNotFound } from '@plugins/commands/general/notfound.js'
-import { pythonGet, pythonPost, analyzeIntent, learnConversation, getAIContext } from '@lib/pythonBridge.js'
+import { analyzeIntent, learnConversation, getAIContext } from '@lib/pythonBridge.js'
 import { hepein } from '@lib/hepein.js'
 import { safeSend } from '@lib/media_sender.js'
 import {
   addXP,
   checkSpam,
   handleSpam,
+  isContentSpam,
   handleAntilink,
   handleAntitoxic,
   handleAntitraba,
@@ -353,24 +354,16 @@ async function handleAIResponse(
 
     let reply: string | null = hepeinRes?.ok ? hepeinRes.text ?? null : null
 
-    // 3. Fallback: plantilla local si la IA no respondió
+    // 3. Último recurso, si Rust no respondió en absoluto.
+    //
+    // Acá había un segundo viaje a `/api/v1/ai/personality/respond` de Python
+    // para pedirle una plantilla cuando la IA no contestaba. Ya no hace falta:
+    // `/ai/chat/respond` de Rust prueba Ollama y las APIs cloud y, si ninguna
+    // responde, cae por su cuenta al motor local de plantillas — con el modo
+    // del grupo y el historial para no repetirse. Lo único que queda acá es la
+    // red de seguridad para cuando Rust entero está caído.
     if (!reply) {
-      // Intentar con el motor de personalidad local (tiene en cuenta el modo del grupo)
-      const localRes = await pythonPost<string>(
-        '/api/v1/ai/personality/respond',
-        {
-          intent,
-          text:       ctx.text,
-          jid:        ctx.jid,
-          use_humor:  true,
-          history,
-          user_style: null,
-        },
-      ).catch(() => null)
-
-      reply = (typeof localRes?.data === 'string' && localRes.data.trim())
-        ? localRes.data.trim()
-        : localFallback(intent)
+      reply = localFallback(intent)
     }
 
     // Editar el "Pensando..." con la respuesta final en vez de mandar un
@@ -526,8 +519,12 @@ export async function handleMessage(msg: WAMessage, sock: WASocket): Promise<voi
 
     // ─── Entrenamiento (Hepein) — aprende de cada mensaje real del grupo ──────
     // Fire-and-forget: no bloquea el handler ni afecta la latencia del mensaje.
-    // trainer.py (vocabulario/estilo) y user_memory.py (reputación) se nutren
-    // acá — antes ninguno de los dos recibía datos.
+    //
+    // hepein.record() va a Rust (POST /ai/observe), a la MISMA tabla
+    // `conversations` que llena learnConversation() unas líneas más abajo en
+    // handleAIResponse. Hasta ahora iba a Python, que guardaba una segunda
+    // copia del mensaje en Parquet para calcular el mismo perfil de estilo:
+    // dos almacenes y una llamada HTTP a Python por cada mensaje de grupo.
     if (ctx.isGroup && ctx.text) {
       const isReply = !!msg.message?.extendedTextMessage?.contextInfo?.quotedMessage
       hepein.record({ groupJid: ctx.jid, senderJid: ctx.sender, text: ctx.text, isReply })
@@ -602,15 +599,21 @@ export async function handleMessage(msg: WAMessage, sock: WASocket): Promise<voi
       if (trabaDeleted) return
 
       if (groupCfg.antispam && ctx.text.length > 10) {
-        // Timeout corto a propósito: esto corre para CADA mensaje de grupo
-        // (no solo comandos) cuando antispam está activo, y ocupa un cupo del
-        // semáforo mientras espera. Con el timeout default (5s) del cliente,
-        // una racha de mensajes con Python lento podía llenar el semáforo con
-        // solo esta llamada. Es moderación best-effort — falla abierto rápido.
-        const spamResult = await pythonPost<{ is_spam: boolean; confidence: number }>(
-          '/api/v1/ml/predict/spam', { text: ctx.text }, 1_500
-        ).catch(() => null)
-        if (spamResult?.data?.is_spam && (spamResult.data.confidence ?? 0) > 0.85) {
+        // Antes esto llamaba a `/api/v1/ml/predict/spam` de Python, que no era
+        // un clasificador de contenido: envolvía la librería C spam_guard.c,
+        // un rate limiter por remitente, pasándole el sender FIJO
+        // `'__predict__'`. Con los valores por defecto —8 mensajes en una
+        // ventana de 5 s— eso significaba que TODOS los usuarios de TODOS los
+        // grupos compartían un solo contador: pasados 8 mensajes en cualquier
+        // ventana de 5 segundos, el siguiente mensaje volvía con
+        // `allowed: false`, que el router traducía a confianza 0.9, y acá se
+        // borraba y se acusaba públicamente a quien lo había escrito. En un
+        // grupo activo, 8 mensajes en 5 segundos es cualquier conversación
+        // normal.
+        //
+        // Ahora lo resuelve Rust (`/nlp/fast`), que sí mira el contenido:
+        // caracteres repetidos, patrones cortos repetidos y texto basura.
+        if (await isContentSpam(ctx.text)) {
           const num = getNumber(ctx.sender)
           await safeSend(() => sock.sendMessage(ctx.jid, {
             text:     `§ @${num} mensaje detectado como spam`,

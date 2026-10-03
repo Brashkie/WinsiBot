@@ -6,12 +6,10 @@ Alertas visuales en consola + log persistente
 import json
 import time
 import threading
-import winsound
 from pathlib import Path
-from datetime import datetime, timedelta
+from datetime import datetime
 from dataclasses import dataclass, asdict, field
 from typing import Optional
-from collections import defaultdict
 from rich.console import Console
 from rich.panel import Panel
 from rich.text import Text
@@ -139,22 +137,20 @@ def _set_cooldown(alert_id: str) -> None:
     _cooldowns[alert_id] = time.time()
 
 # ─── Sonido ───────────────────────────────────────────────────────────────────
+# Las alertas no suenan: la implementación estaba comentada entera, y lo único
+# que quedaba vivo era un `import winsound` en el nivel superior del módulo.
+#
+# winsound es de la biblioteca estándar pero SOLO existe en Windows, así que en
+# Linux, macOS y Termux este módulo lanzaba ModuleNotFoundError al importarse —
+# y lo importan el watchdog (terminal/monitor.py), ai_brain, break_detector y
+# health_monitor, los cuatro con `except Exception: pass`. O sea que fuera de
+# Windows las alertas se perdían EN SILENCIO, por un import que no se usaba.
+#
+# Si alguna vez vuelve el sonido, tiene que ir con el import dentro de la
+# función y detrás de una comprobación de plataforma, como hace el resto del
+# proyecto desde la 8.8.0.
 def _beep(level: str) -> None:
     pass
-    #beeps = LEVEL_CONFIG.get(level, {}).get('beeps', 0)
-    #if beeps == 0:
-        #return
-    #try:
-        #patterns = {
-            #3: [(1000, 200), (800, 200), (600, 400)],   # crítico — descendente urgente
-            #2: [(900, 200), (900, 300)],                  # alto — doble
-            #1: [(750, 250)],                              # medio — simple
-        #}
-        #for freq, dur in patterns.get(beeps, [(750, 250)]):
-            #winsound.Beep(freq, dur)
-            #time.sleep(0.05)
-    #except Exception:
-        #pass  # winsound puede fallar en algunos entornos
 
 # ─── Visual en consola ────────────────────────────────────────────────────────
 def _print_alert(alert: Alert) -> None:
@@ -168,7 +164,7 @@ def _print_alert(alert: Alert) -> None:
         repeat = f' (x{alert.count})' if alert.count > 1 else ''
         title_text = Text()
         title_text.append(f' {icon} ', style=f'bold {cfg["border"]}')
-        title_text.append(f'{alert.title}{repeat}', style=f'bold white')
+        title_text.append(f'{alert.title}{repeat}', style='bold white')
         title_text.append(f'  {now}', style='dim white')
 
         body = Text()

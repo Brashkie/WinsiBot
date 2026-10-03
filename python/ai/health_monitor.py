@@ -17,7 +17,7 @@ from typing import Optional
 from rich.console import Console
 import re
 import collections
-from statistics import mean, stdev
+from statistics import stdev
 
 console = Console()
 
@@ -443,7 +443,6 @@ def check_process_freeze() -> HealthCheck:
     CPU=0% solo en idle no es freeze — verificar con ping HTTP.
     """
     import httpx
-    import asyncio
 
     targets = [
         ('node',  lambda c: 'tsx' in c and 'index.ts' in c, 'http://127.0.0.1:4001/health'),
@@ -627,7 +626,7 @@ def print_report(report: HealthReport) -> None:
         console.print(f'  [{clr}]{icon}[/{clr}] {check["name"]:12} {check["message"]}')
 
     if report.alerts:
-        console.print(f'\n  [red]§ ALERTAS:[/red]')
+        console.print('\n  [red]§ ALERTAS:[/red]')
         for alert in report.alerts:
             console.print(f'  [red]  ✗ {alert}[/red]')
 

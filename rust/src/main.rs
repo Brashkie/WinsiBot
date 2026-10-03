@@ -1,7 +1,9 @@
 // Los módulos viven en la lib (src/lib.rs) para que benches y tests puedan
 // importarlos; el binario los reutiliza desde ahí.
 use winsibot_session_api::{
-    analytics, auth, bad_mac, config, conversations, db, lock_manager, metrics, nlp, platform, rate_limiter, routes, session_id, snapshot, subbots, tasks, watchdog,
+    ai_chat, analytics, auth, bad_mac, config, conversations, db, imagefx, imagesearch,
+    lock_manager, metrics, nlp, personality, platform, rate_limiter, routes, session_id,
+    snapshot, subbots, tasks, user_memory, watchdog,
 };
 
 use axum::{
@@ -156,6 +158,8 @@ async fn main() {
     let conv_db = conversations::init(&cfg.conv_db_path)
         .expect("no se pudo abrir la DB de conversaciones");
     bad_mac::init_schema(&conv_db);
+    personality::init_schema(&conv_db);
+    user_memory::init_schema(&conv_db);
 
     let state = AppState {
         sessions_dir:  cfg.sessions_dir.clone(),
@@ -203,6 +207,26 @@ async fn main() {
         // ─── AI conversations (SQLite) ────────────────────────────────────────
         .route("/ai/learn",               post(conversations::ai_learn))
         .route("/ai/context/:sender",     get(conversations::ai_context))
+        .route("/ai/observe",             post(conversations::ai_observe))
+        .route("/ai/profile/:jid",        get(conversations::ai_profile)
+                                            .delete(conversations::ai_delete_profile))
+        .route("/ai/group-style/:gjid",   get(conversations::ai_group_style))
+        .route("/ai/corpus/stats",        get(conversations::ai_corpus_stats))
+        // Portados de Python en la 8.11.0 (ver imagefx.rs e imagesearch.rs).
+        .route("/imagefx/lego",           post(imagefx::lego))
+        .route("/search/image",           post(imagesearch::search_image))
+        .route("/search/images",          post(imagesearch::search_images))
+        // Portados de Python en la 8.11.0: personalidad, reputacion y la IA
+        // de verdad (ver personality.rs, user_memory.rs y ai_chat.rs).
+        .route("/ai/personality/respond", post(personality::respond))
+        .route("/ai/personality/mode",    get(personality::mode_get)
+                                            .post(personality::mode_set))
+        .route("/ai/personality/reset",   post(personality::mode_reset))
+        .route("/ai/memory/toxic",        get(user_memory::toxic))
+        .route("/ai/memory/:jid",         get(user_memory::get))
+        .route("/ai/memory/:jid/update",  post(user_memory::update))
+        .route("/ai/chat/respond",        post(ai_chat::respond))
+        .route("/ai/chat/imitate",        post(ai_chat::imitate))
         // ─── Bad MAC per-group tracker ────────────────────────────────────────
         .route("/badmac/report",          post(bad_mac::report_bad_mac))
         // ─── Rate limiter per-sender ──────────────────────────────────────────

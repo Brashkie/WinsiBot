@@ -1,3 +1,10 @@
 -r requirements.txt
 
+# Linter — npm run py:lint
 ruff>=0.8.0
+
+# Compilación de las extensiones Cython — npm run cython:build
+# (cython_ext/setup.py). No hacen falta para correr el bot: si los .pyd/.so no
+# están, health.py lo reporta con CYTHON_OK en false y sigue.
+Cython>=3.0.0
+setuptools>=70.0.0

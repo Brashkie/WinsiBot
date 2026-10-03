@@ -10,7 +10,7 @@
 [![Rust](https://img.shields.io/badge/Rust-1.75%2B-CE422B?style=for-the-badge&logo=rust&logoColor=white)](https://rust-lang.org)
 
 [![License](https://img.shields.io/badge/License-GPL--3.0-blue?style=flat-square)](LICENSE)
-[![Version](https://img.shields.io/badge/Version-8.10.0-6C63FF?style=flat-square)](CHANGELOG.md)
+[![Version](https://img.shields.io/badge/Version-8.11.0-6C63FF?style=flat-square)](CHANGELOG.md)
 [![Platform](https://img.shields.io/badge/Platform-Windows%20%7C%20Linux%20%7C%20macOS%20%7C%20Android-lightgrey?style=flat-square)](https://github.com/Brashkie/WinsiBot)
 [![PRs Welcome](https://img.shields.io/badge/PRs-welcome-brightgreen?style=flat-square)](https://github.com/Brashkie/WinsiBot/pulls)
 
@@ -18,7 +18,7 @@
 
 > Bot de WhatsApp de alto rendimiento con arquitectura multi-lenguaje de tres capas.<br/>
 > Sin límite artificial de grupos, pensado para miles de mensajes por hora y múltiples instancias.<br/>
-> v8.10.0 — Versión de fiabilidad. Garantías nuevas contra perder y duplicar operaciones: idempotencia de mensajes (Baileys los re-entrega en cada reconexión, así que un `#daily` podía ejecutarse dos veces), outbox con dead-letter para los comandos de economía, circuit breakers, load shedding por lag del event loop y una suite de chaos testing. El **embudo de salida** pasa de cubrir el 38% de los envíos al 100% — 524 llamadas esquivaban el rate limiter — y se corrige un fallo por el que el retraso mínimo entre mensajes dejaba de aplicarse justo en las ráfagas. Y mucha menos superficie: fuera DuckDB, fuera Redis y Celery, y Python de 16 routers a 7, de 59 archivos a 37 y de 16 dependencias a 9, sin una sola llamada HTTP por mensaje.
+> v8.11.0 — **Python deja de ser un requisito.** De 35 archivos a 16, de 7 routers a 2, y de un `requirements.txt` incompleto a **tres paquetes** que instalan sin compilar nada. Lo único que sigue necesitando un intérprete son los comandos de anime, que son redes neuronales con `torch`: si no hay `python/venv`, el bot lo dice en una línea y arranca igual. Clasificación de intenciones, filtro de spam, personalidad, humor, reputación, perfiles de estilo, mosaico LEGO, búsqueda de imágenes y el cliente de Ollama están ahora en Rust. **Nueve bugs reales** encontrados de camino, entre ellos que `/ml/predict/spam` **borraba mensajes legítimos** (compartía un contador de 8 mensajes cada 5 s entre todos los usuarios de todos los grupos) y que **22 insultos quedaban sin moderar** porque el respaldo de Python impedía que la regex local llegara a evaluarse.<br/>
 
 <br/>
 
@@ -62,36 +62,30 @@
 
 | Capa | Tecnología | Responsabilidad |
 |------|-----------|----------------|
-| 🟦 **Core** | TypeScript / Node.js | Protocolo WhatsApp, dispatcher de comandos, RPG, IA |
-| 🐍 **Services** | Python / FastAPI | IA avanzada (Ollama + GPT + Claude + Gemini), watchdog, health checks |
-| ⚙️ **Session** | Rust / Axum | Escritura atómica de creds, 10 snapshots rotativos, tracker Bad MAC, rate limiter, delivery SQLite |
+| 🟦 **Core** | TypeScript / Node.js | Protocolo WhatsApp, dispatcher de comandos, RPG, economía, panel web |
+| ⚙️ **Session + IA** | Rust / Axum | Creds atómicas y snapshots, tracker Bad MAC, rate limiter, clasificación de intenciones, personalidad y humor, reputación, perfiles de estilo, Ollama y APIs cloud, imágenes |
+| 🐍 **Opcional** | Python / FastAPI | Solo los comandos de anime (redes neuronales con `torch`) y el watchdog de consola. **El bot funciona sin esto** |
 
-### Novedades en v8.10.0
+### Novedades en v8.11.0
+
+**Python deja de ser un requisito para instalar y correr el bot.** Todo lo que estaba en el camino de cada mensaje se fue a Rust; lo único que sigue necesitando un intérprete son los comandos de anime, que son redes neuronales con `torch`.
 
 | Área | Cambio |
 |------|--------|
-| **Outbox: los mensajes de operaciones críticas ya no se pierden en un crash** | Si el bot descontaba dinero y moría antes de mandar la confirmación, quedaba el estado cambiado y el usuario sin respuesta. La tabla `outbox` de Rust existía pero era un medidor de entregas: registraba **después** de enviar y **sin contenido**, así que no había nada que reenviar. Ahora `sendCritical()` encola → envía → marca enviado, y al arrancar `replayOutbox()` reenvía lo que quedó a medias. Con dead-letter: lo que falla 3 veces sale del reintento pero queda en la base para inspeccionarlo |
-| **Embudo de salida (38% → 100%)** | 524 de 850 envíos esquivaban el rate limiter, y el límite **por chat** casi nunca se aplicaba. Ahora `sendMessage` se envuelve una vez al crear el socket: todo pasa por el limitador, también en los sub-bots y también el código que se escriba mañana |
-| **Fix: el retraso mínimo fallaba en ráfagas** | Con envíos concurrentes, dos mensajes salían en el mismo milisegundo pese al mínimo de 300 ms — protegía en reposo y no cuando importaba. Medido: 0 ms antes, 298 ms ahora |
-| **Python: de 59 archivos a 37** | Fuera el reentrenamiento de modelos (`/ml/train`), que el bot nunca llamó y que leía un dataset ya congelado; con él se van `polars` y 4 módulos. De los 8 endpoints de `ml` el bot solo usaba dos. **11.425 líneas → 9.506** y **16 dependencias → 9** |
-| **Python: 6 dependencias menos** | `flask`, `flask-cors`, `pandas`, `openai`, `python-dotenv` y `gunicorn` no tenían un solo import. De 16 a 10. Y `data/database.py` declaraba 9 tablas que no usaba nadie: de 200 a 65 líneas |
-| **Logs con historia útil** | Rust rotaba cada minuto guardando 20 archivos: solo quedaban 20 minutos de historia. Ahora es diaria con 14 días. El volumen nunca fue el problema — los 20 archivos sumaban 4 KB |
-| **Estadísticas sin Python** | Cada mensaje costaba **dos** llamadas HTTP a Python para escribir una fila que solo se usaba para contarla. Ahora es un `++` en memoria (95 ns) que se vuelca a Rust una vez por minuto. Y el top de comandos **funciona por primera vez**: leía un `.parquet` que nadie escribía |
-| **`/pending` eliminado** | Se escribía un registro por cada mensaje para que al arrancar se contaran, se leyeran y se marcaran como procesados — sin usarlos. Un contador decorativo que costaba una llamada HTTP por mensaje |
-| **Fix: `#warn` contaba en el store equivocado** | Las advertencias se guardaban en Python mientras `UserData` de TS ya tenía `warns` sin usar. Mismo patrón que el bug de `#ban` de la 8.7.0 |
-| **`fast/process` eliminado** | Se llamaba en CADA mensaje (hasta 500 ms de espera) para obtener `is_owner` — que TS ya calcula síncrono y con más cobertura — y `allowed`, un tercer rate limit. Era trabajo duplicado, no algo que migrar |
-| **Benchmarks con Criterion** | `npm run rust:bench`. El camino caliente medido en serio: `check` 145-245 ns según carga, `spam_check` 129-138 ns, y un mensaje de 4 KB cuesta igual que uno corto. Contra los 1-3 **ms** del round-trip HTTP eliminado |
-| **SpamGuard de Python a Rust** | Cada comando hacía **dos** round-trips HTTP para casi la misma pregunta: `/rate/check` a Rust y `/spam/check` a Python (que envolvía una librería C con `ctypes`). La lógica — ventana deslizante, bloqueo progresivo y texto repetido — vive ahora en `rate_limiter.rs`, con el mismo contrato. Python sale del camino crítico de cada comando |
-| **Chaos testing (`npm run chaos`)** | 27 comprobaciones en 8 escenarios que rompen cosas de verdad contra el código compilado: tormentas de re-entregas, reinicio a mitad, logs corruptos, dependencias caídas, el event loop bloqueado 1.8s y un crash entre cobrar y confirmar. Sirve para pasar de "creo que aguanta" a "probamos sus modos de fallo" |
-| **Load shedding** | Con el bot saturado, en vez de intentar procesar todo hasta morir se sacrifica lo prescindible: DEGRADADO tira IA/descargas/música/NSFW, CRÍTICO tira también el juego. Moderación, admin y owner nunca caen. La señal es el **lag del event loop** — lo único que detecta la saturación de Node cuando CPU y RAM se ven normales |
-| **Circuit breakers** | Con Python o Rust caídas, cada mensaje pagaba el timeout completo antes de fallar igual — las dos están en el camino crítico. Ahora tras N fallos el circuito se abre y falla al instante: de **242 ms a 0.01 ms** por llamada. Un 429 de `/rate/check` (bloqueo intencional) no cuenta como fallo: lo que se mide es si el servicio contesta |
-| **Aplicado a 9 comandos** | Transferencias (`pay`, `transfer`, `rob`), recompensas de cooldown largo (`daily`, `weekly`, `monthly`) y apuestas resueltas (`coinflip`, `roulette`, `invest`). Los otros 21 comandos con economía se dejaron igual a propósito: cooldowns cortos o cambios verificables con `#bal`. De paso, `transfer` y `rob` enviaban esquivando el rate limiter |
-| **Fix: el mismo mensaje podía ejecutarse dos veces** | `socket.ts` acepta `type === 'append'` (re-entregas post-sync, ventana de 5 min) y el buffer de eventos de Baileys se activa en **cada** reconexión — habituales por Bad MAC. No había ninguna protección por id de mensaje: un `#daily` seguido de una reconexión dentro de esos 5 minutos se ejecutaba dos veces. Nuevo `core/dedup.ts`, con el registro **en disco** (un `Set` en memoria se pierde justo en el caso del reinicio) y separado **por instancia**, porque los ids son globales de WhatsApp y un mensaje de grupo llega al bot principal y a cada sub-bot |
-| **DuckDB eliminado** | Era la razón de que la primera compilación de Rust tardara 10–30 min — y con MSVC 14.51 ya ni terminaba. Solo lo usaban un contador de Bad MAC y un log de conversaciones, que caben en `rusqlite` (ya estaba en el proyecto). `cargo check` pasó de **fallar** a 15 s, y un build de release limpio a **3 m 19 s**. Se va también `rust/build.rs`, que existía solo para él |
-| **Fix: el respaldo de credenciales perdía su última escritura** | `sessionClient.save()` tiene un debounce de 5 s y su doc decía "llamá a `flushNow()` antes de salir" — pero no lo llamaba nadie. El respaldo en Rust quedaba hasta 5 s por detrás del disco, justo el que se usa para recuperar cuando la sesión está corrupta. Conectado al apagado, antes de matar el proceso de Rust y con techo de 2 s |
-| **Código muerto: 9 rutas de Rust** | `/ai/export`, `/badmac/export`, `/badmac/reset`, `/badmac/stats`, `/rate/stats`, `/audit`, `/snapshots`, `/messages/stats`, `/messages/cleanup` — ninguna con un solo llamador. Con sus handlers, structs y helpers. **Rust compila sin un solo warning** |
-| **Código muerto: Python y TypeScript** | Fuera `routers/groups.py`, `ratelimit.py` y `cache.py`, y 5 métodos sin uso de `lib/session.ts` (de 352 a 306 líneas) |
-| **Un motor de persistencia menos** | De 6 a 5: strenor, JSON, rusqlite, SQLAlchemy y Parquet |
+| **Python opcional** | Si no existe `python/venv`, el bot lo detecta al arrancar, lo dice en **una línea de log** y sigue. `#toanime`, `#upscale` y `#removebg` responden con un mensaje claro en vez de esperar un timeout. El `requirements.txt` queda en **3 paquetes** con rueda precompilada |
+| **Un mensaje, una fila** | Cada mensaje de grupo se guardaba **dos veces**: `handler.ts` lo mandaba a Rust y también a Python, que lo escribía otra vez en Parquet para calcular el mismo perfil de estilo. Dos almacenes, dos implementaciones de las mismas agregaciones y una llamada HTTP por mensaje. Ahora sale todo de la tabla que Rust ya llenaba |
+| **De 1582 líneas, 970 eran tablas de datos** | 489 frases de respuesta en 12 modos, 121 de humor y un catálogo de 28 comandos. Extraídas tal cual a JSON por un script que las lee por AST, e incrustadas en el binario con `include_str!` — la idea es que instalar sea un binario y nada más |
+| **Fix grave: el antispam borraba mensajes legítimos** | `/ml/predict/spam` no era un clasificador de contenido: envolvía un rate limiter **por remitente** pasándole el sender **fijo** `'__predict__'`, así que todos los usuarios de todos los grupos compartían un contador de **8 mensajes cada 5 segundos**. Al noveno, el bot borraba el mensaje y acusaba públicamente a quien lo había escrito. En un grupo activo eso es una conversación normal |
+| **Fix: 22 insultos quedaban sin moderar** | El respaldo de Python para clasificar intenciones usaba un vocabulario (`saludo`, `despedida`, `ayuda`…) que **nunca** podía devolver las etiquetas contra las que comparan los consumidores (`insult`, `nsfw`, `spam`) — pero sí devolvía un objeto válido, y eso impedía que la regex local de respaldo llegara a evaluarse. Las listas se unificaron en Rust |
+| **Fix: la reputación `trusted` era inalcanzable** | El cálculo parte de 50 y los bonos suman como máximo +20, con lo que el techo real es 70 — pero el umbral estaba en 80. Ningún usuario podía serlo por bien que se portara, y esa etiqueta sí se usa para suavizar las respuestas. Lo encontró un test |
+| **Fix: la tabla de conversaciones no tenía ni un índice** | Se recorría **entera** en cada respuesta de IA, que tiene un presupuesto de 300 ms. Medido con 300.000 filas: **47 ms → 0,64 ms** (74x), y un perfil completo de ~148 ms a ~1,4 ms |
+| **El mosaico LEGO, 5x más rápido** | Medido bien, Rust **perdía** contra Python. El perfil por etapas mostró por qué: un redimensionado Lanczos3 se llevaba **50 de los 76 ms** para alimentar un paso que después promedia cada celda a un solo color — trabajo tirado. **76 ms → 15,4 ms**, y los colores salen más exactos |
+| **Fix: `requirements.txt` declaraba 7 paquetes y el código importaba 13 más** | Un `pip install` limpio dejaba a Python sin poder servir casi ningún endpoint; nadie lo notaba porque el venv de desarrollo se había armado a mano durante meses. Nuevo `npm run py:deps` para que la deriva no vuelva en silencio |
+| **Fix: fuera de Windows las alertas se perdían en silencio** | `alert_system.py` tenía un `import winsound` —que solo existe en Windows— en el nivel superior, y sus cuatro llamadores lo importan tras un `except: pass`. Pasaba desde la versión que anunció soporte para Linux, macOS y Termux. El import ni se usaba |
+| **Fix: dos escenarios de chaos no probaban nada** | Validaban el circuito sobre un módulo recién importado, y el `?chaos=N` solo invalida la caché del módulo pedido, no la de sus dependencias: comprobaban un objeto distinto con los contadores en cero |
+| **Un archivo JSON por usuario, a una tabla** | Los perfiles de reputación vivían en `data/ai/users/<jid>.json` — con 2557 usuarios, 2557 archivos reescritos enteros cada diez mensajes. Ahora es un UPSERT en la base que ya está abierta |
+| **121 tests unitarios en Rust y dos benchmarks** | De **cero a 121** en esta versión: `cargo test` existía y no corría nada. Varios encontraron bugs reales — la categoría `trusted` inalcanzable, una regex NSFW que nunca matcheaba y un desempate que faltaba al contar palabras. El chaos sube a **35 comprobaciones en 9 escenarios** |
+| **Menos superficie** | Python de **35 archivos a 16** y de 7 routers a 2 (y ~3.200 de las 4.460 líneas que quedan son la consola opcional). Fuera `pyarrow`, `duckdb`, `spacy`, `ddgs`, `requests`, `transformers`, una capa ORM sin un solo lector y la librería C del filtro de spam. Motores de persistencia: de 5 a 3 |
 
 **[📜 Ver el historial completo de versiones →](CHANGELOG.md)**
 
@@ -106,8 +100,10 @@
 | Runtime | Node.js 20 LTS | Loop de eventos WhatsApp |
 | Lenguaje | TypeScript 5.x | Tipado estricto end-to-end |
 | WhatsApp | Baileys 6.x | Protocolo WA Web multi-device |
-| Servicios | Python 3.11 + FastAPI | IA, watchdog, backup |
-| Session Store | Rust + Axum + SQLite | Creds atómicas + delivery tracking |
+| IA y NLP | Rust | Intenciones por reglas, personalidad y humor, reputación, perfiles de estilo |
+| Modelos de lenguaje | Ollama → GPT → Gemini → Claude | Cascada, con caída a plantillas locales si ninguno responde |
+| Opcional | Python 3.11 + FastAPI | Comandos de anime (torch) y watchdog de consola — el bot corre sin esto |
+| Session Store | Rust + Axum + SQLite | Creds atómicas, delivery tracking, outbox con dead-letter |
 | Criptografía | `@brashkie/signalis-core` | Curve25519 / Ed25519 / HKDF / AES-GCM (Rust NAPI) |
 | Persistencia — usuarios | `strenor` (Rust NAPI) | `data/users.aof`, log de deltas: solo se escribe el usuario que cambió |
 | Persistencia — resto | JSON en `data/` (`core/persistence.ts`) | groupConfigs, clanes, inventario — se reescriben solo si cambian |
@@ -168,12 +164,13 @@
 <td width="50%">
 
 ### 🤖 Inteligencia Artificial
-- Multi-modelo: **Ollama (local)** → GPT → Claude → Gemini
-- Historial de conversación por usuario (12 msgs)
-- Rate limiting: 20 req/hora por JID
-- Generación de imágenes con DALL-E
-- Traducción automática (50+ idiomas)
-- NLP fast-path en Rust para detección de palabras clave
+- Multi-modelo: **Ollama (local)** → GPT → Gemini → Claude, **todo desde Rust**
+- **12 modos de personalidad** por grupo, con 489 frases propias
+- Aprende el estilo de cada usuario y del grupo, y lo refleja al responder
+- Si ningún modelo contesta, cae a plantillas locales sin repetir las últimas
+- Reputación por usuario: modula el tono según cómo se porta
+- Clasificación de intenciones por reglas en Rust, sub-milisegundo
+- Historial de conversación por usuario (12 msgs) · 20 req/hora por JID
 
 </td>
 </tr>
@@ -208,32 +205,37 @@
 ## Arquitectura
 
 ```
-╔══════════════════════════════════════════════════════════════════════════════╗
-║                           WinsiBot v8.10.0                                   ║
-╠════════════════════╦═══════════════════════╦═══════════════════════════════╣
-║   TypeScript        ║       Python           ║           Rust                ║
-║   Node.js :4001     ║                        ║                               ║
-║                     ║  ┌──────────────────┐  ║  ┌───────────────────────┐   ║
-║  ┌───────────────┐  ║  │  FastAPI :5000   │  ║  │  Session API :3001    │   ║
-║  │  Baileys WS   │  ║  ├──────────────────┤  ║  │                       │   ║
-║  ├───────────────┤  ║  │  ML: spam/intent │  ║  │  ● atomic write       │   ║
-║  │   Handler     │◄─╬─►│  Ollama client   │  ║  │  ● snapshots ×10      │   ║
-║  │  (semáforo)   │  ║  │  GPT/Claude/     │  ║  │  ● bad_mac tracker    │   ║
-║  ├───────────────┤  ║  │  Gemini fallback │  ║  │  ● rate_limiter       │   ║
-║  │  125+ Cmds    │  ║  ├──────────────────┤  ║  │  ● watchdog heartbeat │   ║
-║  ├───────────────┤  ║  │  Monitor         │  ║  │  ● delivery SQLite    │   ║
-║  │  persistence  │  ║  │  Watchdog        │  ║  │  ● /sessions/backup   │   ║
-║  │  (strenor)    │  ║  └──────────────────┘  ║  └───────────────────────┘   ║
-║  ├───────────────┤  ║                        ║                               ║
-║  │ authVerifier  │  ║                        ║  ┌───────────────────────┐   ║
-║  │ Curve25519    │  ║                        ║  │   messages.db         │   ║
-║  │ + sin QR      │  ║                        ║  │  ● outbox tracking    │   ║
-║  └───────────────┘  ║                        ║  │  ● delivery stats     │   ║
-╚════════════════════╩═══════════════════════╩   └───────────────────────┘   ║
-          │                     │                           │                  ╝
-          └─────────────────────┴───────────────────────────┘
-                                │
-                       WhatsApp Network
+╔═══════════════════════════════════════════════════════════════════════╗
+║                           WinsiBot v8.11.0                            ║
+╠═════════════════════╦══════════════════════════╦══════════════════════╣
+║      TypeScript     ║           Rust           ║        Python        ║
+║    Node.js :4001    ║                          ║  si está instalado   ║
+║                     ║                          ║                      ║
+║  ┌───────────────┐  ║ ┌──────────────────────┐ ║ ┌──────────────────┐ ║
+║  │  Baileys WS   │  ║ │   Session API :3001  │ ║ │  FastAPI :5000   │ ║
+║  ├───────────────┤  ║ ├──────────────────────┤ ║ │   (OPCIONAL)     │ ║
+║  │    Handler    │  ║ │ ● creds atómicas     │ ║ ├──────────────────┤ ║
+║  │   (semáforo)  │  ║ │ ● snapshots ×10      │ ║ │  anime: torch    │ ║
+║  ├───────────────┤  ║ │ ● bad_mac tracker    │ ║ │  #toanime        │ ║
+║  │   125+ Cmds   │  ║ │ ● rate_limiter+spam  │ ║ │  #upscale        │ ║
+║  ├───────────────┤  ║ │ ● watchdog heartbeat │ ║ │  #removebg       │ ║
+║  │    egress     │  ║ │ ● outbox + DLQ       │ ║ ├──────────────────┤ ║
+║  │ (rate limit)  │  ║ ├──────────────────────┤ ║ │  monitor (CLI)   │ ║
+║  ├───────────────┤  ║ │ nlp      intenciones │ ║ │  watchdog        │ ║
+║  │  persistence  │  ║ │ person.  12 modos    │ ║ └──────────────────┘ ║
+║  │   (strenor)   │  ║ │ memory   reputación  │ ║                      ║
+║  ├───────────────┤  ║ │ ai_chat  Ollama→GPT→ │ ║                      ║
+║  │ authVerifier  │  ║ │          Gemini→     │ ║                      ║
+║  │  Curve25519   │  ║ │          Claude      │ ║                      ║
+║  └───────────────┘  ║ │ convers. perfiles    │ ║                      ║
+║                     ║ │ imagefx  mosaico     │ ║                      ║
+║                     ║ │ imagesrc búsqueda    │ ║                      ║
+║                     ║ └──────────────────────┘ ║                      ║
+╚═════════════════════╩══════════════════════════╩══════════════════════╝
+           │                        │                        │           
+           └────────────────────────┴────────────────────────┘           
+                                    │
+                            WhatsApp Network
 ```
 
 ---
@@ -244,18 +246,19 @@
 |-------------|---------------|:---------:|-------|
 | Node.js | 20.x LTS | ✅ | `node --version` |
 | npm | 9.x | ✅ | incluido con Node |
-| Python | 3.11+ | ✅ | `python --version` |
+| Python | 3.11+ | ❌ | **Opcional desde la 8.11.0** — solo para `#toanime`, `#upscale` y `#removebg` |
 | Rust + Cargo | 1.75+ | ✅ | para compilar Session API |
 | Ollama | latest | ❌ | IA local (recomendado, 16 GB RAM+) |
 | FFmpeg | 6.x | ❌ | conversión de media |
 
 **Sistemas operativos soportados:** Windows 10/11 · Ubuntu 20.04+ · Debian 11+ · macOS 12+ · Android (Termux)
 
-> **Nota de plataforma:** en Termux/Android y en Linux/macOS sin GUI, Ollama es opcional igual que en Windows — el bot degrada bien sin ellos. `npm run cython:build` y `npm run spam:build` ya detectan el compilador C disponible (`gcc`/`clang`) en cualquiera de los tres sistemas. El panel web (`web/`) usa el mismo Node.js ya requerido — no suma una herramienta nueva, solo un `npm install && npm run build` aparte (ver sección Instalación).
+> **Nota de plataforma:** en Termux/Android y en Linux/macOS sin GUI, Ollama es opcional igual que en Windows — el bot degrada bien sin ellos. `npm run cython:build` ya detecta el compilador C disponible (`gcc`/`clang`) en cualquiera de los tres sistemas, y es opcional: si los `.pyd`/`.so` no están, `/health` lo reporta con `CYTHON_OK` en false y el bot sigue. (`npm run spam:build` se fue en la 8.11.0 junto con la librería C de spam, cuya lógica está en Rust desde la 8.10.0.) El panel web (`web/`) usa el mismo Node.js ya requerido — no suma una herramienta nueva, solo un `npm install && npm run build` aparte (ver sección Instalación).
 >
 > **Dos cosas a tener en cuenta en dispositivos débiles (Termux/Android, ARM de placa única):**
 >
-> - Algunas dependencias nativas de Node (`sharp`, `cbor-x`) no traen binario precompilado para Android — `npm install` las compila desde código fuente, así que necesitás un compilador C/C++ instalado *antes* de correrlo (ver sección Termux más abajo).
+> - De las dependencias de Node, la que de verdad compila desde código fuente en Android es **`sharp`** (lleva libvips): necesitás `clang`, `make` y `pkg-config` instalados *antes* de correr `npm install` (ver sección Termux más abajo). `cbor-x` se mencionaba acá y no hacía falta — su parte nativa (`cbor-extract`) es una dependencia **opcional**, y si no compila cae a la implementación en JavaScript puro sin que nada deje de funcionar.
+> - **Python es opcional desde la 8.11.0** y podés saltarte su paso de instalación entero. Si lo querés, su núcleo son **3 paquetes** con rueda precompilada (`fastapi`, `uvicorn`, `pydantic`) y lo demás está en `requirements-optional.txt`. La única función que lo necesita de verdad son los comandos de anime, por **`torch`** (~2 GB, sin binario para ARM — o sea que en Termux no van igual). En la 8.11.0 se fueron `pyarrow`, `duckdb`, `spacy`, `ddgs`, `requests`, `transformers` y la librería C del filtro de spam.
 > - La primera compilación de Rust (`npm run rust:build`) tarda unos minutos (~3 min en un PC de escritorio; bastante más en un teléfono) porque compila todo el árbol de dependencias con LTO. Es normal — no cierres la terminal, solo dale tiempo (y evitá que el dispositivo se duerma).
 
 > **Ollama:** Descarga un modelo antes de iniciar — `ollama pull llama3` o `ollama pull mistral`. El bot intenta Ollama primero y cae en las APIs cloud automáticamente si no está disponible.
@@ -272,7 +275,17 @@ cd WinsiBot
 # 2 — Dependencias Node.js
 npm install
 
-# 3 — Entorno virtual Python + dependencias
+# 3 — Python (OPCIONAL desde la 8.11.0)
+#
+# Podés saltarte este paso entero. El bot arranca y funciona sin Python: lo
+# detecta al iniciar, lo dice en una línea de log y sigue. Lo único que queda
+# sin servicio son #toanime, #upscale y #removebg, que responden con un
+# mensaje claro en vez de quedarse esperando.
+#
+# Instalalo solo si querés esos tres comandos (y tené en cuenta que `torch`
+# son ~2 GB y no tiene binario precompilado para ARM, así que en Termux no
+# funcionan de todas formas).
+
 cd python
 python -m venv venv
 
@@ -281,7 +294,12 @@ venv\Scripts\activate
 # Linux / macOS
 # source venv/bin/activate
 
+# Núcleo: 3 paquetes, todos con rueda precompilada
 pip install -r requirements.txt
+
+# Los comandos de anime y las herramientas de consola (npm run monitor)
+# pip install -r requirements-optional.txt
+
 cd ..
 
 # 4 — Compilar Session API de Rust
@@ -429,7 +447,8 @@ npm run start
 
 Compila e inicia el bot **detrás de un supervisor liviano** (`src/supervisor.ts`)
 que lo reinicia solo si crashea o si se cuelga sin heartbeat. El bot, a su vez,
-levanta sus propias dependencias (Rust Session API, Python/FastAPI)
+levanta sus propias dependencias (la Session API de Rust y, **si está instalada**,
+la API de Python)
 si no están corriendo ya, y cada una se reinicia sola si crashea — cada una con
 su propio indicador de estado, y un solo Ctrl+C para apagar todo junto.
 
@@ -438,7 +457,7 @@ su propio indicador de estado, y un solo Ctrl+C para apagar todo junto.
 ```bash
 npm run rust:start      # Solo Session API Rust, de forma aislada
 npm run dev             # Solo Node.js sin compilar — desarrollo rápido / escanear QR
-npm run monitor         # Monitor Python con auto-restart y dashboard
+npm run monitor         # Watchdog de consola — opcional, necesita Python
 ```
 
 <details>
@@ -446,9 +465,9 @@ npm run monitor         # Monitor Python con auto-restart y dashboard
 
 | Script | Descripción |
 |--------|-------------|
-| `start` | Compila e inicia el bot **vía supervisor** — reinicia solo si crashea o se cuelga, y levanta Rust/Python por su cuenta (cada uno con su propio auto-restart) |
+| `start` | Compila e inicia el bot **vía supervisor** — reinicia solo si crashea o se cuelga, y levanta Rust (y Python si está instalado) por su cuenta (cada uno con su propio auto-restart) |
 | `start:unsupervised` | Igual que `start` pero sin la capa de supervisor — arranca `dist/index.js` directo |
-| `monitor` | Monitor Python con auto-restart |
+| `monitor` | Watchdog de consola (necesita Python y `requirements-optional.txt`) |
 | `dev` | Node.js directo — desarrollo / escanear QR |
 | `build` | Compilar TypeScript → `dist/` |
 | `rust:start` | Session API de Rust |
@@ -473,8 +492,10 @@ npm run monitor         # Monitor Python con auto-restart y dashboard
 | `rust:lint` | `cargo clippy` sobre la Session API de Rust |
 | `rust:bench` | Benchmarks de Criterion sobre el camino caliente (informes HTML en `rust/target/criterion/`) |
 | `py:lint` / `py:lint:fix` | Ruff — linter de `python/` (requiere `pip install -r python/requirements-dev.txt`) |
+| `py:deps` | Comprueba que lo que `python/` importa esté declarado en los requirements, en las dos direcciones. Sale con error si falta algo |
+| `rust:test` | Tests unitarios de Rust (`cargo test`) |
 | `py:format` | Ruff — formateo de `python/` |
-| `lint:all` | Corre `lint` + `rust:lint` + `py:lint` de una |
+| `lint:all` | Corre `lint` + `rust:lint` + `py:lint` + `py:deps` de una |
 | `test` | Vitest |
 
 </details>
@@ -653,6 +674,7 @@ curl -H "x-api-key: TU_CLAVE" http://127.0.0.1:3001/messages/pending
 
 | Método | Ruta | Descripción |
 |--------|------|-------------|
+| | **Sesión** | |
 | `POST` | `/write` | Escribir creds (base64) con rename atómico |
 | `GET` | `/read` | Leer creds actuales |
 | `POST` | `/snapshot` | Forzar rotación de snapshot |
@@ -660,22 +682,62 @@ curl -H "x-api-key: TU_CLAVE" http://127.0.0.1:3001/messages/pending
 | `GET` | `/healthy` | Salud de sesión + detección de corrupción |
 | `GET` | `/sessions` | Listar IDs de sesión activos |
 | `POST` | `/sessions/signal/clear` | Eliminar archivos Signal (fix Bad MAC) |
-| `GET` | `/sessions/backup` | Devolver mejor creds válido para restauración sin QR |
-| `POST` | `/badmac/report` | Reportar evento Bad MAC para un JID de grupo (cooldown escalonado) |
-| `POST` | `/rate/check` | Verificar si un sender está dentro del rate limit |
-| `POST` | `/spam/check` | Check combinado: frecuencia + texto repetido + bloqueo progresivo |
-| `POST` | `/watchdog/ping` | Ping de heartbeat desde Node.js |
-| `GET` | `/watchdog/status` | Vivo/muerto + tiempo último ping + conteo |
-| `POST` | `/nlp/fast` | Detección NLP de palabras clave en Rust |
-| `POST` | `/ai/learn` | Guardar turno de conversación IA (SQLite) |
-| `GET` | `/ai/context/:sender` | Recuperar contexto de conversación |
-| `POST` | `/messages/track` | Trackear IDs de mensajes salientes |
+| `GET` | `/sessions/backup` | Mejor creds válido para restauración sin QR |
+| `POST` | `/badmac/report` | Reportar Bad MAC de un grupo (cooldown escalonado) |
+| | **Flujo** | |
+| `POST` | `/rate/check` | Si un sender está dentro del rate limit |
+| `POST` | `/spam/check` | Frecuencia + texto repetido + bloqueo progresivo |
+| `POST` | `/watchdog/ping` | Heartbeat desde Node.js |
+| `GET` | `/watchdog/status` | Vivo/muerto + tiempo del último ping |
+| | **IA** | |
+| `POST` | `/nlp/fast` | Clasificación de intenciones por reglas (sub-ms) |
+| `POST` | `/ai/learn` | Guardar un intercambio con la IA |
+| `POST` | `/ai/observe` | Guardar un mensaje suelto de grupo (alimenta el perfil) |
+| `GET` | `/ai/context/:sender` | Historial reciente para armar el prompt |
+| `GET` · `DELETE` | `/ai/profile/:jid` | Perfil de estilo de un usuario (GET) · borrarlo todo (DELETE) |
+| `GET` | `/ai/group-style/:gjid` | Perfil de estilo de un grupo |
+| `GET` | `/ai/corpus/stats` | Tamaño del corpus de aprendizaje |
+| `POST` | `/ai/chat/respond` | Respuesta con IA: Ollama → GPT → Gemini → Claude → plantilla |
+| `POST` | `/ai/chat/imitate` | Responder imitando el estilo de un usuario |
+| `POST` | `/ai/personality/respond` | Respuesta local por plantillas (sin modelo) |
+| `GET` · `POST` | `/ai/personality/mode` | Modo activo y lista de modos (GET) · cambiarlo (POST) |
+| `POST` | `/ai/personality/reset` | Volver al modo por defecto |
+| `GET` | `/ai/memory/:jid` | Reputación y comportamiento de un usuario |
+| `POST` | `/ai/memory/:jid/update` | Registrar un mensaje en su reputación |
+| `GET` | `/ai/memory/toxic` | Los usuarios con peor reputación |
+| | **Imágenes** | |
+| `POST` | `/imagefx/lego` | Mosaico estilo LEGO |
+| `POST` | `/search/image` | Buscar y descargar una imagen |
+| `POST` | `/search/images` | Buscar y devolver solo las URLs |
+| | **Entrega** | |
+| `POST` | `/messages/track` | Registrar IDs de mensajes salientes |
 | `POST` | `/messages/ack` | Actualizar estado de entrega en lote |
 | `GET` | `/messages/pending` | Mensajes sin confirmación de entrega |
 | `POST` | `/outbox/enqueue` | Encolar un envío ANTES de mandarlo, con su contenido |
 | `GET` | `/outbox/unsent` | Lo que quedó encolado sin salir — para reenviar al arrancar |
 | `POST` | `/outbox/sent` | Marcar como enviado de verdad (libera el contenido) |
-| `POST` | `/outbox/retry` | Sumar un reintento (dead-letter tras N intentos) |
+| `POST` | `/outbox/retry` | Sumar un reintento (dead-letter tras 3) |
+| | **Sub-bots** | |
+| `POST` | `/subbots/register` | Registrar un sub-bot nuevo |
+| `GET` | `/subbots` | Listar sub-bots |
+| `GET` · `DELETE` | `/subbots/:id` | Estado de un sub-bot |
+| `PUT` | `/subbots/:id/state` | Cambiar su estado |
+| `POST` | `/subbots/:id/heartbeat` | Latido de un sub-bot |
+| `POST` | `/subbots/:id/messages` | Sumar mensajes a su cuota |
+| `POST` | `/subbots/:id/errors` | Registrar un error |
+| `GET` | `/subbots/can-create` | Si queda cupo para otro |
+| `GET` | `/subbots/config` | Configuración, con recarga en caliente |
+| `GET` | `/subbots/stats` | Totales de sub-bots |
+| `POST` | `/subbots/cleanup` | Limpiar los que quedaron colgados |
+| | **Estado** | |
+| `GET` | `/health` | Estado general + sesiones activas + plataforma |
+| `GET` | `/health/live` | Liveness (Docker / K8s) |
+| `GET` | `/health/ready` | Readiness |
+| `GET` | `/metrics` | Contadores atómicos (escrituras, lecturas, bytes) |
+| `GET` | `/analytics` | Panel agregado |
+| `POST` | `/stats/bump` | Sumar a los contadores del bot |
+| `GET` | `/stats/counters` | Contadores acumulados |
+| `GET` | `/stats/top-commands` | Comandos más usados |
 
 </details>
 
@@ -708,9 +770,9 @@ WinsiBot/
 │   │   ├── socket.ts                 # Conexión WebSocket a WhatsApp
 │   │   ├── handler.ts                # Dispatcher de mensajes → comandos (semáforo con espera acotada)
 │   │   ├── dedup.ts                  # Descarta re-entregas del mismo mensaje (por instancia, sobrevive reinicios)
-│   ├── loadShedding.ts           # Degrada por lag del event loop — nunca tira moderación ni admin
-│   ├── botStats.ts               # Contadores en memoria, volcados a Rust cada minuto
-│   ├── egress.ts                 # Embudo de salida — TODO sendMessage pasa por el rate limiter
+│   │   ├── loadShedding.ts           # Degrada por lag del event loop — nunca tira moderación ni admin
+│   │   ├── botStats.ts               # Contadores en memoria, volcados a Rust cada minuto
+│   │   ├── egress.ts                 # Embudo de salida — TODO sendMessage pasa por el rate limiter
 │   │   ├── groupCache.ts             # Cache canónico de groupMetadata (TTL + debounce/coalescing)
 │   │   ├── store.ts                  # Cache de contactos/chats (escritura atómica)
 │   │   ├── persistence.ts            # Persistencia real (users/groups/inventory/clans.json, escritura atómica)
@@ -728,7 +790,7 @@ WinsiBot/
 │   ├── lib/
 │   │   ├── authStateCbor.ts          # Sesión de Baileys en CBOR (creds/keys) en vez de JSON
 │   │   ├── authVerifier.ts           # Verificación Curve25519 + restauración sin QR
-│   │   ├── db.ts                     # SQLite — KV genérico (sesiones del panel web)
+│   │   ├── kv.ts                      # strenor — KV con TTL real (sesiones del panel web)
 │   │   ├── interactive.ts            # Mensajes interactivos: botones, listas, carrusel, álbum
 │   │   ├── gift.ts                   # Sistema de regalos (30+ items, buzón, wishlist, trueques)
 │   │   ├── pvp.ts                    # Arena PvP (ELO K=32, 9 divisiones, 5 acciones)
@@ -740,8 +802,8 @@ WinsiBot/
 │   │   ├── downloader.ts             # yt-dlp wrapper (YouTube audio/video, TikTok, Instagram) — máx 3 concurrentes
 │   │   ├── queue.ts                  # Cola genérica con concurrencia configurable (usada por downloader.ts)
 │   │   ├── rule34.ts                 # Cliente de la API JSON de Rule34 (imágenes/videos por tag)
-│   │   ├── circuitBreaker.ts             # Corta las llamadas a un servicio caído (closed/open/half-open)
-│   ├── cacheManager.ts           # Cache genérico con TTL, stats hits/misses, eviction LFU
+│   │   ├── circuitBreaker.ts          # Corta las llamadas a un servicio caído (closed/open/half-open)
+│   │   ├── cacheManager.ts           # Cache genérico con TTL, stats hits/misses, eviction LFU
 │   │   ├── media_sender.ts           # safeSend / enqueueSend / broadcastSend
 │   │   ├── rateLimiter.ts            # Token bucket rate limiter (TypeScript)
 │   │   ├── session.ts                # Cliente Session API de Rust
@@ -758,18 +820,23 @@ WinsiBot/
 │       ├── server.ts                 # API + WS + estático de web/dist
 │       ├── auth.ts                   # Login vinculando WhatsApp (#login <código>)
 │       └── routes/                   # /api/subbots, /api/groups, /api/admin
-├── python/                           # Python — servicios auxiliares
+├── python/                           # Python — OPCIONAL, el bot corre sin esto
+│   ├── requirements.txt              # 3 paquetes, todos con rueda precompilada
+│   ├── requirements-optional.txt     # Anime (torch) + herramientas de consola
 │   ├── api/
+│   │   ├── app.py                    # FastAPI — sin lifespan: no abre bases ni levanta hilos
 │   │   └── routers/
-│   │       └── hepein.py             # Router IA: Ollama → GPT → Claude → Gemini
-│   ├── ai/
-│   │   ├── ollama_client.py          # Cliente Ollama async con verificación de disponibilidad
-│   │   └── commands_ref.py           # Referencia de comandos para contexto IA
+│   │       ├── health.py             # GET /health — lo único que el bot consulta
+│   │       └── anime.py              # Redes neuronales (torch): lo único que aún necesita Python
+│   ├── ai/                           # Watchdog de consola: salud, roturas, anomalías, alertas
 │   ├── session/                      # Backup / restore / checksum SHA-256
 │   └── terminal/
 │       ├── monitor.py                # Watchdog principal con auto-restart
 │       └── manage.py                 # CLI de mantenimiento interactivo
-├── rust/                             # Rust — Session API v5.1.0
+├── rust/                             # Rust — Session API v5.6.0
+│   ├── assets/                       # Datos incrustados en el binario con include_str!
+│   │   ├── personality.json          # 489 frases en 12 modos + 121 de humor
+│   │   └── commands.json             # Catálogo de 28 comandos para el contexto de la IA
 │   └── src/
 │       ├── main.rs                   # Entry point (Axum) — graceful shutdown + compresión gzip
 │       ├── routes.rs                 # Handlers HTTP + AppState
@@ -779,7 +846,14 @@ WinsiBot/
 │       ├── snapshot.rs               # 10 snapshots rotativos + read_best_valid()
 │       ├── db.rs                     # SQLite delivery tracker + audit_log
 │       ├── atomic.rs                 # Escritura atómica (tmp → fsync → rename)
-│       ├── nlp.rs                    # NLP fast-path en Rust
+│       ├── nlp.rs                    # Clasificador de intenciones por reglas — insultos, NSFW, spam, comandos (sub-ms)
+│       ├── imagefx.rs                # Mosaico LEGO (crate `image`)
+│       ├── imagesearch.rs            # Búsqueda y descarga de imágenes (Bing)
+│       ├── personality.rs            # Modos, plantillas de respuesta y humor (datos incrustados)
+│       ├── user_memory.rs            # Reputación y comportamiento por usuario
+│       ├── ai_chat.rs                # IA real: Ollama → GPT → Gemini → Claude, con caída a plantilla
+│       ├── rng.rs                    # Aleatoriedad barata (xorshift64*) para frases y mezclas
+│       ├── conversations.rs          # Conversaciones de la IA + perfiles de estilo de usuario y grupo (SQLite)
 │       ├── subbots.rs                # SubBot Manager — cuotas, estado, hot-reload de config
 │       ├── metrics.rs                # Contadores atómicos (writes/reads/bytes/snapshots)
 │       ├── tasks.rs                  # Tareas de fondo: auto-snapshot, limpieza periódica
@@ -866,7 +940,7 @@ En Windows también necesitas las **Build Tools de Visual Studio** (MSVC). Desc�
 <summary><b>Ollama no responde / IA cae en cloud</b></summary>
 
 Verifica que Ollama está corriendo: `ollama serve`. Descarga un modelo si no lo tienes: `ollama pull llama3`.  
-El bot verifica la disponibilidad de Ollama en cada petición y cae silenciosamente en GPT → Claude → Gemini si no está disponible.
+El bot verifica la disponibilidad de Ollama en cada petición y cae en GPT → Gemini → Claude si no está. Si ninguno responde, usa su **motor local de plantillas** — 489 frases en 12 modos, con el modo del grupo y sin repetir las últimas respuestas — así que siempre contesta algo. Todo eso corre en Rust desde la 8.11.0: no necesita Python.
 
 </details>
 

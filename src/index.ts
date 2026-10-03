@@ -266,13 +266,39 @@ async function waitPythonApi(maxWaitMs = 20_000): Promise<boolean> {
   return false
 }
 
+/**
+ * Levanta la API de Python si hace falta y si se puede.
+ *
+ * Desde la 8.11.0 Python es **opcional**: lo único que queda allá son los
+ * comandos de anime (`#toanime`, `#upscale`, `#removebg`), que son redes
+ * neuronales con torch — ~2 GB y sin binario para ARM, así que en Termux no
+ * funcionaban ni antes. Todo lo demás se fue a Rust.
+ *
+ * Por eso esto no falla ni avisa en rojo cuando no hay entorno de Python: si
+ * no existe el venv, se salta en silencio y el bot arranca igual. Los tres
+ * comandos de anime responden con un mensaje claro en vez de esperar un
+ * timeout.
+ *
+ * La detección es por la presencia del venv y no por una variable de entorno,
+ * para que quien ya lo tenía andando no tenga que configurar nada.
+ */
+export function pythonDisponible(): boolean {
+  return existsSync(venvPythonPath())
+}
+
 async function ensurePythonApi(): Promise<void> {
   // Si ya responde, no hacer nada
   if (await isPythonApiUp()) return
 
-  // Buscar el ejecutable de Python del venv
-  const venvPython = venvPythonPath()
-  const python     = existsSync(venvPython) ? venvPython : systemPython()
+  if (!pythonDisponible()) {
+    logger.info(
+      'Python no instalado — el bot funciona igual. Solo quedan sin servicio ' +
+      '#toanime, #upscale y #removebg (ver python/requirements-optional.txt).',
+    )
+    return
+  }
+
+  const python = venvPythonPath()
 
   const stopSpin = loader.spin('Iniciando Python API...')
 

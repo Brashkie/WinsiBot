@@ -1,6 +1,6 @@
 [package]
 name = "winsibot-session-api"
-version = "5.4.0"
+version = "5.6.0"
 edition = "2021"
 
 [lib]
@@ -29,6 +29,10 @@ rusqlite = { version = "0.31", features = ["bundled"] }
 regex    = { version = "1", features = ["unicode"] }
 reqwest  = { version = "0.12", default-features = false, features = ["json", "rustls-tls"] }
 tracing-appender = "0.2.5"
+# Solo PNG y JPEG: default-features trae una docena de decodificadores (webp,
+# tiff, bmp, ico, avif...) que este proyecto no usa y que alargan el build y
+# engordan el binario.
+image    = { version = "0.25", default-features = false, features = ["png", "jpeg"] }
 
 [profile.release]
 lto = true
@@ -45,4 +49,8 @@ harness = false
 
 [[bench]]
 name = "storage"
+harness = false
+
+[[bench]]
+name = "imagefx"
 harness = false

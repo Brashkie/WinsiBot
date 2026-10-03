@@ -1,6 +1,19 @@
 // ─────────────────────────────────────────────────────────────────────────────
 //  WinsiBot — CLIENTE HEPEIN
-//  Conecta TypeScript con el pipeline Python: Parquet + DuckDB + IA.
+//
+//  Python se quedó solo con lo que de verdad necesita Python: hablar con Ollama
+//  y adaptar el texto. Los perfiles de estilo —de usuario y de grupo— salen de
+//  Rust, de la tabla `conversations` que ya se llenaba en cada respuesta de IA.
+//
+//  Antes había DOS almacenes calculando el mismo perfil: Rust escribía en
+//  `conversations` + `user_style`, y acá se mandaba el mismo mensaje a
+//  `/hepein/record` para que trainer.py lo guardara otra vez en Parquet y lo
+//  consultara con DuckDB. Dos copias de cada mensaje, dos implementaciones de
+//  las mismas agregaciones, y una llamada HTTP a Python por cada mensaje de
+//  grupo que ya dábamos por eliminada.
+//
+//  Al irse trainer.py se van con él `pyarrow` y `duckdb`, que eran dos de las
+//  cuatro dependencias Python que compilan desde fuente en Termux.
 //
 //  Uso rápido:
 //    import { hepein } from '@lib/hepein.js'
@@ -13,35 +26,22 @@
 //    if (res.ok) sock.sendMessage(jid, { text: res.text })
 //
 //    // Imitar a un usuario:
-//    const res = await hepein.imitate({ prompt, targetJid, groupJid, senderJid })
+//    const res = await hepein.imitate({ prompt, targetJid })
 // ─────────────────────────────────────────────────────────────────────────────
 
-import { pythonPost, pythonGet, pythonDelete } from './pythonBridge.js'
+import {
+  observeMessage, getUserStyle, getGroupStyle,
+  deleteUserStyle, getCorpusStats,
+  aiRespond, aiImitate, updateUserMemory,
+  type UserStyleProfile, type GroupStyleProfile,
+} from './pythonBridge.js'
 import { logger } from '../core/logger.js'
 
 // ─── Tipos ────────────────────────────────────────────────────────────────────
 
-export interface UserStyleProfile {
-  jid:          string
-  msg_count:    number
-  avg_len:      number
-  emoji_freq:   number
-  common_words: string[]
-  active_hours: number[]
-  vocab_sample: string[]
-  uses_slang:   boolean
-}
-
-export interface GroupStyleProfile {
-  group_jid:    string
-  msg_count:    number
-  active_users: string[]
-  common_words: string[]
-  avg_msg_len:  number
-  emoji_freq:   number
-  vocab_sample: string[]
-  topics:       string[]
-}
+// UserStyleProfile y GroupStyleProfile se re-exportan: los definía este
+// archivo cuando los producía Python, y ahora los produce Rust.
+export type { UserStyleProfile, GroupStyleProfile }
 
 export interface HepeinResponse {
   ok:         boolean
@@ -88,27 +88,23 @@ export const hepein = {
     text:      string
     isReply?:  boolean
   }): void {
-    const { groupJid, senderJid, text, isReply = false } = opts
+    const { groupJid, senderJid, text } = opts
     if (!text?.trim() || text.length < 3) return
-    pythonPost('/api/v1/hepein/record', {
-      group_jid:  groupJid,
-      sender_jid: senderJid,
-      text,
-      is_reply:   isReply,
-    }).catch(err => logger.debug({ err }, 'Hepein record silenciado'))
+    // isReply se acepta por compatibilidad con los puntos de llamada, pero no
+    // se guarda: trainer.py lo escribía en Parquet y ninguna agregación lo
+    // llegaba a leer nunca.
+    observeMessage(senderJid, groupJid, text)
+      .catch(err => logger.debug({ err }, 'Hepein record silenciado'))
   },
 
   /**
-   * Actualiza la reputación/comportamiento del usuario (user_memory.py).
+   * Actualiza la reputación y el comportamiento del usuario.
    * Fire-and-forget — no bloquea el handler.
    */
   updateMemory(jid: string, text: string, intent: string, isCmd = false): void {
     if (!jid || !text?.trim()) return
-    pythonPost(`/api/v1/ai/memory/${encodeURIComponent(jid)}/update`, {
-      text,
-      intent,
-      is_cmd: isCmd,
-    }).catch(err => logger.debug({ err }, 'user_memory update silenciado'))
+    updateUserMemory(jid, text, intent, isCmd)
+      .catch(err => logger.debug({ err }, 'user_memory update silenciado'))
   },
 
   /**
@@ -121,62 +117,43 @@ export const hepein = {
     senderJid:  string
     intent?:    string
     mode?:      string
-    model?:     string   // modelo Ollama específico (según la palabra disparadora) — sin cascada a GPT/Claude/Gemini
+    model?:     string   // modelo Ollama concreto (según la palabra disparadora)
     useGpt?:    boolean
     useHumor?:  boolean
-    force?:     boolean   // omitir cooldown
-    // Historial reciente del sender (de getAIContext) — Python lo usa para no
-    // repetir las últimas respuestas cuando cae a su plantilla local (Ollama
-    // caído/lento). Sin esto, hepein_respond() siempre devuelve texto "ok"
-    // (real o de plantilla) sin que el filtro anti-repetición se active nunca.
-    history?: Array<{ text: string; intent: string; reply: string; ts: number }>
+    force?:     boolean  // omitir el cooldown por grupo
+    history?:   Array<{ reply: string }>
   }): Promise<HepeinResponse> {
-    const {
-      prompt, groupJid, senderJid,
-      intent   = 'neutral',
-      useGpt   = true,
-      useHumor = false,
-      force    = false,
-      history  = [],
-    } = opts
-
+    const { groupJid, force = false } = opts
     if (!force && !_canRespond(groupJid)) {
       return { ok: false, text: '', mode: '', hasProfile: false, groupMsgs: 0, error: 'cooldown' }
     }
 
-    const res = await pythonPost<{
-      text:        string
-      mode:        string
-      has_profile: boolean
-      group_msgs:  number
-    }>('/api/v1/hepein/respond', {
-      prompt,
-      group_jid:  groupJid,
-      sender_jid: senderJid,
-      intent,
-      use_gpt:    useGpt,
-      use_humor:  useHumor,
-      history,
-      ...(opts.mode  ? { mode: opts.mode }   : {}),
-      ...(opts.model ? { model: opts.model } : {}),
-    }, 45_000) // Ollama en CPU (sin GPU) puede tardar 20-35s en un modelo de 3B —
-               // medido en real: ~19s para una respuesta corta. Con 15s este
-               // timeout cortaba la llamada ANTES de que Ollama (que del lado
-               // Python espera hasta OLLAMA_TIMEOUT=40s) llegara a responder,
-               // forzando el fallback a plantillas aunque la IA sí iba a
-               // contestar — por eso Hepein parecía "repetir lo que ya existe
-               // en Python" en vez de generar una respuesta real.
+    // Rust resuelve el camino entero: perfiles, prompt, Ollama, APIs cloud y,
+    // si ninguna responde, el motor local de plantillas.
+    // Las opcionales van con spread y no como `campo: undefined`, porque el
+    // proyecto compila con `exactOptionalPropertyTypes`: ahí "ausente" y
+    // "presente pero undefined" no son lo mismo.
+    const r = await aiRespond({
+      prompt:    opts.prompt,
+      groupJid,
+      senderJid: opts.senderJid,
+      ...(opts.intent   !== undefined ? { intent:   opts.intent }   : {}),
+      ...(opts.mode     !== undefined ? { mode:     opts.mode }     : {}),
+      ...(opts.model    !== undefined ? { model:    opts.model }    : {}),
+      ...(opts.useGpt   !== undefined ? { useGpt:   opts.useGpt }   : {}),
+      ...(opts.useHumor !== undefined ? { useHumor: opts.useHumor } : {}),
+      ...(opts.history  !== undefined ? { history:  opts.history }  : {}),
+    })
 
-    if (!res.success || !res.data?.text) {
-      return { ok: false, text: '', mode: '', hasProfile: false, groupMsgs: 0, error: res.error }
+    if (!r) {
+      return { ok: false, text: '', mode: '', hasProfile: false, groupMsgs: 0, error: 'sin respuesta' }
     }
-
     return {
       ok:         true,
-      text:       res.data.text,
-      mode:       res.data.mode,
-      hasProfile: res.data.has_profile,
-      groupMsgs:  res.data.group_msgs,
+      text:       r.text,
+      mode:       r.mode,
+      hasProfile: r.hasProfile,
+      groupMsgs:  r.groupMsgs,
       error:      undefined,
     }
   },
@@ -187,74 +164,46 @@ export const hepein = {
   async imitate(opts: {
     prompt:    string
     targetJid: string
-    groupJid:  string
-    senderJid: string
   }): Promise<ImitateResponse> {
-    const res = await pythonPost<{
-      text:        string
-      has_profile: boolean
-      msg_count:   number
-    }>('/api/v1/hepein/imitate', {
-      prompt:      opts.prompt,
-      target_jid:  opts.targetJid,
-      group_jid:   opts.groupJid,
-      sender_jid:  opts.senderJid,
-    })
-
-    if (!res.success || !res.data?.text) {
-      return { ok: false, text: '', hasProfile: false, msgCount: 0, error: res.error }
+    const r = await aiImitate(opts.prompt, opts.targetJid)
+    if (!r) {
+      return { ok: false, text: '', hasProfile: false, msgCount: 0, error: 'sin respuesta' }
     }
-
-    return {
-      ok:         true,
-      text:       res.data.text,
-      hasProfile: res.data.has_profile,
-      msgCount:   res.data.msg_count,
-      error:      undefined,
-    }
+    return { ok: true, text: r.text, hasProfile: r.hasProfile, msgCount: r.msgCount, error: undefined }
   },
 
   /**
    * Devuelve el perfil de estilo aprendido de un usuario.
    */
-  async getProfile(jid: string, days = 45): Promise<UserStyleProfile | null> {
-    const res = await pythonGet<UserStyleProfile>(`/api/v1/hepein/profile/${encodeURIComponent(jid)}`, {
-      days: String(days),
-    })
-    return res.success && res.data ? res.data : null
+  getProfile(jid: string, days = 45): Promise<UserStyleProfile | null> {
+    return getUserStyle(jid, days)
   },
 
   /**
    * Devuelve el perfil de estilo aprendido de un grupo.
    */
-  async getGroupStyle(groupJid: string, days = 30): Promise<GroupStyleProfile | null> {
-    const res = await pythonGet<GroupStyleProfile>(`/api/v1/hepein/group/${encodeURIComponent(groupJid)}`, {
-      days: String(days),
-    })
-    return res.success && res.data ? res.data : null
+  getGroupStyle(groupJid: string, days = 30): Promise<GroupStyleProfile | null> {
+    return getGroupStyle(groupJid, days)
   },
 
   /**
-   * Elimina todos los datos de mensajes de un usuario (privacidad).
+   * Elimina todos los mensajes guardados de un usuario (privacidad).
    */
   async deleteProfile(jid: string): Promise<{ deletedRows: number }> {
-    const res = await pythonDelete<{ deleted_rows: number }>(`/api/v1/hepein/profile/${encodeURIComponent(jid)}`)
-    return { deletedRows: res.data?.deleted_rows ?? 0 }
+    return { deletedRows: await deleteUserStyle(jid) }
   },
 
   /**
-   * Estadísticas del pipeline Parquet.
+   * Tamaño del corpus de aprendizaje.
+   *
+   * Antes contaba archivos Parquet y lo que quedaba en el buffer de trainer.py.
+   * Ahora que es una tabla SQLite, lo informativo son las filas y a cuántos
+   * usuarios y grupos cubren; `diskMb` sale del propio SQLite
+   * (page_count * page_size), sin mirar el filesystem.
    */
-  async stats(): Promise<{ parquetFiles: number; diskMb: number; bufferPending: number } | null> {
-    const res = await pythonGet<{ parquet_files: number; disk_mb: number; buffer_pending: number }>(
-      '/api/v1/hepein/stats'
-    )
-    if (!res.success || !res.data) return null
-    return {
-      parquetFiles:  res.data.parquet_files,
-      diskMb:        res.data.disk_mb,
-      bufferPending: res.data.buffer_pending,
-    }
+  async stats(): Promise<{ rows: number; senders: number; groups: number; diskMb: number } | null> {
+    const s = await getCorpusStats()
+    if (!s) return null
+    return { rows: s.rows, senders: s.senders, groups: s.groups, diskMb: s.disk_mb }
   },
 }
-

@@ -567,17 +567,26 @@ def print_break_report(report: BreakReport) -> None:
 
     console.print(f'\n  [red]◆ Break Detector — {report.total} activa(s) · {report.critical} crítica(s)[/red]')
 
-    # mostrar agrupados primero
-    shown_ids = set()
+    # Los agrupados van primero, y después el detalle de los que NO están en
+    # ningún grupo.
+    #
+    # `shown_ids` existía y se quedaba vacío: nadie le agregaba nada y nadie la
+    # leía, así que los errores agrupados se imprimían DOS veces — una en el
+    # bloque de grupos y otra en el detalle. Era un aviso de ruff (F841,
+    # variable asignada y nunca usada) que señalaba un bug de verdad.
+    shown_ids: set[str] = set()
     if report.groups:
         console.print('  [dim]── grupos ──[/dim]')
         for gid, messages in report.groups.items():
             console.print(f'  [cyan]◆ Grupo ({len(messages)} errores similares):[/cyan]')
             for m in messages[:3]:
                 console.print(f'    [dim]· {m}[/dim]')
+            shown_ids.add(gid)
 
-    console.print('  [dim]── detalle ──[/dim]')
-    for b in report.active[:10]:  # máximo 10 en pantalla
+    restantes = [b for b in report.active if b.get('group_id') not in shown_ids]
+    if restantes:
+        console.print('  [dim]── detalle ──[/dim]')
+    for b in restantes[:10]:  # máximo 10 en pantalla
         sev   = b.get('severity', 'low')
         freq  = b.get('frequency', 0)
         count = b.get('count', 1)

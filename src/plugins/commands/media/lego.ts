@@ -1,5 +1,5 @@
 import type { Command } from '../../../types/index.js'
-import { pythonPost } from '@lib/pythonBridge.js'
+import { legofyImage } from '@lib/pythonBridge.js'
 import { downloadContentFromMessage } from '@whiskeysockets/baileys'
 
 import { sleep } from '@lib/utils.js'
@@ -53,19 +53,11 @@ const command: Command = {
 
     const imageB64 = imageBuffer.toString('base64')
 
-    const result = await pythonPost<{
-      success:     boolean
-      image?:      string
-      error?:      string
-      brick_size?: number
-      original?:   { w: number; h: number }
-      bricks?:     { w: number; h: number }
-    }>('/api/v1/imagefx/lego', { image: imageB64, brick_size: brickSize }, 20_000)
-      .catch(() => null)
+    const result = await legofyImage(imageB64, brickSize)
 
-    if (!result?.data?.success || !result.data.image) {
+    if (!result?.success || !result.image) {
       await sock.sendMessage(jid, {
-        text: `✗ Error: ${result?.data?.error ?? 'Error desconocido'}`,
+        text: `✗ Error: ${result?.error ?? 'Error desconocido'}`,
         edit: key,
       } as any)
       return
@@ -74,14 +66,14 @@ const command: Command = {
     await sock.sendMessage(jid, { text: '✔ Listo', edit: key } as any)
     await sleep(150)
 
-    const bricks = result.data.bricks
+    const bricks = result.bricks
     const caption = [
       `◆ Mosaico LEGO`,
       bricks ? `§ ${bricks.w}x${bricks.h} fichas` : '',
     ].filter(Boolean).join('\n')
 
     await sock.sendMessage(jid, {
-      image:   Buffer.from(result.data.image, 'base64'),
+      image:   Buffer.from(result.image, 'base64'),
       caption,
     }, { quoted: msg })
   },

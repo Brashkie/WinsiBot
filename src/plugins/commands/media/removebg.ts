@@ -80,7 +80,7 @@ const command: Command = {
 
     if (!result?.data?.success || !result.data.image) {
       await sock.sendMessage(jid, {
-        text: `✗ Error: ${result?.data?.error ?? 'Error desconocido'}`,
+        text: `✗ Error: ${result?.data?.error ?? result?.error ?? 'Error desconocido'}`,
         edit: key,
       } as any)
       return

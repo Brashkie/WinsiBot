@@ -53,7 +53,15 @@ function resetStrikes(key: string): void {
 }
 
 // Detecta spam de contenido (chars repetidos, junk) via Rust NLP
-async function isContentSpam(text: string): Promise<boolean> {
+/**
+ * Spam de contenido: texto basura, caracteres repetidos, patrones cortos.
+ *
+ * Lo resuelve `/nlp/fast` de Rust; si no hay respuesta cae a la regex local,
+ * que es el motivo por el que el respaldo a Python se quitó en la 8.11.0 — ese
+ * respaldo devolvía siempre un objeto válido y hacía que esta regex no se
+ * evaluara nunca (ver analyzeIntent en lib/pythonBridge.ts).
+ */
+export async function isContentSpam(text: string): Promise<boolean> {
   try {
     const r = await analyzeIntent(text)
     if (r) return r.primary === 'spam' || r.primary === 'nonsense'

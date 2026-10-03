@@ -109,6 +109,22 @@ export class CircuitBreaker {
 
   get currentState(): CircuitState { return this.state }
 
+  /**
+   * Fuerza el cierre del circuito sin esperar el tiempo de apertura.
+   *
+   * Para cuando se sabe desde fuera que el servicio volvió —se reinició a
+   * mano, o un test acaba de levantar otro en su lugar— y no tiene sentido
+   * seguir rechazando llamadas durante los 20 o 30 segundos que faltan.
+   *
+   * No toca los contadores de `stats()`: los trips y los rechazos ya
+   * ocurrieron, y borrarlos escondería lo que pasó.
+   */
+  reset(): void {
+    this.state    = 'closed'
+    this.failures = 0
+    this.openedAt = 0
+  }
+
   stats(): { name: string; state: CircuitState; failures: number; rejected: number; trips: number } {
     return {
       name:     this.name,

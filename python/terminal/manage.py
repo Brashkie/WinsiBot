@@ -23,18 +23,15 @@ import os
 import json
 import shutil
 import subprocess
-import time
 import urllib.request
 import urllib.error
 from pathlib import Path
-from datetime import datetime
 from typing import Optional
 
 from rich.console  import Console
 from rich.table    import Table
 from rich.panel    import Panel
 from rich.prompt   import Prompt, Confirm
-from rich.text     import Text
 from rich          import box
 
 sys.path.insert(0, str(Path(__file__).parent.parent))

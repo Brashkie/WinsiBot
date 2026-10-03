@@ -28,6 +28,18 @@ const only    = process.argv[2]
 const results = []
 const sleep   = (ms) => new Promise(r => setTimeout(r, ms))
 
+// CHAOS_RUST_URL tiene que aplicarse ACÁ, antes del primer import de dist/.
+//
+// src/config.ts lee process.env una sola vez, al cargarse, y todos los módulos
+// comparten ese objeto: no se vuelve a leer nunca. Ponerlo dentro del escenario
+// —como estaba— no cambiaba nada, porque config.js ya llevaba rato cargado con
+// la URL del .env; el cliente seguía llamando al puerto de siempre y el
+// escenario del outbox fallaba con "fetch failed" aunque la API estuviera
+// corriendo en el puerto que se le había pasado.
+if (process.env.CHAOS_RUST_URL) {
+  process.env.SESSION_API_URL = process.env.CHAOS_RUST_URL
+}
+
 function check(label, ok, detail = '') {
   results.push({ label, ok })
   const mark = ok ? color.green('OK') : color.red('XX')
@@ -53,6 +65,17 @@ async function scenario(name, desc, fn) {
 // Importa con la caché invalidada — simula un proceso recién arrancado.
 let _gen = 0
 const freshImport = (p) => import(`${DIST(p)}?chaos=${++_gen}`)
+
+// Importa la instancia COMPARTIDA, la misma que ven los demás módulos.
+//
+// La diferencia con freshImport() importa: el `?chaos=N` solo invalida la caché
+// del módulo pedido, no la de sus dependencias. Así que `lib/session.js?chaos=3`
+// es un módulo nuevo, pero su `import './circuitBreaker.js'` resuelve al
+// especificador de siempre y recibe el circuito canónico. Pedir
+// `circuitBreaker.js?chaos=4` devuelve un objeto DISTINTO, con sus contadores
+// en cero y su propio estado: comprobarlo o reiniciarlo no dice nada del
+// circuito que el bot está usando de verdad.
+const sharedImport = (p) => import(DIST(p))
 
 // ─────────────────────────────────────────────────────────────────────────────
 //  1. Tormenta de re-entregas — el caso real tras una reconexión por Bad MAC
@@ -156,18 +179,41 @@ await scenario('breaker-429', 'Rust devuelve 429 a propósito (rate limit real)'
     res.end(JSON.stringify({ ok: true, allowed: false, remaining: 0 }))
   })
   await new Promise(r => srv.listen(19911, r))
+  const urlPrevia = { s: process.env.SESSION_API_URL, r: process.env.RUST_API_URL }
   process.env.SESSION_API_URL = 'http://127.0.0.1:19911'
   process.env.RUST_API_URL    = 'http://127.0.0.1:19911'
 
   try {
     const { sessionClient } = await freshImport('lib/session.js')
-    const { rustCircuit }   = await freshImport('lib/circuitBreaker.js')
+    const { rustCircuit }   = await sharedImport('lib/circuitBreaker.js')
+
+    // Se mide el DELTA, no el absoluto. El circuito es compartido y llega con
+    // los trips de los escenarios anteriores; la afirmación que importa es que
+    // estas 30 llamadas no suman ninguno, no que el contador global esté a
+    // cero. Antes se comprobaba sobre una copia recién importada del módulo,
+    // que siempre daba 0 trips y 'closed' sin haber hecho nada.
+    rustCircuit.reset()
+    const tripsAntes = rustCircuit.stats().trips
 
     for (let i = 0; i < 30; i++) await sessionClient.checkRate('flood@s.whatsapp.net').catch(() => {})
     check('30 bloqueos NO abren el circuito', rustCircuit.currentState === 'closed', rustCircuit.currentState)
-    check('el rate limiter sigue operativo', rustCircuit.stats().trips === 0)
+    check('el rate limiter sigue operativo', rustCircuit.stats().trips === tripsAntes,
+      `trips ${tripsAntes} → ${rustCircuit.stats().trips}`)
   } finally {
     srv.close()
+    // Hay que dejar las cosas como estaban, y no por prolijidad: el poller de
+    // salud de session.js sigue vivo apuntando al 19911, que acaba de morir.
+    // Esos fallos son reales y abrían el circuito [rust] DESPUÉS de este
+    // escenario — el de outbox, que corre luego, se encontraba el circuito
+    // abierto y fallaba por algo que no tenía nada que ver con el outbox.
+    //
+    // freshImport() invalida la caché del módulo que se le pide, pero no la de
+    // sus dependencias: circuitBreaker.js es el MISMO objeto en los 8
+    // escenarios, así que el estado se arrastra entre ellos.
+    process.env.SESSION_API_URL = urlPrevia.s
+    process.env.RUST_API_URL    = urlPrevia.r
+    const { rustCircuit } = await sharedImport('lib/circuitBreaker.js')
+    rustCircuit.reset()
   }
 })
 
@@ -195,13 +241,16 @@ await scenario('shedding-flood', 'el event loop se bloquea bajo una avalancha', 
 //  8. Crash entre "cobrar" y "avisar" — el escenario que motivó el outbox
 // ─────────────────────────────────────────────────────────────────────────────
 await scenario('outbox-crash', 'muere tras mover el dinero, antes de confirmar', async () => {
-  const rust = process.env.CHAOS_RUST_URL
-  if (!rust) {
+  if (!process.env.CHAOS_RUST_URL) {
     console.log(`     ${color.yellow('--')} ${color.dim('omitido: necesita la API de Rust (CHAOS_RUST_URL=http://127.0.0.1:puerto)')}`)
     return
   }
-  process.env.SESSION_API_URL = rust
-  process.env.RUST_API_URL    = rust
+  // Cada escenario anterior dejó su propio sessionClient con su poller de
+  // salud apuntando a un servidor que ya no existe, y todos comparten este
+  // circuito. Empezar con él cerrado es parte de montar el escenario, no una
+  // concesión: lo que se quiere probar acá es el outbox, no el breaker.
+  const { rustCircuit }   = await sharedImport('lib/circuitBreaker.js')
+  rustCircuit.reset()
   const { sessionClient } = await freshImport('lib/session.js')
 
   const id = `CHAOS_${Date.now()}`
@@ -220,6 +269,64 @@ await scenario('outbox-crash', 'muere tras mover el dinero, antes de confirmar',
   await sessionClient.markOutboxSent([id])
   const tras2 = (await sessionClient.outboxUnsent(100, 3)).find(m => m.id === id)
   check('tras reenviarlo sale de la cola', !tras2)
+})
+
+// ─────────────────────────────────────────────────────────────────────────────
+//  9. Un mensaje, una fila — el invariante que motivó unificar el almacén
+// ─────────────────────────────────────────────────────────────────────────────
+await scenario('corpus-unico', 'el mensaje se guarda una sola vez y en un solo sitio', async () => {
+  if (!process.env.CHAOS_RUST_URL) {
+    console.log(`     ${color.yellow('--')} ${color.dim('omitido: necesita la API de Rust (CHAOS_RUST_URL=http://127.0.0.1:puerto)')}`)
+    return
+  }
+
+  const url = process.env.SESSION_API_URL
+  const key = process.env.SESSION_API_KEY ?? ''
+  const api = async (ruta, init = {}) => {
+    const r = await fetch(`${url}${ruta}`, {
+      ...init,
+      headers: { 'content-type': 'application/json', 'x-api-key': key, ...(init.headers ?? {}) },
+    })
+    return r.json()
+  }
+
+  // Un JID propio del escenario: así se puede contar sin que lo ensucie nada
+  // de lo que haya en la base, y se borra al final.
+  const jid  = `chaos-corpus-${Date.now()}@s.whatsapp.net`
+  const gjid = `chaos-corpus-${Date.now()}@g.us`
+
+  const antes = (await api('/ai/corpus/stats')).rows
+
+  // 5 mensajes sueltos de grupo (lo que antes iba a Python → Parquet) …
+  for (let i = 0; i < 5; i++) {
+    await api('/ai/observe', { method: 'POST',
+      body: JSON.stringify({ sender: jid, gjid, text: `mensaje de prueba numero ${i} jaja causa` }) })
+  }
+  // … y un intercambio con la IA (lo que ya iba a Rust).
+  await api('/ai/learn', { method: 'POST', body: JSON.stringify({
+    sender: jid, gjid, text: 'hola bot', intent: 'saludo', reply: 'que tal', mode: 'amable' }) })
+
+  const perfil = await api(`/ai/profile/${encodeURIComponent(jid)}`)
+  check('los 6 mensajes están, sin duplicar', perfil.msg_count === 6, `msg_count=${perfil.msg_count}`)
+
+  const despues = (await api('/ai/corpus/stats')).rows
+  check('el corpus creció en 6, no en 12', despues - antes === 6, `+${despues - antes} filas`)
+
+  // Lo que separa los dos usos del mismo almacén: las observaciones alimentan
+  // el perfil de estilo, pero NO son historial para armar el prompt — serían
+  // pares pregunta/respuesta con la respuesta vacía.
+  const ctx = await api(`/ai/context/${encodeURIComponent(jid)}`)
+  check('el historial trae solo el intercambio real', ctx.history?.length === 1, `${ctx.history?.length} turnos`)
+  check('y con la respuesta del bot', ctx.history?.[0]?.reply === 'que tal')
+
+  check('la jerga se detecta', perfil.uses_slang === true)
+  check('el estilo del grupo sale del mismo sitio',
+    (await api(`/ai/group-style/${encodeURIComponent(gjid)}`)).msg_count === 6)
+
+  // Privacidad: tiene que irse TODO, de las dos tablas.
+  const borrado = await api(`/ai/profile/${encodeURIComponent(jid)}`, { method: 'DELETE' })
+  check('el borrado se lleva las 6 filas y el perfil', borrado.deleted_rows === 7, `${borrado.deleted_rows} filas`)
+  check('y el corpus vuelve a como estaba', (await api('/ai/corpus/stats')).rows === antes)
 })
 
 // ─────────────────────────────────────────────────────────────────────────────

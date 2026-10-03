@@ -1,5 +1,5 @@
 import type { Command } from '../../../types/index.js'
-import { pythonPost } from '@lib/pythonBridge.js'
+import { searchImage } from '@lib/pythonBridge.js'
 
 const BANNED_WORDS = [
   'porn','porno','xxx','nsfw','hentai','nude','nudes',
@@ -56,21 +56,16 @@ const command: Command = {
     await new Promise(r => setTimeout(r, 400))
     await edit('◈◈ Buscando y descargando...')
 
-    // Búsqueda + descarga en un solo viaje — python/ml/search.py ya maneja
-    // el fallback DDG → Bing y reintenta con varias URLs hasta que una baje.
-    // Timeout largo: puede tardar (búsqueda + hasta 5 intentos de descarga).
-    const res = await pythonPost<{
-      image:  string   // base64 JPEG
-      width:  number
-      height: number
-    }>('/api/v1/search/image', { query }, 30_000)
+    // Búsqueda + descarga en un solo viaje: rust/src/imagesearch.rs raspa Bing
+    // y reintenta con hasta cinco URLs hasta que alguna baje.
+    const res = await searchImage(query)
 
-    if (!res.success || !res.data?.image) {
+    if (!res?.success || !res.image) {
       await edit(`✗ No se encontraron imágenes para: *${query}*`)
       return
     }
 
-    const buffer = Buffer.from(res.data.image, 'base64')
+    const buffer = Buffer.from(res.image, 'base64')
 
     await edit(`✔ ¡Listo!`)
     await new Promise(r => setTimeout(r, 150))

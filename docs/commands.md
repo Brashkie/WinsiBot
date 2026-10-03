@@ -86,15 +86,37 @@
 | `gptreset` | — | — | 👤 | Borra tu historial de conversación con la IA |
 | `imagine` | `dalle`, `img`, `imagen` | — | ⭐ | Genera una imagen con DALL-E 3 |
 | `traducir` | `tl`, `translate`, `tr` | — | 👤 | Traduce texto a cualquier idioma (50+ idiomas) |
+| `hepein` | `bot` | — | 🔑 | Cambia la **personalidad del bot** en este grupo (12 modos) |
+| `imitar` | `imitate`, `hablar`, `copy` | — | 👤 | El bot responde imitando el estilo de un usuario del grupo |
+| `miestilo` | `mystyle`, `miperfilia` | — | 👤 | Tu perfil de estilo aprendido: cuánto escribís, emojis, vocabulario |
+| `estilode` | `styleof`, `perfiliade` | — | 👤 | El perfil de estilo de otro usuario |
+| `olvidar` | `forgetme`, `borrariadat` | — | 👤 | **Privacidad:** borra todos tus mensajes guardados y tu perfil |
+| `hepeinstats` | `iaestats`, `trainerinfo` | — | ⭐ | Tamaño del corpus: mensajes, usuarios, grupos y disco |
 
-> Prioridad: **Ollama (local)** → GPT → Claude → Gemini (fallback automático). Límite: 20 mensajes/hora por usuario.
+> **Modelos:** **Ollama (local)** → GPT → Gemini → Claude, con caída automática.
+> Si ninguno responde, el bot usa su motor local de plantillas: 489 frases en 12
+> modos, respetando el modo del grupo y sin repetir las últimas respuestas — así
+> que siempre contesta algo. Límite: 20 mensajes/hora por usuario.
+>
+> **Los 12 modos de `hepein`:** `amable` · `alegre` · `toxico` · `sarcastico` ·
+> `formal` · `misterioso` · `peruano` · `gamer` · `amoroso` · `chistoso` ·
+> `depresivo` · `kawaii`. El modo es **por grupo**; sin especificar grupo se
+> cambia el global.
+>
+> **El bot aprende de los mensajes del grupo** para imitar el tono: cuánto se
+> escribe, si se usan emojis y el vocabulario habitual. Con `olvidar` se borra
+> todo lo tuyo. Desde la 8.11.0 esto corre entero en Rust — no necesita Python.
 
 ```
 !gpt Explícame la relatividad
 !gptreset
 !imagine un dragón en el espacio
 !traducir en Hello world
-!tl ja こんにちは
+!hepein peruano          ← cambia la personalidad de este grupo
+!hepein                  ← ver el modo actual y la lista
+!imitar @usuario qué opinás del partido
+!miestilo
+!olvidar                 ← borra tu perfil y tus mensajes guardados
 ```
 
 ---
@@ -307,6 +329,16 @@
 !lego             ← citar imagen (tamaño de ficha por defecto)
 !lego 10          ← citar imagen, fichas chicas (más detalle)
 ```
+
+> **`removebg`, `anime` y `toanime` necesitan Python instalado.** Son los únicos
+> tres comandos que lo necesitan: corren redes neuronales (AnimeGANv2, NAFNet,
+> isnetis) con `torch`, que son ~2 GB y no tienen binario precompilado para ARM
+> —así que en Termux no funcionan—. El resto del bot corre sin Python; si no
+> está, estos tres responden con un mensaje claro en vez de quedarse esperando.
+> Ver `python/requirements-optional.txt`.
+>
+> `lego` e `imagen` también estaban en Python hasta la 8.11.0 y ahora están en
+> Rust: funcionan siempre.
 
 ---
 

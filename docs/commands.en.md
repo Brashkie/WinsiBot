@@ -82,19 +82,41 @@
 
 | Command | Aliases | Cooldown | Permission | Description |
 |---------|---------|:--------:|:----------:|-------------|
-| `gpt` | `ai`, `chatgpt`, `ask` | — | 👤 | Chat with GPT-4o-mini, keeps history per user |
-| `gptreset` | — | — | 👤 | Clear your AI conversation history |
+| `gpt` | `ai`, `chatgpt`, `ask` | — | 👤 | Chat with GPT-4o-mini, keeps per-user history |
+| `gptreset` | — | — | 👤 | Clear your conversation history with the AI |
 | `imagine` | `dalle`, `img`, `imagen` | — | ⭐ | Generate an image with DALL-E 3 |
 | `traducir` | `tl`, `translate`, `tr` | — | 👤 | Translate text to any language (50+ languages) |
+| `hepein` | `bot` | — | 🔑 | Change the **bot's personality** in this group (12 modes) |
+| `imitar` | `imitate`, `hablar`, `copy` | — | 👤 | The bot replies imitating a group member's style |
+| `miestilo` | `mystyle`, `miperfilia` | — | 👤 | Your learned style profile: length, emojis, vocabulary |
+| `estilode` | `styleof`, `perfiliade` | — | 👤 | Another user's style profile |
+| `olvidar` | `forgetme`, `borrariadat` | — | 👤 | **Privacy:** wipes every message of yours that was stored, and your profile |
+| `hepeinstats` | `iaestats`, `trainerinfo` | — | ⭐ | Corpus size: messages, users, groups and disk |
 
-> Priority: **Ollama (local)** → GPT → Claude → Gemini (automatic fallback). Limit: 20 messages/hour per user.
+> **Models:** **Ollama (local)** → GPT → Gemini → Claude, with automatic fallback.
+> If none answer, the bot uses its local template engine: 489 phrases across 12
+> modes, honouring the group's mode and avoiding recent replies — so it always
+> says something. Limit: 20 messages/hour per user.
+>
+> **The 12 `hepein` modes:** `amable` · `alegre` · `toxico` · `sarcastico` ·
+> `formal` · `misterioso` · `peruano` · `gamer` · `amoroso` · `chistoso` ·
+> `depresivo` · `kawaii`. The mode is **per group**; with no group specified it
+> changes the global one.
+>
+> **The bot learns from group messages** to mirror the tone: how much people
+> write, whether they use emojis, and the usual vocabulary. `olvidar` wipes
+> everything of yours. As of 8.11.0 this runs entirely in Rust — no Python needed.
 
 ```
-!gpt Explain relativity
+!gpt Explain relativity to me
 !gptreset
 !imagine a dragon in space
-!traducir es Hello world
-!tl ja こんにちは
+!traducir en Hello world
+!hepein peruano          ← change this group's personality
+!hepein                  ← show the current mode and the list
+!imitar @user what do you think of the match
+!miestilo
+!olvidar                 ← wipes your profile and your stored messages
 ```
 
 ---
@@ -307,6 +329,16 @@
 !lego           ← reply to an image (default brick size)
 !lego 10        ← reply to an image, small bricks (more detail)
 ```
+
+> **`removebg`, `anime` and `toanime` need Python installed.** They are the only
+> three commands that do: they run neural networks (AnimeGANv2, NAFNet, isnetis)
+> on `torch`, which is ~2 GB with no prebuilt ARM binary — so they don't work on
+> Termux. The rest of the bot runs without Python; if it isn't there, these three
+> answer with a clear message instead of hanging. See
+> `python/requirements-optional.txt`.
+>
+> `lego` and `imagen` were also in Python until 8.11.0 and now live in Rust: they
+> always work.
 
 ---
 

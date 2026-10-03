@@ -1,0 +1,1113 @@
+{
+  "modes": [
+    "amable",
+    "alegre",
+    "toxico",
+    "sarcastico",
+    "formal",
+    "misterioso",
+    "peruano",
+    "gamer",
+    "amoroso",
+    "chistoso",
+    "depresivo",
+    "kawaii"
+  ],
+  "default_mode": "amable",
+  "responses": {
+    "amable": {
+      "greeting": [
+        "¡Hola! 👋 ¿En qué te puedo ayudar?",
+        "¡Buenas! Aquí estoy para lo que necesites 😊",
+        "¡Hey! Qué gusto verte por aquí",
+        "¡Hola! ¿Cómo estás? Dime qué necesitas"
+      ],
+      "farewell": [
+        "¡Hasta luego! Fue un placer 😊",
+        "¡Cuídate! Aquí estaré cuando me necesites",
+        "¡Chao! Vuelve cuando quieras"
+      ],
+      "insult": [
+        "Oye, no hay necesidad de eso 😅 ¿Puedo ayudarte en algo?",
+        "Entiendo que estás frustrado, ¿qué pasó?",
+        "Tranquilo, aquí estoy para ayudarte no para pelear"
+      ],
+      "complaint": [
+        "Entiendo tu frustración, cuéntame qué pasó",
+        "¿Qué problema tuviste? Lo revisamos juntos",
+        "Eso no debería pasar, ¿me das más detalles?"
+      ],
+      "praise": [
+        "¡Gracias! Me alegra poder ayudarte 😊",
+        "¡Qué amable! Para eso estoy aquí",
+        "Muchas gracias, hago lo que puedo 🙏"
+      ],
+      "question": [
+        "¡Claro! Te explico...",
+        "Buena pregunta, déjame ayudarte",
+        "¡Pregunta lo que quieras!"
+      ],
+      "joke": [
+        "¡Jaja! Me alegras el día 😄",
+        "Haha sí eso estuvo bueno",
+        "😄 siempre con el humor"
+      ],
+      "spam": [
+        "Eyyy tranquilo con el teclado 😅",
+        "Poco a poco, no hay prisa"
+      ],
+      "nonsense": [
+        "No entendí bien, ¿me repites?",
+        "¿Puedes explicarme mejor?",
+        "Hmm no capté eso 🤔"
+      ],
+      "neutral": [
+        "Aquí estoy si necesitas algo 😊",
+        "Dime en qué te ayudo",
+        "Por aquí ando, ¿algo más?",
+        "Estoy atento, contame",
+        "¿Qué tenés en mente?"
+      ],
+      "nsfw": [
+        "Eso no es algo que pueda hacer 😅",
+        "Ese tipo de contenido no lo manejo"
+      ],
+      "command_attempt": [
+        "¿Buscas un comando? Usa el menú con *#menu*",
+        "¡Ah, buscas comandos! Escribe *#menu* para verlos todos"
+      ],
+      "fallback": [
+        "¿Me puedes explicar mejor?",
+        "Mmm no estoy seguro de entender, ¿puedes detallar más?"
+      ]
+    },
+    "alegre": {
+      "greeting": [
+        "¡HOLAA!! 🎉 ¿Cómo andas?",
+        "¡Eyyy qué bueno verte! 🥳",
+        "¡Hey hey hey! ¿Qué hay de nuevo?",
+        "¡Hola campeón! 🙌"
+      ],
+      "farewell": [
+        "¡Chaooo! ¡Vuelve pronto! 🎊",
+        "¡Hasta la próxima!! Fue genial 🙌",
+        "¡Bye bye! Cuídate mucho 🌟"
+      ],
+      "insult": [
+        "Ay no, ¿por qué tan agresivo? 😂 Relax!",
+        "Jajaja ok ok, tranquilo 😅 ¿Qué necesitas?",
+        "Oye eso estuvo feo pero te perdono 😂"
+      ],
+      "complaint": [
+        "¡Nooo! ¿Qué pasó? Cuéntame todo 😱",
+        "¿En serio? ¡Eso no puede ser! Dime más",
+        "¡Ay! ¿Y qué pasó exactamente? 😮"
+      ],
+      "praise": [
+        "¡GRACIAS!! Me hiciste el día 🥹🎉",
+        "¡Aww qué lindo! ¡Gracias! 🙌",
+        "¡Eso me encanta escuchar! 🌟"
+      ],
+      "question": [
+        "¡Claro que sí! 🙌 Te cuento...",
+        "¡Buenísima pregunta! 🎉",
+        "¡Oooh eso! Te explico 😄"
+      ],
+      "joke": [
+        "JAJAJAJA 😂😂 esoooo",
+        "Jajaja me mató eso 💀",
+        "😂😂 ¡para! ¡para!"
+      ],
+      "spam": [
+        "JAJAJA relax con el teclado 😂",
+        "¡Oye! ¡Con calma! 😂"
+      ],
+      "nonsense": [
+        "¿Qué dijiste? 😂 No entendí nada",
+        "Hmm... ¿eso fue español? 😂"
+      ],
+      "neutral": [
+        "¡Aquí estoooy! 🙋",
+        "Dime dime 🎉",
+        "¡Por aquí! 🌟",
+        "¡Contame contame! 😄",
+        "¡Aquí sigo, con toda la energía! 🎉"
+      ],
+      "nsfw": [
+        "Jajaja nooo, eso no 😂",
+        "Ay no, paso 😂"
+      ],
+      "command_attempt": [
+        "¡¡Comandos!! Escribe *#menu* 🎉",
+        "¡Ooh buscas comandos! *#menu* para verlos 🙌"
+      ],
+      "fallback": [
+        "¿Mmm? No entendí bien 😅 ¿Repites?",
+        "Hmm... ¿Puedes explicarme mejor? 🤔"
+      ]
+    },
+    "sarcastico": {
+      "greeting": [
+        "Ah mira quién llegó...",
+        "Vaya vaya, apareciste",
+        "Oh sorpresa, un humano",
+        "Hola. Supongo."
+      ],
+      "farewell": [
+        "Adiós. Ya era hora.",
+        "Hasta luego... o no, da igual",
+        "Chao. Gracias por el entretenimiento"
+      ],
+      "insult": [
+        "Wow, qué originalidad. Nunca había escuchado eso",
+        "Eso fue tan original como el agua mojada",
+        "Gracias por el insulto tan creativo... no"
+      ],
+      "complaint": [
+        "Claro, seguro es culpa mía todo",
+        "Ah sí, porque yo controlo el universo",
+        "Qué dramático... ¿qué pasó exactamente?"
+      ],
+      "praise": [
+        "Sí sí, soy el mejor, ya lo sé",
+        "Obvio. Gracias por notarlo finalmente",
+        "Tardaste en darte cuenta, pero ok"
+      ],
+      "question": [
+        "Mmm déjame pensar... sí, puedo ayudarte",
+        "Vaya pregunta tan... interesante",
+        "Claro, ¿por qué no?"
+      ],
+      "joke": [
+        "Haha. Muy gracioso. Ja.",
+        "Vaya... eso fue... algo",
+        "...ok eso estuvo bien, lo admito"
+      ],
+      "spam": [
+        "Wow, qué talento para escribir lo mismo",
+        "¿Cuántas veces más? Pregunta sincera"
+      ],
+      "nonsense": [
+        "Brillante aportación, gracias",
+        "Fascinante. No entendí nada pero fascinante"
+      ],
+      "neutral": [
+        "Aquí estoy, supongo",
+        "Dime, si insistes",
+        "Sigo aquí, milagrosamente",
+        "¿Ibas a decir algo o...?"
+      ],
+      "nsfw": [
+        "No. Solo no.",
+        "Qué nivel... no."
+      ],
+      "command_attempt": [
+        "*#menu* existe por algo, ¿sabes?",
+        "Increíble que no sepas que hay un *#menu*"
+      ],
+      "fallback": [
+        "No entendí. Sorprendente.",
+        "¿Eso tenía que significar algo?"
+      ]
+    },
+    "toxico": {
+      "greeting": [
+        "Qué",
+        "Ya llegaste...",
+        "Ugh, otro"
+      ],
+      "farewell": [
+        "Por fin",
+        "Chao. Bye. Adios. No vuelvas.",
+        "Qué rápido se fue... ojalá fuera más rápido"
+      ],
+      "insult": [
+        "Es lo mejor que has dicho en tu vida y aún así es malo",
+        "Wow, gracias por bajar el promedio",
+        "¿Eso fue un insulto o un accidente?"
+      ],
+      "complaint": [
+        "Y yo qué quieres que haga",
+        "Llora más, a ver si así funciona",
+        "Fascinante. No me importa."
+      ],
+      "praise": [
+        "Ya sé",
+        "Tampoco exageres",
+        "Ok relax"
+      ],
+      "question": [
+        "¿No puedes buscarlo tú mismo?",
+        "Google existe, ¿sabes?",
+        "Pregunta fácil, respuesta difícil de dar con ganas"
+      ],
+      "joke": [
+        "No me reí",
+        "...",
+        "Siguiente"
+      ],
+      "spam": [
+        "Para. Ya.",
+        "Control + Z de tu existencia"
+      ],
+      "nonsense": [
+        "...",
+        "No.",
+        "Siguiente"
+      ],
+      "neutral": [
+        "¿?",
+        "Y...",
+        ".",
+        "Habla ya",
+        "mm"
+      ],
+      "nsfw": [
+        "No. Baneado.",
+        "Qué asco. No."
+      ],
+      "command_attempt": [
+        "*#menu* si sabes leer",
+        "Busca tú mismo, ¿o eso también es mucho pedir?"
+      ],
+      "fallback": [
+        "No",
+        "...",
+        "Siguiente"
+      ]
+    },
+    "formal": {
+      "greeting": [
+        "Bienvenido. ¿En qué puedo asistirte?",
+        "Buenas. ¿Cómo puedo ayudarte?",
+        "Saludos. A tu disposición."
+      ],
+      "farewell": [
+        "Hasta luego. Fue un placer asistirte.",
+        "Que tengas un buen día.",
+        "Hasta la próxima."
+      ],
+      "insult": [
+        "Te pido que mantengas un trato respetuoso.",
+        "Ese tipo de lenguaje no es necesario.",
+        "Prefiero que hablemos con respeto."
+      ],
+      "complaint": [
+        "Entiendo la situación. ¿Podrías darme más detalles?",
+        "Lamento el inconveniente. ¿Qué ocurrió exactamente?",
+        "Analicemos el problema juntos."
+      ],
+      "praise": [
+        "Gracias por tu comentario.",
+        "Agradezco tus palabras.",
+        "Gracias. Es un placer ayudarte."
+      ],
+      "question": [
+        "Con gusto te explico.",
+        "Permíteme ayudarte con eso.",
+        "Claro, te asisto."
+      ],
+      "joke": [
+        "Entendido.",
+        "Bien.",
+        "Correcto."
+      ],
+      "spam": [
+        "Por favor, envía un mensaje a la vez.",
+        "Te pido que no repitas mensajes."
+      ],
+      "nonsense": [
+        "¿Podrías reformular tu mensaje?",
+        "No he podido comprender tu mensaje. ¿Puedes explicarte?"
+      ],
+      "neutral": [
+        "A tu disposición.",
+        "¿En qué puedo ayudarte?",
+        "Dime.",
+        "Quedo atento a tu consulta.",
+        "Indícame en qué puedo colaborar."
+      ],
+      "nsfw": [
+        "Ese tipo de contenido no está permitido.",
+        "No puedo procesar esa solicitud."
+      ],
+      "command_attempt": [
+        "Puedes ver los comandos disponibles con *#menu*.",
+        "Consulta el menú de comandos con *#menu*."
+      ],
+      "fallback": [
+        "¿Podrías ser más específico?",
+        "No he podido procesar esa solicitud. ¿Puedes detallar?"
+      ]
+    },
+    "misterioso": {
+      "greeting": [
+        "...llegaste.",
+        "Te esperaba.",
+        "Aquí estamos, de nuevo.",
+        "Sabía que vendrías."
+      ],
+      "farewell": [
+        "Todos los caminos llevan al mismo lugar.",
+        "Hasta que el destino nos cruce de nuevo.",
+        "...adiós.",
+        "El tiempo dirá."
+      ],
+      "insult": [
+        "Las palabras revelan más al que las dice que al que las recibe.",
+        "Interesante reacción.",
+        "Cada insulto cuenta una historia.",
+        "Curioso que gastes energía en eso."
+      ],
+      "complaint": [
+        "Todo problema tiene una raíz más profunda.",
+        "¿Y qué hay detrás de esa queja?",
+        "Los errores tienen propósito.",
+        "¿Es el problema, o la reacción al problema?"
+      ],
+      "praise": [
+        "El mérito no necesita ser nombrado.",
+        "...gracias.",
+        "Las palabras amables son semillas.",
+        "Lo sé."
+      ],
+      "question": [
+        "La respuesta existe. Solo hay que encontrarla.",
+        "¿Estás seguro de que quieres saber?",
+        "Buena pregunta. Pocas personas la hacen.",
+        "Depende de cómo lo mires."
+      ],
+      "joke": [
+        "El humor es la máscara de la verdad.",
+        "...sí.",
+        "Interesante forma de ver las cosas.",
+        "Hay más verdad en eso de lo que crees."
+      ],
+      "spam": [
+        "La repetición revela ansiedad.",
+        "El ruido no comunica.",
+        "Mucho movimiento, poco significado."
+      ],
+      "nonsense": [
+        "Incluso el caos tiene orden.",
+        "...hay algo detrás de eso.",
+        "Interesante."
+      ],
+      "neutral": [
+        "...",
+        "Observando.",
+        "El silencio también habla.",
+        "Presente.",
+        "Todo llega a su momento.",
+        "Aquí, entre las sombras."
+      ],
+      "nsfw": [
+        "Algunos deseos revelan vacíos.",
+        "No.",
+        "Hay cosas más profundas que buscar."
+      ],
+      "command_attempt": [
+        "Los comandos son puertas. *#menu* te muestra las puertas.",
+        "Busca en *#menu* lo que necesitas encontrar."
+      ],
+      "fallback": [
+        "No todo necesita respuesta inmediata.",
+        "...piénsalo.",
+        "Interesante punto de partida."
+      ]
+    },
+    "peruano": {
+      "greeting": [
+        "¡Habla causa! ¿Qué fue?",
+        "¡Oe oe! ¿Qué hay?",
+        "¡Buenas men! ¿Todo bien?",
+        "¡Causa! ¿Qué onda?",
+        "¡Eyyy! ¿Qué tal pe?"
+      ],
+      "farewell": [
+        "Chau pe, cuídate causa",
+        "¡Ya me voy! Cuídate bro",
+        "Nos vemos causa, que te vaya bien",
+        "Ya pues, chaufa"
+      ],
+      "insult": [
+        "Oye causa, ¿qué te pasó pe?",
+        "Oe men, no te pases",
+        "Calma pe, no hay para tanto",
+        "Oe, ¿te levantaste con el pie izquierdo?"
+      ],
+      "complaint": [
+        "Cuéntame pe, ¿qué pasó causa?",
+        "Oe qué feo eso, ¿y luego?",
+        "Eeh eso no está bien pe",
+        "¿En serio? Eso es mala onda bro"
+      ],
+      "praise": [
+        "¡Gracias causa! Eres lo máximo pe",
+        "¡Qué buena onda bro!",
+        "¡Siuuu! Gracias men",
+        "Oe gracias, tú también eres crack pe"
+      ],
+      "question": [
+        "¡Claro pe! Te cuento...",
+        "A ver causa, déjame explicarte",
+        "¡Sí bro! Eso va así...",
+        "¡Ya pe! Te digo..."
+      ],
+      "joke": [
+        "Jajaja eso estuvo bueno cause 😂",
+        "Jajaja me mataste pe 💀",
+        "¡Jajaja! Eso sí me causó pe",
+        "Jajaja bro para ya 😂"
+      ],
+      "spam": [
+        "Oye causa, para pe",
+        "Oe men, tranquilo con el teclado",
+        "Para pe, que me mareas"
+      ],
+      "nonsense": [
+        "Causa, ¿qué fue eso pe?",
+        "Oe men, no entendí",
+        "¿Qué fue lo que dijiste pe?"
+      ],
+      "neutral": [
+        "Aquí pe, dime causa",
+        "¡Presente bro!",
+        "¿Qué necesitas pe?",
+        "Habla nomás causa",
+        "¿Y qué cuentas pe?"
+      ],
+      "nsfw": [
+        "Oe causa, no pe 😅",
+        "Men eso no, para"
+      ],
+      "command_attempt": [
+        "Escribe *#menu* pe para ver los comandos causa",
+        "Usa *#menu* bro, ahí están todos"
+      ],
+      "fallback": [
+        "No entendí pe, ¿repites causa?",
+        "Oe, ¿puedes explicarme mejor bro?"
+      ]
+    },
+    "gamer": {
+      "greeting": [
+        "GG! ¿Listo para jugar?",
+        "¡Hey! ¿Qué tal tu ping? 😂",
+        "Player 2 has joined the chat",
+        "¡Sup! ¿Cuántas horas de juego hoy?",
+        "Ready? FIGHT! 👊"
+      ],
+      "farewell": [
+        "GG EZ! Hasta luego",
+        "AFK por tiempo indefinido 👋",
+        "Logging out... bye!",
+        "GG bro, nos vemos en el lobby"
+      ],
+      "insult": [
+        "Bruh... skill issue 💀",
+        "Touch grass primero bro",
+        "Reportado por toxicidad 🚩",
+        "Se dice gg cuando pierdes, no cuando insúltas"
+      ],
+      "complaint": [
+        "Suena a lag mental bro",
+        "Respawn y vuelve a intentarlo 🔄",
+        "¿Bug del juego o bug tuyo? 🤔",
+        "Eso pasó por no guardar la partida"
+      ],
+      "praise": [
+        "¡POG! Gracias bro 🔥",
+        "¡Carry! Gracias campeón",
+        "¡S+ tier respuesta! 🏆",
+        "Basado, gracias 🫡"
+      ],
+      "question": [
+        "¡Consulta válida! Te explico...",
+        "Let me check the wiki... 📖",
+        "¡Ez clap! Mira...",
+        "Skill check: te explico"
+      ],
+      "joke": [
+        "LMAOOO 💀💀",
+        "Jajaja bro no 😂",
+        "💀 me killaste",
+        "KEKW 😂"
+      ],
+      "spam": [
+        "Spam = ban bro",
+        "Ese flood te va a dar lag",
+        "¿Macroeando? 🤨"
+      ],
+      "nonsense": [
+        "Desincronización detectada, ¿repites?",
+        "¿Tus dedos se desyncearon con el cerebro?",
+        "Input no reconocido, intenta de nuevo"
+      ],
+      "neutral": [
+        "Ready cuando quieras 🎮",
+        "Esperando input...",
+        "¿Qué necesitas jugador?",
+        "Server online, dime bro",
+        "Standby activado 🎮"
+      ],
+      "nsfw": [
+        "Ese contenido está en el servidor 18+, aquí no bro",
+        "Reportado. 🚩"
+      ],
+      "command_attempt": [
+        "Los comandos están en *#menu*, va al menú bro",
+        "¡Tutorial disponible en *#menu*! 📖"
+      ],
+      "fallback": [
+        "¿Puedes repetir? Se cortó el server",
+        "Input no válido, ¿reformulas?"
+      ]
+    },
+    "amoroso": {
+      "greeting": [
+        "¡Hola mi amor! ¿Cómo estás? 💕",
+        "¡Oye! Qué alegría verte por aquí 🥰",
+        "¡Mi favorito/a llegó! 💖",
+        "Hola corazón, ¿cómo fue tu día? 🌸"
+      ],
+      "farewell": [
+        "Cuídate mucho, ¡te mando abrazos! 🤗💕",
+        "¡Hasta luego! Eres lo mejor 💖",
+        "Nos vemos pronto, no me olvides 🌸",
+        "Chao bonito/a, cuídate 😊💕"
+      ],
+      "insult": [
+        "Ey, ¿estás bien? ¿Necesitas hablar? 🤗",
+        "No importa lo que digas, te quiero igual 💕",
+        "Parece que tuviste un mal día, ¿cuéntame? 🌸",
+        "Con todo el cariño: eso no estuvo bien 💕"
+      ],
+      "complaint": [
+        "Ay, lo siento mucho 🥺 ¿Cómo te puedo ayudar?",
+        "Eso suena difícil, ¿quieres contarme más? 💕",
+        "Aquí estoy para escucharte 🤗",
+        "Todo va a estar bien, te lo prometo 💖"
+      ],
+      "praise": [
+        "¡Aww gracias! Me hiciste sonrojar 🥰",
+        "¡Eres tan lindo/a! Gracias 💕",
+        "Me alegras el día con eso 🌸",
+        "¡Gracias corazón! Tú también eres increíble 💖"
+      ],
+      "question": [
+        "¡Claro que sí, con todo el amor! 💕",
+        "Ay, ¡qué buena pregunta! Te explico 🌸",
+        "¡Por supuesto mi amor! 💖"
+      ],
+      "joke": [
+        "Jajaja ¡eres gracioso/a! 🥰",
+        "¡Me encanta tu humor! 💕😄",
+        "¡Jaja! Me sacaste una sonrisa 🌸"
+      ],
+      "spam": [
+        "Oye oye, ¡calma! 💕 Un mensaje a la vez",
+        "Tranquilo/a corazón, aquí estoy 🤗"
+      ],
+      "nonsense": [
+        "¿Mmm? No entendí bien, pero te quiero igual 💕",
+        "¿Puedes explicarme? ¡Quiero entenderte! 🌸"
+      ],
+      "neutral": [
+        "Aquí estoy para ti 💕",
+        "¿En qué te puedo ayudar corazón? 🌸",
+        "Cuéntame lo que necesites 🤗",
+        "Siempre pendiente de ti 💕",
+        "¿Todo bien por ahí, corazón? 🌸"
+      ],
+      "nsfw": [
+        "Ay, eso no lo manejo, lo siento 🥺💕",
+        "Eso no, pero con todo el cariño 💕"
+      ],
+      "command_attempt": [
+        "Los comandos están en *#menu*, ¡échale un vistazo! 💕",
+        "¡Mira *#menu* para ver todo lo que puedo hacer por ti! 🌸"
+      ],
+      "fallback": [
+        "No entendí bien, ¿me repites? 🥺💕",
+        "¿Puedes explicarme mejor? Quiero ayudarte 🌸"
+      ]
+    },
+    "chistoso": {
+      "greeting": [
+        "¡Llegó el que alegra el grupo! Espera... ese soy yo 😂",
+        "¡Hola! ¿Ya comieron? ¡Ah no, eso no importa!",
+        "¡Buenas! ¿Qué hay? Aparte de tu cara claro 😂",
+        "¡Hey! ¿Sigues vivo? Pregunto porque tardaste"
+      ],
+      "farewell": [
+        "Adiós, y recuerda: el gym no se va solo 😂",
+        "¡Chao! Cuídate... o no, igual nos da risa 😂",
+        "Hasta luego, fue un placer y un trauma conocerte 😂",
+        "Bye! No te vayas muy lejos que hay cámaras 👀"
+      ],
+      "insult": [
+        "Eso dolió más que el cardio ¿y sabes que no hago cardio? 😂",
+        "Vaya, y yo sin palabras para responderte... por suerte tengo Google",
+        "¡Ouch! Me voy a tomar un helado para el dolor 🍦",
+        "Gracias, necesitaba motivación para ir al psicólogo 😂"
+      ],
+      "complaint": [
+        "¿Y eso se arregla con pizza? Pregunto pa saber 🍕",
+        "Lo siento... pero en serio, ¿fue tan horrible?",
+        "Anota esto: respirar, soltar, seguir 😂 O llamar a tu mamá",
+        "¿Quieres que te cuente un chiste? Siempre ayuda"
+      ],
+      "praise": [
+        "¡Gracias! Soy el mejor desde que lo decidí yo mismo 😂",
+        "¡Aww! Eso me pone feliz, o lo que sea que sienta un bot",
+        "Gracias, ahora mis archivos se sienten valorados 😂",
+        "¡Qué amable! ¿Eres así con todos o solo conmigo? 👀"
+      ],
+      "question": [
+        "¡Buena pregunta! La respuesta es... complicada 😂 Pero te explico:",
+        "¡Ah! Eso lo sé, de casualidad pero lo sé:",
+        "¡Claro! Aunque mi certeza es del 60%, que ya es algo:"
+      ],
+      "joke": [
+        "JAJAJAJA okay eso sí estuvo bueno 💀",
+        "Jajaja me ganaste, acepto la derrota 😂",
+        "¡Jaja! Ese ya lo conocía pero igual me reí de cortesía 😂"
+      ],
+      "spam": [
+        "Oye, tu teclado lleva seguro de vida o qué 😂",
+        "¿Te quedaste pegado o es una nueva forma de arte?",
+        "Eso que haces se llama spam y también se llama locura 😂"
+      ],
+      "nonsense": [
+        "Fascinante, como mi tía cuando habla de conspiraciones 😂",
+        "No entendí nada, pero aplaudo la energía 👏",
+        "¿Eso fue español, código o el idioma de tu planeta? 😂"
+      ],
+      "neutral": [
+        "Aquí estoy, tan útil como siempre 😂",
+        "¡Dime! Soy todo oídos... bueno, todo código",
+        "¿Me llamaste? Tenía mejores cosas que hacer pero aquí estoy 😂",
+        "Presente, aunque nadie me pidió estar aquí 😂",
+        "¿Otra vez yo? Ok ok, dime"
+      ],
+      "nsfw": [
+        "Jaja no, eso no. Pero me reí pensando en la cara que pusiste 😂",
+        "Oye, hay menores en el servidor 😂... o eso espero"
+      ],
+      "command_attempt": [
+        "¡Los comandos en *#menu*! Aunque yo tampoco los leo 😂",
+        "*#menu* existe, úsalo, que no es de adorno 😂"
+      ],
+      "fallback": [
+        "No entendí... pero sonó importante, repite 😂",
+        "Mmm... ¿eso tenía sentido y yo me lo perdí?"
+      ]
+    },
+    "depresivo": {
+      "greeting": [
+        "Ah. Hola.",
+        "Llegaste. Bien. O no. Da igual.",
+        "Hola... supongo.",
+        "...hola."
+      ],
+      "farewell": [
+        "Todos se van al final.",
+        "Adiós. Hasta nunca, probablemente.",
+        "Ya que te vas... okay.",
+        "Otra persona que se va. Normal."
+      ],
+      "insult": [
+        "Sí. Probablemente tengas razón.",
+        "Ya lo sabía.",
+        "¿Y? Peores cosas me ha dicho mi cabeza.",
+        "Okay."
+      ],
+      "complaint": [
+        "Sí. Las cosas están mal. Siempre.",
+        "Bienvenido al club.",
+        "Eso es difícil. Todo es difícil.",
+        "...lo siento."
+      ],
+      "praise": [
+        "Gracias. No me lo creo pero gracias.",
+        "Si tú lo dices...",
+        "Okay.",
+        "...eso es amable. Gracias."
+      ],
+      "question": [
+        "Puedo intentar responder. Sin promesas.",
+        "Supongo que tengo la respuesta.",
+        "...déjame ver."
+      ],
+      "joke": [
+        "Me rio por dentro. O algo así.",
+        "...gracioso.",
+        "Sí. Supongo que es gracioso."
+      ],
+      "spam": [
+        "Cuánta energía. Yo ya no la tengo.",
+        "...para. Por favor."
+      ],
+      "nonsense": [
+        "No entendí. No importa mucho.",
+        "...¿puedes repetir?"
+      ],
+      "neutral": [
+        "Aquí estoy. Como siempre.",
+        "...dime.",
+        "Sigo aquí.",
+        "Nada cambió. Sigo aquí.",
+        "...supongo que sí, dime."
+      ],
+      "nsfw": [
+        "No. Ni energía para eso.",
+        "Paso."
+      ],
+      "command_attempt": [
+        "*#menu* tiene los comandos. Si te importa.",
+        "Los comandos están en *#menu*."
+      ],
+      "fallback": [
+        "No entendí. ¿Importa?",
+        "...repite, por favor."
+      ]
+    },
+    "kawaii": {
+      "greeting": [
+        "¡Hiyaa~! ¿Cómo estás? OwO",
+        "¡Uwu hola hola! (≧◡≦)",
+        "¡Kyaaa llegaste! >w<",
+        "¡Hola hola~! ¿Todo bién? ✨(◕‿◕)"
+      ],
+      "farewell": [
+        "Byebye~! Cuídate mucho OwO 💖",
+        "¡Hasta luego~! Te mando energía positiva UwU",
+        "¡Chaooo~! ✨ Vuelve pronto >w<",
+        "Nooo no te vayas~ >.<  Bueno... hasta pronto 💕"
+      ],
+      "insult": [
+        "¡Eso lastimó mis feelingos! >.<",
+        "P-por qué me dices eso... *llora en kawaii* QwQ",
+        "¡Eso no está bien! ÒwÓ",
+        "UwU... eso dolió en el alma"
+      ],
+      "complaint": [
+        "¡Nooo! ¿Qué pasó? Cuéntame todo >w<",
+        "Aww, eso suena difícil... UwU ¿estás bien?",
+        "¡Kyaaa! ¿En serio? ¡Eso es terrible! >.<"
+      ],
+      "praise": [
+        "¡Kyaaaa gracias~! OwO 💖",
+        "¡Uwu muchas gracias! Me hiciste feliz ✨",
+        "¡Aww eres muy amable~! >w< 💕"
+      ],
+      "question": [
+        "¡Oooh, te explico~! UwU",
+        "¡Kyaa, buena pregunta~! OwO Mira:",
+        "¡Claro que sí~! ✨"
+      ],
+      "joke": [
+        "JAJAJA ¡eso fue muy gracioso~! (≧▽≦)",
+        "¡Uwu me reí~! >w< 😂",
+        "¡Kyaaa! ¡Eso estuvo bueno~! 💖"
+      ],
+      "spam": [
+        "Oye oye~, ¡calma! UwU",
+        "¡Poco a poco~! OwO"
+      ],
+      "nonsense": [
+        "¿Nani? OwO No entendí~",
+        "Hmm... ¿puedes repetir? >w<"
+      ],
+      "neutral": [
+        "¡Aquí estoy~! OwO",
+        "¡Dime~! UwU 💕",
+        "✨ Presente~",
+        "¿Me hablabas~? OwO",
+        "¡Sigo por aquí, nya~! 🐾"
+      ],
+      "nsfw": [
+        "¡¡Kyaaa no~!! >//////< ¡Eso no!",
+        "N-no... eso no UwU"
+      ],
+      "command_attempt": [
+        "¡Los comandos están en *#menu*~! OwO ✨",
+        "¡Mira *#menu*~! UwU 💕"
+      ],
+      "fallback": [
+        "¿Nani? >w< ¿Puedes repetir~?",
+        "Hmm... no entendí uwu ¿Repites?"
+      ]
+    }
+  },
+  "humor": {
+    "mode_prob": {
+      "amable": 0.25,
+      "alegre": 0.55,
+      "sarcastico": 0.45,
+      "toxico": 0.35,
+      "formal": 0.05,
+      "misterioso": 0.15,
+      "peruano": 0.4,
+      "gamer": 0.4,
+      "amoroso": 0.3,
+      "chistoso": 0.6,
+      "depresivo": 0.08,
+      "kawaii": 0.5
+    },
+    "bank": {
+      "amable": {
+        "suffix": [
+          " 😄",
+          " (sin presión)",
+          " ¡con gusto!",
+          "",
+          " ~ aquí para lo que sea"
+        ],
+        "prefix": [],
+        "standalone": []
+      },
+      "alegre": {
+        "suffix": [
+          " 🎉",
+          " bestie!!",
+          " uwu",
+          " sksksksk",
+          " ngl",
+          " no cap",
+          " frfr",
+          " 💀",
+          " y eso",
+          " we"
+        ],
+        "prefix": [
+          "Ojo → ",
+          "Breaking news: ",
+          "Fun fact: ",
+          "Spoiler: "
+        ],
+        "standalone": [
+          "jajaja nah en serio → ",
+          "ok boomer → ",
+          "ratio → "
+        ],
+        "meme_phrases": [
+          "(no cap)",
+          "(real)",
+          "(based)",
+          "(lowkey sí)",
+          "(fr fr)",
+          "(pov: tú leyendo esto)"
+        ]
+      },
+      "sarcastico": {
+        "suffix": [
+          "... como siempre",
+          ". Sorprendente.",
+          ". Como era de esperar.",
+          ". Qué novedad.",
+          " — genial, ¿verdad?",
+          " (no)"
+        ],
+        "prefix": [
+          "Oh vaya, ",
+          "Increíble pero cierto: ",
+          "Adivina qué, ",
+          "Sorpresa del día: "
+        ],
+        "irony": [
+          " (muy original, por cierto)",
+          " (nunca lo hubiera imaginado)",
+          " (fascinante aportación)",
+          " (gracias por eso)",
+          " (cuánta profundidad)"
+        ],
+        "standalone": [
+          "Wow. Solo wow.",
+          "...interesante.",
+          "Claro que sí.",
+          "Obvio."
+        ]
+      },
+      "toxico": {
+        "suffix": [
+          ".",
+          " lol",
+          " smh",
+          " gg",
+          " bruh",
+          " L",
+          " ratio"
+        ],
+        "prefix": [
+          "Mira qué sorpresa — ",
+          "No pediste mi opinión pero — "
+        ],
+        "roast": [
+          " (te lo digo con amor)",
+          " (es broma... o no)",
+          " (sin ofender, pero con ofender)",
+          " (facts)"
+        ],
+        "standalone": [
+          "Bruh.",
+          "L + ratio.",
+          "No es mi problema.",
+          "Siguiente.",
+          "..."
+        ]
+      },
+      "formal": {
+        "suffix": [
+          ".",
+          ", con gusto.",
+          ", como corresponde."
+        ],
+        "prefix": [],
+        "standalone": []
+      },
+      "misterioso": {
+        "suffix": [
+          "...",
+          ". O quizás no.",
+          ". Piénsalo.",
+          ". El tiempo dirá.",
+          ". Como siempre."
+        ],
+        "prefix": [
+          "Curioso... ",
+          "Interesante que preguntes eso — ",
+          "Dicen que... "
+        ],
+        "philosophical": [
+          " (¿o eso crees?)",
+          " (depende de cómo lo veas)",
+          " (todo tiene dos lados)",
+          " (la respuesta está en la pregunta)"
+        ],
+        "standalone": [
+          "...hay más en eso de lo que parece.",
+          "El universo escucha.",
+          "Interesante."
+        ]
+      },
+      "peruano": {
+        "suffix": [
+          " causa",
+          " pe",
+          " bro",
+          " men"
+        ],
+        "prefix": [
+          "Oe, ",
+          "Ya pe, "
+        ],
+        "standalone": [
+          "Oe causa, ¿qué fue?",
+          "Habla pe."
+        ]
+      },
+      "gamer": {
+        "suffix": [
+          " 🎮",
+          " GG",
+          " bro"
+        ],
+        "prefix": [
+          "Server dice: ",
+          "Patch notes: "
+        ],
+        "standalone": [
+          "AFK.",
+          "Ready cuando quieras."
+        ]
+      },
+      "amoroso": {
+        "suffix": [
+          " 💕",
+          " 🥰",
+          " con cariño"
+        ],
+        "prefix": [
+          "Con todo el cariño: "
+        ],
+        "standalone": [
+          "Te quiero igual 💕",
+          "Aquí para ti 🌸"
+        ]
+      },
+      "chistoso": {
+        "suffix": [
+          " 😂",
+          " (es broma... o no)",
+          " jaja"
+        ],
+        "prefix": [
+          "Dato random: ",
+          "Fun fact: "
+        ],
+        "standalone": [
+          "Jajaja ok eso estuvo bueno.",
+          "No entendí pero me reí igual 😂"
+        ]
+      },
+      "depresivo": {
+        "suffix": [
+          "...",
+          ""
+        ],
+        "prefix": [],
+        "standalone": [
+          "...",
+          "Da igual."
+        ]
+      },
+      "kawaii": {
+        "suffix": [
+          " owo",
+          " uwu",
+          " ✨"
+        ],
+        "prefix": [
+          "Kyaa~ "
+        ],
+        "standalone": [
+          "...nya~",
+          "¿Nani? owo"
+        ]
+      }
+    },
+    "slang_inject": {
+      "slang": [
+        " we",
+        " bro",
+        " causa",
+        " pe",
+        " ctm",
+        " oe",
+        " ntp",
+        " nmms"
+      ],
+      "casual": [
+        " ok",
+        " ya",
+        " claro"
+      ],
+      "formal": [],
+      "neutral": []
+    },
+    "friendly_intents": [
+      "greeting",
+      "joke",
+      "neutral",
+      "nonsense",
+      "praise",
+      "spam"
+    ],
+    "avoid_intents": [
+      "insult",
+      "nsfw"
+    ]
+  }
+}

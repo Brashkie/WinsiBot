@@ -1,0 +1,230 @@
+{
+  "commands": [
+    {
+      "name": "rw",
+      "aliases": [
+        "roll",
+        "gacha",
+        "rollimage",
+        "rollwaifu"
+      ],
+      "category": "rpg",
+      "usage": "!rw [fuente]",
+      "desc": "Obtiene un personaje aleatorio. Fuentes disponibles: marvel, pokedex. Ejemplo: !rw marvel · !rw pokedex. Cooldown: 29 minutos por usuario."
+    },
+    {
+      "name": "c",
+      "aliases": [
+        "claim"
+      ],
+      "category": "rpg",
+      "usage": "!c  (respondiendo al mensaje del personaje)",
+      "desc": "Reclama el personaje activo en el grupo. Debes responder directamente al mensaje del personaje y escribir !c. El personaje expira en 10 minutos si nadie lo reclama."
+    },
+    {
+      "name": "steal",
+      "category": "rpg",
+      "usage": "!steal @usuario NombrePersonaje",
+      "desc": "Roba un personaje del inventario de otro usuario. El otro jugador tiene un tiempo para defenderse."
+    },
+    {
+      "name": "inv",
+      "aliases": [
+        "inventory",
+        "inventario"
+      ],
+      "category": "rpg",
+      "usage": "!inv [@usuario]",
+      "desc": "Muestra tu inventario de personajes reclamados. Si mencionas a alguien, muestra el inventario de esa persona."
+    },
+    {
+      "name": "wimage",
+      "aliases": [
+        "wi",
+        "waifuimage"
+      ],
+      "category": "rpg",
+      "usage": "!wimage NombrePersonaje",
+      "desc": "Muestra una imagen aleatoria de un personaje. Busca en todas las fuentes (marvel, pokedex). También acepta nombres en español (traduce automáticamente). Ejemplo: !wimage Spider-Man · !wimage hombre araña · !wimage Pikachu"
+    },
+    {
+      "name": "winfo",
+      "aliases": [
+        "waifuinfo",
+        "charinfo"
+      ],
+      "category": "rpg",
+      "usage": "!winfo NombrePersonaje",
+      "desc": "Muestra información detallada de un personaje: género, valor, quién lo tiene, fecha de reclamo, fuente, puesto, último voto, habilidad y debilidad."
+    },
+    {
+      "name": "prestige",
+      "category": "rpg",
+      "usage": "!prestige",
+      "desc": "Sube de rango (prestige) usando tus personajes acumulados. Resetea progreso a cambio de un rango permanente más alto."
+    },
+    {
+      "name": "mascota",
+      "category": "rpg",
+      "usage": "!mascota [acción]",
+      "desc": "Gestiona tu mascota virtual: alimentar, jugar, ver estado, evolucionar."
+    },
+    {
+      "name": "regalo",
+      "category": "rpg",
+      "usage": "!regalo @usuario NombrePersonaje",
+      "desc": "Regala uno de tus personajes a otro usuario del grupo."
+    },
+    {
+      "name": "arena",
+      "category": "games",
+      "usage": "!arena @usuario",
+      "desc": "Inicia un combate PvP contra otro jugador. Los personajes del inventario de cada uno pelean entre sí."
+    },
+    {
+      "name": "quiz",
+      "category": "games",
+      "usage": "!quiz",
+      "desc": "Pregunta de trivia aleatoria. El primero en responder correctamente gana puntos."
+    },
+    {
+      "name": "adivinar",
+      "category": "games",
+      "usage": "!adivinar",
+      "desc": "Minijuego Draw & Guess: adivina el personaje a partir de pistas visuales."
+    },
+    {
+      "name": "menu",
+      "aliases": [
+        "help",
+        "ayuda",
+        "start"
+      ],
+      "category": "general",
+      "usage": "!menu",
+      "desc": "Muestra el menú principal del bot con todas las categorías disponibles."
+    },
+    {
+      "name": "categoria",
+      "aliases": [
+        "cat",
+        "cats",
+        "categorias"
+      ],
+      "category": "general",
+      "usage": "!categoria [nombre]",
+      "desc": "Lista los comandos de una categoría. Sin argumento: muestra todas las categorías. Ejemplo: !categoria rpg · !categoria juegos"
+    },
+    {
+      "name": "ping",
+      "category": "general",
+      "usage": "!ping",
+      "desc": "Muestra la latencia del bot y confirma que está activo."
+    },
+    {
+      "name": "info",
+      "category": "general",
+      "usage": "!info",
+      "desc": "Información del bot: versión, comandos totales, uptime."
+    },
+    {
+      "name": "sticker",
+      "aliases": [
+        "s",
+        "stiker"
+      ],
+      "category": "sticker",
+      "usage": "!sticker  (enviando o respondiendo una imagen/video)",
+      "desc": "Convierte una imagen o video corto en sticker de WhatsApp."
+    },
+    {
+      "name": "stickerpack",
+      "category": "sticker",
+      "usage": "!stickerpack NombrePack",
+      "desc": "Busca y muestra un pack de stickers por nombre."
+    },
+    {
+      "name": "yt",
+      "aliases": [
+        "youtube"
+      ],
+      "category": "downloader",
+      "usage": "!yt URL",
+      "desc": "Descarga un video de YouTube. Envía el enlace y el bot manda el video."
+    },
+    {
+      "name": "tt",
+      "aliases": [
+        "tiktok"
+      ],
+      "category": "downloader",
+      "usage": "!tt URL",
+      "desc": "Descarga un video de TikTok sin marca de agua."
+    },
+    {
+      "name": "ig",
+      "aliases": [
+        "instagram"
+      ],
+      "category": "downloader",
+      "usage": "!ig URL",
+      "desc": "Descarga un video o reels de Instagram."
+    },
+    {
+      "name": "ttsearch",
+      "category": "downloader",
+      "usage": "!ttsearch búsqueda",
+      "desc": "Busca videos en TikTok por palabras clave y devuelve el primero."
+    },
+    {
+      "name": "apk",
+      "aliases": [
+        "downloadapk"
+      ],
+      "category": "downloader",
+      "usage": "!apk NombreApp",
+      "desc": "Busca y descarga un APK de Android por nombre de aplicación."
+    },
+    {
+      "name": "hepein",
+      "category": "admin",
+      "usage": "!hepein on|off",
+      "desc": "Activa o desactiva la IA Hepein en el grupo. Solo admins. Cuando está activo, Hepein responde cuando lo mencionan."
+    },
+    {
+      "name": "ban",
+      "category": "admin",
+      "usage": "!ban @usuario [razón]",
+      "desc": "Banea a un usuario del bot (no del grupo). Solo admins y owner."
+    },
+    {
+      "name": "warn",
+      "category": "admin",
+      "usage": "!warn @usuario [razón]",
+      "desc": "Da una advertencia a un usuario. Solo admins."
+    },
+    {
+      "name": "kick",
+      "category": "admin",
+      "usage": "!kick @usuario",
+      "desc": "Expulsa a un usuario del grupo. Solo admins del grupo."
+    },
+    {
+      "name": "antilink",
+      "aliases": [
+        "antilinks"
+      ],
+      "category": "admin",
+      "usage": "!antilink on|off",
+      "desc": "Activa/desactiva la protección antilinks en el grupo. Solo admins."
+    }
+  ],
+  "category_labels": {
+    "rpg": "🎴 RPG / Gacha",
+    "games": "🕹️ Juegos",
+    "general": "🔧 General",
+    "sticker": "🖼️ Stickers",
+    "downloader": "⬇️ Descargas",
+    "admin": "🛡️ Admin"
+  }
+}

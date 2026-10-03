@@ -1,4 +1,6 @@
-import { pythonPost, pythonGet } from '@lib/pythonBridge.js'
+import {
+  getPersonalityModes, setPersonalityMode, resetPersonalityMode,
+} from '@lib/pythonBridge.js'
 import { hepein }               from '@lib/hepein.js'
 
 export const MODES = [
@@ -41,14 +43,14 @@ interface PersonalityModeResponse {
   group_modes: Record<string, string>
 }
 
-// ─── Bridge a Flask/Python ────────────────────────────────────────────────────
+// ─── Bridge a Rust ────────────────────────────────────────────────────────────
+// Los modos los guarda personality.rs en la misma base que el resto, en vez de
+// la tabla `personality_config` que Python creaba en su propio SQLite.
 
 export async function getMode(jid?: string): Promise<PersonalityMode> {
   try {
-    const res = await pythonGet<PersonalityModeResponse>('/api/v1/ai/personality/mode')
-    const mode = jid
-      ? res?.data?.group_modes?.[jid] ?? res?.data?.current
-      : res?.data?.current
+    const res = await getPersonalityModes()
+    const mode = jid ? res?.group_modes?.[jid] ?? res?.current : res?.current
     return (MODES.includes(mode as PersonalityMode) ? mode : 'amable') as PersonalityMode
   } catch {
     return 'amable'
@@ -57,11 +59,7 @@ export async function getMode(jid?: string): Promise<PersonalityMode> {
 
 export async function setMode(mode: PersonalityMode, jid?: string): Promise<boolean> {
   try {
-    const res = await pythonPost<{ success: boolean }>('/api/v1/ai/personality/mode', {
-      mode,
-      jid: jid ?? null,
-    })
-    return res?.success ?? false
+    return await setPersonalityMode(mode, jid ?? '')
   } catch {
     return false
   }
@@ -69,10 +67,7 @@ export async function setMode(mode: PersonalityMode, jid?: string): Promise<bool
 
 export async function resetMode(jid?: string): Promise<boolean> {
   try {
-    const res = await pythonPost<{ success: boolean }>('/api/v1/ai/personality/reset', {
-      jid: jid ?? null,
-    })
-    return res?.success ?? false
+    return await resetPersonalityMode(jid ?? '')
   } catch {
     return false
   }
@@ -80,12 +75,10 @@ export async function resetMode(jid?: string): Promise<boolean> {
 
 export async function getAllModes(): Promise<{ global: string; groups: Record<string, string> }> {
   try {
-    const res = await pythonGet<PersonalityModeResponse>(
-      '/api/v1/ai/personality/mode'
-    )
+    const res = await getPersonalityModes()
     return {
-      global: res?.data?.current ?? 'amable',
-      groups: res?.data?.group_modes ?? {},
+      global: res?.current ?? 'amable',
+      groups: res?.group_modes ?? {},
     }
   } catch {
     return { global: 'amable', groups: {} }

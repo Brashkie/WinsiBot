@@ -11,7 +11,6 @@ from pathlib import Path
 from datetime import datetime
 from dataclasses import dataclass, asdict, field
 from rich.console import Console
-from rich.table import Table
 
 console  = Console()
 ROOT_DIR = Path(__file__).parent.parent.parent

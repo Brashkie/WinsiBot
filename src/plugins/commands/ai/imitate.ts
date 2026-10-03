@@ -90,12 +90,7 @@ const imitar: Command = {
     const prompt = args.filter(a => !a.startsWith('@') && !/^\d{10,}/.test(a)).join(' ').trim()
       || 'Hola qué hay de nuevo'
 
-    const res = await hepein.imitate({
-      prompt,
-      targetJid,
-      groupJid:   jid,
-      senderJid:  sender,
-    })
+    const res = await hepein.imitate({ prompt, targetJid })
 
     if (!res.ok) {
       await safeSend(() => sock.sendMessage(jid, {
@@ -256,9 +251,9 @@ const hepeinStats: Command = {
       text: [
         `◈ *Hepein Trainer — Stats*`,
         ``,
-        `§ Archivos Parquet: *${stats.parquetFiles}*`,
-        `§ Espacio en disco: *${stats.diskMb} MB*`,
-        `§ Buffer pendiente: *${stats.bufferPending} msgs*`,
+        `§ Mensajes aprendidos: *${stats.rows.toLocaleString('es')}*`,
+        `§ Usuarios: *${stats.senders}*  Grupos: *${stats.groups}*`,
+        `§ Espacio en disco: *${stats.diskMb.toFixed(1)} MB*`,
       ].join('\n'),
     }, { quoted: msg }))
   },
