@@ -95,7 +95,6 @@ export interface BotConfig {
   botName:              string
   ownerJid:             string[]
   sessionPath:          string
-  pythonApiUrl:         string
   rustApiUrl:           string
   sessionApiKey:        string
   openaiKey?:           string

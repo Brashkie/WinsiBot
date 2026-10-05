@@ -16,12 +16,10 @@ const ROOT = process.cwd()
 // caído aunque estuviera corriendo perfectamente.
 const RUST_URL = process.env.SESSION_API_URL ?? process.env.RUST_API_URL ?? 'http://127.0.0.1:18080'
 const RUST_PORT = Number(new URL(RUST_URL).port) || 18080
-const PY_URL  = process.env.PYTHON_API_URL ?? 'http://127.0.0.1:5000'
-const PY_PORT = Number(new URL(PY_URL).port) || 5000
-
+// Acá también se comprobaba la API de Python. Se fue en la 8.11.0 junto con
+// los tres comandos de imagen, que eran lo último que servía.
 const SERVICES = [
-  { name: 'FastAPI', port: PY_PORT, health: `${PY_URL}/health` },
-  { name: 'Rust',   port: RUST_PORT, health: `${RUST_URL}/health/live` },
+  { name: 'Rust', port: RUST_PORT, health: `${RUST_URL}/health/live` },
 ]
 
 function portAlive(port) {
@@ -70,7 +68,8 @@ console.log(ascii.table(serviceRows, {
 console.log()
 
 const checks = [
-  { label: 'Venv Python', paths: [join(ROOT, 'python', 'venv')],       missing: 'npm run setup' },
+  // El venv es opcional: solo lo necesitan `npm run monitor` y `npm run manage`.
+  { label: 'Venv Python', paths: [join(ROOT, 'python', 'venv')],       missing: 'opcional — solo para npm run monitor/manage' },
   { label: 'Bot dist/',   paths: [join(ROOT, 'dist', 'index.js')],     missing: 'npm run build' },
   // La sesión puede vivir en creds.json o creds.cbor — ver authStateCbor.ts
   { label: 'Session',     paths: [join(ROOT, 'auth', 'creds.json'), join(ROOT, 'auth', 'creds.cbor')], missing: 'npm run qr' },

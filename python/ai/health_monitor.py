@@ -16,13 +16,13 @@ from dataclasses import dataclass, asdict
 from typing import Optional
 from rich.console import Console
 import re
+from paths import ROOT
 import collections
 from statistics import stdev
 
 console = Console()
 
 # ─── Paths ────────────────────────────────────────────────────────────────────
-ROOT       = Path(__file__).parent.parent.parent
 DATA_DIR   = ROOT / 'data'
 HEALTH_LOG = DATA_DIR / 'health_log.json'
 

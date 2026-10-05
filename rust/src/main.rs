@@ -3,7 +3,7 @@
 use winsibot_session_api::{
     ai_chat, analytics, auth, bad_mac, config, conversations, db, imagefx, imagesearch,
     lock_manager, metrics, nlp, personality, platform, rate_limiter, routes, session_id,
-    snapshot, subbots, tasks, user_memory, watchdog,
+    snapshot, subbots, tasks, user_memory, vision, watchdog,
 };
 
 use axum::{
@@ -227,6 +227,11 @@ async fn main() {
         .route("/ai/memory/:jid/update",  post(user_memory::update))
         .route("/ai/chat/respond",        post(ai_chat::respond))
         .route("/ai/chat/imitate",        post(ai_chat::imitate))
+        // Modelos de imagen con ONNX Runtime (ver vision.rs). Portados de
+        // Python: dos de los tres comandos de anime ni siquiera usaban torch.
+        .route("/vision/removebg",        post(vision::removebg))
+        .route("/vision/toanime",         post(vision::toanime))
+        .route("/vision/upscale",         post(vision::upscale_handler))
         // ─── Bad MAC per-group tracker ────────────────────────────────────────
         .route("/badmac/report",          post(bad_mac::report_bad_mac))
         // ─── Rate limiter per-sender ──────────────────────────────────────────

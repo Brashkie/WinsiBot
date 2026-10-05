@@ -8,13 +8,13 @@ import json
 import time
 import threading
 import numpy as np
-from pathlib import Path
 from datetime import datetime
 from dataclasses import dataclass, asdict, field
 from rich.console import Console
+from paths import ROOT
 
 console  = Console()
-ROOT_DIR = Path(__file__).parent.parent.parent
+ROOT_DIR = ROOT
 DATA_DIR = ROOT_DIR / 'data' / 'ai'
 DATA_DIR.mkdir(parents=True, exist_ok=True)
 

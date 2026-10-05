@@ -28,4 +28,5 @@ pub mod snapshot;
 pub mod subbots;
 pub mod tasks;
 pub mod user_memory;
+pub mod vision;
 pub mod watchdog;

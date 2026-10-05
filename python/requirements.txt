@@ -1,19 +1,46 @@
-# ── Núcleo ───────────────────────────────────────────────────────────────────
+# ── Herramientas de consola ──────────────────────────────────────────────────
 #
-# Tres paquetes, todos con rueda precompilada: instalan en Termux sin compilar
-# nada y sin tocar un compilador.
+# Esto es TODO lo que Python necesita en el proyecto, y es solo para:
 #
-# Y desde la 8.11.0 **Python entero es opcional**: el bot arranca y funciona sin
-# él. Lo único que queda del lado de Python son los comandos de anime
-# (`#toanime`, `#upscale`, `#removebg`), que son redes neuronales con torch.
-# Todo lo demás —clasificación de intenciones, filtro de spam, personalidad,
-# humor, reputación, perfiles de estilo, cliente de Ollama y las APIs cloud,
-# mosaico LEGO y búsqueda de imágenes— está en Rust.
+#   npm run monitor     watchdog interactivo con auto-restart
+#   npm run manage      CLI de mantenimiento (backup, reparación, logs)
 #
-# Si no existe `python/venv`, el bot lo detecta al arrancar, lo dice en una
-# línea de log y sigue; esos tres comandos responden con un mensaje claro en vez
-# de esperar un timeout.
+# **El bot no necesita Python para nada.** Desde la 8.11.0 no queda nada suyo
+# en el camino de ningún mensaje, y tampoco hay una API de Python que levantar:
+# lo último que servía eran los tres comandos de imagen, que están en
+# rust/src/vision.rs. Si no vas a usar estas dos herramientas, podés saltarte
+# Python entero.
+#
+# `scikit-learn` y `joblib` van juntas: el detector de anomalías de ai_brain.py
+# guarda su modelo con joblib y el .pkl no se puede leer sin sklearn.
+psutil>=7.0.0
+rich>=14.0.0
+httpx>=0.27.0
+cbor2>=5.6.0
+scikit-learn>=1.5.0
+joblib>=1.5.0
+numpy>=1.26.0
 
-fastapi>=0.111.0
-uvicorn[standard]>=0.30.0
-pydantic>=2.7.0
+
+# ── Lo que se fue en la 8.11.0 ───────────────────────────────────────────────
+#
+# Acá estaban los tres comandos de imagen, que eran lo último que de verdad
+# ataba el proyecto a Python. Al mirarlos de cerca resultó que **dos de los tres
+# ni siquiera usaban torch**: `dghs-imgutils` ya corría sus modelos con ONNX
+# Runtime, y torch era apenas un `extra` suyo que este proyecto no usaba.
+#
+# Los tres están ahora en rust/src/vision.rs:
+#
+#   #toanime   AnimeGANv2 en ONNX, 8 MB de modelo   (antes: torch, 3,7 GB)
+#   #removebg  isnetis en ONNX, 168 MB de modelo    (antes: onnxruntime + imgutils + cv2)
+#   #upscale   Anime4K portado — no es una red sino un algoritmo, sin modelo
+#
+# Se fueron con ellos: torch, pillow, pyanime4k, dghs-imgutils, onnxruntime y
+# opencv-contrib-python. Más de 4 GB de dependencias por tres comandos.
+#
+# Y lo que más importa para instalar: en Termux el problema nunca fue que
+# faltaran binarios —las ruedas de PyPI YA son binarios (.so dentro del .whl)—
+# sino la libc. Las ruedas de ARM se publican como `manylinux`, que asume glibc,
+# y Android usa Bionic. ONNX Runtime enlazado dentro del binario de Rust no
+# tiene ese problema: los tres comandos funcionan en cualquier plataforma donde
+# compile Rust.

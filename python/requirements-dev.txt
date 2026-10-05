@@ -3,8 +3,12 @@
 # Linter — npm run py:lint
 ruff>=0.8.0
 
-# Compilación de las extensiones Cython — npm run cython:build
-# (cython_ext/setup.py). No hacen falta para correr el bot: si los .pyd/.so no
-# están, health.py lo reporta con CYTHON_OK en false y sigue.
-Cython>=3.0.0
-setuptools>=70.0.0
+# Compilador — npm run tools:build
+#
+# Pasa `monitor` y `manage` a ejecutables nativos que corren sin Python
+# instalado. Necesita un compilador de C en la máquina (MSVC en Windows,
+# gcc/clang en el resto); Nuitka baja su backend la primera vez.
+#
+# Solo hace falta para publicar esos binarios: el bot no los usa y
+# `tools:build` avisa con el comando exacto si no está.
+nuitka>=2.5

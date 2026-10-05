@@ -10,7 +10,6 @@ const envSchema = z.object({
   OPENAI_API_KEY:        z.string().optional(),
   SPOTIFY_CLIENT_ID:     z.string().optional(),
   SPOTIFY_CLIENT_SECRET: z.string().optional(),
-  PYTHON_API_URL:        z.string().default('http://localhost:5000'),
   // .env.example documenta SESSION_API_URL/SESSION_API_KEY — RUST_API_URL no
   // es un nombre real que nadie setea, así que leerlo dejaba a config.rustApiUrl
   // siempre en el default aunque el operador cambiara el puerto de Rust.
@@ -51,7 +50,6 @@ export const config = {
   botName:      env.BOT_NAME,
   ownerJid:     env.OWNER_JID.split(',').map(j => j.trim()).filter(Boolean),
   sessionPath:  env.SESSION_PATH,
-  pythonApiUrl: env.PYTHON_API_URL,
   rustApiUrl:      env.SESSION_API_URL,
   sessionApiKey:   env.SESSION_API_KEY,
   logLevel:     env.LOG_LEVEL,

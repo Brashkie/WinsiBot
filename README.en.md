@@ -10,7 +10,7 @@
 [![Rust](https://img.shields.io/badge/Rust-1.75%2B-CE422B?style=for-the-badge&logo=rust&logoColor=white)](https://rust-lang.org)
 
 [![License](https://img.shields.io/badge/License-GPL--3.0-blue?style=flat-square)](LICENSE)
-[![Version](https://img.shields.io/badge/Version-8.11.0-6C63FF?style=flat-square)](CHANGELOG.md)
+[![Version](https://img.shields.io/badge/Version-8.12.0-6C63FF?style=flat-square)](CHANGELOG.md)
 [![Platform](https://img.shields.io/badge/Platform-Windows%20%7C%20Linux%20%7C%20macOS%20%7C%20Android-lightgrey?style=flat-square)](https://github.com/Brashkie/WinsiBot)
 [![PRs Welcome](https://img.shields.io/badge/PRs-welcome-brightgreen?style=flat-square)](https://github.com/Brashkie/WinsiBot/pulls)
 
@@ -18,7 +18,7 @@
 
 > High-performance WhatsApp bot with a three-layer multi-language architecture.<br/>
 > No artificial group limit, built for thousands of messages per hour and multiple instances.<br/>
-> v8.11.0 — **Python is no longer a requirement.** Down from 35 files to 16, from 7 routers to 2, and from an incomplete `requirements.txt` to **three packages** that install without compiling anything. The only thing still needing an interpreter is the anime commands, which are neural networks on `torch`: with no `python/venv` present, the bot says so in one line and starts anyway. Intent classification, spam filtering, personality, humour, reputation, style profiles, the LEGO mosaic, image search and the Ollama client all live in Rust now. **Nine real bugs** surfaced along the way, among them that `/ml/predict/spam` **was deleting legitimate messages** (one 8-messages-per-5-seconds counter shared across every user in every group) and that **22 insults were going unmoderated** because the Python fallback kept the local regex from ever being evaluated.<br/>
+> v8.12.0 — **The bot stops calling Python, and what's left of it compiles.** The three image commands now live in Rust: `#toanime` goes from **3.7 GB of torch to an 8 MB ONNX model**, `#removebg` uses the same model via the `ort` crate, and `#upscale` is **Anime4K ported** — no model to download and no temp files. The entire Python API went with them, having been reduced to a single endpoint that said it was alive. Installing is **`npm install` and nothing else**: the Session API binary is fetched prebuilt for your platform — 6 targets, Termux included — with its SHA-256 verified. **Nine real bugs** surfaced along the way, among them that `npm run build` **never cleaned `dist/`**, so the bot served **35 commands from source-less code** — two of them deleted seven releases earlier — and that the **Session API could not start** if you followed `.env.example`, with the panic invisible because it is launched with `stdio: 'ignore'`.<br/>
 
 <br/>
 
@@ -64,31 +64,26 @@
 |-------|-----------|----------------|
 | 🟦 **Core** | TypeScript / Node.js | WhatsApp protocol, command dispatcher, RPG, economy, web panel |
 | ⚙️ **Session + AI** | Rust / Axum | Atomic creds and snapshots, Bad MAC tracker, rate limiter, intent classification, personality and humour, reputation, style profiles, Ollama and cloud APIs, images |
-| 🐍 **Optional** | Python / FastAPI | Only the anime commands (neural networks on `torch`) and the console watchdog. **The bot runs without it** |
+| 🐍 **Optional** | Python | Only the console watchdog and the maintenance CLI, which you open by hand. **The bot runs without it and nothing starts it** |
 
-### What's new in v8.11.0
+### What's new in v8.12.0
 
-**Python is no longer a requirement to install or run the bot.** Everything that sat on the per-message path moved to Rust; the only thing still needing an interpreter is the anime commands, which are neural networks on `torch`.
+**The bot no longer calls Python at all, and what's left of it compiles.** 8.11.0 got it down to 16 files but left three commands that needed an interpreter, plus a whole API to serve them. All three are in Rust, the API is gone, and Python is down to 9 files that are console tooling only.
 
 | Area | Change |
 |------|--------|
-| **Python optional** | With no `python/venv` present, the bot detects it at startup, says so in **one log line** and carries on. `#toanime`, `#upscale` and `#removebg` answer with a clear message instead of waiting for a timeout. `requirements.txt` is down to **3 packages**, all with prebuilt wheels |
-| **One message, one row** | Every group message was stored **twice**: `handler.ts` sent it to Rust and also to Python, which wrote it again to Parquet to compute the same style profile. Two stores, two implementations of the same aggregations, and one HTTP call per message. It all comes from the table Rust was already filling |
-| **Of 1582 lines, 970 were data tables** | 489 response phrases across 12 modes, 121 humour phrases and a 28-command catalogue. Extracted verbatim to JSON by a script that reads them via AST, and embedded in the binary with `include_str!` — the goal is for installing to be one binary and nothing else |
-| **Serious fix: antispam was deleting legitimate messages** | `/ml/predict/spam` wasn't a content classifier: it wrapped a **per-sender** rate limiter while passing the **fixed** sender `'__predict__'`, so every user in every group shared one counter of **8 messages per 5 seconds**. On the ninth, the bot deleted the message and publicly accused whoever wrote it. In an active group that's an ordinary conversation |
-| **Fix: 22 insults were going unmoderated** | The Python intent fallback used a vocabulary (`saludo`, `despedida`, `ayuda`…) that could **never** return the labels the consumers compare against (`insult`, `nsfw`, `spam`) — but it did return a valid object, and that kept the local backstop regex from ever being evaluated. The lists are now merged in Rust |
-| **Fix: the `trusted` reputation tier was unreachable** | The score starts at 50 and the bonuses add at most +20, so the real ceiling is 70 — but the threshold was 80. No user could ever reach it however well they behaved, and that tier is used to soften responses. Found by a test |
-| **Fix: the conversations table had no index at all** | It was scanned **in full** on every AI reply, which has a 300 ms budget. Measured at 300,000 rows: **47 ms → 0.64 ms** (74x), and a full profile from ~148 ms to ~1.4 ms |
-| **The LEGO mosaic, 5x faster** | Measured properly, Rust was **losing** to Python. Stage profiling showed why: a Lanczos3 downscale took **50 of the 76 ms**, feeding a step that then averages each cell down to a single colour — wasted work. **76 ms → 15.4 ms**, and the colours come out more accurate |
-| **Fix: `requirements.txt` declared 7 packages while the code imported 13 more** | A clean `pip install` left Python unable to serve almost any endpoint; nobody noticed because the dev venv had been assembled by hand over months. New `npm run py:deps` so the drift can't come back silently |
-| **Fix: outside Windows, alerts were lost silently** | `alert_system.py` had an `import winsound` — a Windows-only module — at module top level, and its four callers import it behind an `except: pass`. This had been the case since the release that announced Linux, macOS and Termux support. The import wasn't even used |
-| **Fix: two chaos scenarios tested nothing** | They asserted on the circuit via a freshly imported module, and `?chaos=N` only busts the cache of the requested module, not its dependencies: they were checking a different object with its counters at zero |
-| **One JSON file per user, now a table** | Reputation profiles lived in `data/ai/users/<jid>.json` — with 2557 users, that's 2557 files rewritten whole every ten messages. Now it's an UPSERT on the database that is already open |
-| **121 Rust unit tests and two benchmarks** | From **zero to 121** in this release: `cargo test` existed and ran nothing. Several found real bugs — the unreachable `trusted` tier, an NSFW regex that never matched, and a missing tie-breaker in word counting. Chaos is up to **35 checks across 9 scenarios** |
-| **Less surface** | Python from **35 files to 16** and from 7 routers to 2 (and ~3,200 of the remaining 4,460 lines are the optional console tooling). Out go `pyarrow`, `duckdb`, `spacy`, `ddgs`, `requests`, `transformers`, an ORM layer without a single reader, and the C spam library. Persistence engines: from 5 to 3 |
-
-**[📜 See the full version history →](CHANGELOG.md)**
-
+| **The three image commands moved to Rust, and two never needed torch** | `#toanime` goes from **3.7 GB of torch to an 8 MB ONNX model**; `#removebg` uses the same `isnetis.onnx` as before via the `ort` crate; and `#upscale` is **Anime4K ported** — not a network but a five-step algorithm, so it downloads no model and takes **175 ms** against the seconds it cost while writing temp files. Migrating them revealed that **two of the three never used torch**: `dghs-imgutils` already ran on ONNX Runtime |
+| **`npm install` and done: prebuilt Rust binaries** | Building the Session API took **~4 minutes** and required Rust installed. Now `postinstall` fetches the binary for your platform from the releases and verifies its SHA-256, with a workflow building **6 targets** — Termux included, which has its own because Android uses Bionic rather than glibc. If no binary exists, it says so in one line and building from source still works |
+| **Python is off every message path** | The last things to go were the three image commands, and with them the entire Python API: it had been reduced to **a single endpoint**, `GET /health`, polled only by `monitor.py` and `manage.py` to display "FastAPI: online". A service whose only job was to answer that it was alive |
+| **The console tools compile too** | `npm run tools:build` runs `monitor` and `manage` through Nuitka and produces executables that work **without Python installed**, `rich` included — which is pure Python, 77 modules and zero native binaries, so there is no `.so` of it to download: you have to compile it. Measured: 16.0 and 16.1 MB, ~3 min each with a warm C cache |
+| **Serious fix: the bot was running deleted code** | `tsc` compiles but never cleans, and `loadCommands()` registers **every** `.js` it finds under `dist/`. There were 38 orphan files from earlier versions and **35 command keys were being served by source-less code** — among them `#registro` and `#unreg`, deliberately removed **seven releases earlier** and still working, and `#image`, which served the old version and **masked the migration to Rust**. `npm run build` now wipes `dist/` first |
+| **Serious fix: the Session API would not start if you followed `.env.example`** | The Rust server read `API_KEY` and `PORT`; the client and `.env.example` use `SESSION_API_KEY` and `SESSION_API_URL`, and the first two were **documented nowhere**. Anyone cloning the repo got no API and no explanation: `index.ts` launches it with `stdio: 'ignore'`, so the panic never reached a log — just a retry every 3 seconds. The key now has **one name**, and the port is derived from `SESSION_API_URL`, so client and server cannot end up on different ports |
+| **Fix: the compiled binaries could not find the project** | Under Nuitka `--onefile`, `__file__` points into the temp directory the binary unpacks itself into on every run, so the 8 places that computed the project root returned a path that is deleted on exit: `manage.exe` reported *"auth dir missing"* with **8,422 files** in `auth/`. Neither `sys.frozen` nor `sys.executable` helps there; `__compiled__.containing_dir` does |
+| **Fix: `npm run manage` crashed on any Spanish Windows** | With a legacy codepage — cp1252, the default — `rich` falls back to its legacy renderer and throws `UnicodeEncodeError` on the first of its symbols: it **died before printing anything**. Not a compilation artifact; the interpreted version did the same. Both tools now force UTF-8 before creating the `Console` |
+| **Fix: the Health Monitor could silently never start** | It shared a `try` with the AI Brain and started **after** that import, so any failure in the second took the first down with it, unnoticed. Seen live running the compiled binary, where `numpy` is excluded on purpose |
+| **Fix: the postinstall broke `npm install` with a 404** | `process.exit(0)` with an HTTP request still in flight made libuv abort with **code 127**, which npm reads as a failed postinstall and aborts the whole install — on exactly the most common path while no release is published |
+| **Fix: `chaos` and `ruff` were lying** | `chaos` reported *"invalid or missing API key"* on 8 checks when the key was fine and what was missing was the script reading `.env`. And `ruff` and `py:deps` excluded the literal name `venv`, so any `venv.roto` or `venv_tools` alongside sent them walking site-packages: **26,165 warnings** about code that isn't this project's. An environment is now recognised by its `pyvenv.cfg` |
+| **140 Rust unit tests and two benchmarks** | 19 more this release. What depends on an ONNX model isn't asserted, but everything around it is: the padded framing, the NCHW tensor conversion, and **all of Anime4K**, including a test that it sharpens edges more than a plain bicubic — which is exactly what sets it apart from a resize |
 ---
 
 ## Technical Stack
@@ -102,7 +97,7 @@
 | WhatsApp | Baileys 6.x | WA Web multi-device protocol |
 | AI and NLP | Rust | Rule-based intents, personality and humour, reputation, style profiles |
 | Language models | Ollama → GPT → Gemini → Claude | Cascade, falling back to local templates if none answer |
-| Optional | Python 3.11 + FastAPI | Anime commands (torch) and the console watchdog — the bot runs without it |
+| Optional | Python 3.11 | Console watchdog and maintenance CLI — the bot runs without it |
 | Session Store | Rust + Axum + SQLite | Atomic creds, delivery tracking, outbox with dead-letter |
 | Crypto | `@brashkie/signalis-core` | Curve25519 / Ed25519 / HKDF / AES-GCM (Rust NAPI) |
 | Persistence — users | `strenor` (Rust NAPI) | `data/users.aof`, a delta log: only the user that changed gets written |
@@ -206,23 +201,23 @@
 
 ```
 ╔═══════════════════════════════════════════════════════════════════════╗
-║                           WinsiBot v8.11.0                            ║
+║                           WinsiBot v8.12.0                            ║
 ╠═════════════════════╦══════════════════════════╦══════════════════════╣
 ║      TypeScript     ║           Rust           ║        Python        ║
-║    Node.js :4001    ║                          ║     if installed     ║
+║    Node.js :4001    ║                          ║  nothing starts it   ║
 ║                     ║                          ║                      ║
 ║  ┌───────────────┐  ║ ┌──────────────────────┐ ║ ┌──────────────────┐ ║
-║  │  Baileys WS   │  ║ │   Session API :3001  │ ║ │  FastAPI :5000   │ ║
-║  ├───────────────┤  ║ ├──────────────────────┤ ║ │   (OPCIONAL)     │ ║
+║  │  Baileys WS   │  ║ │   Session API :3001  │ ║ │   (OPCIONAL)     │ ║
+║  ├───────────────┤  ║ ├──────────────────────┤ ║ │  solo consola    │ ║
 ║  │    Handler    │  ║ │ ● creds atómicas     │ ║ ├──────────────────┤ ║
-║  │   (semáforo)  │  ║ │ ● snapshots ×10      │ ║ │  anime: torch    │ ║
-║  ├───────────────┤  ║ │ ● bad_mac tracker    │ ║ │  #toanime        │ ║
-║  │   125+ Cmds   │  ║ │ ● rate_limiter+spam  │ ║ │  #upscale        │ ║
-║  ├───────────────┤  ║ │ ● watchdog heartbeat │ ║ │  #removebg       │ ║
-║  │    egress     │  ║ │ ● outbox + DLQ       │ ║ ├──────────────────┤ ║
-║  │ (rate limit)  │  ║ ├──────────────────────┤ ║ │  monitor (CLI)   │ ║
-║  ├───────────────┤  ║ │ nlp      intenciones │ ║ │  watchdog        │ ║
-║  │  persistence  │  ║ │ person.  12 modos    │ ║ └──────────────────┘ ║
+║  │   (semáforo)  │  ║ │ ● snapshots ×10      │ ║ │  monitor         │ ║
+║  ├───────────────┤  ║ │ ● bad_mac tracker    │ ║ │  watchdog con    │ ║
+║  │   125+ Cmds   │  ║ │ ● rate_limiter+spam  │ ║ │  auto-restart    │ ║
+║  ├───────────────┤  ║ │ ● watchdog heartbeat │ ║ ├──────────────────┤ ║
+║  │    egress     │  ║ │ ● outbox + DLQ       │ ║ │  manage          │ ║
+║  │ (rate limit)  │  ║ ├──────────────────────┤ ║ │  backup/reparar  │ ║
+║  ├───────────────┤  ║ │ nlp      intenciones │ ║ └──────────────────┘ ║
+║  │  persistence  │  ║ │ person.  12 modos    │ ║                      ║
 ║  │   (strenor)   │  ║ │ memory   reputación  │ ║                      ║
 ║  ├───────────────┤  ║ │ ai_chat  Ollama→GPT→ │ ║                      ║
 ║  │ authVerifier  │  ║ │          Gemini→     │ ║                      ║
@@ -230,6 +225,7 @@
 ║  └───────────────┘  ║ │ convers. perfiles    │ ║                      ║
 ║                     ║ │ imagefx  mosaico     │ ║                      ║
 ║                     ║ │ imagesrc búsqueda    │ ║                      ║
+║                     ║ │ vision   anime+ONNX  │ ║                      ║
 ║                     ║ └──────────────────────┘ ║                      ║
 ╚═════════════════════╩══════════════════════════╩══════════════════════╝
            │                        │                        │           
@@ -246,19 +242,19 @@
 |------|---------|:--------:|-------|
 | Node.js | 20.x LTS | ✅ | `node --version` |
 | npm | 9.x | ✅ | bundled with Node |
-| Python | 3.11+ | ❌ | **Optional as of 8.11.0** — only for `#toanime`, `#upscale` and `#removebg` |
+| Python | 3.11+ | ❌ | **No longer needed** — as of 8.12.0 not even the image commands use it. Only for `npm run monitor` and `npm run manage`, which you open by hand (and which can also be compiled) |
 | Rust + Cargo | 1.75+ | ✅ | to compile Session API |
 | Ollama | latest | ❌ | local AI (recommended, 16 GB RAM+) |
 | FFmpeg | 6.x | ❌ | media conversion |
 
 **Supported OS:** Windows 10/11 · Ubuntu 20.04+ · Debian 11+ · macOS 12+ · Android (Termux)
 
-> **Platform note:** on Termux/Android and headless Linux/macOS, Ollama is optional just like on Windows — the bot degrades gracefully without it. `npm run cython:build` auto-detects the available C compiler (`gcc`/`clang`) on all three, and it is optional: if the `.pyd`/`.so` files are missing, `/health` reports `CYTHON_OK` as false and the bot carries on. (`npm run spam:build` is gone as of 8.11.0, together with the C spam library whose logic has lived in Rust since 8.10.0.) The web panel (`web/`) uses the same Node.js already required — no new tool, just a separate `npm install && npm run build` (see Installation).
+> **Platform note:** on Termux/Android and headless Linux/macOS, Ollama is optional just like on Windows — the bot degrades gracefully without it. As of 8.12.0 a C compiler is no longer needed either: `npm run spam:build` and `npm run cython:build` are gone along with the C spam library and the Cython extensions, which were compiling code that already lived in Rust. The web panel (`web/`) uses the same Node.js already required — no new tool, just a separate `npm install && npm run build` (see Installation).
 >
 > **Two things to expect on weaker devices (Termux/Android, single-board ARM):**
 >
 > - The Node dependency that genuinely builds from source on Android is **`sharp`** (it bundles libvips): you need `clang`, `make` and `pkg-config` installed *before* running `npm install` (see the Termux section below). `cbor-x` used to be listed here and did not belong — its native part (`cbor-extract`) is an **optional** dependency, and if it fails to build it falls back to pure JavaScript with nothing breaking.
-> - **Python is optional as of 8.11.0** and you can skip its install step entirely. If you do want it, its core is **3 packages** with prebuilt wheels (`fastapi`, `uvicorn`, `pydantic`) and the rest lives in `requirements-optional.txt`. The only feature that genuinely needs it is the anime commands, because of **`torch`** (~2 GB, no ARM binary — so they don't work on Termux anyway). 8.11.0 dropped `pyarrow`, `duckdb`, `spacy`, `ddgs`, `requests`, `transformers` and the C spam library.
+> - **Python is no longer needed to run the bot.** Nothing of it remains on any message path and nothing starts it; only `npm run monitor` and `npm run manage` use it, and you open those by hand. 8.11.0 dropped `pyarrow`, `duckdb`, `spacy`, `ddgs`, `requests` and `transformers`, and 8.12.0 dropped the rest: `torch`, `pillow`, `pyanime4k`, `dghs-imgutils`, `onnxruntime` and `opencv` — over 4 GB of dependencies between the two.
 > - The first Rust build (`npm run rust:build`) takes a few minutes (~3 min on a desktop; considerably longer on a phone) because it compiles the whole dependency tree with LTO. That's expected — don't close the terminal, just let it run (and keep the device from sleeping).
 
 > **Ollama:** Pull a model before starting — `ollama pull llama3` or `ollama pull mistral`. The bot tries Ollama first and silently falls back to cloud APIs.
@@ -272,94 +268,78 @@
 git clone https://github.com/Brashkie/WinsiBot.git
 cd WinsiBot
 
-# 2 — Node.js dependencies
+# 2 — Dependencies
 npm install
-
-# 3 — Python (OPTIONAL as of 8.11.0)
 #
-# You can skip this step entirely. The bot starts and runs without Python: it
-# detects this at startup, says so in one log line and carries on. The only
-# things left without service are #toanime, #upscale and #removebg, which
-# answer with a clear message instead of hanging.
-#
-# Install it only if you want those three commands (and note that `torch` is
-# ~2 GB with no prebuilt binary for ARM, so they will not work on Termux
-# either way).
-cd python
-python -m venv venv
+# This also downloads the prebuilt Rust Session API binary for your platform
+# and verifies its SHA-256. If there is no binary for yours, it says so in one
+# line and you can build it yourself with `npm run rust:build`.
 
-# Windows
-venv\Scripts\activate
-# Linux / macOS
-# source venv/bin/activate
+# 3 — Configuration
+cp .env.example .env
+#      ...then set OWNER_JID to your number
 
-# Core: 3 packages, all with prebuilt wheels
-pip install -r requirements.txt
+# 4 — Web panel (optional — the bot starts fine without it)
+npm run web:build
 
-# Anime commands and the console tooling (npm run monitor)
-# pip install -r requirements-optional.txt
-
-cd ..
-
-# 4 — Compile Rust Session API
-npm run rust:build
-
-# 5 — Build the web panel (optional — the bot still starts without this,
-#     the panel just shows a notice until you run this step)
-cd web
-npm install
-npm run build
-cd ..
-
-# 6 — Environment variables
-# Windows
-copy .env.example .env
-copy rust\.env.example rust\.env
-# Linux / macOS
-# cp .env.example .env && cp rust/.env.example rust/.env
-
-# 7 — Edit .env with your values (see Configuration)
-
-# 8 — Start everything
-npm run start
+# 5 — Start
+npm start
 ```
 
-> **First run:** If no session is saved, a **QR code** will appear in the terminal.  
-> Scan it from WhatsApp → ⋮ → Linked Devices → Link a Device.
-
+> **Python is no longer needed.** Up to 8.12.0 you had to create a virtualenv
+> and install dependencies; since then nothing of Python remains on any message
+> path and the bot never starts it. It is only used for two tools you open by
+> hand:
+>
+> ```bash
+> cd python && python -m venv venv
+> venv\Scripts\activate          # Windows
+> # source venv/bin/activate      # Linux / macOS / Termux
+> pip install -r requirements.txt
+> ```
+>
+> That enables `npm run monitor` (interactive watchdog) and `npm run manage`
+> (maintenance CLI). If you will not use them, skip the step. For
+> `npm run py:lint` and `npm run tools:build` use `requirements-dev.txt`,
+> which includes the other one.
+>
+> **If you upgrade Python, the virtualenv has to be recreated.** A venv
+> stores the absolute path of the interpreter that created it, and its
+> compiled extensions carry the version in their filename (`cp311`), so it
+> cannot be repointed at another one: `npm run py:lint`, `py:deps`,
+> `tools:build`, `monitor` and `manage` all fail with `No Python at '...'`.
+> Delete `python/venv` and repeat the commands above.
 ---
 
 ### Installing on Termux (Android)
 
-The same 8 steps above work on Termux — this section only covers what's Android-specific: what to install first, and how to keep the bot running after you close the app.
-
-> Install Termux from **F-Droid**, not the Play Store — the Play Store version is discontinued and outdated.
+> Install Termux from **F-Droid**, not the Play Store — the Play Store build is discontinued and outdated.
 
 ```bash
-# 0 — System packages (one time only)
+# 0 — System packages (once)
 pkg update && pkg upgrade -y
-pkg install -y nodejs-lts python rust git clang make pkg-config openssl-tool tmux
+pkg install -y nodejs-lts git tmux
 
-# Optional — only if the bot needs to read/write shared device storage
+# Optional — only if the bot will read/write the phone's shared storage
 # (outside its own data folder):
 termux-setup-storage
 ```
 
-With that installed, follow the 8 steps in the [Installation](#installation) section above unchanged — Termux takes the "Linux / macOS" branch in steps 3 and 6.
+Then the same 5 steps from [Installation](#installation), unchanged.
 
-**Two things that will happen and are expected:**
+**`rust`, `python`, `clang`, `make` and `pkg-config` are no longer needed.** Up to 8.12.0 you had to build the Session API on the phone — several minutes — and create a Python virtualenv. Now `npm install` fetches the prebuilt binary for `aarch64-linux-android`, which is Termux's own target: Android uses the **Bionic** libc, not glibc, so an ordinary Linux ARM binary would download fine and fail to start.
 
-- In step 2 (`npm install`), some native dependencies will compile from source (Android has no prebuilt binary for them) — that's why `clang`/`make`/`pkg-config` come first in step 0. If `npm install` fails mentioning `node-gyp` or a missing compiler, one of those packages is missing.
-- In step 4 (`npm run rust:build`), the first build takes a few minutes (~3 min on a desktop; longer on a phone) because it compiles all dependencies with LTO. Let it run and don't close the Termux session.
+The image commands (`#toanime`, `#removebg`, `#upscale`) **work on the phone**, because ONNX Runtime ships a build for that target with **NNAPI**, Android's hardware acceleration.
+
+**The only thing that may build from source** is `sharp` (it bundles libvips), which has no Android binary. If `npm install` fails there, run `pkg install -y clang make pkg-config` and retry.
 
 **Keeping the bot running in the background:**
 
-- Run `termux-wake-lock` before starting the bot to stop Android from killing the process when the screen turns off (`termux-wake-unlock` to release it later).
+- `termux-wake-lock` before starting the bot stops Android from killing the process when the screen turns off (`termux-wake-unlock` to release it).
 - Run the bot inside a `tmux` session (`tmux new -s winsibot`, then `npm run start`) so the process survives closing the Termux app — reattach with `tmux attach -t winsibot`.
-- For autostart on device reboot, install the **Termux:Boot** add-on (F-Droid) and add a script under `~/.termux/boot/`.
+- For autostart on reboot, install the **Termux:Boot** add-on (F-Droid) and drop a script in `~/.termux/boot/`.
 
-> **RAM:** Ollama (local AI) usually isn't viable on a regular phone — use the cloud APIs (`OPENAI_API_KEY`/`ANTHROPIC_API_KEY`/`GEMINI_API_KEY`) instead, the bot falls back to them automatically if Ollama doesn't respond.
-
+> **RAM:** Ollama (local AI) usually isn't viable on an ordinary phone — use the cloud APIs (`OPENAI_API_KEY`/`ANTHROPIC_API_KEY`/`GEMINI_API_KEY`), or let the bot answer with its local template engine, which needs no model at all.
 ---
 
 ## Configuration
@@ -466,9 +446,9 @@ npm run monitor         # Console watchdog — optional, needs Python
 |--------|-------------|
 | `start` | Build and start the bot **via the supervisor** — restarts it if it crashes or hangs, and brings up Rust (and Python if installed) on its own (each with its own auto-restart) |
 | `start:unsupervised` | Same as `start` but without the supervisor layer — runs `dist/index.js` directly |
-| `monitor` | Console watchdog (needs Python plus `requirements-optional.txt`) |
+| `monitor` | Console watchdog — optional, needs Python (`python/requirements.txt`) |
 | `dev` | Node.js direct — development / QR scan |
-| `build` | Compile TypeScript → `dist/` |
+| `build` | Compile TypeScript → `dist/`. **Wipes `dist/` first**: `tsc` never cleans, and the command loader registers every `.js` it finds there, so a file from an earlier release would keep running |
 | `rust:start` | Rust Session API |
 | `rust:build` | Compile Rust in release mode |
 | `manage` | Maintenance CLI (interactive menu) |
@@ -491,6 +471,7 @@ npm run monitor         # Console watchdog — optional, needs Python
 | `rust:lint` | `cargo clippy` on the Rust Session API |
 | `py:lint` / `py:lint:fix` | Ruff — lints `python/` (needs `pip install -r python/requirements-dev.txt`) |
 | `py:deps` | Checks that everything `python/` imports is declared in the requirements, both ways. Exits non-zero if anything is missing |
+| `tools:build` | Compiles `monitor` and `manage` into native executables with Nuitka — they run without Python installed. Does not cross-compile: the binary is for the machine that built it |
 | `rust:test` | Rust unit tests (`cargo test`) |
 | `rust:bench` | Criterion benchmarks on the hot path (HTML reports in `rust/target/criterion/`) |
 | `py:format` | Ruff — formats `python/` |
@@ -543,7 +524,7 @@ Interactive multi-service menu orchestrating Python, Rust, and Node.js.
 
 | Option | Command | When to use |
 |:------:|---------|-------------|
-| 1 | `manage:status` | Check FastAPI / Rust / Webhook / Web panel status |
+| 1 | `manage:status` | Check Rust / Webhook / Web panel status |
 | 2 | `manage:diagnose` | Analyze session, Signal files, Rust, logs |
 | 3 | `manage:repair` | Corrupted Signal → tries QR-free restore → backup |
 | 4 | `manage:reset-signal` | Delete `session-*.json` only (keeps `creds.json`) |
@@ -708,6 +689,9 @@ curl -H "x-api-key: YOUR_KEY" http://127.0.0.1:3001/messages/pending
 | `POST` | `/imagefx/lego` | LEGO-style mosaic |
 | `POST` | `/search/image` | Search for and download an image |
 | `POST` | `/search/images` | Search and return only the URLs |
+| `POST` | `/vision/removebg` | Remove the background (isnetis on ONNX) |
+| `POST` | `/vision/toanime` | Convert to anime style (AnimeGANv2 on ONNX) |
+| `POST` | `/vision/upscale` | Upscale x2 or x4 with Anime4K (no model) |
 | | **Delivery** | |
 | `POST` | `/messages/track` | Track outgoing message IDs |
 | `POST` | `/messages/ack` | Batch-update delivery status |
@@ -817,20 +801,15 @@ WinsiBot/
 │       ├── server.ts                 # API + WS + web/dist static files
 │       ├── auth.ts                   # WhatsApp-linked login (#login <code>)
 │       └── routes/                   # /api/subbots, /api/groups, /api/admin
-├── python/                           # Python — OPTIONAL, the bot runs without it
-│   ├── requirements.txt              # 3 packages, all with prebuilt wheels
-│   ├── requirements-optional.txt     # Anime (torch) + console tooling
-│   ├── api/
-│   │   ├── app.py                    # FastAPI — no lifespan: opens no databases, starts no threads
-│   │   └── routers/
-│   │       ├── health.py             # GET /health — the only thing the bot queries
-│   │       └── anime.py              # Neural networks (torch): the only thing still needing Python
-│   ├── ai/                           # Console watchdog: health, breakages, anomalies, alerts
+├── python/                           # Python — OPTIONAL, console tooling only
+│   ├── requirements.txt              # What `npm run monitor` and `manage` need
+│   ├── paths.py                      # The project root, interpreted or compiled
+│   ├── ai/                           # Health, breakages, anomalies, alerts
 │   ├── session/                      # Backup / restore / SHA-256 checksum
 │   └── terminal/
-│       ├── monitor.py                # Main watchdog with auto-restart
-│       └── manage.py                 # Interactive maintenance CLI
-├── rust/                             # Rust — Session API v5.6.0
+│       ├── monitor.py                # Interactive watchdog with auto-restart
+│       └── manage.py                 # Maintenance CLI
+├── rust/                             # Rust — Session API v5.7.0
 │   ├── assets/                       # Data embedded into the binary with include_str!
 │   │   ├── personality.json          # 489 phrases across 12 modes + 121 humour phrases
 │   │   └── commands.json             # 28-command catalogue for AI context

@@ -5,11 +5,12 @@ import cbor2
 from pathlib import Path
 from datetime import datetime
 from rich.console import Console
+from paths import ROOT
 
 console = Console()
 
 # ─── Paths absolutos desde la raiz del proyecto ───────────────────────────────
-_ROOT      = Path(__file__).parent.parent.parent
+_ROOT      = ROOT
 AUTH_DIR   = _ROOT / 'auth'
 BACKUP_DIR = _ROOT / 'data' / 'session_backups'
 LOG_FILE   = _ROOT / 'data' / 'session_log.json'

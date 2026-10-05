@@ -1,155 +1,33 @@
 // Hecho por HepeinBaileys
 
 import axios, { type AxiosInstance } from 'axios'
-import axiosRetry from 'axios-retry'
 import { config } from '@config'
 import { logger } from '@core/logger.js'
-import { pythonCircuit, rustCircuit } from '@lib/circuitBreaker.js'
-import { venvPythonPath } from '@lib/platform.js'
-import { existsSync } from 'node:fs'
-import type { PythonApiResponse } from '../types/index.js'
+import { rustCircuit } from '@lib/circuitBreaker.js'
 
-// ─── Clientes HTTP ────────────────────────────────────────────────────────────
-const client: AxiosInstance = axios.create({
-  baseURL: config.pythonApiUrl,
-  timeout: 5_000,
-  headers: { 'Content-Type': 'application/json' },
-})
+// ─── Cliente de Rust ──────────────────────────────────────────────────────────
+//
+// Acá vivía además el cliente HTTP de la API de Python —`pythonPost`,
+// `pythonGet`, `pythonDelete`, su circuito y sus reintentos—. No queda nada que
+// llamar: lo último fueron los tres comandos de imagen, que están en
+// `rust/src/vision.rs` desde la 8.11.0, y con ellos se fue la API entera, que
+// se había quedado sirviendo un solo endpoint de salud que únicamente
+// consultaban sus propios vigilantes.
+//
+// El archivo conserva el nombre para no tocar sus once puntos de importación.
 
-// Cliente para el servidor Rust (sin reintentos — ya es sub-ms)
-// Antes mandaba process.env.RUST_API_KEY (nunca documentado en .env.example,
-// siempre vacío) — Rust rechaza con 401 cualquier x-api-key que no matchee,
-// así que TODO el camino rápido de NLP en Rust caía en silencio a Python.
 const rustClient: AxiosInstance = axios.create({
   baseURL: config.rustApiUrl,
-  timeout: 300,   // 300ms máximo; si no responde, cae a Python
   headers: { 'Content-Type': 'application/json', 'x-api-key': config.sessionApiKey },
+  // Sin timeout global: la mayoría de estas llamadas están en el camino
+  // crítico de cada mensaje y responden en sub-milisegundos, pero unas pocas
+  // (la IA con Ollama, los modelos de imagen) tardan segundos y fijan el suyo
+  // en cada llamada. Un techo global tendría que ser el del caso más lento, lo
+  // que no protegería a los rápidos de nada.
 })
-
-// 1 solo reintento — este cliente está en el camino crítico de cada mensaje
-// (vía hepein.respond, etc.). Con 3 reintentos + backoff exponencial, una
-// Python lenta/degradada podía tardar 20-30s en fallar definitivamente,
-// dejando ocupado un slot del semáforo de concurrencia de handler.ts todo
-// ese tiempo. Mejor fallar rápido — el bot ya maneja Python no disponible.
-axiosRetry(client, {
-  retries:        1,
-  retryDelay:     axiosRetry.exponentialDelay,
-  retryCondition: (err) => axiosRetry.isNetworkOrIdempotentRequestError(err),
-})
-
-// ─── Circuito ─────────────────────────────────────────────────────────────────
-// Solo cuentan como fallo del SERVICIO los errores de red, los timeouts y los
-// 5xx. Un 4xx significa que la petición estaba mal, no que Python se cayó:
-// contarlo abriría el circuito por un bug nuestro y dejaría sin IA a todo el
-// bot. Ver lib/circuitBreaker.ts.
-function isServiceFailure(err: any): boolean {
-  const status = err?.response?.status
-  if (typeof status === 'number') return status >= 500
-  return true   // sin respuesta = red caída, timeout o DNS
-}
-
-/** Respuesta inmediata cuando el circuito está abierto — sin tocar la red. */
-function circuitOpenResponse<T>(): PythonApiResponse<T> {
-  return { success: false, error: 'Python API no disponible (circuito abierto)' } as PythonApiResponse<T>
-}
-
-// ─── Base ─────────────────────────────────────────────────────────────────────
-/**
- * ¿Hay un entorno de Python instalado?
- *
- * Desde la 8.11.0 Python es opcional: lo único que queda allá son los comandos
- * de anime, que son redes neuronales con torch. Sin venv no hay nada que
- * llamar, así que conviene decirlo de entrada en vez de intentar la petición,
- * fallar por conexión rechazada y que el usuario vea un error genérico después
- * de esperar.
- *
- * Se evalúa una vez: instalar Python con el bot corriendo es un caso que no
- * vale una llamada al sistema de archivos por petición.
- */
-let _pythonInstalado: boolean | null = null
-export function pythonInstalado(): boolean {
-  if (_pythonInstalado === null) _pythonInstalado = existsSync(venvPythonPath())
-  return _pythonInstalado
-}
-
-/** El error que ven los comandos cuando no hay Python instalado. */
-export const SIN_PYTHON = 'Esta función necesita Python instalado (ver python/requirements-optional.txt)'
-
-export async function pythonPost<T>(
-  endpoint:  string,
-  data:      Record<string, unknown>,
-  timeoutMs?: number,
-): Promise<PythonApiResponse<T>> {
-  if (!pythonInstalado()) return { success: false, error: SIN_PYTHON } as PythonApiResponse<T>
-  if (!pythonCircuit.canAttempt()) return circuitOpenResponse<T>()
-  try {
-    const res = await client.post<PythonApiResponse<T>>(
-      endpoint, data,
-      timeoutMs != null ? { timeout: timeoutMs } : undefined,
-    )
-    pythonCircuit.recordSuccess()
-    return res.data
-  } catch (err: any) {
-    if (isServiceFailure(err)) pythonCircuit.recordFailure()
-    if (err?.code === 'ECONNREFUSED' || err?.cause?.code === 'ECONNREFUSED') {
-      return { success: false, error: 'Flask offline' }
-    }
-    logger.error({
-      endpoint,
-      code:    err?.code,
-      status:  err?.response?.status,
-      message: err?.message,
-    }, 'Error llamando Python API')
-    return { success: false, error: 'Python API no disponible' }
-  }
-}
-
-export async function pythonGet<T>(
-  endpoint: string,
-  params?:  Record<string, string>,
-): Promise<PythonApiResponse<T>> {
-  if (!pythonCircuit.canAttempt()) return circuitOpenResponse<T>()
-  try {
-    const res = await client.get<PythonApiResponse<T>>(endpoint, { params })
-    pythonCircuit.recordSuccess()
-    return res.data
-  } catch (err: any) {
-    if (isServiceFailure(err)) pythonCircuit.recordFailure()
-    if (err?.code === 'ECONNREFUSED' || err?.cause?.code === 'ECONNREFUSED') {
-      return { success: false, error: 'Flask offline' }
-    }
-    logger.error({
-      endpoint,
-      code:    err?.code,
-      status:  err?.response?.status,
-      message: err?.message,
-    }, 'Error llamando Python API')
-    return { success: false, error: 'Python API no disponible' }
-  }
-}
-
-export async function pythonDelete<T>(
-  endpoint: string,
-): Promise<PythonApiResponse<T>> {
-  try {
-    const res = await client.delete<PythonApiResponse<T>>(endpoint)
-    return res.data
-  } catch (err: any) {
-    if (err?.code === 'ECONNREFUSED' || err?.cause?.code === 'ECONNREFUSED') {
-      return { success: false, error: 'Flask offline' }
-    }
-    logger.error({
-      endpoint,
-      code:    err?.code,
-      status:  err?.response?.status,
-      message: err?.message,
-    }, 'Error llamando Python API')
-    return { success: false, error: 'Python API no disponible' }
-  }
-}
-
 
 // ─── NLP ──────────────────────────────────────────────────────────────────────
+
 export interface NLPIntent {
   text:    string
   primary: string
@@ -170,23 +48,21 @@ interface RustNlpResult {
  * (`LOCAL_TOXIC` en antitoxic, `LOCAL_NSFW` en nsfw, la de caracteres
  * repetidos en antispam) y solo la evalúa si acá no hay respuesta.
  *
- * Antes, con `unknown` se consultaba a Python — y ese respaldo era PEOR que
- * no tener ninguno. El vocabulario de Python era `saludo`/`despedida`/`ayuda`/
+ * Antes, con `unknown` se consultaba a Python — y ese respaldo era PEOR que no
+ * tener ninguno. El vocabulario de Python era `saludo`/`despedida`/`ayuda`/
  * `gracias`/`insulto`/`pregunta`, así que nunca podía devolver `insult`,
  * `nsfw`, `spam` ni `nonsense`, que es contra lo que comparan los cinco
  * consumidores. Pero devolvía un objeto válido, así que el `if (r)` de
- * `isToxic`/`isNSFW`/`isContentSpam` daba verdadero, esas funciones
- * devolvían `false` y la regex local NUNCA se llegaba a evaluar.
+ * `isToxic`/`isNSFW`/`isContentSpam` daba verdadero, esas funciones devolvían
+ * `false` y la regex local NUNCA se llegaba a evaluar.
  *
- * En la práctica: los 22 insultos y los 8 términos NSFW que la lista de Rust
- * no tenía quedaban sin moderar, aunque el respaldo local sí los cubría. Los
+ * En la práctica: los 22 insultos y los 8 términos NSFW que la lista de Rust no
+ * tenía quedaban sin moderar, aunque el respaldo local sí los cubría. Los
  * términos se unificaron en `nlp.rs` y el paso por Python se fue.
- *
- * `intents` e `is_question` también se fueron del tipo: no los leía nadie.
  */
 export async function analyzeIntent(text: string): Promise<NLPIntent | null> {
   try {
-    const res = await rustClient.post<RustNlpResult>('/nlp/fast', { text })
+    const res = await rustClient.post<RustNlpResult>('/nlp/fast', { text }, { timeout: 300 })
     if (res.data?.ok && res.data.intent !== 'unknown') {
       return { text, primary: res.data.intent }
     }
@@ -530,4 +406,58 @@ export async function resetPersonalityMode(jid = ''): Promise<boolean> {
   } catch {
     return false
   }
+}
+
+// ─── Modelos de imagen (Rust) ─────────────────────────────────────────────────
+// Portados de Python en la 8.11.0. Eran los últimos comandos que ataban el
+// proyecto a un intérprete, y al mirarlos de cerca resultó que **dos de los tres
+// ni siquiera usaban torch**: `dghs-imgutils` ya corría sus modelos con ONNX
+// Runtime. Ahora los tres están en `vision.rs`:
+//
+//   #toanime   AnimeGANv2 en ONNX — 8 MB de modelo, en vez de 3,7 GB de torch
+//   #removebg  isnetis en ONNX — 168 MB de modelo
+//   #upscale   Anime4K, que no es una red sino un algoritmo: ningún modelo
+//
+// Los dos primeros bajan su modelo la primera vez que se usan y lo cachean en
+// disco, así que el primer pedido puede tardar bastante más que los siguientes.
+
+export interface ResultadoImagen {
+  success:   boolean
+  image?:    string
+  error?:    string
+  format?:   string
+  scale?:    number
+  original?: { w: number; h: number }
+  result?:   { w: number; h: number }
+}
+
+async function visionPost(
+  ruta: string,
+  body: Record<string, unknown>,
+): Promise<ResultadoImagen | null> {
+  if (!rustCircuit.canAttempt()) return null
+  try {
+    // Timeout generoso: la primera llamada puede incluir la descarga del
+    // modelo (168 MB en el caso de removebg) además de la inferencia.
+    const res = await rustClient.post<ResultadoImagen>(ruta, body, { timeout: 180_000 })
+    rustCircuit.recordSuccess()
+    return res.data
+  } catch (err: any) {
+    if (typeof err?.response?.status !== 'number' || err.response.status >= 500) {
+      rustCircuit.recordFailure()
+    }
+    logger.debug({ err: err?.message, ruta }, 'vision falló')
+    return null
+  }
+}
+
+export const vision = {
+  removeBackground: (imageB64: string, bg?: string) =>
+    visionPost('/vision/removebg', { image: imageB64, ...(bg ? { bg } : {}) }),
+
+  toAnime: (imageB64: string) =>
+    visionPost('/vision/toanime', { image: imageB64 }),
+
+  upscale: (imageB64: string, scale = 2) =>
+    visionPost('/vision/upscale', { image: imageB64, scale }),
 }

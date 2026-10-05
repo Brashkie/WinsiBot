@@ -8,15 +8,15 @@ import time
 import re
 import hashlib
 import threading
-from pathlib import Path
 from datetime import datetime, timedelta
 from dataclasses import dataclass, asdict, field
 from typing import Optional
 from collections import defaultdict
 from rich.console import Console
+from paths import ROOT
 
 console  = Console()
-ROOT_DIR = Path(__file__).parent.parent.parent
+ROOT_DIR = ROOT
 DATA_DIR = ROOT_DIR / 'data'
 BREAK_LOG = DATA_DIR / 'break_log.json'
 

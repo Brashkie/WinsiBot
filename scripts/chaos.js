@@ -28,6 +28,13 @@ const only    = process.argv[2]
 const results = []
 const sleep   = (ms) => new Promise(r => setTimeout(r, ms))
 
+// El escenario 9 lee SESSION_API_KEY de process.env, y nadie la había puesto
+// ahí: está en el .env, que este script no cargaba. Las 8 comprobaciones que
+// hablan con la API fallaban todas con "API key inválida o faltante", que suena
+// a clave mal configurada y en realidad era este script sin leer el archivo.
+// El import va primero y no pisa lo que ya venga del entorno.
+import 'dotenv/config'
+
 // CHAOS_RUST_URL tiene que aplicarse ACÁ, antes del primer import de dist/.
 //
 // src/config.ts lee process.env una sola vez, al cargarse, y todos los módulos

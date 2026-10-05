@@ -1,7 +1,4 @@
 {
-  "extraPaths": [
-    "cython_ext"
-  ],
   "reportMissingModuleSource": "none",
   "reportMissingImports": "none"
 }

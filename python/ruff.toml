@@ -2,8 +2,12 @@ target-version = "py311"
 line-length = 100
 
 exclude = [
-    "venv",
-    "cython_ext/build",
+    # Cualquier entorno virtual, no solo uno llamado exactamente `venv`: al
+    # recrear el entorno queda un `venv.roto`/`venv.old` al lado, y con el
+    # nombre exacto ruff se metía a lintear site-packages — 26.165 avisos de
+    # código que no es de este proyecto, que es lo mismo que no tener linter.
+    "venv*",
+    ".venv*",
     "data",
 ]
 

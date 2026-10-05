@@ -6,16 +6,16 @@ Alertas visuales en consola + log persistente
 import json
 import time
 import threading
-from pathlib import Path
 from datetime import datetime
 from dataclasses import dataclass, asdict, field
 from typing import Optional
 from rich.console import Console
 from rich.panel import Panel
 from rich.text import Text
+from paths import ROOT
 
 console   = Console()
-ROOT_DIR  = Path(__file__).parent.parent.parent
+ROOT_DIR  = ROOT
 DATA_DIR  = ROOT_DIR / 'data'
 ALERT_LOG = DATA_DIR / 'alert_log.json'
 

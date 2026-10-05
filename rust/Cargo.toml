@@ -1,6 +1,6 @@
 [package]
 name = "winsibot-session-api"
-version = "5.6.0"
+version = "5.7.0"
 edition = "2021"
 
 [lib]
@@ -33,6 +33,10 @@ tracing-appender = "0.2.5"
 # tiff, bmp, ico, avif...) que este proyecto no usa y que alargan el build y
 # engordan el binario.
 image    = { version = "0.25", default-features = false, features = ["png", "jpeg"] }
+# ONNX Runtime para los modelos de imagen (ver vision.rs). `download-binaries`
+# baja el runtime nativo al compilar, asi que no hay que instalarlo aparte.
+ort      = { version = "=2.0.0-rc.13", default-features = false, features = ["std", "download-binaries", "tls-rustls", "ndarray"] }
+ndarray  = "0.17"
 
 [profile.release]
 lto = true

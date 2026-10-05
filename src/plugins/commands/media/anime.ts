@@ -1,5 +1,5 @@
 import type { Command } from '../../../types/index.js'
-import { pythonPost } from '@lib/pythonBridge.js'
+import { vision } from '@lib/pythonBridge.js'
 import { downloadContentFromMessage } from '@whiskeysockets/baileys'
 
 import { sleep } from '@lib/utils.js'
@@ -59,14 +59,7 @@ const command: Command = {
     const imageB64 = imageBuffer.toString('base64')
 
     const [result] = await Promise.all([
-      pythonPost<{
-        success:  boolean
-        image?:   string
-        error?:   string
-        scale?:   number
-        original?: { w: number; h: number }
-        result?:  { w: number; h: number }
-      }>('/api/v1/anime/upscale', { image: imageB64, scale })
+      vision.upscale(imageB64, scale)
         .catch(() => null),
       (async () => {
         for (const frame of frames) {
@@ -76,9 +69,9 @@ const command: Command = {
       })(),
     ])
 
-    if (!result?.data?.success || !result.data.image) {
+    if (!result?.success || !result.image) {
       await sock.sendMessage(jid, {
-        text: `✗ Error: ${result?.data?.error ?? result?.error ?? 'Error desconocido'}`,
+        text: `✗ Error: ${result?.error ?? result?.error ?? 'Error desconocido'}`,
         edit: key,
       } as any)
       return
@@ -87,8 +80,8 @@ const command: Command = {
     await sock.sendMessage(jid, { text: '✔ Listo', edit: key } as any)
     await sleep(200)
 
-    const orig = result.data.original
-    const res  = result.data.result
+    const orig = result.original
+    const res  = result.result
 
     const caption = [
       `◆ Anime4K x${scale}`,
@@ -98,7 +91,7 @@ const command: Command = {
     ].filter(Boolean).join('\n')
 
     await sock.sendMessage(jid, {
-      image:   Buffer.from(result.data.image, 'base64'),
+      image:   Buffer.from(result.image, 'base64'),
       caption,
     }, { quoted: msg })
   },

@@ -1,5 +1,5 @@
 import type { Command } from '../../../types/index.js'
-import { pythonPost } from '@lib/pythonBridge.js'
+import { vision } from '@lib/pythonBridge.js'
 import { downloadContentFromMessage } from '@whiskeysockets/baileys'
 
 import { sleep } from '@lib/utils.js'
@@ -48,17 +48,12 @@ const command: Command = {
 
     const imageB64 = imageBuffer.toString('base64')
 
-    const result = await pythonPost<{
-      success:   boolean
-      image?:    string
-      error?:    string
-      original?: { w: number; h: number }
-    }>('/api/v1/anime/convert', { image: imageB64 }, 30_000)
+    const result = await vision.toAnime(imageB64)
       .catch(() => null)
 
-    if (!result?.data?.success || !result.data.image) {
+    if (!result?.success || !result.image) {
       await sock.sendMessage(jid, {
-        text: `✗ Error: ${result?.data?.error ?? result?.error ?? 'Error desconocido'}`,
+        text: `✗ Error: ${result?.error ?? result?.error ?? 'Error desconocido'}`,
         edit: key,
       } as any)
       return
@@ -68,7 +63,7 @@ const command: Command = {
     await sleep(150)
 
     await sock.sendMessage(jid, {
-      image:   Buffer.from(result.data.image, 'base64'),
+      image:   Buffer.from(result.image, 'base64'),
       caption: `◆ Estilo Anime`,
     }, { quoted: msg })
   },

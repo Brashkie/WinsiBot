@@ -11,9 +11,10 @@ from pathlib import Path
 from datetime import datetime
 from dataclasses import dataclass, asdict, field
 from rich.console import Console
+from paths import ROOT
 
 console  = Console()
-ROOT_DIR = Path(__file__).parent.parent.parent
+ROOT_DIR = ROOT
 DATA_DIR = ROOT_DIR / 'data'
 ANALYSIS_LOG = DATA_DIR / 'code_analysis.json'
 
@@ -281,7 +282,7 @@ PY_RULES = [
 # ─── Archivos a ignorar ───────────────────────────────────────────────────────
 IGNORE_DIRS = {
     'node_modules', '.git', '__pycache__', 'venv', '.venv',
-    'dist', 'build', '.next', 'coverage', 'cython_ext',
+    'dist', 'build', '.next', 'coverage',
     'ai',
 }
 IGNORE_FILES = {

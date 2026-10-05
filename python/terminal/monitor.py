@@ -5,10 +5,25 @@ import os
 import time
 import threading
 import signal
-import urllib.request
-import urllib.error
 from pathlib import Path
 from datetime import datetime
+# ─── Salida en UTF-8 ──────────────────────────────────────────────────────────
+#
+# En Windows la consola arranca con una codepage heredada (cp1252 en español),
+# y `rich` cae ahí a su renderizador legacy: al escribir cualquiera de sus
+# símbolos lanza UnicodeEncodeError y la herramienta muere antes de mostrar
+# nada. Reconfigurar la salida lo evita, y `errors='replace'` cubre el caso
+# del terminal que de verdad no puede con un carácter: mejor un signo raro
+# que un traceback.
+#
+# Va antes de crear la Console de rich: ahí es donde decide cómo renderiza.
+for _flujo in (sys.stdout, sys.stderr):
+    if _flujo is not None and hasattr(_flujo, 'reconfigure'):
+        try:
+            _flujo.reconfigure(encoding='utf-8', errors='replace')
+        except Exception:
+            pass
+
 from rich.console import Console
 
 sys.path.insert(0, str(Path(__file__).parent.parent))
@@ -17,9 +32,10 @@ from session.manager import (
     check_session_health, clean_old_backups, log_event
 )
 from ai.break_detector import analyze_line
+from paths import ROOT
 
 console  = Console()
-ROOT_DIR = Path(__file__).parent.parent.parent
+ROOT_DIR = ROOT
 
 NODE_CMD         = ["npm.cmd", "run", "dev"]
 RESTART_DELAY    = 10
@@ -32,7 +48,6 @@ last_output_time   = time.time()
 last_command_time  = 0.0
 last_response_time = 0.0
 process:           subprocess.Popen | None = None
-flask_proc:        subprocess.Popen | None = None
 warned_hang        = False
 warned_no_response = False
 session_expelled   = False
@@ -86,34 +101,12 @@ def find_python() -> str:
         return str(venv)
     return sys.executable
 
-# ─── FastAPI ──────────────────────────────────────────────────────────────────
-def start_flask():
-    global flask_proc
-    python_exe = find_python()
-    try:
-        flask_proc = subprocess.Popen(
-            [python_exe, 'api/app.py'],
-            cwd=str(ROOT_DIR / 'python'),
-            stdout=subprocess.DEVNULL,
-            stderr=subprocess.DEVNULL,
-        )
-        log("[cyan]§ FastAPI iniciado (puerto 5000)[/cyan]")
-    except Exception as e:
-        log(f"[yellow]§ FastAPI no pudo iniciar: {e}[/yellow]")
-
-# ─── Esperar a que FastAPI esté lista ─────────────────────────────────────────
-def wait_for_api(timeout: float = 15.0, interval: float = 0.4) -> bool:
-    url      = 'http://127.0.0.1:5000/api/v1/health'
-    deadline = time.time() + timeout
-    while time.time() < deadline:
-        try:
-            with urllib.request.urlopen(url, timeout=1) as r:
-                if r.status == 200:
-                    return True
-        except Exception:
-            pass
-        time.sleep(interval)
-    return False
+# La API de Python se arrancaba y se esperaba acá.
+#
+# Desde la 8.11.0 no queda nada que servir: los tres comandos de imagen —lo
+# último que vivía allá— están en rust/src/vision.rs, y la API se había
+# quedado con un solo endpoint, GET /health, que solo consultaban este archivo
+# y manage.py. Un servicio cuyo único trabajo era responder que estaba vivo.
 
 # ─── Watchdog ─────────────────────────────────────────────────────────────────
 def watchdog():
@@ -240,15 +233,32 @@ def alert_from_watchdog(event: str, detail: str = '') -> None:
         pass
 
 def start_health_monitor():
+    # Cada servicio en su propio try.
+    #
+    # Antes los dos imports y los dos arranques estaban en el MISMO bloque, y
+    # el de ai_brain iba segundo: si fallaba —por un modelo corrupto, por
+    # numpy ausente en una compilación recortada, por lo que sea— la excepción
+    # saltaba antes de `start_background(interval=30)` y el Health Monitor
+    # **nunca arrancaba, en silencio**. Dos cosas distintas no comparten
+    # try/except.
     try:
         from ai.health_monitor import start_background
-        from ai.ai_brain       import brain as ai_brain
-
         start_background(interval=30)
         log("[cyan]§ Health Monitor iniciado[/cyan]")
+    except Exception as e:
+        log(f"[yellow]§ Health Monitor no disponible: {e}[/yellow]")
 
+    # El detector de anomalías necesita numpy y scikit-learn, que son las dos
+    # dependencias pesadas de todo el proyecto. Sin ellas el resto del
+    # watchdog funciona igual.
+    try:
+        from ai.ai_brain import brain as ai_brain
         ai_brain.start_background(interval=60)
         log("[cyan]§ AI Brain iniciado[/cyan]")
+    except Exception as e:
+        log(f"[dim]§ AI Brain no disponible: {e}[/dim]")
+
+    try:
 
         # ─── breaks y code analysis en background — no bloquear arranque ──
         def _deferred_checks():
@@ -281,10 +291,11 @@ def handle_exit(sig, frame):
     log_event("shutdown", "manual SIGINT")
     alert_from_watchdog("shutdown")
     backup_session()
-    for proc in [process, flask_proc]:
-        if proc:
-            try: proc.kill()
-            except: pass
+    if process:
+        try:
+            process.kill()
+        except Exception:
+            pass
     sys.exit(0)
 
 signal.signal(signal.SIGINT,  handle_exit)
@@ -299,19 +310,13 @@ if __name__ == "__main__":
 
     # 1. iniciar servicios en paralelo
     service_threads = [
-        threading.Thread(target=start_flask,         daemon=True, name='SvcAPI'),
-        threading.Thread(target=start_health_monitor,daemon=True, name='SvcHealth'),
+        threading.Thread(target=start_health_monitor, daemon=True, name='SvcHealth'),
     ]
     for t in service_threads:
         t.start()
     for t in service_threads:
         t.join(timeout=3)
 
-    # 2. esperar a que FastAPI responda antes de arrancar Node
-    if wait_for_api(timeout=15):
-        log("[green]✔ FastAPI lista[/green]")
-    else:
-        log("[yellow]§ FastAPI no respondio en 15s — arrancando Node igual[/yellow]")
 
     # 2. verificar sesion
     health = check_session_health()

@@ -330,15 +330,18 @@
 !lego 10          ← citar imagen, fichas chicas (más detalle)
 ```
 
-> **`removebg`, `anime` y `toanime` necesitan Python instalado.** Son los únicos
-> tres comandos que lo necesitan: corren redes neuronales (AnimeGANv2, NAFNet,
-> isnetis) con `torch`, que son ~2 GB y no tienen binario precompilado para ARM
-> —así que en Termux no funcionan—. El resto del bot corre sin Python; si no
-> está, estos tres responden con un mensaje claro en vez de quedarse esperando.
-> Ver `python/requirements-optional.txt`.
+> **Los tres ya no necesitan Python.** Hasta la 8.11.0 corrían del lado de
+> Python y pesaban más de 4 GB en dependencias; ahora están en Rust:
 >
-> `lego` e `imagen` también estaban en Python hasta la 8.11.0 y ahora están en
-> Rust: funcionan siempre.
+> | Comando | Cómo funciona | Modelo |
+> |---------|---------------|-------:|
+> | `anime` (upscale) | Anime4K — un algoritmo, no una red | ninguno |
+> | `removebg` | isnetis en ONNX Runtime | 168 MB |
+> | `toanime` | AnimeGANv2 en ONNX Runtime | 8 MB |
+>
+> Los dos que usan modelo lo bajan **la primera vez** y lo dejan cacheado en
+> `data/models/`, así que el primer uso tarda bastante más que los siguientes.
+> Funcionan en cualquier plataforma donde compile Rust, Termux incluido.
 
 ---
 

@@ -5,6 +5,7 @@ import { spawnSync } from 'child_process'
 import { existsSync } from 'fs'
 import { join }       from 'path'
 import readline       from 'readline'
+import { exeName }    from './_platform.js'
 
 const WIN    = process.platform === 'win32'
 // Termux siempre define $PREFIX apuntando a su propio userland — es la forma
@@ -97,10 +98,22 @@ async function main() {
     ok()
   }
 
-  // 7. Rust (opcional, pregunta)
-  const cargoR = run('cargo --version')
+  // 7. Rust — solo si no bajó ya el binario compilado
+  //
+  // `npm install` corre scripts/fetch_rust.js, que baja el binario de esta
+  // plataforma desde las releases de GitHub. Si ya está, no hay nada que
+  // preguntar ni que compilar.
+  const binRust = join(ROOT, 'rust', 'target', 'release', exeName('winsibot-session-api'))
+  const yaEsta  = existsSync(binRust)
+  if (yaEsta) {
+    console.log('  ✅ Binario de Rust ya presente (bajado durante npm install).')
+  }
+  const cargoR = yaEsta ? { status: 1 } : run('cargo --version')
   if (cargoR.status === 0) {
-    const estimate = TERMUX ? '10-30+ min en un teléfono, compila DuckDB en C++ desde cero' : 'tarda ~2min'
+    // El estimado decía '10-30+ min en un teléfono, compila DuckDB en C++
+    // desde cero'. DuckDB se fue en la 8.10.0; lo que pesa ahora es ONNX
+    // Runtime, que viene precompilado.
+    const estimate = TERMUX ? 'varios minutos en un teléfono' : 'tarda ~4min'
     const ans = await ask(`\n  ¿Compilar Rust ahora? (${estimate}) [s/N] `)
     if (ans.toLowerCase() === 's') {
       console.log('  ◈ Compilando Rust (cargo build --release)...')

@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
 WinsiBot Manager — CLI de mantenimiento multi-servicio
-Orquesta Rust (session API), FastAPI y Node para diagnóstico y reparación.
+Orquesta Rust (session API) y Node para diagnóstico y reparación.
 
 Uso:
   python manage.py              menú interactivo
@@ -28,6 +28,23 @@ import urllib.error
 from pathlib import Path
 from typing import Optional
 
+# ─── Salida en UTF-8 ──────────────────────────────────────────────────────────
+#
+# En Windows la consola arranca con una codepage heredada (cp1252 en español),
+# y `rich` cae ahí a su renderizador legacy: al escribir cualquiera de sus
+# símbolos lanza UnicodeEncodeError y la herramienta muere antes de mostrar
+# nada. Reconfigurar la salida lo evita, y `errors='replace'` cubre el caso
+# del terminal que de verdad no puede con un carácter: mejor un signo raro
+# que un traceback.
+#
+# Va antes de crear la Console de rich: ahí es donde decide cómo renderiza.
+for _flujo in (sys.stdout, sys.stderr):
+    if _flujo is not None and hasattr(_flujo, 'reconfigure'):
+        try:
+            _flujo.reconfigure(encoding='utf-8', errors='replace')
+        except Exception:
+            pass
+
 from rich.console  import Console
 from rich.table    import Table
 from rich.panel    import Panel
@@ -40,9 +57,10 @@ from session.manager import (
     clean_old_backups, log_event, get_session_logs, get_signal_files,
     AUTH_DIR, BACKUP_DIR,
 )
+from paths import ROOT
 
 console  = Console()
-ROOT_DIR = Path(__file__).parent.parent.parent
+ROOT_DIR = ROOT
 
 # ─── Cargar .env del proyecto ─────────────────────────────────────────────────
 def _load_env():
@@ -61,7 +79,6 @@ RUST_BASE   = os.getenv('SESSION_API_URL', 'http://127.0.0.1:3001')
 RUST_APIKEY = os.getenv('SESSION_API_KEY', '')
 
 SERVICES = {
-    'FastAPI':   'http://127.0.0.1:5000/api/v1/health',
     'Rust API':  f'{RUST_BASE}/health/live',
     'Webhook':   'http://127.0.0.1:4001/health',
     'Dashboard': f'http://127.0.0.1:{os.getenv("DASHBOARD_PORT", "4002")}/api/health',
@@ -216,15 +233,12 @@ def cmd_diagnose():
         _warn('Rust API offline')
         issues.append(('warn', 'Rust API offline'))
 
-    # ── FastAPI / Webhook ─────────────────────────────────────────────────────
+    # ── Webhook ───────────────────────────────────────────────────────────────
+    # Acá también se comprobaba la API de Python. Se fue en la 8.11.0: los tres
+    # comandos de imagen —lo último que servía— están en Rust, y había quedado
+    # con un solo endpoint de salud que solo miraba esta pantalla.
     console.print()
-    _section('FastAPI / Webhook')
-    api = _http_get(SERVICES['FastAPI'])
-    if api: _ok('FastAPI online')
-    else:
-        _warn('FastAPI offline')
-        issues.append(('warn', 'FastAPI offline'))
-
+    _section('Webhook')
     wh = _http_get(SERVICES['Webhook'])
     if wh:
         connected = wh.get('connected', False)

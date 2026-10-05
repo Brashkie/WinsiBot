@@ -243,99 +243,16 @@ process.on('SIGTERM', () => {
   })
 })
 
-// ─── Python API auto-arranque ─────────────────────────────────────────────────
-
-let _pythonProc: ChildProcess | null = null
-
-async function isPythonApiUp(): Promise<boolean> {
-  try {
-    const { default: axios } = await import('axios')
-    await axios.get(`${config.pythonApiUrl}/api/v1/health`, { timeout: 2_000 })
-    return true
-  } catch {
-    return false
-  }
-}
-
-async function waitPythonApi(maxWaitMs = 20_000): Promise<boolean> {
-  const deadline = Date.now() + maxWaitMs
-  while (Date.now() < deadline) {
-    if (await isPythonApiUp()) return true
-    await new Promise(r => setTimeout(r, 800))
-  }
-  return false
-}
-
-/**
- * Levanta la API de Python si hace falta y si se puede.
- *
- * Desde la 8.11.0 Python es **opcional**: lo único que queda allá son los
- * comandos de anime (`#toanime`, `#upscale`, `#removebg`), que son redes
- * neuronales con torch — ~2 GB y sin binario para ARM, así que en Termux no
- * funcionaban ni antes. Todo lo demás se fue a Rust.
- *
- * Por eso esto no falla ni avisa en rojo cuando no hay entorno de Python: si
- * no existe el venv, se salta en silencio y el bot arranca igual. Los tres
- * comandos de anime responden con un mensaje claro en vez de esperar un
- * timeout.
- *
- * La detección es por la presencia del venv y no por una variable de entorno,
- * para que quien ya lo tenía andando no tenga que configurar nada.
- */
-export function pythonDisponible(): boolean {
-  return existsSync(venvPythonPath())
-}
-
-async function ensurePythonApi(): Promise<void> {
-  // Si ya responde, no hacer nada
-  if (await isPythonApiUp()) return
-
-  if (!pythonDisponible()) {
-    logger.info(
-      'Python no instalado — el bot funciona igual. Solo quedan sin servicio ' +
-      '#toanime, #upscale y #removebg (ver python/requirements-optional.txt).',
-    )
-    return
-  }
-
-  const python = venvPythonPath()
-
-  const stopSpin = loader.spin('Iniciando Python API...')
-
-  _pythonProc = spawn(python, [
-    '-m', 'uvicorn',
-    'api.app:app',
-    '--host', '127.0.0.1',
-    '--port', '5000',
-    '--workers', '1',
-    '--log-level', 'warning',
-    '--no-access-log',
-  ], {
-    cwd:   join(process.cwd(), 'python'),
-    // 'ignore' descarta stdout/stderr — evita que el pipe buffer se llene y bloquee Python
-    stdio: ['ignore', 'ignore', 'ignore'],
-  })
-
-  _pythonProc.on('error', (err) => {
-    stopSpin(`Python API no pudo iniciar: ${err.message}`, false)
-  })
-
-  // Reinicar Python si muere inesperadamente (exit code != 0)
-  _pythonProc.on('exit', (code) => {
-    if (code !== 0 && code !== null) {
-      logger.warn(`Python API terminó con código ${code} — reiniciando en 3s`)
-      setTimeout(() => ensurePythonApi().catch(() => {}), 3_000)
-    }
-  })
-
-  // Esperar hasta que responda (máx 20s)
-  const ok = await waitPythonApi(20_000)
-  if (ok) {
-    stopSpin('Python API lista', true)
-  } else {
-    stopSpin('Python API tardó demasiado — continuando sin ella', false)
-  }
-}
+// ─── La API de Python ya no existe ───────────────────────────────────────────
+//
+// Acá se levantaba `python/api/app.py` si no estaba corriendo. Desde la 8.11.0
+// no hay nada que levantar: lo último que servía eran los tres comandos de
+// imagen, que están en rust/src/vision.rs, y la API se había quedado con un
+// solo endpoint de salud que solo consultaban sus propios vigilantes.
+//
+// Python sigue en el proyecto, pero solo como herramienta de consola
+// (`npm run monitor`, `npm run manage`), que se abre a mano y no la lanza nadie
+// automáticamente.
 
 // ─── Rust Session API auto-arranque ──────────────────────────────────────────
 
@@ -491,7 +408,6 @@ async function main() {
   // Rust → Python. El bot levanta sus propias dependencias — un solo árbol de
   // procesos, un solo lugar donde se limpian.
   await ensureRust()
-  await ensurePythonApi()
 
   const stopData = loader.spin('Cargando datos guardados...')
   await loadAll()

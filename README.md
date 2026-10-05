@@ -10,7 +10,7 @@
 [![Rust](https://img.shields.io/badge/Rust-1.75%2B-CE422B?style=for-the-badge&logo=rust&logoColor=white)](https://rust-lang.org)
 
 [![License](https://img.shields.io/badge/License-GPL--3.0-blue?style=flat-square)](LICENSE)
-[![Version](https://img.shields.io/badge/Version-8.11.0-6C63FF?style=flat-square)](CHANGELOG.md)
+[![Version](https://img.shields.io/badge/Version-8.12.0-6C63FF?style=flat-square)](CHANGELOG.md)
 [![Platform](https://img.shields.io/badge/Platform-Windows%20%7C%20Linux%20%7C%20macOS%20%7C%20Android-lightgrey?style=flat-square)](https://github.com/Brashkie/WinsiBot)
 [![PRs Welcome](https://img.shields.io/badge/PRs-welcome-brightgreen?style=flat-square)](https://github.com/Brashkie/WinsiBot/pulls)
 
@@ -18,7 +18,7 @@
 
 > Bot de WhatsApp de alto rendimiento con arquitectura multi-lenguaje de tres capas.<br/>
 > Sin límite artificial de grupos, pensado para miles de mensajes por hora y múltiples instancias.<br/>
-> v8.11.0 — **Python deja de ser un requisito.** De 35 archivos a 16, de 7 routers a 2, y de un `requirements.txt` incompleto a **tres paquetes** que instalan sin compilar nada. Lo único que sigue necesitando un intérprete son los comandos de anime, que son redes neuronales con `torch`: si no hay `python/venv`, el bot lo dice en una línea y arranca igual. Clasificación de intenciones, filtro de spam, personalidad, humor, reputación, perfiles de estilo, mosaico LEGO, búsqueda de imágenes y el cliente de Ollama están ahora en Rust. **Nueve bugs reales** encontrados de camino, entre ellos que `/ml/predict/spam` **borraba mensajes legítimos** (compartía un contador de 8 mensajes cada 5 s entre todos los usuarios de todos los grupos) y que **22 insultos quedaban sin moderar** porque el respaldo de Python impedía que la regex local llegara a evaluarse.<br/>
+> v8.12.0 — **El bot deja de llamar a Python, y lo que queda de él se compila.** Los tres comandos de imagen están ahora en Rust: `#toanime` pasa de **3,7 GB de torch a un ONNX de 8 MB**, `#removebg` usa el mismo modelo con el crate `ort`, y `#upscale` es **Anime4K portado** — sin modelo que bajar y sin archivos temporales. Con ellos se fue la API de Python entera, que había quedado con un solo endpoint para decir que estaba viva. Instalar es **`npm install` y nada más**: el binario de la Session API se baja precompilado para la plataforma —6 targets, Termux incluido— con su SHA-256 verificado. **Nueve bugs reales** encontrados de camino, entre ellos que `npm run build` **nunca limpiaba `dist/`** y el bot servía **35 comandos con código sin fuente** —dos de ellos borrados siete versiones atrás— y que la **Session API no podía arrancar** siguiendo `.env.example`, con el panic invisible porque se lanza con `stdio: 'ignore'`.<br/>
 
 <br/>
 
@@ -64,31 +64,26 @@
 |------|-----------|----------------|
 | 🟦 **Core** | TypeScript / Node.js | Protocolo WhatsApp, dispatcher de comandos, RPG, economía, panel web |
 | ⚙️ **Session + IA** | Rust / Axum | Creds atómicas y snapshots, tracker Bad MAC, rate limiter, clasificación de intenciones, personalidad y humor, reputación, perfiles de estilo, Ollama y APIs cloud, imágenes |
-| 🐍 **Opcional** | Python / FastAPI | Solo los comandos de anime (redes neuronales con `torch`) y el watchdog de consola. **El bot funciona sin esto** |
+| 🐍 **Opcional** | Python | Solo el watchdog de consola y el CLI de mantenimiento, que se abren a mano. **El bot funciona sin esto y nadie lo arranca** |
 
-### Novedades en v8.11.0
+### Novedades en v8.12.0
 
-**Python deja de ser un requisito para instalar y correr el bot.** Todo lo que estaba en el camino de cada mensaje se fue a Rust; lo único que sigue necesitando un intérprete son los comandos de anime, que son redes neuronales con `torch`.
+**El bot ya no llama a Python para nada, y lo que queda de él se compila.** La 8.11.0 lo bajó a 16 archivos pero dejó tres comandos que necesitaban un intérprete y una API entera para servirlos. Los tres están en Rust, la API no existe, y Python queda en 9 archivos que son solo herramienta de consola.
 
 | Área | Cambio |
 |------|--------|
-| **Python opcional** | Si no existe `python/venv`, el bot lo detecta al arrancar, lo dice en **una línea de log** y sigue. `#toanime`, `#upscale` y `#removebg` responden con un mensaje claro en vez de esperar un timeout. El `requirements.txt` queda en **3 paquetes** con rueda precompilada |
-| **Un mensaje, una fila** | Cada mensaje de grupo se guardaba **dos veces**: `handler.ts` lo mandaba a Rust y también a Python, que lo escribía otra vez en Parquet para calcular el mismo perfil de estilo. Dos almacenes, dos implementaciones de las mismas agregaciones y una llamada HTTP por mensaje. Ahora sale todo de la tabla que Rust ya llenaba |
-| **De 1582 líneas, 970 eran tablas de datos** | 489 frases de respuesta en 12 modos, 121 de humor y un catálogo de 28 comandos. Extraídas tal cual a JSON por un script que las lee por AST, e incrustadas en el binario con `include_str!` — la idea es que instalar sea un binario y nada más |
-| **Fix grave: el antispam borraba mensajes legítimos** | `/ml/predict/spam` no era un clasificador de contenido: envolvía un rate limiter **por remitente** pasándole el sender **fijo** `'__predict__'`, así que todos los usuarios de todos los grupos compartían un contador de **8 mensajes cada 5 segundos**. Al noveno, el bot borraba el mensaje y acusaba públicamente a quien lo había escrito. En un grupo activo eso es una conversación normal |
-| **Fix: 22 insultos quedaban sin moderar** | El respaldo de Python para clasificar intenciones usaba un vocabulario (`saludo`, `despedida`, `ayuda`…) que **nunca** podía devolver las etiquetas contra las que comparan los consumidores (`insult`, `nsfw`, `spam`) — pero sí devolvía un objeto válido, y eso impedía que la regex local de respaldo llegara a evaluarse. Las listas se unificaron en Rust |
-| **Fix: la reputación `trusted` era inalcanzable** | El cálculo parte de 50 y los bonos suman como máximo +20, con lo que el techo real es 70 — pero el umbral estaba en 80. Ningún usuario podía serlo por bien que se portara, y esa etiqueta sí se usa para suavizar las respuestas. Lo encontró un test |
-| **Fix: la tabla de conversaciones no tenía ni un índice** | Se recorría **entera** en cada respuesta de IA, que tiene un presupuesto de 300 ms. Medido con 300.000 filas: **47 ms → 0,64 ms** (74x), y un perfil completo de ~148 ms a ~1,4 ms |
-| **El mosaico LEGO, 5x más rápido** | Medido bien, Rust **perdía** contra Python. El perfil por etapas mostró por qué: un redimensionado Lanczos3 se llevaba **50 de los 76 ms** para alimentar un paso que después promedia cada celda a un solo color — trabajo tirado. **76 ms → 15,4 ms**, y los colores salen más exactos |
-| **Fix: `requirements.txt` declaraba 7 paquetes y el código importaba 13 más** | Un `pip install` limpio dejaba a Python sin poder servir casi ningún endpoint; nadie lo notaba porque el venv de desarrollo se había armado a mano durante meses. Nuevo `npm run py:deps` para que la deriva no vuelva en silencio |
-| **Fix: fuera de Windows las alertas se perdían en silencio** | `alert_system.py` tenía un `import winsound` —que solo existe en Windows— en el nivel superior, y sus cuatro llamadores lo importan tras un `except: pass`. Pasaba desde la versión que anunció soporte para Linux, macOS y Termux. El import ni se usaba |
-| **Fix: dos escenarios de chaos no probaban nada** | Validaban el circuito sobre un módulo recién importado, y el `?chaos=N` solo invalida la caché del módulo pedido, no la de sus dependencias: comprobaban un objeto distinto con los contadores en cero |
-| **Un archivo JSON por usuario, a una tabla** | Los perfiles de reputación vivían en `data/ai/users/<jid>.json` — con 2557 usuarios, 2557 archivos reescritos enteros cada diez mensajes. Ahora es un UPSERT en la base que ya está abierta |
-| **121 tests unitarios en Rust y dos benchmarks** | De **cero a 121** en esta versión: `cargo test` existía y no corría nada. Varios encontraron bugs reales — la categoría `trusted` inalcanzable, una regex NSFW que nunca matcheaba y un desempate que faltaba al contar palabras. El chaos sube a **35 comprobaciones en 9 escenarios** |
-| **Menos superficie** | Python de **35 archivos a 16** y de 7 routers a 2 (y ~3.200 de las 4.460 líneas que quedan son la consola opcional). Fuera `pyarrow`, `duckdb`, `spacy`, `ddgs`, `requests`, `transformers`, una capa ORM sin un solo lector y la librería C del filtro de spam. Motores de persistencia: de 5 a 3 |
-
-**[📜 Ver el historial completo de versiones →](CHANGELOG.md)**
-
+| **Los tres comandos de imagen a Rust, y dos no necesitaban torch** | `#toanime` pasa de **3,7 GB de torch a un modelo ONNX de 8 MB**; `#removebg` usa el mismo `isnetis.onnx` de antes con el crate `ort`; y `#upscale` es **Anime4K portado** — no una red sino un algoritmo de cinco pasos, así que no baja ningún modelo y tarda **175 ms** contra los segundos que costaba escribiendo archivos temporales. Al migrarlos salió que **dos de los tres ni siquiera usaban torch**: `dghs-imgutils` ya corría con ONNX Runtime |
+| **`npm install` y listo: binarios de Rust precompilados** | Compilar la Session API eran **~4 minutos** y pedía Rust instalado. Ahora `postinstall` baja el binario de la plataforma desde las releases y verifica su SHA-256, con un workflow que compila **6 targets** —Termux incluido, que tiene el suyo propio porque Android usa Bionic y no glibc—. Si no hay binario, lo dice en una línea y compilar sigue funcionando |
+| **Python ya no está en el camino de ningún mensaje** | Lo último en irse fueron los tres comandos de imagen, y con ellos la API de Python entera: había quedado con **un solo endpoint**, `GET /health`, que solo consultaban `monitor.py` y `manage.py` para mostrar "FastAPI: online". Un servicio cuyo único trabajo era responder que estaba vivo |
+| **Las herramientas de consola también se compilan** | `npm run tools:build` pasa `monitor` y `manage` por Nuitka y saca ejecutables que corren **sin Python instalado**, `rich` incluido — que es Python puro, 77 módulos y cero binarios nativos, así que no hay un `.so` suyo que bajar: hay que compilarlo. Medido: 16,0 y 16,1 MB, ~3 min cada uno con la caché de C caliente |
+| **Fix grave: el bot ejecutaba código borrado** | `tsc` compila pero no limpia, y `loadCommands()` registra **todo** `.js` que encuentre en `dist/`. Había 38 archivos huérfanos de versiones anteriores y **35 claves de comando las servía código sin fuente** — entre ellas `#registro` y `#unreg`, eliminados a propósito **siete versiones atrás** y que seguían funcionando, y `#image`, que servía la versión vieja y **tapaba la migración a Rust**. `npm run build` ahora limpia `dist/` primero |
+| **Fix grave: la Session API no arrancaba siguiendo `.env.example`** | El servidor de Rust leía `API_KEY` y `PORT`; el cliente y el `.env.example` usan `SESSION_API_KEY` y `SESSION_API_URL`, y los dos primeros **no estaban documentados en ninguna parte**. Quien clonara el repo se quedaba sin API y sin saber por qué: `index.ts` la lanza con `stdio: 'ignore'`, así que el panic no salía en ningún log y solo se veía un reintento cada 3 segundos. Ahora la clave tiene **un solo nombre** y el puerto sale de `SESSION_API_URL`, así que cliente y servidor no pueden quedar en puertos distintos |
+| **Fix: los binarios compilados no encontraban el proyecto** | Bajo Nuitka `--onefile`, `__file__` apunta al directorio temporal donde el binario se extrae en cada arranque, así que los 8 sitios que calculaban la raíz del proyecto daban una ruta que se borra al salir: `manage.exe` informaba *"auth dir missing"* teniendo **8.422 archivos** en `auth/`. Ni `sys.frozen` ni `sys.executable` sirven ahí; el que sí es `__compiled__.containing_dir` |
+| **Fix: `npm run manage` crasheaba en cualquier Windows en español** | Con una codepage heredada —cp1252, el caso por defecto— `rich` cae a su renderizador legacy y lanza `UnicodeEncodeError` con el primero de sus símbolos: **moría antes de mostrar nada**. No era cosa de compilar, la versión interpretada hacía lo mismo. Las dos herramientas fuerzan UTF-8 antes de crear la `Console` |
+| **Fix: el Health Monitor podía no arrancar nunca, en silencio** | Compartía un `try` con el AI Brain y arrancaba **después** del import de este, así que cualquier fallo del segundo se llevaba al primero sin que nadie se enterara. Se vio en vivo al correr el binario compilado, donde `numpy` está excluido a propósito |
+| **Fix: el postinstall rompía `npm install` con un 404** | `process.exit(0)` con una petición HTTP en vuelo hacía que libuv abortara con **código 127**, que npm lee como postinstall fallido y corta la instalación entera — justo en el camino más común mientras no haya release publicada |
+| **Fix: `chaos` y `ruff` mentían** | `chaos` reportaba *"API key inválida o faltante"* en 8 comprobaciones cuando la clave estaba bien y lo que faltaba era que el script leyera el `.env`. Y `ruff` y `py:deps` excluían el nombre exacto `venv`, así que cualquier `venv.roto` o `venv_tools` al lado los metía a recorrer site-packages: **26.165 avisos** de código que no es de este proyecto. Ahora un entorno se reconoce por su `pyvenv.cfg` |
+| **140 tests unitarios en Rust y dos benchmarks** | 19 más en esta versión. Lo que depende de un modelo ONNX no se prueba con assert, pero sí todo lo que lo rodea: el encuadre con relleno, la conversión a tensor NCHW y **Anime4K entero**, incluido un test que comprueba que marca el borde más que una bicúbica sola — que es justo lo que lo distingue de un redimensionado |
 ---
 
 ## Stack técnico
@@ -102,7 +97,7 @@
 | WhatsApp | Baileys 6.x | Protocolo WA Web multi-device |
 | IA y NLP | Rust | Intenciones por reglas, personalidad y humor, reputación, perfiles de estilo |
 | Modelos de lenguaje | Ollama → GPT → Gemini → Claude | Cascada, con caída a plantillas locales si ninguno responde |
-| Opcional | Python 3.11 + FastAPI | Comandos de anime (torch) y watchdog de consola — el bot corre sin esto |
+| Opcional | Python 3.11 | Watchdog de consola y CLI de mantenimiento — el bot corre sin esto |
 | Session Store | Rust + Axum + SQLite | Creds atómicas, delivery tracking, outbox con dead-letter |
 | Criptografía | `@brashkie/signalis-core` | Curve25519 / Ed25519 / HKDF / AES-GCM (Rust NAPI) |
 | Persistencia — usuarios | `strenor` (Rust NAPI) | `data/users.aof`, log de deltas: solo se escribe el usuario que cambió |
@@ -206,23 +201,23 @@
 
 ```
 ╔═══════════════════════════════════════════════════════════════════════╗
-║                           WinsiBot v8.11.0                            ║
+║                           WinsiBot v8.12.0                            ║
 ╠═════════════════════╦══════════════════════════╦══════════════════════╣
 ║      TypeScript     ║           Rust           ║        Python        ║
-║    Node.js :4001    ║                          ║  si está instalado   ║
+║    Node.js :4001    ║                          ║    nadie lo lanza    ║
 ║                     ║                          ║                      ║
 ║  ┌───────────────┐  ║ ┌──────────────────────┐ ║ ┌──────────────────┐ ║
-║  │  Baileys WS   │  ║ │   Session API :3001  │ ║ │  FastAPI :5000   │ ║
-║  ├───────────────┤  ║ ├──────────────────────┤ ║ │   (OPCIONAL)     │ ║
+║  │  Baileys WS   │  ║ │   Session API :3001  │ ║ │   (OPCIONAL)     │ ║
+║  ├───────────────┤  ║ ├──────────────────────┤ ║ │  solo consola    │ ║
 ║  │    Handler    │  ║ │ ● creds atómicas     │ ║ ├──────────────────┤ ║
-║  │   (semáforo)  │  ║ │ ● snapshots ×10      │ ║ │  anime: torch    │ ║
-║  ├───────────────┤  ║ │ ● bad_mac tracker    │ ║ │  #toanime        │ ║
-║  │   125+ Cmds   │  ║ │ ● rate_limiter+spam  │ ║ │  #upscale        │ ║
-║  ├───────────────┤  ║ │ ● watchdog heartbeat │ ║ │  #removebg       │ ║
-║  │    egress     │  ║ │ ● outbox + DLQ       │ ║ ├──────────────────┤ ║
-║  │ (rate limit)  │  ║ ├──────────────────────┤ ║ │  monitor (CLI)   │ ║
-║  ├───────────────┤  ║ │ nlp      intenciones │ ║ │  watchdog        │ ║
-║  │  persistence  │  ║ │ person.  12 modos    │ ║ └──────────────────┘ ║
+║  │   (semáforo)  │  ║ │ ● snapshots ×10      │ ║ │  monitor         │ ║
+║  ├───────────────┤  ║ │ ● bad_mac tracker    │ ║ │  watchdog con    │ ║
+║  │   125+ Cmds   │  ║ │ ● rate_limiter+spam  │ ║ │  auto-restart    │ ║
+║  ├───────────────┤  ║ │ ● watchdog heartbeat │ ║ ├──────────────────┤ ║
+║  │    egress     │  ║ │ ● outbox + DLQ       │ ║ │  manage          │ ║
+║  │ (rate limit)  │  ║ ├──────────────────────┤ ║ │  backup/reparar  │ ║
+║  ├───────────────┤  ║ │ nlp      intenciones │ ║ └──────────────────┘ ║
+║  │  persistence  │  ║ │ person.  12 modos    │ ║                      ║
 ║  │   (strenor)   │  ║ │ memory   reputación  │ ║                      ║
 ║  ├───────────────┤  ║ │ ai_chat  Ollama→GPT→ │ ║                      ║
 ║  │ authVerifier  │  ║ │          Gemini→     │ ║                      ║
@@ -230,6 +225,7 @@
 ║  └───────────────┘  ║ │ convers. perfiles    │ ║                      ║
 ║                     ║ │ imagefx  mosaico     │ ║                      ║
 ║                     ║ │ imagesrc búsqueda    │ ║                      ║
+║                     ║ │ vision   anime+ONNX  │ ║                      ║
 ║                     ║ └──────────────────────┘ ║                      ║
 ╚═════════════════════╩══════════════════════════╩══════════════════════╝
            │                        │                        │           
@@ -246,19 +242,19 @@
 |-------------|---------------|:---------:|-------|
 | Node.js | 20.x LTS | ✅ | `node --version` |
 | npm | 9.x | ✅ | incluido con Node |
-| Python | 3.11+ | ❌ | **Opcional desde la 8.11.0** — solo para `#toanime`, `#upscale` y `#removebg` |
+| Python | 3.11+ | ❌ | **Ya no hace falta** — desde la 8.12.0 ni los comandos de imagen lo usan. Solo para `npm run monitor` y `npm run manage`, que se abren a mano (y que también se pueden compilar) |
 | Rust + Cargo | 1.75+ | ✅ | para compilar Session API |
 | Ollama | latest | ❌ | IA local (recomendado, 16 GB RAM+) |
 | FFmpeg | 6.x | ❌ | conversión de media |
 
 **Sistemas operativos soportados:** Windows 10/11 · Ubuntu 20.04+ · Debian 11+ · macOS 12+ · Android (Termux)
 
-> **Nota de plataforma:** en Termux/Android y en Linux/macOS sin GUI, Ollama es opcional igual que en Windows — el bot degrada bien sin ellos. `npm run cython:build` ya detecta el compilador C disponible (`gcc`/`clang`) en cualquiera de los tres sistemas, y es opcional: si los `.pyd`/`.so` no están, `/health` lo reporta con `CYTHON_OK` en false y el bot sigue. (`npm run spam:build` se fue en la 8.11.0 junto con la librería C de spam, cuya lógica está en Rust desde la 8.10.0.) El panel web (`web/`) usa el mismo Node.js ya requerido — no suma una herramienta nueva, solo un `npm install && npm run build` aparte (ver sección Instalación).
+> **Nota de plataforma:** en Termux/Android y en Linux/macOS sin GUI, Ollama es opcional igual que en Windows — el bot degrada bien sin ellos. Desde la 8.12.0 tampoco hace falta un compilador de C: `npm run spam:build` y `npm run cython:build` se fueron junto con la librería C de spam y las extensiones Cython, que compilaban código que ya estaba en Rust. El panel web (`web/`) usa el mismo Node.js ya requerido — no suma una herramienta nueva, solo un `npm install && npm run build` aparte (ver sección Instalación).
 >
 > **Dos cosas a tener en cuenta en dispositivos débiles (Termux/Android, ARM de placa única):**
 >
 > - De las dependencias de Node, la que de verdad compila desde código fuente en Android es **`sharp`** (lleva libvips): necesitás `clang`, `make` y `pkg-config` instalados *antes* de correr `npm install` (ver sección Termux más abajo). `cbor-x` se mencionaba acá y no hacía falta — su parte nativa (`cbor-extract`) es una dependencia **opcional**, y si no compila cae a la implementación en JavaScript puro sin que nada deje de funcionar.
-> - **Python es opcional desde la 8.11.0** y podés saltarte su paso de instalación entero. Si lo querés, su núcleo son **3 paquetes** con rueda precompilada (`fastapi`, `uvicorn`, `pydantic`) y lo demás está en `requirements-optional.txt`. La única función que lo necesita de verdad son los comandos de anime, por **`torch`** (~2 GB, sin binario para ARM — o sea que en Termux no van igual). En la 8.11.0 se fueron `pyarrow`, `duckdb`, `spacy`, `ddgs`, `requests`, `transformers` y la librería C del filtro de spam.
+> - **Python ya no hace falta para correr el bot.** No queda nada suyo en el camino de ningún mensaje y nadie lo arranca; solo lo usan `npm run monitor` y `npm run manage`, que se abren a mano. La 8.11.0 se llevó `pyarrow`, `duckdb`, `spacy`, `ddgs`, `requests` y `transformers`, y la 8.12.0 el resto: `torch`, `pillow`, `pyanime4k`, `dghs-imgutils`, `onnxruntime` y `opencv` — más de 4 GB de dependencias entre las dos.
 > - La primera compilación de Rust (`npm run rust:build`) tarda unos minutos (~3 min en un PC de escritorio; bastante más en un teléfono) porque compila todo el árbol de dependencias con LTO. Es normal — no cierres la terminal, solo dale tiempo (y evitá que el dispositivo se duerma).
 
 > **Ollama:** Descarga un modelo antes de iniciar — `ollama pull llama3` o `ollama pull mistral`. El bot intenta Ollama primero y cae en las APIs cloud automáticamente si no está disponible.
@@ -272,86 +268,70 @@
 git clone https://github.com/Brashkie/WinsiBot.git
 cd WinsiBot
 
-# 2 — Dependencias Node.js
+# 2 — Dependencias
 npm install
-
-# 3 — Python (OPCIONAL desde la 8.11.0)
 #
-# Podés saltarte este paso entero. El bot arranca y funciona sin Python: lo
-# detecta al iniciar, lo dice en una línea de log y sigue. Lo único que queda
-# sin servicio son #toanime, #upscale y #removebg, que responden con un
-# mensaje claro en vez de quedarse esperando.
-#
-# Instalalo solo si querés esos tres comandos (y tené en cuenta que `torch`
-# son ~2 GB y no tiene binario precompilado para ARM, así que en Termux no
-# funcionan de todas formas).
+# Esto también baja el binario ya compilado de la Session API de Rust para tu
+# plataforma y verifica su SHA-256. Si para la tuya no hay binario, lo dice en
+# una línea y podés compilarlo vos con `npm run rust:build`.
 
-cd python
-python -m venv venv
+# 3 — Configuración
+cp .env.example .env
+#      ...y editá OWNER_JID con tu número
 
-# Windows
-venv\Scripts\activate
-# Linux / macOS
-# source venv/bin/activate
+# 4 — Panel web (opcional — el bot arranca igual sin esto)
+npm run web:build
 
-# Núcleo: 3 paquetes, todos con rueda precompilada
-pip install -r requirements.txt
-
-# Los comandos de anime y las herramientas de consola (npm run monitor)
-# pip install -r requirements-optional.txt
-
-cd ..
-
-# 4 — Compilar Session API de Rust
-npm run rust:build
-
-# 5 — Compilar el panel web (opcional — el bot arranca igual sin esto,
-#     el panel muestra un aviso hasta que corras este paso)
-cd web
-npm install
-npm run build
-cd ..
-
-# 6 — Variables de entorno
-# Windows
-copy .env.example .env
-copy rust\.env.example rust\.env
-# Linux / macOS
-# cp .env.example .env && cp rust/.env.example rust/.env
-
-# 7 — Editar .env con tus valores (ver sección Configuración)
-
-# 8 — Iniciar todo
-npm run start
+# 5 — Arrancar
+npm start
 ```
 
-> **Primera vez:** Si no hay sesión guardada, aparecerá un **código QR** en la terminal.  
-> Escanéalo desde WhatsApp → ⋮ → Dispositivos vinculados → Vincular dispositivo.
-
+> **Python ya no hace falta.** Hasta la 8.12.0 había que crear un entorno
+> virtual e instalar dependencias; desde entonces no queda nada de Python en el
+> camino de ningún mensaje y el bot no lo arranca. Solo se usa para dos
+> herramientas que se abren a mano:
+>
+> ```bash
+> cd python && python -m venv venv
+> venv\Scripts\activate          # Windows
+> # source venv/bin/activate      # Linux / macOS / Termux
+> pip install -r requirements.txt
+> ```
+>
+> Con eso andan `npm run monitor` (watchdog interactivo) y `npm run manage`
+> (CLI de mantenimiento). Si no las vas a usar, saltate el paso. Para
+> `npm run py:lint` y `npm run tools:build` usa `requirements-dev.txt`, que
+> incluye al otro.
+>
+> **Si actualizas Python, hay que recrear el entorno.** Un venv guarda la
+> ruta absoluta del interprete que lo creo, y sus extensiones compiladas
+> llevan la version en el nombre (`cp311`), asi que no se puede reapuntar a
+> otra: `npm run py:lint`, `py:deps`, `tools:build`, `monitor` y `manage`
+> fallan todos con `No Python at '...'`. Se arregla borrando `python/venv` y
+> repitiendo los comandos de arriba.
 ---
 
 ### Instalación en Termux (Android)
-
-Los mismos 8 pasos de arriba funcionan en Termux — esta sección solo cubre lo que es específico de Android: qué instalar antes, y cómo mantener el bot corriendo cuando cerrás la app.
 
 > Instalá Termux desde **F-Droid**, no desde Play Store — la versión de Play Store está descontinuada y desactualizada.
 
 ```bash
 # 0 — Paquetes del sistema (una sola vez)
 pkg update && pkg upgrade -y
-pkg install -y nodejs-lts python rust git clang make pkg-config openssl-tool tmux
+pkg install -y nodejs-lts git tmux
 
 # Opcional — solo si el bot va a leer/escribir en el almacenamiento compartido
 # del teléfono (fuera de su propia carpeta de datos):
 termux-setup-storage
 ```
 
-Con eso instalado, seguí los 8 pasos de la sección [Instalación](#instalación) de arriba sin cambios — Termux entra por la rama "Linux / macOS" en los pasos 3 y 6.
+Y después los mismos 5 pasos de [Instalación](#instalación), sin cambios.
 
-**Dos cosas que van a pasar y son normales:**
+**Ya no hace falta `rust`, `python`, `clang`, `make` ni `pkg-config`.** Hasta la 8.12.0 había que compilar la Session API en el teléfono —varios minutos— y crear un entorno virtual de Python. Ahora `npm install` baja el binario ya compilado para `aarch64-linux-android`, que es el target propio de Termux: Android usa la libc **Bionic**, no glibc, así que un binario de Linux ARM normal bajaría bien y no arrancaría.
 
-- En el paso 2 (`npm install`), algunas dependencias nativas van a compilar desde código fuente (Android no tiene binario precompilado para ellas) — por eso `clang`/`make`/`pkg-config` van primero en el paso 0. Si `npm install` falla mencionando `node-gyp` o un compilador no encontrado, es señal de que falta alguno de esos paquetes.
-- En el paso 4 (`npm run rust:build`), la primera compilación tarda unos minutos (~3 min en un PC; más en un teléfono) porque compila todas las dependencias con LTO. Dejalo corriendo y no cierres la sesión de Termux.
+Los comandos de imagen (`#toanime`, `#removebg`, `#upscale`) **funcionan en el teléfono**, porque ONNX Runtime publica build para ese target con **NNAPI**, la aceleración por hardware de Android.
+
+**Lo único que puede compilar desde fuente** es `sharp` (lleva libvips), que no trae binario para Android. Si `npm install` falla ahí, instalá `pkg install -y clang make pkg-config` y repetí.
 
 **Mantener el bot corriendo en segundo plano:**
 
@@ -359,8 +339,7 @@ Con eso instalado, seguí los 8 pasos de la sección [Instalación](#instalació
 - Corré el bot dentro de una sesión de `tmux` (`tmux new -s winsibot`, después `npm run start`) para que el proceso siga vivo aunque cierres la app de Termux — reconectá con `tmux attach -t winsibot`.
 - Para autoarranque al reiniciar el teléfono, instalá el complemento **Termux:Boot** (F-Droid) y agregá un script en `~/.termux/boot/`.
 
-> **RAM:** Ollama (IA local) generalmente no es viable en un teléfono común — usá las APIs cloud (`OPENAI_API_KEY`/`ANTHROPIC_API_KEY`/`GEMINI_API_KEY`) en su lugar, el bot cae a ellas automáticamente si Ollama no responde.
-
+> **RAM:** Ollama (IA local) generalmente no es viable en un teléfono común — usá las APIs cloud (`OPENAI_API_KEY`/`ANTHROPIC_API_KEY`/`GEMINI_API_KEY`), o dejá que el bot responda con su motor local de plantillas, que no necesita ningún modelo.
 ---
 
 ## Configuración
@@ -467,9 +446,9 @@ npm run monitor         # Watchdog de consola — opcional, necesita Python
 |--------|-------------|
 | `start` | Compila e inicia el bot **vía supervisor** — reinicia solo si crashea o se cuelga, y levanta Rust (y Python si está instalado) por su cuenta (cada uno con su propio auto-restart) |
 | `start:unsupervised` | Igual que `start` pero sin la capa de supervisor — arranca `dist/index.js` directo |
-| `monitor` | Watchdog de consola (necesita Python y `requirements-optional.txt`) |
+| `monitor` | Watchdog de consola — opcional, necesita Python (`python/requirements.txt`) |
 | `dev` | Node.js directo — desarrollo / escanear QR |
-| `build` | Compilar TypeScript → `dist/` |
+| `build` | Compilar TypeScript → `dist/`. **Borra `dist/` primero**: `tsc` no limpia, y el cargador de comandos registra todo `.js` que encuentre ahí, así que un archivo de una versión anterior seguiría ejecutándose |
 | `rust:start` | Session API de Rust |
 | `rust:build` | Compilar Rust en release |
 | `manage` | CLI de mantenimiento (menú interactivo) |
@@ -493,6 +472,7 @@ npm run monitor         # Watchdog de consola — opcional, necesita Python
 | `rust:bench` | Benchmarks de Criterion sobre el camino caliente (informes HTML en `rust/target/criterion/`) |
 | `py:lint` / `py:lint:fix` | Ruff — linter de `python/` (requiere `pip install -r python/requirements-dev.txt`) |
 | `py:deps` | Comprueba que lo que `python/` importa esté declarado en los requirements, en las dos direcciones. Sale con error si falta algo |
+| `tools:build` | Compila `monitor` y `manage` a ejecutables nativos con Nuitka — corren sin Python instalado. No cruza plataformas: el binario sirve para la máquina donde se compiló |
 | `rust:test` | Tests unitarios de Rust (`cargo test`) |
 | `py:format` | Ruff — formateo de `python/` |
 | `lint:all` | Corre `lint` + `rust:lint` + `py:lint` + `py:deps` de una |
@@ -544,7 +524,7 @@ Menú interactivo multi-servicio que orquesta Python, Rust y Node.js.
 
 | Opción | Comando | Cuándo usarlo |
 |:------:|---------|---------------|
-| 1 | `manage:status` | Ver estado de FastAPI / Rust / Webhook / Panel web |
+| 1 | `manage:status` | Ver estado de Rust / Webhook / Panel web |
 | 2 | `manage:diagnose` | Analizar sesión, archivos Signal, Rust, logs |
 | 3 | `manage:repair` | Signal corrupto → intenta restauración sin QR → recupera backup |
 | 4 | `manage:reset-signal` | Solo borrar `session-*.json` (conserva `creds.json`) |
@@ -709,6 +689,9 @@ curl -H "x-api-key: TU_CLAVE" http://127.0.0.1:3001/messages/pending
 | `POST` | `/imagefx/lego` | Mosaico estilo LEGO |
 | `POST` | `/search/image` | Buscar y descargar una imagen |
 | `POST` | `/search/images` | Buscar y devolver solo las URLs |
+| `POST` | `/vision/removebg` | Quitar el fondo (isnetis en ONNX) |
+| `POST` | `/vision/toanime` | Convertir a estilo anime (AnimeGANv2 en ONNX) |
+| `POST` | `/vision/upscale` | Ampliar x2 o x4 con Anime4K (sin modelo) |
 | | **Entrega** | |
 | `POST` | `/messages/track` | Registrar IDs de mensajes salientes |
 | `POST` | `/messages/ack` | Actualizar estado de entrega en lote |
@@ -820,20 +803,15 @@ WinsiBot/
 │       ├── server.ts                 # API + WS + estático de web/dist
 │       ├── auth.ts                   # Login vinculando WhatsApp (#login <código>)
 │       └── routes/                   # /api/subbots, /api/groups, /api/admin
-├── python/                           # Python — OPCIONAL, el bot corre sin esto
-│   ├── requirements.txt              # 3 paquetes, todos con rueda precompilada
-│   ├── requirements-optional.txt     # Anime (torch) + herramientas de consola
-│   ├── api/
-│   │   ├── app.py                    # FastAPI — sin lifespan: no abre bases ni levanta hilos
-│   │   └── routers/
-│   │       ├── health.py             # GET /health — lo único que el bot consulta
-│   │       └── anime.py              # Redes neuronales (torch): lo único que aún necesita Python
-│   ├── ai/                           # Watchdog de consola: salud, roturas, anomalías, alertas
+├── python/                           # Python — OPCIONAL, solo herramientas de consola
+│   ├── requirements.txt              # Lo que necesitan `npm run monitor` y `manage`
+│   ├── paths.py                      # La raíz del proyecto, interpretado o compilado
+│   ├── ai/                           # Salud, roturas, anomalías, alertas
 │   ├── session/                      # Backup / restore / checksum SHA-256
 │   └── terminal/
-│       ├── monitor.py                # Watchdog principal con auto-restart
-│       └── manage.py                 # CLI de mantenimiento interactivo
-├── rust/                             # Rust — Session API v5.6.0
+│       ├── monitor.py                # Watchdog interactivo con auto-restart
+│       └── manage.py                 # CLI de mantenimiento
+├── rust/                             # Rust — Session API v5.7.0
 │   ├── assets/                       # Datos incrustados en el binario con include_str!
 │   │   ├── personality.json          # 489 frases en 12 modos + 121 de humor
 │   │   └── commands.json             # Catálogo de 28 comandos para el contexto de la IA

@@ -21,16 +21,23 @@ import { color } from 'ansimax'
 
 const RAIZ   = process.cwd()
 const PYDIR  = join(RAIZ, 'python')
-const REQS   = ['requirements.txt', 'requirements-optional.txt', 'requirements-dev.txt']
+const REQS   = ['requirements.txt', 'requirements-dev.txt']
 
-// Módulos que se importan sin prefijo de paquete porque python/ y python/api
-// están en sys.path. No son paquetes de pip.
-const LOCALES = new Set([
-  'ai', 'api', 'data', 'ml', 'session', 'terminal', 'cython_ext',
-  'routers', 'middleware', 'sqlalchemy_models',
-  // Extensiones Cython compiladas (npm run cython:build), no vienen de pip.
-  'fast_utils', 'fast_ml', 'spam_guard',
-])
+// Módulos propios, que se importan sin prefijo porque python/ está en
+// sys.path. No son paquetes de pip y no van en los requirements.
+//
+// Se leen del disco en vez de llevar una lista a mano: la lista que había
+// seguía nombrando `api`, `routers` y `middleware`, borrados al quitar la API
+// de Python, y no incluía `paths.py`, que es un archivo y no un directorio —
+// así que al crearlo el checker lo reportó como un paquete de PyPI ausente.
+// Cuentan las dos formas que Python reconoce: un directorio (paquete) y un
+// .py suelto (módulo).
+const LOCALES = new Set(
+  readdirSync(PYDIR, { withFileTypes: true })
+    .filter(e => !existsSync(join(PYDIR, e.name, 'pyvenv.cfg')))
+    .map(e => (e.isDirectory() ? e.name : e.name.endsWith('.py') ? e.name.slice(0, -3) : null))
+    .filter(Boolean),
+)
 
 // Nombre del import → nombre en PyPI, cuando no coinciden.
 const ALIAS = {
@@ -67,10 +74,21 @@ const STDLIB = new Set([
 const RE_IMPORT = /^[ \t]*import[ \t]+([A-Za-z_][\w.]*)/gm
 const RE_FROM   = /^[ \t]*from[ \t]+([A-Za-z_][\w.]*)[ \t]+import/gm
 
+// Cualquier entorno virtual, no solo uno llamado exactamente `venv`.
+//
+// La lista era `venv`, `.venv` y `__pycache__` a secas, y con eso un
+// `venv.roto` de los que quedan al recrear el entorno, o un `venv_tools`
+// aparte, entraba al recorrido entero: miles de archivos de site-packages
+// reportados como imports del proyecto. Un entorno se reconoce por tener
+// `pyvenv.cfg`, que es lo que lo define, así que no hace falta acertar el
+// nombre.
+const esEntornoVirtual = (ruta) => existsSync(join(ruta, 'pyvenv.cfg'))
+
 function archivosPy(dir) {
   const salida = []
   for (const nombre of readdirSync(dir)) {
-    if (nombre === 'venv' || nombre === '.venv' || nombre === '__pycache__') continue
+    if (nombre === '__pycache__') continue
+    if (esEntornoVirtual(join(dir, nombre))) continue
     const ruta = join(dir, nombre)
     if (statSync(ruta).isDirectory()) salida.push(...archivosPy(ruta))
     else if (nombre.endsWith('.py')) salida.push(ruta)
@@ -114,11 +132,19 @@ for (const [top, archivos] of [...usos].sort()) {
   if (!declarados.has(dist)) faltan.push({ top, dist, archivos: [...archivos].sort() })
 }
 
+// Lo que se declara a proposito aunque ningun .py lo importe: herramientas
+// que se INVOCAN, no se importan. `ruff` corre como `python -m ruff` desde
+// py_lint.js y `nuitka` como `python -m nuitka` desde build_tools.js.
+//
+// Antes esta lista tambien llevaba `onnxruntime` y `opencv-contrib-python`,
+// que eran runtime de `dghs-imgutils` y que su metadata no declaraba. Las dos
+// se fueron de los requirements al pasar los comandos de imagen a Rust, asi
+// que aca solo quedaban tapando nombres que ya no existen.
+const INDIRECTAS = ['ruff', 'nuitka']
+
 const usadosDist = new Set([...usos.keys()].map(t => (ALIAS[t] ?? t).toLowerCase()))
 for (const [dist, req] of declarados) {
-  // ruff, Cython y setuptools son herramientas: se invocan, no se importan
-  // desde el código del bot (salvo cython_ext/setup.py, que sí lo hace).
-  if (['ruff'].includes(dist)) continue
+  if (INDIRECTAS.includes(dist)) continue
   if (!usadosDist.has(dist)) sobran.push({ dist, req })
 }
 
