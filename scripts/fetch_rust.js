@@ -44,7 +44,12 @@ function target() {
     case 'linux-x64':   return 'x86_64-unknown-linux-gnu'
     case 'linux-arm64': return 'aarch64-unknown-linux-gnu'
     case 'darwin-arm64':return 'aarch64-apple-darwin'
-    case 'darwin-x64':  return 'x86_64-apple-darwin'
+    // Mac Intel no tiene binario publicado, y es a propósito: `ort` no
+    // encuentra build de ONNX Runtime para ese target, así que el workflow ni
+    // lo intenta. Devolver null acá —en vez del nombre del target— hace que se
+    // avise de entrada, en lugar de salir a pedir un archivo que nunca va a
+    // estar y reportar un 404, que parecería una release rota.
+    case 'darwin-x64':  return null
     default:            return null
   }
 }

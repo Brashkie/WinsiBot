@@ -40,16 +40,29 @@ jobs:
             os: ubuntu-latest
             ext: ""
             # Linker cruzado: el host es x86_64.
-            apt: gcc-aarch64-linux-gnu
+            #
+            # Tiene que ser `g++` y no `gcc`: ONNX Runtime es C++, y al enlazar
+            # se pide `-lstdc++`. Con solo el compilador de C el build llega
+            # hasta el final y muere en el linker con `cannot find -lstdc++`,
+            # que no dice en ningún momento que falte un paquete. `g++` arrastra
+            # a `gcc` y a la libstdc++ de ARM, así que con este alcanza.
+            apt: g++-aarch64-linux-gnu
             linker: aarch64-linux-gnu-gcc
 
           - target: aarch64-apple-darwin
             os: macos-latest
             ext: ""
 
-          - target: x86_64-apple-darwin
-            os: macos-latest
-            ext: ""
+          # Mac Intel (`x86_64-apple-darwin`) NO está, y no es un olvido.
+          #
+          # `ort-sys` corta el build con *no prebuilt binaries available for
+          # target x86_64-apple-darwin*: ONNX Runtime publica para Apple un
+          # xcframework que ya no cubre Intel. Las alternativas son compilar
+          # ONNX Runtime desde fuente en CI (decenas de minutos por release) o
+          # cargarlo dinámicamente, que rompe la premisa de "un solo archivo".
+          #
+          # Un Mac Intel instala igual: `fetch_rust.js` no encuentra binario,
+          # lo dice en una línea y compila desde fuente como siempre.
 
           # Termux. NO es `aarch64-unknown-linux-gnu`: Android usa la libc
           # Bionic, no glibc, y confundirlos da un binario que baja bien y no
@@ -101,8 +114,21 @@ jobs:
           cd rust/target/${{ matrix.target }}/release
           NOMBRE="winsibot-session-api-${{ matrix.target }}${{ matrix.ext }}"
           mv "winsibot-session-api${{ matrix.ext }}" "$NOMBRE"
-          # `shasum -a 256` existe en los tres runners; `sha256sum` no está en macOS.
-          shasum -a 256 "$NOMBRE" > "$NOMBRE.sha256"
+          # Ninguna de las dos herramientas está en los tres runners, así que
+          # se prueba por orden en vez de dar una por segura — que es lo que
+          # hacía antes, y por eso Windows fallaba con `shasum: command not
+          # found` DESPUÉS de haber compilado bien los 30 MB.
+          #
+          #   sha256sum  Linux y el Git Bash de Windows, no macOS
+          #   shasum     macOS y Linux, no el Git Bash de Windows
+          #
+          # Las dos escriben el mismo formato (`<hash>  <archivo>`), que es lo
+          # que `fetch_rust.js` parsea con `split(/\s+/)[0]`.
+          if command -v sha256sum >/dev/null 2>&1; then
+            sha256sum "$NOMBRE" > "$NOMBRE.sha256"
+          else
+            shasum -a 256 "$NOMBRE" > "$NOMBRE.sha256"
+          fi
           ls -la "$NOMBRE"*
 
       - name: Subir artefacto
