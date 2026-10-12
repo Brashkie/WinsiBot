@@ -392,7 +392,12 @@ pub async fn ollama_disponible(modelo: Option<&str>) -> bool {
         .unwrap_or(false)
 }
 
-async fn ollama_chat(prompt: &str, system: &str, modelo: Option<&str>) -> Option<String> {
+async fn ollama_chat(
+    prompt: &str,
+    system: &str,
+    modelo: Option<&str>,
+    sesion: &str,
+) -> Option<String> {
     let objetivo = modelo.map(str::to_string).unwrap_or_else(|| env("OLLAMA_MODEL", "llama3.2:3b"));
     let c = cliente(ollama_timeout()).await.ok()?;
     // Endpoint compatible con OpenAI, igual que usaba ollama_client.py.
@@ -409,6 +414,13 @@ async fn ollama_chat(prompt: &str, system: &str, modelo: Option<&str>) -> Option
             "temperature": 0.85,
             "max_tokens":  300,
             "stream":      false,
+
+            // Fuera del dialecto de OpenAI, que no tiene el concepto de
+            // conversación: ahí cada llamada es independiente. Cosxamix lo usa
+            // para reaprovechar su caché de atención entre turnos del mismo
+            // chat, y Ollama lo ignora sin quejarse, así que mandarlo no
+            // rompe nada si del otro lado hay Ollama.
+            "cosxamix_sesion": sesion,
         }))
         .send()
         .await
@@ -528,10 +540,14 @@ pub async fn generar_ia(
     system:  &str,
     use_gpt: bool,
     modelo:  Option<&str>,
+    // Qué conversación es, para el caché de atención del motor local.
+    // Vacío = sin sesión: se procesa el prompt entero. Las APIs de la
+    // nube no lo usan, son sin estado por diseño.
+    sesion:  &str,
 ) -> Option<String> {
     if let Some(m) = modelo {
         if ollama_disponible(Some(m)).await {
-            if let Some(t) = ollama_chat(prompt, system, Some(m)).await {
+            if let Some(t) = ollama_chat(prompt, system, Some(m), sesion).await {
                 tracing::debug!("IA → Ollama ({})", m);
                 return Some(t);
             }
@@ -540,7 +556,7 @@ pub async fn generar_ia(
     }
 
     if ollama_disponible(None).await {
-        if let Some(t) = ollama_chat(prompt, system, None).await {
+        if let Some(t) = ollama_chat(prompt, system, None, sesion).await {
             tracing::debug!("IA → Ollama (local)");
             return Some(t);
         }
@@ -652,7 +668,12 @@ pub async fn respond(
     let bot_name = env("BOT_NAME", "Hepein");
 
     let system = prompt_sistema(&grupo, &usuario, &modo, &bot_name, &req.prompt);
-    let texto = generar_ia(&req.prompt, &system, req.use_gpt, req.model.as_deref()).await;
+    // La sesión es el chat: el grupo si lo hay, el remitente si es privado.
+    // Dos personas del mismo grupo comparten el hilo de la IA, que es como
+    // se comporta el bot — responde a la conversación, no a cada uno.
+    let sesion = if req.group_jid.is_empty() { &req.sender_jid } else { &req.group_jid };
+
+    let texto = generar_ia(&req.prompt, &system, req.use_gpt, req.model.as_deref(), sesion).await;
 
     // Si ninguna IA contestó, el motor local de plantillas. Recibe el historial
     // para no repetir las últimas respuestas, que es lo que más delata que hay
@@ -734,7 +755,7 @@ pub async fn imitate(
     };
 
     let system = prompt_imitacion(&perfil, &req.target_jid);
-    let texto = generar_ia(&req.prompt, &system, true, None)
+    let texto = generar_ia(&req.prompt, &system, true, None, &req.target_jid)
         .await
         .unwrap_or_else(|| "...".into());
 

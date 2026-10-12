@@ -159,7 +159,7 @@
 <td width="50%">
 
 ### 🤖 Artificial Intelligence
-- Multi-model: **Ollama (local)** → GPT → Gemini → Claude, **all from Rust**
+- Multi-model: **Ollama or Cosxamix (local)** → GPT → Gemini → Claude, **all from Rust**
 - **12 personality modes** per group, with 489 phrases of their own
 - Learns each user's and the group's style, and mirrors it when replying
 - If no model answers, falls back to local templates without repeating recent ones
@@ -244,7 +244,7 @@
 | npm | 9.x | ✅ | bundled with Node |
 | Python | 3.11+ | ❌ | **No longer needed** — as of 8.12.0 not even the image commands use it. Only for `npm run monitor` and `npm run manage`, which you open by hand (and which can also be compiled) |
 | Rust + Cargo | 1.75+ | ✅ | to compile Session API |
-| Ollama | latest | ❌ | local AI (recommended, 16 GB RAM+) |
+| Ollama **or** [Cosxamix](https://github.com/Brashkie/Cosxamix) | latest | ❌ | local AI (recommended, 16 GB RAM+). Both speak the same dialect, so switching between them is three lines of `.env` — see `.env.example` |
 | FFmpeg | 6.x | ❌ | media conversion |
 
 **Supported OS:** Windows 10/11 · Ubuntu 20.04+ · Debian 11+ · macOS 12+ · Android (Termux)
@@ -472,6 +472,7 @@ npm run monitor         # Console watchdog — optional, needs Python
 | `py:lint` / `py:lint:fix` | Ruff — lints `python/` (needs `pip install -r python/requirements-dev.txt`) |
 | `py:deps` | Checks that everything `python/` imports is declared in the requirements, both ways. Exits non-zero if anything is missing |
 | `tools:build` | Compiles `monitor` and `manage` into native executables with Nuitka — they run without Python installed. Does not cross-compile: the binary is for the machine that built it |
+| `ai:bench` | Measures what a cold Ollama model costs versus a warm one, and checks whether the endpoint the bot uses honours `keep_alive`. Needs Ollama running |
 | `rust:test` | Rust unit tests (`cargo test`) |
 | `rust:bench` | Criterion benchmarks on the hot path (HTML reports in `rust/target/criterion/`) |
 | `py:format` | Ruff — formats `python/` |

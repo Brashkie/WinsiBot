@@ -159,7 +159,7 @@
 <td width="50%">
 
 ### 🤖 Inteligencia Artificial
-- Multi-modelo: **Ollama (local)** → GPT → Gemini → Claude, **todo desde Rust**
+- Multi-modelo: **Ollama o Cosxamix (local)** → GPT → Gemini → Claude, **todo desde Rust**
 - **12 modos de personalidad** por grupo, con 489 frases propias
 - Aprende el estilo de cada usuario y del grupo, y lo refleja al responder
 - Si ningún modelo contesta, cae a plantillas locales sin repetir las últimas
@@ -244,7 +244,7 @@
 | npm | 9.x | ✅ | incluido con Node |
 | Python | 3.11+ | ❌ | **Ya no hace falta** — desde la 8.12.0 ni los comandos de imagen lo usan. Solo para `npm run monitor` y `npm run manage`, que se abren a mano (y que también se pueden compilar) |
 | Rust + Cargo | 1.75+ | ✅ | para compilar Session API |
-| Ollama | latest | ❌ | IA local (recomendado, 16 GB RAM+) |
+| Ollama **o** [Cosxamix](https://github.com/Brashkie/Cosxamix) | latest | ❌ | IA local (recomendado, 16 GB RAM+). Los dos hablan el mismo dialecto, así que cambiar de uno a otro son tres líneas del `.env` — ver `.env.example` |
 | FFmpeg | 6.x | ❌ | conversión de media |
 
 **Sistemas operativos soportados:** Windows 10/11 · Ubuntu 20.04+ · Debian 11+ · macOS 12+ · Android (Termux)
@@ -473,6 +473,7 @@ npm run monitor         # Watchdog de consola — opcional, necesita Python
 | `py:lint` / `py:lint:fix` | Ruff — linter de `python/` (requiere `pip install -r python/requirements-dev.txt`) |
 | `py:deps` | Comprueba que lo que `python/` importa esté declarado en los requirements, en las dos direcciones. Sale con error si falta algo |
 | `tools:build` | Compila `monitor` y `manage` a ejecutables nativos con Nuitka — corren sin Python instalado. No cruza plataformas: el binario sirve para la máquina donde se compiló |
+| `ai:bench` | Mide cuánto cuesta que Ollama tenga el modelo frío contra caliente, y comprueba si el endpoint que usa el bot respeta `keep_alive`. Necesita Ollama corriendo |
 | `rust:test` | Tests unitarios de Rust (`cargo test`) |
 | `py:format` | Ruff — formateo de `python/` |
 | `lint:all` | Corre `lint` + `rust:lint` + `py:lint` + `py:deps` de una |

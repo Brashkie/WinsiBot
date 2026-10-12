@@ -4,6 +4,36 @@ Todos los cambios notables de WinsiBot se documentan en este archivo, versión p
 
 ---
 
+## [9.0.0] — sin publicar
+
+**En curso.** Queda una sola cosa para esta versión: que **Cosxamix** sea el motor por defecto y
+Ollama deje de ser un requisito. Hoy se puede apuntar el bot a Cosxamix descomentando tres líneas
+del `.env` —eso entró en la 8.13.0— pero el valor por defecto sigue siendo Ollama, y mientras sea
+así no hay cambio mayor que anunciar.
+
+Lo que falta para dar el paso: que instalar WinsiBot traiga Cosxamix, o que el bot lo arranque
+solo como hace con la Session API, sin romper la premisa de que instalar es `npm install` y nada
+más.
+
+---
+## [8.13.0] — 2026-10-11
+
+**Medir antes de tocar, y poder cambiar de motor de IA sin tocar código.**
+
+Las dos herramientas de esta versión nacieron de la misma pregunta —si convenía reescribir kernels
+en otro lenguaje— y las dos la contestan con números en vez de con opiniones. La tercera entrada
+es la consecuencia de la segunda.
+
+| Área | Cambio |
+|------|--------|
+| **`cargo run --example perfil_upscale`: dónde se van los milisegundos de `#upscale`** | Hecho para contestar con un número, y no con una intuición, si vale la pena reescribir los kernels de Anime4K en otro lenguaje o a mano con SIMD. Medido sobre tres imágenes y escalas distintas, mediana de 7: **decodificar 1%, redimensionado bicúbico 16-20%, kernels de Anime4K 75%, codificar PNG 4-8%**. La proporción se sostiene en los tres casos, así que **el techo de Amdahl es ~4x**: aunque los kernels tardaran cero, el comando entero solo bajaría de 50,8 a 12,8 ms (o de 462 a 114 ms en la imagen grande). Es el único sitio del núcleo nativo donde un kernel vectorizado tendría algo que ganar — todo lo demás ya está en sub-milisegundo |
+| **Lo que ese perfil decide, y lo que no** | Que el 75% esté en bucles por píxel independientes dice **SIMD y paralelismo**, no dice *qué lenguaje*. Esos bucles son vergonzosamente paralelos y `rayon` los cubre sin toolchain nuevo, sin FFI y sin un segundo modelo de memoria; `std::simd` cubre la vectorización dentro de Rust. Un kernel en otro lenguaje solo se justificaría si **después** de eso se midiera que el codegen de Rust se queda corto. El perfil queda en el repo justamente para poder comprobarlo en vez de discutirlo |
+| **`npm run ai:bench`: el cuello de botella de la IA no está en ningún kernel** | El lado de Rust aporta ~1,4 ms al camino de una respuesta de IA; Ollama tarda segundos. Pero "segundos" tapa dos cosas distintas, porque **Ollama descarga el modelo de memoria a los 5 minutos de inactividad** — y un bot de WhatsApp recibe mensajes a la IA de forma esporádica, así que puede estar pagando la recarga entera del disco en la mayoría de las peticiones, sin que aparezca en ningún log. `ai_chat.rs` **no manda `keep_alive` en ninguna llamada**. El script mide frío contra caliente con el mismo endpoint y el mismo tamaño de prompt que usa el bot |
+| **Y contesta una pregunta que no se puede dar por sabida** | El bot llama a `/v1/chat/completions`, el endpoint compatible con OpenAI — y `keep_alive` es un concepto de la API **nativa** de Ollama, que OpenAI no tiene. Si lo respeta, alcanza con mandarlo desde `ai_chat.rs`; si no, hay que resolverlo del lado del servidor con `OLLAMA_KEEP_ALIVE=-1` o pasar las llamadas a `/api/chat`. El script lo comprueba en vez de suponerlo, descargando el modelo por esa vía y mirando `/api/ps` |
+| **Apuntar el bot a Cosxamix sin tocar código** | `Cosxamix` es el runtime de IA propio, y habla el **mismo dialecto que Ollama** a propósito: los mismos dos endpoints, `/api/tags` y `/v1/chat/completions`. Así que cambiar de motor son tres líneas del `.env`, documentadas en `.env.example` con lo que cambia y por qué. Lo que se gana, medido: Ollama **descarga el modelo a los 5 minutos** de inactividad y un bot de WhatsApp paga esa recarga en casi cada petición, mientras que Cosxamix lo precalienta y lo deja cargado; y el *system prompt* del bot, 131 tokens que Ollama reprocesa en cada mensaje, Cosxamix lo reutiliza de su caché de atención por conversación — segundo turno de **4905 ms a 3891 ms**, medido contra el bot de verdad. El timeout sube a 60 s en esa configuración porque cargar el 3B tarda ~45 s y con 40 una petición que llegue durante el arranque se corta sola |
+| **El identificador de conversación viaja al motor** | `ai_chat.rs` manda `cosxamix_sesion` en el cuerpo de cada llamada: el JID del grupo, o el del remitente en privado. Es lo que le permite al motor saber qué caché de atención corresponde. Va **fuera** del dialecto de OpenAI, que no tiene el concepto —ahí cada llamada es independiente—, así que un servidor que no lo entienda lo ignora y todo sigue funcionando, solo que reprocesando el prompt entero. Ollama lo ignora |
+
+---
 ## [8.12.0] — 2026-10-05
 
 **Se cierra lo que la 8.11.0 dejó a medias: el bot ya no llama a Python para nada, y lo que queda de él se compila.** La 8.11.0 bajó Python a 16 archivos y 2 routers, pero seguía habiendo tres comandos que necesitaban un intérprete —`#toanime`, `#removebg` y `#upscale`— y una API de Python entera para servirlos. Los tres están ahora en Rust, la API no existe, y Python queda en **9 archivos que son solo herramienta de consola**: `npm run monitor` y `npm run manage`. Ninguno lo arranca el bot.
