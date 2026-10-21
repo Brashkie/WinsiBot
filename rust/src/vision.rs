@@ -49,21 +49,21 @@ const ANIMEGAN_LADO: u32 = 512;
 
 struct Modelo {
     archivo: &'static str,
-    url:     &'static str,
+    url: &'static str,
     /// Para avisar en el log antes de empezar una descarga larga.
-    mb:      u32,
+    mb: u32,
 }
 
 const ISNETIS: Modelo = Modelo {
     archivo: "isnetis.onnx",
-    url:     "https://huggingface.co/skytnt/anime-seg/resolve/main/isnetis.onnx",
-    mb:      168,
+    url: "https://huggingface.co/skytnt/anime-seg/resolve/main/isnetis.onnx",
+    mb: 168,
 };
 
 const ANIMEGAN: Modelo = Modelo {
     archivo: "face_paint_512_v2.onnx",
-    url:     "https://huggingface.co/akhaliq/AnimeGANv2-ONNX/resolve/main/face_paint_512_v2_0.onnx",
-    mb:      8,
+    url: "https://huggingface.co/akhaliq/AnimeGANv2-ONNX/resolve/main/face_paint_512_v2_0.onnx",
+    mb: 8,
 };
 
 fn dir_modelos() -> PathBuf {
@@ -82,8 +82,13 @@ async fn asegurar_modelo(m: &Modelo) -> Result<PathBuf, String> {
         return Ok(destino);
     }
 
-    std::fs::create_dir_all(&dir).map_err(|e| format!("no se pudo crear {}: {e}", dir.display()))?;
-    tracing::info!("descargando modelo {} ({} MB), solo la primera vez", m.archivo, m.mb);
+    std::fs::create_dir_all(&dir)
+        .map_err(|e| format!("no se pudo crear {}: {e}", dir.display()))?;
+    tracing::info!(
+        "descargando modelo {} ({} MB), solo la primera vez",
+        m.archivo,
+        m.mb
+    );
 
     let cliente = reqwest::Client::builder()
         // Sin timeout total: 168 MB en una conexión lenta pueden tardar mucho y
@@ -92,7 +97,11 @@ async fn asegurar_modelo(m: &Modelo) -> Result<PathBuf, String> {
         .build()
         .map_err(|e| e.to_string())?;
 
-    let r = cliente.get(m.url).send().await.map_err(|e| format!("descarga fallida: {e}"))?;
+    let r = cliente
+        .get(m.url)
+        .send()
+        .await
+        .map_err(|e| format!("descarga fallida: {e}"))?;
     if !r.status().is_success() {
         return Err(format!("descarga fallida: HTTP {}", r.status()));
     }
@@ -113,7 +122,7 @@ async fn asegurar_modelo(m: &Modelo) -> Result<PathBuf, String> {
 /// dos inferencias a la vez sí duplicarían el pico de memoria.
 type SesionCacheada = OnceLock<Mutex<Session>>;
 
-static S_ISNETIS:  SesionCacheada = OnceLock::new();
+static S_ISNETIS: SesionCacheada = OnceLock::new();
 static S_ANIMEGAN: SesionCacheada = OnceLock::new();
 
 fn abrir(cache: &'static SesionCacheada, ruta: &Path) -> Result<&'static Mutex<Session>, String> {
@@ -180,9 +189,12 @@ fn encuadrar(img: &RgbImage, lado: u32) -> (RgbImage, Encuadre) {
     (lienzo, Encuadre { w, h, off_x, off_y })
 }
 
-pub fn quitar_fondo(png_o_jpeg: &[u8], fondo_blanco: bool) -> Result<(Vec<u8>, &'static str), String> {
-    let img = image::load_from_memory(png_o_jpeg)
-        .map_err(|e| format!("no se pudo decodificar: {e}"))?;
+pub fn quitar_fondo(
+    png_o_jpeg: &[u8],
+    fondo_blanco: bool,
+) -> Result<(Vec<u8>, &'static str), String> {
+    let img =
+        image::load_from_memory(png_o_jpeg).map_err(|e| format!("no se pudo decodificar: {e}"))?;
     let (w0, h0) = (img.width(), img.height());
     let rgb = img.to_rgb8();
 
@@ -195,8 +207,12 @@ pub fn quitar_fondo(png_o_jpeg: &[u8], fondo_blanco: bool) -> Result<(Vec<u8>, &
         let mut s = sesion.lock().map_err(|e| e.to_string())?;
         let entradas = ort::inputs!["img" => ort::value::TensorRef::from_array_view(&tensor)
             .map_err(|e| e.to_string())?];
-        let r = s.run(entradas).map_err(|e| format!("inferencia fallida: {e}"))?;
-        let (forma, datos) = r["mask"].try_extract_tensor::<f32>().map_err(|e| e.to_string())?;
+        let r = s
+            .run(entradas)
+            .map_err(|e| format!("inferencia fallida: {e}"))?;
+        let (forma, datos) = r["mask"]
+            .try_extract_tensor::<f32>()
+            .map_err(|e| e.to_string())?;
         // Se copia porque el resultado muere con `r` al salir del bloque.
         let v: Vec<usize> = forma.iter().map(|d| *d as usize).collect();
         ArrayView4::from_shape((v[0], v[1], v[2], v[3]), datos)
@@ -249,14 +265,19 @@ pub fn quitar_fondo(png_o_jpeg: &[u8], fondo_blanco: bool) -> Result<(Vec<u8>, &
 // ── Estilo anime (AnimeGANv2) ────────────────────────────────────────────────
 
 pub fn a_estilo_anime(png_o_jpeg: &[u8]) -> Result<Vec<u8>, String> {
-    let img = image::load_from_memory(png_o_jpeg)
-        .map_err(|e| format!("no se pudo decodificar: {e}"))?;
+    let img =
+        image::load_from_memory(png_o_jpeg).map_err(|e| format!("no se pudo decodificar: {e}"))?;
     let (w0, h0) = (img.width(), img.height());
 
     // El export ONNX tiene forma fija, así que se deforma a 512x512 y al final
     // se vuelve a la proporción original. El modelo es de retratos y se entrenó
     // a ese tamaño, con lo cual no se pierde nada frente a la versión PyTorch.
-    let entrada = image::imageops::resize(&img.to_rgb8(), ANIMEGAN_LADO, ANIMEGAN_LADO, FilterType::Lanczos3);
+    let entrada = image::imageops::resize(
+        &img.to_rgb8(),
+        ANIMEGAN_LADO,
+        ANIMEGAN_LADO,
+        FilterType::Lanczos3,
+    );
 
     // El modelo espera [-1, 1], no [0, 1]: es el `* 2 - 1` del código original.
     let mut tensor = a_tensor(&entrada);
@@ -268,8 +289,12 @@ pub fn a_estilo_anime(png_o_jpeg: &[u8]) -> Result<Vec<u8>, String> {
         let mut s = sesion.lock().map_err(|e| e.to_string())?;
         let entradas = ort::inputs!["input_image" => ort::value::TensorRef::from_array_view(&tensor)
             .map_err(|e| e.to_string())?];
-        let r = s.run(entradas).map_err(|e| format!("inferencia fallida: {e}"))?;
-        let (forma, datos) = r["output_image"].try_extract_tensor::<f32>().map_err(|e| e.to_string())?;
+        let r = s
+            .run(entradas)
+            .map_err(|e| format!("inferencia fallida: {e}"))?;
+        let (forma, datos) = r["output_image"]
+            .try_extract_tensor::<f32>()
+            .map_err(|e| e.to_string())?;
         let v: Vec<usize> = forma.iter().map(|d| *d as usize).collect();
         ArrayView4::from_shape((v[0], v[1], v[2], v[3]), datos)
             .map_err(|e| e.to_string())?
@@ -375,9 +400,14 @@ fn empujar(
 
 /// Los ocho vecinos más el propio píxel, con los bordes replicados.
 struct Vecindad {
-    tl: image::Rgba<u8>, tc: image::Rgba<u8>, tr: image::Rgba<u8>,
-    ml: image::Rgba<u8>,                      mr: image::Rgba<u8>,
-    bl: image::Rgba<u8>, bc: image::Rgba<u8>, br: image::Rgba<u8>,
+    tl: image::Rgba<u8>,
+    tc: image::Rgba<u8>,
+    tr: image::Rgba<u8>,
+    ml: image::Rgba<u8>,
+    mr: image::Rgba<u8>,
+    bl: image::Rgba<u8>,
+    bc: image::Rgba<u8>,
+    br: image::Rgba<u8>,
 }
 
 fn vecindad(img: &image::RgbaImage, x: u32, y: u32) -> Vecindad {
@@ -389,14 +419,23 @@ fn vecindad(img: &image::RgbaImage, x: u32, y: u32) -> Vecindad {
     let yp = if y == h - 1 { y } else { y + 1 };
     let g = |a: u32, b: u32| *img.get_pixel(a, b);
     Vecindad {
-        tl: g(xn, yn), tc: g(x, yn), tr: g(xp, yn),
-        ml: g(xn, y),                mr: g(xp, y),
-        bl: g(xn, yp), bc: g(x, yp), br: g(xp, yp),
+        tl: g(xn, yn),
+        tc: g(x, yn),
+        tr: g(xp, yn),
+        ml: g(xn, y),
+        mr: g(xp, y),
+        bl: g(xn, yp),
+        bc: g(x, yp),
+        br: g(xp, yp),
     }
 }
 
-fn maxi(a: u8, b: u8, c: u8) -> u8 { a.max(b).max(c) }
-fn mini(a: u8, b: u8, c: u8) -> u8 { a.min(b).min(c) }
+fn maxi(a: u8, b: u8, c: u8) -> u8 {
+    a.max(b).max(c)
+}
+fn mini(a: u8, b: u8, c: u8) -> u8 {
+    a.min(b).min(c)
+}
 
 /// Afina las líneas empujando cada píxel hacia el lado más claro.
 ///
@@ -410,13 +449,21 @@ fn push_color(img: &image::RgbaImage, fuerza: f32) -> image::RgbaImage {
         for x in 0..img.width() {
             let v = vecindad(img, x, y);
             let p = img.get_pixel(x, y);
-            let mut mc = [f32::from(p[0]), f32::from(p[1]), f32::from(p[2]), f32::from(p[3])];
+            let mut mc = [
+                f32::from(p[0]),
+                f32::from(p[1]),
+                f32::from(p[2]),
+                f32::from(p[3]),
+            ];
             let a = |m: &[f32; 4]| redondear(m[3]);
 
             // arriba y abajo
-            if mini(v.tl[3], v.tc[3], v.tr[3]) > a(&mc) && a(&mc) > maxi(v.bl[3], v.bc[3], v.br[3]) {
+            if mini(v.tl[3], v.tc[3], v.tr[3]) > a(&mc) && a(&mc) > maxi(v.bl[3], v.bc[3], v.br[3])
+            {
                 empujar(&mut mc, &v.tl, &v.tc, &v.tr, fuerza, false);
-            } else if mini(v.bl[3], v.bc[3], v.br[3]) > a(&mc) && a(&mc) > maxi(v.tl[3], v.tc[3], v.tr[3]) {
+            } else if mini(v.bl[3], v.bc[3], v.br[3]) > a(&mc)
+                && a(&mc) > maxi(v.tl[3], v.tc[3], v.tr[3])
+            {
                 empujar(&mut mc, &v.bl, &v.bc, &v.br, fuerza, false);
             }
 
@@ -428,9 +475,12 @@ fn push_color(img: &image::RgbaImage, fuerza: f32) -> image::RgbaImage {
             }
 
             // izquierda y derecha
-            if mini(v.tr[3], v.mr[3], v.br[3]) > a(&mc) && a(&mc) > maxi(v.tl[3], v.ml[3], v.bl[3]) {
+            if mini(v.tr[3], v.mr[3], v.br[3]) > a(&mc) && a(&mc) > maxi(v.tl[3], v.ml[3], v.bl[3])
+            {
                 empujar(&mut mc, &v.tr, &v.mr, &v.br, fuerza, false);
-            } else if mini(v.tl[3], v.ml[3], v.bl[3]) > a(&mc) && a(&mc) > maxi(v.tr[3], v.mr[3], v.br[3]) {
+            } else if mini(v.tl[3], v.ml[3], v.bl[3]) > a(&mc)
+                && a(&mc) > maxi(v.tr[3], v.mr[3], v.br[3])
+            {
                 empujar(&mut mc, &v.tl, &v.ml, &v.bl, fuerza, false);
             }
 
@@ -441,9 +491,16 @@ fn push_color(img: &image::RgbaImage, fuerza: f32) -> image::RgbaImage {
                 empujar(&mut mc, &v.ml, &v.tl, &v.tc, fuerza, false);
             }
 
-            salida.put_pixel(x, y, image::Rgba([
-                redondear(mc[0]), redondear(mc[1]), redondear(mc[2]), redondear(mc[3]),
-            ]));
+            salida.put_pixel(
+                x,
+                y,
+                image::Rgba([
+                    redondear(mc[0]),
+                    redondear(mc[1]),
+                    redondear(mc[2]),
+                    redondear(mc[3]),
+                ]),
+            );
         }
     }
     salida
@@ -483,10 +540,17 @@ fn push_gradient(img: &image::RgbaImage, fuerza: f32) -> image::RgbaImage {
         for x in 0..img.width() {
             let v = vecindad(img, x, y);
             let p = img.get_pixel(x, y);
-            let mut mc = [f32::from(p[0]), f32::from(p[1]), f32::from(p[2]), f32::from(p[3])];
+            let mut mc = [
+                f32::from(p[0]),
+                f32::from(p[1]),
+                f32::from(p[2]),
+                f32::from(p[3]),
+            ];
             let ma = p[3];
 
-            let elegido = if mini(v.tl[3], v.tc[3], v.tr[3]) > ma && ma > maxi(v.bl[3], v.bc[3], v.br[3]) {
+            let elegido = if mini(v.tl[3], v.tc[3], v.tr[3]) > ma
+                && ma > maxi(v.bl[3], v.bc[3], v.br[3])
+            {
                 Some((v.tl, v.tc, v.tr))
             } else if mini(v.bl[3], v.bc[3], v.br[3]) > ma && ma > maxi(v.tl[3], v.tc[3], v.tr[3]) {
                 Some((v.bl, v.bc, v.br))
@@ -513,18 +577,28 @@ fn push_gradient(img: &image::RgbaImage, fuerza: f32) -> image::RgbaImage {
                 None => mc[3] = 255.0,
             }
 
-            salida.put_pixel(x, y, image::Rgba([
-                redondear(mc[0]), redondear(mc[1]), redondear(mc[2]), redondear(mc[3]),
-            ]));
+            salida.put_pixel(
+                x,
+                y,
+                image::Rgba([
+                    redondear(mc[0]),
+                    redondear(mc[1]),
+                    redondear(mc[2]),
+                    redondear(mc[3]),
+                ]),
+            );
         }
     }
     salida
 }
 
-pub fn upscale(png_o_jpeg: &[u8], escala: u32) -> Result<(Vec<u8>, (u32, u32), (u32, u32)), String> {
+pub fn upscale(
+    png_o_jpeg: &[u8],
+    escala: u32,
+) -> Result<(Vec<u8>, (u32, u32), (u32, u32)), String> {
     let escala = escala.clamp(2, 4);
-    let img = image::load_from_memory(png_o_jpeg)
-        .map_err(|e| format!("no se pudo decodificar: {e}"))?;
+    let img =
+        image::load_from_memory(png_o_jpeg).map_err(|e| format!("no se pudo decodificar: {e}"))?;
     let (w0, h0) = (img.width(), img.height());
     let (w, h) = (w0 * escala, h0 * escala);
 
@@ -570,20 +644,21 @@ pub struct ImagenRequest {
     /// Solo para removebg: "white" pega sobre blanco, cualquier otra cosa deja
     /// el fondo transparente.
     #[serde(default)]
-    pub bg:    Option<String>,
+    pub bg: Option<String>,
     /// Solo para upscale: 2 o 4.
     #[serde(default)]
     pub scale: Option<u32>,
 }
 
 fn decodificar(b64: &str) -> Result<Vec<u8>, String> {
-    B64.decode(b64.as_bytes()).map_err(|e| format!("base64 inválido: {e}"))
+    B64.decode(b64.as_bytes())
+        .map_err(|e| format!("base64 inválido: {e}"))
 }
 
 /// POST /vision/removebg
 pub async fn removebg(
     State(_state): State<AppState>,
-    Json(req):     Json<ImagenRequest>,
+    Json(req): Json<ImagenRequest>,
 ) -> Json<serde_json::Value> {
     let bytes = match decodificar(&req.image) {
         Ok(b) => b,
@@ -599,14 +674,14 @@ pub async fn removebg(
             "success": true, "image": B64.encode(&datos), "format": fmt,
         })),
         Ok(Err(e)) => Json(serde_json::json!({ "success": false, "error": e })),
-        Err(e)     => Json(serde_json::json!({ "success": false, "error": e.to_string() })),
+        Err(e) => Json(serde_json::json!({ "success": false, "error": e.to_string() })),
     }
 }
 
 /// POST /vision/toanime
 pub async fn toanime(
     State(_state): State<AppState>,
-    Json(req):     Json<ImagenRequest>,
+    Json(req): Json<ImagenRequest>,
 ) -> Json<serde_json::Value> {
     let bytes = match decodificar(&req.image) {
         Ok(b) => b,
@@ -621,7 +696,7 @@ pub async fn toanime(
             "success": true, "image": B64.encode(&png), "format": "png",
         })),
         Ok(Err(e)) => Json(serde_json::json!({ "success": false, "error": e })),
-        Err(e)     => Json(serde_json::json!({ "success": false, "error": e.to_string() })),
+        Err(e) => Json(serde_json::json!({ "success": false, "error": e.to_string() })),
     }
 }
 
@@ -631,7 +706,7 @@ pub async fn toanime(
 /// algoritmo, no una red.
 pub async fn upscale_handler(
     State(_state): State<AppState>,
-    Json(req):     Json<ImagenRequest>,
+    Json(req): Json<ImagenRequest>,
 ) -> Json<serde_json::Value> {
     let bytes = match decodificar(&req.image) {
         Ok(b) => b,
@@ -649,7 +724,7 @@ pub async fn upscale_handler(
             "result":   { "w": res.0,  "h": res.1 },
         })),
         Ok(Err(e)) => Json(serde_json::json!({ "success": false, "error": e })),
-        Err(e)     => Json(serde_json::json!({ "success": false, "error": e.to_string() })),
+        Err(e) => Json(serde_json::json!({ "success": false, "error": e.to_string() })),
     }
 }
 
@@ -682,7 +757,11 @@ mod tests {
     fn png_con_linea(w: u32, h: u32) -> Vec<u8> {
         let mut img = RgbImage::new(w, h);
         for (x, _y, p) in img.enumerate_pixels_mut() {
-            *p = if x == w / 2 { image::Rgb([20, 20, 20]) } else { image::Rgb([230, 230, 230]) };
+            *p = if x == w / 2 {
+                image::Rgb([20, 20, 20])
+            } else {
+                image::Rgb([230, 230, 230])
+            };
         }
         let mut buf = Vec::new();
         DynamicImage::ImageRgb8(img)
@@ -697,7 +776,11 @@ mod tests {
     fn el_encuadre_conserva_la_proporcion_y_centra() {
         // Apaisada: el ancho llega al lado y la altura queda proporcional.
         let (lienzo, enc) = encuadrar(&RgbImage::new(200, 100), 1024);
-        assert_eq!((lienzo.width(), lienzo.height()), (1024, 1024), "siempre cuadrado");
+        assert_eq!(
+            (lienzo.width(), lienzo.height()),
+            (1024, 1024),
+            "siempre cuadrado"
+        );
         assert_eq!(enc.w, 1024);
         assert_eq!(enc.h, 512, "la mitad de ancho, la mitad de alto");
         assert_eq!(enc.off_x, 0);
@@ -802,7 +885,10 @@ mod tests {
         // los bordes, que es donde mas se nota.
         let (png, _, _) = upscale(&png_con_linea(40, 40), 2).unwrap();
         let img = image::load_from_memory(&png).unwrap();
-        assert!(!img.color().has_alpha(), "la salida debe ser RGB, sin canal alfa");
+        assert!(
+            !img.color().has_alpha(),
+            "la salida debe ser RGB, sin canal alfa"
+        );
     }
 
     #[test]
@@ -814,7 +900,8 @@ mod tests {
             let d = |a: u8, b: u8| (i32::from(a) - i32::from(b)).abs();
             assert!(
                 d(p[0], 120) <= 2 && d(p[1], 60) <= 2 && d(p[2], 30) <= 2,
-                "aparecio color donde no habia nada: {:?}", p.0,
+                "aparecio color donde no habia nada: {:?}",
+                p.0,
             );
         }
     }
@@ -830,7 +917,9 @@ mod tests {
 
         let base = image::imageops::resize(
             &image::load_from_memory(&fuente).unwrap().to_rgb8(),
-            80, 80, FilterType::CatmullRom,
+            80,
+            80,
+            FilterType::CatmullRom,
         );
 
         // Maximo salto horizontal entre pixeles contiguos, en la fila del medio.
@@ -847,7 +936,8 @@ mod tests {
         assert!(
             salto(&a4k) >= salto(&base),
             "Anime4K deberia dejar el borde al menos tan marcado como la bicubica: {} vs {}",
-            salto(&a4k), salto(&base),
+            salto(&a4k),
+            salto(&base),
         );
     }
 

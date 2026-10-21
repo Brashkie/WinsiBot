@@ -15,7 +15,6 @@
 /// ESE lock, no por ningún dato compartido real. Con DashMap, cada shard
 /// tiene su propio lock interno, así que sesiones distintas casi nunca
 /// contienden entre sí.
-
 use dashmap::DashMap;
 use std::sync::Arc;
 use tokio::sync::Mutex as AsyncMutex;
@@ -37,7 +36,11 @@ impl LockManager {
         if self.locks.len() >= 512 && !self.locks.contains_key(session_id) {
             let before = self.locks.len();
             self.locks.retain(|_, v| Arc::strong_count(v) > 1);
-            tracing::debug!(before, after = self.locks.len(), "LockManager: evicted unused locks");
+            tracing::debug!(
+                before,
+                after = self.locks.len(),
+                "LockManager: evicted unused locks"
+            );
         }
         self.locks
             .entry(session_id.to_string())

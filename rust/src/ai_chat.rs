@@ -26,17 +26,17 @@ use crate::routes::AppState;
 
 #[derive(Deserialize)]
 pub struct Comando {
-    pub name:     String,
+    pub name: String,
     #[serde(default)]
-    pub aliases:  Vec<String>,
+    pub aliases: Vec<String>,
     pub category: String,
-    pub usage:    String,
-    pub desc:     String,
+    pub usage: String,
+    pub desc: String,
 }
 
 #[derive(Deserialize)]
 pub struct Catalogo {
-    pub commands:        Vec<Comando>,
+    pub commands: Vec<Comando>,
     pub category_labels: HashMap<String, String>,
 }
 
@@ -108,13 +108,25 @@ pub fn seccion_comandos(prompt: &str) -> String {
     // 2. ¿Nombró una categoría?
     if encontrados.is_empty() {
         const CATS: [(&str, &str); 19] = [
-            ("rpg", "rpg"), ("gacha", "rpg"), ("waifu", "rpg"),
-            ("personajes", "rpg"), ("personaje", "rpg"),
-            ("juegos", "games"), ("juego", "games"), ("arena", "games"), ("quiz", "games"),
-            ("general", "general"), ("basico", "general"), ("básico", "general"),
-            ("stickers", "sticker"), ("sticker", "sticker"),
-            ("descargas", "downloader"), ("descargar", "downloader"), ("descarga", "downloader"),
-            ("administrador", "admin"), ("admin", "admin"),
+            ("rpg", "rpg"),
+            ("gacha", "rpg"),
+            ("waifu", "rpg"),
+            ("personajes", "rpg"),
+            ("personaje", "rpg"),
+            ("juegos", "games"),
+            ("juego", "games"),
+            ("arena", "games"),
+            ("quiz", "games"),
+            ("general", "general"),
+            ("basico", "general"),
+            ("básico", "general"),
+            ("stickers", "sticker"),
+            ("sticker", "sticker"),
+            ("descargas", "downloader"),
+            ("descargar", "downloader"),
+            ("descarga", "downloader"),
+            ("administrador", "admin"),
+            ("admin", "admin"),
         ];
         for (palabra, c) in CATS {
             if bajo.contains(palabra) {
@@ -130,7 +142,8 @@ pub fn seccion_comandos(prompt: &str) -> String {
         }
     }
 
-    let mut lineas = vec!["Información sobre los comandos del bot WinsiBot (prefijo !):".to_string()];
+    let mut lineas =
+        vec!["Información sobre los comandos del bot WinsiBot (prefijo !):".to_string()];
 
     if encontrados.is_empty() {
         // Resumen por categoría. El orden lo fija `category_labels`, que viene
@@ -178,19 +191,19 @@ pub fn seccion_comandos(prompt: &str) -> String {
 /// respetaba, pero la IA real no reflejaba el cambio de personalidad.
 fn descripcion_modo(modo: &str) -> &'static str {
     match modo {
-        "amable"     => "amigable y servicial",
-        "alegre"     => "energético y divertido",
-        "toxico"     => "sarcástico y sin filtro",
+        "amable" => "amigable y servicial",
+        "alegre" => "energético y divertido",
+        "toxico" => "sarcástico y sin filtro",
         "sarcastico" => "irónico con humor negro suave",
-        "formal"     => "profesional y educado",
+        "formal" => "profesional y educado",
         "misterioso" => "filosófico y críptico",
-        "peruano"    => "peruano, usa jerga como \"causa\", \"pe\", \"bro\", \"oe\"",
-        "gamer"      => "gamer, usa términos como GG, lag, noob y referencias a videojuegos",
-        "amoroso"    => "cariñoso y afectuoso, con mucho cariño y emojis de corazón",
-        "chistoso"   => "bromista, siempre buscando el chiste y la observación cómica",
-        "depresivo"  => "apático, nihilista, con humor negro y desgano",
-        "kawaii"     => "estilo anime kawaii, tierno, usa uwu/owo y onomatopeyas",
-        _            => "natural",
+        "peruano" => "peruano, usa jerga como \"causa\", \"pe\", \"bro\", \"oe\"",
+        "gamer" => "gamer, usa términos como GG, lag, noob y referencias a videojuegos",
+        "amoroso" => "cariñoso y afectuoso, con mucho cariño y emojis de corazón",
+        "chistoso" => "bromista, siempre buscando el chiste y la observación cómica",
+        "depresivo" => "apático, nihilista, con humor negro y desgano",
+        "kawaii" => "estilo anime kawaii, tierno, usa uwu/owo y onomatopeyas",
+        _ => "natural",
     }
 }
 
@@ -198,29 +211,29 @@ fn descripcion_modo(modo: &str) -> &'static str {
 #[derive(Debug, Default, Deserialize)]
 pub struct PerfilUsuario {
     #[serde(default)]
-    pub msg_count:    i64,
+    pub msg_count: i64,
     #[serde(default)]
-    pub avg_len:      f64,
+    pub avg_len: f64,
     #[serde(default)]
-    pub emoji_freq:   f64,
+    pub emoji_freq: f64,
     #[serde(default)]
     pub common_words: Vec<String>,
     #[serde(default)]
     pub vocab_sample: Vec<String>,
     #[serde(default)]
-    pub uses_slang:   bool,
+    pub uses_slang: bool,
 }
 
 #[derive(Debug, Default, Deserialize)]
 pub struct PerfilGrupo {
     #[serde(default)]
-    pub msg_count:    i64,
+    pub msg_count: i64,
     #[serde(default)]
     pub common_words: Vec<String>,
     #[serde(default)]
-    pub avg_msg_len:  f64,
+    pub avg_msg_len: f64,
     #[serde(default)]
-    pub emoji_freq:   f64,
+    pub emoji_freq: f64,
     #[serde(default)]
     pub vocab_sample: Vec<String>,
 }
@@ -228,14 +241,14 @@ pub struct PerfilGrupo {
 /// Cuántos mensajes hacen falta para que el perfil sea representativo.
 /// Por debajo, adaptar el estilo sería ruido.
 const MIN_MSGS_PERFIL: i64 = 15;
-const MIN_MSGS_GRUPO:  i64 = 10;
+const MIN_MSGS_GRUPO: i64 = 10;
 
 pub fn prompt_sistema(
-    grupo:    &PerfilGrupo,
-    usuario:  &PerfilUsuario,
-    modo:     &str,
+    grupo: &PerfilGrupo,
+    usuario: &PerfilUsuario,
+    modo: &str,
     bot_name: &str,
-    prompt:   &str,
+    prompt: &str,
 ) -> String {
     let mut p = vec![
         format!("Eres {bot_name}, la IA del bot WinsiBot en este grupo de WhatsApp."),
@@ -248,7 +261,13 @@ pub fn prompt_sistema(
         if !grupo.common_words.is_empty() {
             p.push(format!(
                 "Vocabulario típico del grupo: {}",
-                grupo.common_words.iter().take(20).cloned().collect::<Vec<_>>().join(", "),
+                grupo
+                    .common_words
+                    .iter()
+                    .take(20)
+                    .cloned()
+                    .collect::<Vec<_>>()
+                    .join(", "),
             ));
         }
         if grupo.avg_msg_len < 30.0 {
@@ -324,7 +343,13 @@ pub fn prompt_imitacion(perfil: &PerfilUsuario, target_jid: &str) -> String {
         if !perfil.common_words.is_empty() {
             p.push(format!(
                 "Sus palabras frecuentes: {}",
-                perfil.common_words.iter().take(12).cloned().collect::<Vec<_>>().join(", "),
+                perfil
+                    .common_words
+                    .iter()
+                    .take(12)
+                    .cloned()
+                    .collect::<Vec<_>>()
+                    .join(", "),
             ));
         }
         if !perfil.vocab_sample.is_empty() {
@@ -372,16 +397,24 @@ async fn cliente(timeout: Duration) -> Result<reqwest::Client, String> {
 /// La comparación es por el nombre sin la etiqueta: pedir "llama3.2" acepta
 /// "llama3.2:3b" instalado.
 pub async fn ollama_disponible(modelo: Option<&str>) -> bool {
-    let objetivo = modelo.map(str::to_string).unwrap_or_else(|| env("OLLAMA_MODEL", "llama3.2:3b"));
+    let objetivo = modelo
+        .map(str::to_string)
+        .unwrap_or_else(|| env("OLLAMA_MODEL", "llama3.2:3b"));
     let base = objetivo.split(':').next().unwrap_or(&objetivo).to_string();
 
-    let Ok(c) = cliente(Duration::from_secs(2)).await else { return false };
+    let Ok(c) = cliente(Duration::from_secs(2)).await else {
+        return false;
+    };
     let url = format!("{}/api/tags", env("OLLAMA_URL", "http://localhost:11434"));
-    let Ok(r) = c.get(&url).send().await else { return false };
+    let Ok(r) = c.get(&url).send().await else {
+        return false;
+    };
     if !r.status().is_success() {
         return false;
     }
-    let Ok(j) = r.json::<serde_json::Value>().await else { return false };
+    let Ok(j) = r.json::<serde_json::Value>().await else {
+        return false;
+    };
     j.get("models")
         .and_then(|m| m.as_array())
         .map(|ms| {
@@ -398,10 +431,15 @@ async fn ollama_chat(
     modelo: Option<&str>,
     sesion: &str,
 ) -> Option<String> {
-    let objetivo = modelo.map(str::to_string).unwrap_or_else(|| env("OLLAMA_MODEL", "llama3.2:3b"));
+    let objetivo = modelo
+        .map(str::to_string)
+        .unwrap_or_else(|| env("OLLAMA_MODEL", "llama3.2:3b"));
     let c = cliente(ollama_timeout()).await.ok()?;
     // Endpoint compatible con OpenAI, igual que usaba ollama_client.py.
-    let url = format!("{}/v1/chat/completions", env("OLLAMA_URL", "http://localhost:11434"));
+    let url = format!(
+        "{}/v1/chat/completions",
+        env("OLLAMA_URL", "http://localhost:11434")
+    );
 
     let r = c
         .post(&url)
@@ -523,7 +561,13 @@ async fn claude(prompt: &str, system: &str, key: &str) -> Option<String> {
         return None;
     }
     let j: serde_json::Value = r.json().await.ok()?;
-    let t = j.get("content")?.get(0)?.get("text")?.as_str()?.trim().to_string();
+    let t = j
+        .get("content")?
+        .get(0)?
+        .get("text")?
+        .as_str()?
+        .trim()
+        .to_string();
     (!t.is_empty()).then_some(t)
 }
 
@@ -536,14 +580,14 @@ async fn claude(prompt: &str, system: &str, key: &str) -> Option<String> {
 /// Sin `modelo`, el orden de siempre: Ollama (local, gratis, sin internet), GPT,
 /// Gemini y Claude, cada uno solo si hay clave.
 pub async fn generar_ia(
-    prompt:  &str,
-    system:  &str,
+    prompt: &str,
+    system: &str,
     use_gpt: bool,
-    modelo:  Option<&str>,
+    modelo: Option<&str>,
     // Qué conversación es, para el caché de atención del motor local.
     // Vacío = sin sesión: se procesa el prompt entero. Las APIs de la
     // nube no lo usan, son sin estado por diseño.
-    sesion:  &str,
+    sesion: &str,
 ) -> Option<String> {
     if let Some(m) = modelo {
         if ollama_disponible(Some(m)).await {
@@ -595,28 +639,30 @@ pub async fn generar_ia(
 
 #[derive(Deserialize)]
 pub struct ChatRequest {
-    pub prompt:     String,
+    pub prompt: String,
     #[serde(default)]
-    pub group_jid:  String,
+    pub group_jid: String,
     #[serde(default)]
     pub sender_jid: String,
     #[serde(default)]
-    pub intent:     String,
+    pub intent: String,
     #[serde(default)]
-    pub mode:       Option<String>,
+    pub mode: Option<String>,
     #[serde(default)]
-    pub model:      Option<String>,
+    pub model: Option<String>,
     #[serde(default = "si")]
-    pub use_gpt:    bool,
+    pub use_gpt: bool,
     #[serde(default)]
-    pub use_humor:  bool,
+    pub use_humor: bool,
     #[serde(default)]
-    pub history:    Vec<TurnoHistorial>,
+    pub history: Vec<TurnoHistorial>,
     #[serde(default)]
-    pub context:    Contexto,
+    pub context: Contexto,
 }
 
-fn si() -> bool { true }
+fn si() -> bool {
+    true
+}
 
 /// POST /ai/chat/respond
 ///
@@ -624,7 +670,7 @@ fn si() -> bool { true }
 /// que el cliente los traiga en el cuerpo como cuando esto vivía en Python.
 pub async fn respond(
     State(state): State<AppState>,
-    Json(req):    Json<ChatRequest>,
+    Json(req): Json<ChatRequest>,
 ) -> Json<serde_json::Value> {
     let db = state.conv_db.clone();
 
@@ -633,33 +679,33 @@ pub async fn respond(
     let db2 = db.clone();
     let datos = tokio::task::spawn_blocking(move || {
         let usuario = crate::conversations::user_profile(&db2, &sender, 45).ok();
-        let grupo   = crate::conversations::group_profile(&db2, &gjid, 30).ok();
-        let modo    = personality::modo(&db2, &gjid);
+        let grupo = crate::conversations::group_profile(&db2, &gjid, 30).ok();
+        let modo = personality::modo(&db2, &gjid);
         (usuario, grupo, modo)
     })
     .await;
 
     let (perfil_u, perfil_g, modo_guardado) = match datos {
-        Ok(d)  => d,
+        Ok(d) => d,
         Err(e) => return Json(serde_json::json!({ "success": false, "error": e.to_string() })),
     };
 
     let usuario = perfil_u
         .map(|p| PerfilUsuario {
-            msg_count:    p.msg_count,
-            avg_len:      p.avg_len,
-            emoji_freq:   p.emoji_freq,
+            msg_count: p.msg_count,
+            avg_len: p.avg_len,
+            emoji_freq: p.emoji_freq,
             common_words: p.common_words,
             vocab_sample: p.vocab_sample,
-            uses_slang:   p.uses_slang,
+            uses_slang: p.uses_slang,
         })
         .unwrap_or_default();
     let grupo = perfil_g
         .map(|g| PerfilGrupo {
-            msg_count:    g.msg_count,
+            msg_count: g.msg_count,
             common_words: g.common_words,
-            avg_msg_len:  g.avg_msg_len,
-            emoji_freq:   g.emoji_freq,
+            avg_msg_len: g.avg_msg_len,
+            emoji_freq: g.emoji_freq,
             vocab_sample: g.vocab_sample,
         })
         .unwrap_or_default();
@@ -671,9 +717,20 @@ pub async fn respond(
     // La sesión es el chat: el grupo si lo hay, el remitente si es privado.
     // Dos personas del mismo grupo comparten el hilo de la IA, que es como
     // se comporta el bot — responde a la conversación, no a cada uno.
-    let sesion = if req.group_jid.is_empty() { &req.sender_jid } else { &req.group_jid };
+    let sesion = if req.group_jid.is_empty() {
+        &req.sender_jid
+    } else {
+        &req.group_jid
+    };
 
-    let texto = generar_ia(&req.prompt, &system, req.use_gpt, req.model.as_deref(), sesion).await;
+    let texto = generar_ia(
+        &req.prompt,
+        &system,
+        req.use_gpt,
+        req.model.as_deref(),
+        sesion,
+    )
+    .await;
 
     // Si ninguna IA contestó, el motor local de plantillas. Recibe el historial
     // para no repetir las últimas respuestas, que es lo que más delata que hay
@@ -682,17 +739,21 @@ pub async fn respond(
         Some(t) => (t, "ia"),
         None => {
             let estilo = (usuario.msg_count >= MIN_MSGS_PERFIL).then(|| EstiloUsuario {
-                avg_len:      usuario.avg_len,
-                emoji_freq:   usuario.emoji_freq,
+                avg_len: usuario.avg_len,
+                emoji_freq: usuario.emoji_freq,
                 common_words: usuario.common_words.clone(),
             });
             let local = RespondRequest {
-                intent:     if req.intent.is_empty() { "neutral".into() } else { req.intent.clone() },
-                text:       req.prompt.clone(),
-                jid:        req.group_jid.clone(),
-                use_humor:  req.use_humor,
-                context:    req.context.clone(),
-                history:    req.history,
+                intent: if req.intent.is_empty() {
+                    "neutral".into()
+                } else {
+                    req.intent.clone()
+                },
+                text: req.prompt.clone(),
+                jid: req.group_jid.clone(),
+                use_humor: req.use_humor,
+                context: req.context.clone(),
+                history: req.history,
                 user_style: estilo,
             };
             let (t, _usado) = personality::generar(&modo, &local);
@@ -702,11 +763,14 @@ pub async fn respond(
 
     // Y aunque haya contestado la IA, el texto se acerca al estilo del usuario.
     let texto = if usuario.msg_count >= MIN_MSGS_PERFIL {
-        personality::imitar(&texto, &EstiloUsuario {
-            avg_len:      usuario.avg_len,
-            emoji_freq:   usuario.emoji_freq,
-            common_words: usuario.common_words,
-        })
+        personality::imitar(
+            &texto,
+            &EstiloUsuario {
+                avg_len: usuario.avg_len,
+                emoji_freq: usuario.emoji_freq,
+                common_words: usuario.common_words,
+            },
+        )
     } else {
         texto
     };
@@ -725,14 +789,14 @@ pub async fn respond(
 
 #[derive(Deserialize)]
 pub struct ImitateRequest {
-    pub prompt:     String,
+    pub prompt: String,
     pub target_jid: String,
 }
 
 /// POST /ai/chat/imitate — responde imitando a un usuario concreto.
 pub async fn imitate(
     State(state): State<AppState>,
-    Json(req):    Json<ImitateRequest>,
+    Json(req): Json<ImitateRequest>,
 ) -> Json<serde_json::Value> {
     let db = state.conv_db.clone();
     let target = req.target_jid.clone();
@@ -742,16 +806,16 @@ pub async fn imitate(
     })
     .await
     {
-        Ok(Ok(p))  => PerfilUsuario {
-            msg_count:    p.msg_count,
-            avg_len:      p.avg_len,
-            emoji_freq:   p.emoji_freq,
+        Ok(Ok(p)) => PerfilUsuario {
+            msg_count: p.msg_count,
+            avg_len: p.avg_len,
+            emoji_freq: p.emoji_freq,
             common_words: p.common_words,
             vocab_sample: p.vocab_sample,
-            uses_slang:   p.uses_slang,
+            uses_slang: p.uses_slang,
         },
         Ok(Err(e)) => return Json(serde_json::json!({ "success": false, "error": e })),
-        Err(e)     => return Json(serde_json::json!({ "success": false, "error": e.to_string() })),
+        Err(e) => return Json(serde_json::json!({ "success": false, "error": e.to_string() })),
     };
 
     let system = prompt_imitacion(&perfil, &req.target_jid);
@@ -760,11 +824,14 @@ pub async fn imitate(
         .unwrap_or_else(|| "...".into());
 
     let texto = if perfil.msg_count >= MIN_MSGS_PERFIL {
-        personality::imitar(&texto, &EstiloUsuario {
-            avg_len:      perfil.avg_len,
-            emoji_freq:   perfil.emoji_freq,
-            common_words: perfil.common_words,
-        })
+        personality::imitar(
+            &texto,
+            &EstiloUsuario {
+                avg_len: perfil.avg_len,
+                emoji_freq: perfil.emoji_freq,
+                common_words: perfil.common_words,
+            },
+        )
     } else {
         texto
     };
@@ -786,7 +853,10 @@ mod tests {
     use super::*;
 
     fn perfil(msgs: i64) -> PerfilUsuario {
-        PerfilUsuario { msg_count: msgs, ..Default::default() }
+        PerfilUsuario {
+            msg_count: msgs,
+            ..Default::default()
+        }
     }
 
     // ── Catalogo ────────────────────────────────────────────────────────────
@@ -801,7 +871,9 @@ mod tests {
             assert!(!cmd.usage.is_empty(), "{} sin uso", cmd.name);
             assert!(
                 c.category_labels.contains_key(&cmd.category),
-                "{} usa una categoria sin etiqueta: {}", cmd.name, cmd.category,
+                "{} usa una categoria sin etiqueta: {}",
+                cmd.name,
+                cmd.category,
             );
         }
     }
@@ -812,7 +884,11 @@ mod tests {
         for (i, cmd) in catalogo().commands.iter().enumerate() {
             assert_eq!(idx.get(&cmd.name.to_lowercase()), Some(&i));
             for a in &cmd.aliases {
-                assert_eq!(idx.get(&a.to_lowercase()), Some(&i), "alias {a} sin indexar");
+                assert_eq!(
+                    idx.get(&a.to_lowercase()),
+                    Some(&i),
+                    "alias {a} sin indexar"
+                );
             }
         }
     }
@@ -821,7 +897,13 @@ mod tests {
 
     #[test]
     fn detecta_las_preguntas_sobre_comandos() {
-        for p in ["como uso el bot", "que comandos tienes", "!rw", "ayuda", "dime el menu"] {
+        for p in [
+            "como uso el bot",
+            "que comandos tienes",
+            "!rw",
+            "ayuda",
+            "dime el menu",
+        ] {
             assert!(es_consulta_de_comandos(p), "deberia detectar {p:?}");
         }
     }
@@ -838,15 +920,24 @@ mod tests {
         let nombre = &catalogo().commands[0].name;
         let s = seccion_comandos(&format!("como uso !{nombre}"));
         assert!(s.contains(&format!("!{nombre}")));
-        assert!(s.contains("Uso:"), "deberia traer el detalle, no el resumen");
+        assert!(
+            s.contains("Uso:"),
+            "deberia traer el detalle, no el resumen"
+        );
     }
 
     #[test]
     fn sin_nada_concreto_trae_el_resumen_por_categoria() {
         let s = seccion_comandos("que comandos hay");
-        assert!(!s.contains("Uso:"), "deberia ser el resumen, no el detalle de 28 comandos");
+        assert!(
+            !s.contains("Uso:"),
+            "deberia ser el resumen, no el detalle de 28 comandos"
+        );
         for etiqueta in catalogo().category_labels.values() {
-            assert!(s.contains(etiqueta.as_str()), "falta la categoria {etiqueta}");
+            assert!(
+                s.contains(etiqueta.as_str()),
+                "falta la categoria {etiqueta}"
+            );
         }
     }
 
@@ -878,7 +969,13 @@ mod tests {
 
     #[test]
     fn el_prompt_lleva_el_nombre_y_el_modo() {
-        let s = prompt_sistema(&PerfilGrupo::default(), &perfil(0), "gamer", "Hepein", "hola");
+        let s = prompt_sistema(
+            &PerfilGrupo::default(),
+            &perfil(0),
+            "gamer",
+            "Hepein",
+            "hola",
+        );
         assert!(s.contains("Hepein"));
         assert!(s.contains(descripcion_modo("gamer")));
         assert!(s.contains("español"));
@@ -888,13 +985,27 @@ mod tests {
     fn el_prompt_omite_el_estilo_sin_datos_suficientes() {
         // Con pocos mensajes el perfil es ruido y describirlo haria que la IA
         // imite un estilo inventado.
-        let s = prompt_sistema(&PerfilGrupo::default(), &perfil(MIN_MSGS_PERFIL - 1), "amable", "Bot", "hola");
-        assert!(!s.contains("El usuario que te escribe"), "no deberia describir el estilo");
+        let s = prompt_sistema(
+            &PerfilGrupo::default(),
+            &perfil(MIN_MSGS_PERFIL - 1),
+            "amable",
+            "Bot",
+            "hola",
+        );
+        assert!(
+            !s.contains("El usuario que te escribe"),
+            "no deberia describir el estilo"
+        );
     }
 
     #[test]
     fn el_prompt_incluye_el_estilo_con_datos_suficientes() {
-        let p = PerfilUsuario { msg_count: 100, avg_len: 8.0, uses_slang: true, ..Default::default() };
+        let p = PerfilUsuario {
+            msg_count: 100,
+            avg_len: 8.0,
+            uses_slang: true,
+            ..Default::default()
+        };
         let s = prompt_sistema(&PerfilGrupo::default(), &p, "amable", "Bot", "hola");
         assert!(s.contains("El usuario que te escribe"));
         assert!(s.contains("Escribe muy corto"));
@@ -909,13 +1020,28 @@ mod tests {
             ..Default::default()
         };
         let s = prompt_sistema(&g, &perfil(0), "amable", "Bot", "hola");
-        assert!(s.contains("nunca repitas"), "sin ese aviso la IA recicla los ejemplos");
+        assert!(
+            s.contains("nunca repitas"),
+            "sin ese aviso la IA recicla los ejemplos"
+        );
     }
 
     #[test]
     fn el_prompt_inyecta_los_comandos_solo_si_preguntan_por_ellos() {
-        let con = prompt_sistema(&PerfilGrupo::default(), &perfil(0), "amable", "Bot", "que comandos hay");
-        let sin = prompt_sistema(&PerfilGrupo::default(), &perfil(0), "amable", "Bot", "manana jugamos");
+        let con = prompt_sistema(
+            &PerfilGrupo::default(),
+            &perfil(0),
+            "amable",
+            "Bot",
+            "que comandos hay",
+        );
+        let sin = prompt_sistema(
+            &PerfilGrupo::default(),
+            &perfil(0),
+            "amable",
+            "Bot",
+            "manana jugamos",
+        );
         assert!(con.contains("comandos del bot WinsiBot"));
         assert!(!sin.contains("comandos del bot WinsiBot"));
     }
@@ -924,7 +1050,10 @@ mod tests {
     fn el_prompt_de_imitacion_usa_el_numero_y_no_el_jid_entero() {
         let s = prompt_imitacion(&perfil(0), "5190@s.whatsapp.net");
         assert!(s.contains("@5190"));
-        assert!(!s.contains("s.whatsapp.net"), "no deberia filtrar el jid completo");
+        assert!(
+            !s.contains("s.whatsapp.net"),
+            "no deberia filtrar el jid completo"
+        );
     }
 
     #[test]
@@ -947,9 +1076,15 @@ mod tests {
     fn una_respuesta_vacia_o_rara_no_cuenta_como_respuesta() {
         // Si contara, el caller daria por buena una respuesta vacia en vez de
         // caer al motor local de plantillas.
-        assert_eq!(texto_openai(&serde_json::json!({ "choices": [{ "message": { "content": "   " } }] })), None);
+        assert_eq!(
+            texto_openai(&serde_json::json!({ "choices": [{ "message": { "content": "   " } }] })),
+            None
+        );
         assert_eq!(texto_openai(&serde_json::json!({ "choices": [] })), None);
-        assert_eq!(texto_openai(&serde_json::json!({ "error": "lo que sea" })), None);
+        assert_eq!(
+            texto_openai(&serde_json::json!({ "error": "lo que sea" })),
+            None
+        );
         assert_eq!(texto_openai(&serde_json::json!({})), None);
     }
 }

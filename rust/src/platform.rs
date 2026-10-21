@@ -37,10 +37,12 @@ pub struct PlatformInfo {
 
 pub fn detect() -> PlatformInfo {
     PlatformInfo {
-        os:     std::env::consts::OS,
-        arch:   std::env::consts::ARCH,
+        os: std::env::consts::OS,
+        arch: std::env::consts::ARCH,
         family: std::env::consts::FAMILY,
-        cores:  std::thread::available_parallelism().map(|n| n.get()).unwrap_or(1),
+        cores: std::thread::available_parallelism()
+            .map(|n| n.get())
+            .unwrap_or(1),
     }
 }
 

@@ -3,7 +3,6 @@
 /// - is_healthy: respuesta enriquecida (corruptionDetected, lastSnapshot)
 /// - liveness / readiness: para Docker/K8s
 /// - messages/track, messages/ack, messages/pending, messages/stats, messages/cleanup
-
 use axum::{
     extract::{Query, State},
     http::StatusCode,
@@ -13,8 +12,11 @@ use base64::{engine::general_purpose::STANDARD as B64, Engine as _};
 use chrono::Utc;
 use serde::{Deserialize, Serialize};
 
-use crate::{alerts, atomic, bad_mac, conversations, db, metrics, rate_limiter, session_id, snapshot, subbots, watchdog};
 use crate::config::MAX_SESSION_BYTES;
+use crate::{
+    alerts, atomic, bad_mac, conversations, db, metrics, rate_limiter, session_id, snapshot,
+    subbots, watchdog,
+};
 
 // ── AppState ──────────────────────────────────────────────────────────────────
 
@@ -23,17 +25,20 @@ use std::sync::Arc;
 
 #[derive(Clone)]
 pub struct AppState {
-    pub sessions_dir:  String,
-    pub auth_dir:      String,
-    pub locks:         LockManager,
-    pub db:            db::Db,
-    pub conv_db:       conversations::ConvDb,
-    pub bad_mac:       bad_mac::BadMacTracker,
-    pub rate_limiter:  rate_limiter::RateLimiter,
-    pub watchdog:      watchdog::WatchdogState,
-    pub subbots:       Arc<subbots::SubBotManager>,
-    pub metrics:       metrics::Metrics,
+    pub sessions_dir: String,
+    pub auth_dir: String,
+    pub locks: LockManager,
+    pub db: db::Db,
+    pub conv_db: conversations::ConvDb,
+    pub bad_mac: bad_mac::BadMacTracker,
+    pub rate_limiter: rate_limiter::RateLimiter,
+    pub watchdog: watchdog::WatchdogState,
+    pub subbots: Arc<subbots::SubBotManager>,
+    pub metrics: metrics::Metrics,
     pub alert_webhook_url: Option<String>,
+    /// Ritmo de salida por cuenta: ventanas, calentamiento, 429 y 463. Ver
+    /// antiban.rs.
+    pub antiban: crate::antiban::Antiban,
 }
 
 // ── Límites de seguridad ──────────────────────────────────────────────────────
@@ -45,27 +50,26 @@ fn ok(msg: impl Into<String>) -> Json<serde_json::Value> {
     Json(serde_json::json!({ "ok": true, "message": msg.into(), "ts": Utc::now() }))
 }
 
-fn err(
-    status: StatusCode,
-    msg: impl Into<String>,
-) -> (StatusCode, Json<serde_json::Value>) {
+fn err(status: StatusCode, msg: impl Into<String>) -> (StatusCode, Json<serde_json::Value>) {
     let msg = msg.into();
     tracing::warn!(error = %msg, status = %status.as_u16(), "request fallido");
-    (status, Json(serde_json::json!({ "ok": false, "error": msg, "ts": Utc::now() })))
+    (
+        status,
+        Json(serde_json::json!({ "ok": false, "error": msg, "ts": Utc::now() })),
+    )
 }
 
 fn resolve_path(
     sessions_dir: &str,
     sid: &str,
 ) -> Result<std::path::PathBuf, (StatusCode, Json<serde_json::Value>)> {
-    session_id::resolve(sessions_dir, sid)
-        .map_err(|e| err(StatusCode::BAD_REQUEST, e.to_string()))
+    session_id::resolve(sessions_dir, sid).map_err(|e| err(StatusCode::BAD_REQUEST, e.to_string()))
 }
 
 // ── GET /health (público) ─────────────────────────────────────────────────────
 
 pub async fn health(State(state): State<AppState>) -> Json<serde_json::Value> {
-    let dir      = state.sessions_dir.clone();
+    let dir = state.sessions_dir.clone();
     let sessions = tokio::task::spawn_blocking(move || session_id::list_sessions(&dir))
         .await
         .unwrap_or_default();
@@ -91,7 +95,7 @@ pub async fn liveness() -> Json<serde_json::Value> {
 // ── GET /health/ready (público) — sessiones_dir accesible ────────────────────
 
 pub async fn readiness(State(state): State<AppState>) -> Json<serde_json::Value> {
-    let dir   = state.sessions_dir.clone();
+    let dir = state.sessions_dir.clone();
     let ready = tokio::task::spawn_blocking(move || std::fs::metadata(&dir).is_ok())
         .await
         .unwrap_or(false);
@@ -108,7 +112,7 @@ pub async fn readiness(State(state): State<AppState>) -> Json<serde_json::Value>
 // ── GET /sessions ─────────────────────────────────────────────────────────────
 
 pub async fn list_sessions(State(state): State<AppState>) -> Json<serde_json::Value> {
-    let dir      = state.sessions_dir.clone();
+    let dir = state.sessions_dir.clone();
     let sessions = tokio::task::spawn_blocking(move || session_id::list_sessions(&dir))
         .await
         .unwrap_or_default();
@@ -133,7 +137,7 @@ pub async fn write(
     let path = resolve_path(&state.sessions_dir, &body.session_id)?;
 
     // Adquirir lock por sessionId — serializa escrituras concurrentes
-    let lock   = state.locks.get(&body.session_id);
+    let lock = state.locks.get(&body.session_id);
     let _guard = lock.lock().await;
 
     let bytes = B64
@@ -143,13 +147,21 @@ pub async fn write(
     if bytes.len() > MAX_SESSION_BYTES {
         return Err(err(
             StatusCode::PAYLOAD_TOO_LARGE,
-            format!("datos demasiado grandes ({} bytes, máx {})", bytes.len(), MAX_SESSION_BYTES),
+            format!(
+                "datos demasiado grandes ({} bytes, máx {})",
+                bytes.len(),
+                MAX_SESSION_BYTES
+            ),
         ));
     }
 
     // Validar JSON antes de tocar disco
-    serde_json::from_slice::<serde_json::Value>(&bytes)
-        .map_err(|e| err(StatusCode::BAD_REQUEST, format!("data no es JSON válido: {e}")))?;
+    serde_json::from_slice::<serde_json::Value>(&bytes).map_err(|e| {
+        err(
+            StatusCode::BAD_REQUEST,
+            format!("data no es JSON válido: {e}"),
+        )
+    })?;
 
     let bytes_len = bytes.len();
 
@@ -165,25 +177,36 @@ pub async fn write(
     let write_result = tokio::task::spawn_blocking(move || {
         let _ = snapshot::create(&path_for_write);
         atomic::atomic_write(&path_for_write, &bytes)
-    }).await;
+    })
+    .await;
 
     match write_result {
         Ok(Ok(())) => {}
         Ok(Err(e)) => {
             alerts::fire(
                 &state,
-                &format!("🔴 WinsiBot: fallo al escribir sesión '{}': {e}", body.session_id),
-            ).await;
+                &format!(
+                    "🔴 WinsiBot: fallo al escribir sesión '{}': {e}",
+                    body.session_id
+                ),
+            )
+            .await;
             return Err(err(StatusCode::INTERNAL_SERVER_ERROR, e.to_string()));
         }
         Err(e) => {
-            return Err(err(StatusCode::INTERNAL_SERVER_ERROR, format!("tarea interna falló: {e}")));
+            return Err(err(
+                StatusCode::INTERNAL_SERVER_ERROR,
+                format!("tarea interna falló: {e}"),
+            ));
         }
     }
 
     state.metrics.inc_write(bytes_len);
     tracing::info!(session = %body.session_id, bytes = bytes_len, "sesión guardada");
-    Ok(ok(format!("sesión '{}' guardada ({} bytes)", body.session_id, bytes_len)))
+    Ok(ok(format!(
+        "sesión '{}' guardada ({} bytes)",
+        body.session_id, bytes_len
+    )))
 }
 
 // ── GET /read?sessionId=bot1 ──────────────────────────────────────────────────
@@ -196,12 +219,12 @@ pub struct SessionQuery {
 
 #[derive(Serialize)]
 pub struct ReadResponse {
-    ok:           bool,
+    ok: bool,
     #[serde(rename = "sessionId")]
-    session_id:   String,
-    data:         String,
-    healthy:      bool,
-    ts:           chrono::DateTime<Utc>,
+    session_id: String,
+    data: String,
+    healthy: bool,
+    ts: chrono::DateTime<Utc>,
 }
 
 pub async fn read(
@@ -213,10 +236,18 @@ pub async fn read(
     let path_for_read = path.clone();
     let bytes = tokio::task::spawn_blocking(move || std::fs::read(&path_for_read))
         .await
-        .map_err(|e| err(StatusCode::INTERNAL_SERVER_ERROR, format!("tarea interna falló: {e}")))?
+        .map_err(|e| {
+            err(
+                StatusCode::INTERNAL_SERVER_ERROR,
+                format!("tarea interna falló: {e}"),
+            )
+        })?
         .map_err(|e| {
             tracing::warn!(session = %q.session_id, error = %e, "sesión no encontrada");
-            err(StatusCode::NOT_FOUND, format!("sesión '{}' no encontrada", q.session_id))
+            err(
+                StatusCode::NOT_FOUND,
+                format!("sesión '{}' no encontrada", q.session_id),
+            )
         })?;
 
     let healthy = serde_json::from_slice::<serde_json::Value>(&bytes).is_ok();
@@ -251,7 +282,12 @@ pub async fn snapshot_route(
         move || snapshot::create(&path)
     })
     .await
-    .map_err(|e| err(StatusCode::INTERNAL_SERVER_ERROR, format!("tarea interna falló: {e}")))?
+    .map_err(|e| {
+        err(
+            StatusCode::INTERNAL_SERVER_ERROR,
+            format!("tarea interna falló: {e}"),
+        )
+    })?
     .map_err(|e| err(StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
 
     state.metrics.inc_snapshot_manual();
@@ -272,7 +308,12 @@ pub async fn recover(
         move || snapshot::recover(&path)
     })
     .await
-    .map_err(|e| err(StatusCode::INTERNAL_SERVER_ERROR, format!("tarea interna falló: {e}")))?;
+    .map_err(|e| {
+        err(
+            StatusCode::INTERNAL_SERVER_ERROR,
+            format!("tarea interna falló: {e}"),
+        )
+    })?;
 
     match recovered {
         Some(msg) => {
@@ -301,7 +342,12 @@ pub async fn is_healthy(
         move || (atomic::is_healthy(&path), snapshot::latest_meta(&path))
     })
     .await
-    .map_err(|e| err(StatusCode::INTERNAL_SERVER_ERROR, format!("tarea interna falló: {e}")))?;
+    .map_err(|e| {
+        err(
+            StatusCode::INTERNAL_SERVER_ERROR,
+            format!("tarea interna falló: {e}"),
+        )
+    })?;
 
     tracing::debug!(session = %q.session_id, healthy, "health check de sesión");
 
@@ -322,10 +368,10 @@ pub async fn is_healthy(
 
 pub async fn read_backup(
     State(state): State<AppState>,
-    Query(q):     Query<SessionQuery>,
+    Query(q): Query<SessionQuery>,
 ) -> (StatusCode, Json<serde_json::Value>) {
     let path = match resolve_path(&state.sessions_dir, &q.session_id) {
-        Ok(p)  => p,
+        Ok(p) => p,
         Err(e) => return e,
     };
 
@@ -338,7 +384,7 @@ pub async fn read_backup(
             // 1. Intentar el backup actual
             if let Ok(bytes) = std::fs::read(&path) {
                 if serde_json::from_slice::<serde_json::Value>(&bytes).is_ok() {
-                    return ("current".to_string(), 0usize, Some(bytes))
+                    return ("current".to_string(), 0usize, Some(bytes));
                 }
             }
             // 2. Buscar el mejor snapshot sin sobreescribir nada
@@ -347,41 +393,56 @@ pub async fn read_backup(
                 None => (String::new(), 0, None),
             }
         }
-    }).await;
+    })
+    .await;
 
     let (source, idx, bytes) = match result {
-        Ok(r)  => r,
-        Err(e) => return err(StatusCode::INTERNAL_SERVER_ERROR, format!("tarea interna falló: {e}")),
+        Ok(r) => r,
+        Err(e) => {
+            return err(
+                StatusCode::INTERNAL_SERVER_ERROR,
+                format!("tarea interna falló: {e}"),
+            )
+        }
     };
 
     match bytes {
         Some(bytes) if source == "current" => {
             tracing::debug!(session = %q.session_id, "read_backup desde archivo principal");
-            (StatusCode::OK, Json(serde_json::json!({
-                "ok":     true,
-                "source": "current",
-                "index":  0,
-                "data":   B64.encode(&bytes),
-                "ts":     Utc::now(),
-            })))
+            (
+                StatusCode::OK,
+                Json(serde_json::json!({
+                    "ok":     true,
+                    "source": "current",
+                    "index":  0,
+                    "data":   B64.encode(&bytes),
+                    "ts":     Utc::now(),
+                })),
+            )
         }
         Some(bytes) => {
             tracing::info!(session = %q.session_id, index = idx, "read_backup desde snapshot");
-            (StatusCode::OK, Json(serde_json::json!({
-                "ok":     true,
-                "source": "snapshot",
-                "index":  idx,
-                "data":   B64.encode(&bytes),
-                "ts":     Utc::now(),
-            })))
+            (
+                StatusCode::OK,
+                Json(serde_json::json!({
+                    "ok":     true,
+                    "source": "snapshot",
+                    "index":  idx,
+                    "data":   B64.encode(&bytes),
+                    "ts":     Utc::now(),
+                })),
+            )
         }
         None => {
             tracing::warn!(session = %q.session_id, "read_backup — sin backup válido");
-            (StatusCode::NOT_FOUND, Json(serde_json::json!({
-                "ok":    false,
-                "error": "sin backup disponible — se requiere nuevo QR",
-                "ts":    Utc::now(),
-            })))
+            (
+                StatusCode::NOT_FOUND,
+                Json(serde_json::json!({
+                    "ok":    false,
+                    "error": "sin backup disponible — se requiere nuevo QR",
+                    "ts":    Utc::now(),
+                })),
+            )
         }
     }
 }
@@ -425,8 +486,10 @@ pub async fn clear_signal_sessions(
     State(state): State<AppState>,
     body: Option<Json<ClearSignalBody>>,
 ) -> Json<serde_json::Value> {
-    let auth_dir  = state.auth_dir.clone();
-    let group_jid = body.and_then(|Json(b)| b.group_jid).filter(|g| !g.is_empty());
+    let auth_dir = state.auth_dir.clone();
+    let group_jid = body
+        .and_then(|Json(b)| b.group_jid)
+        .filter(|g| !g.is_empty());
 
     // std::fs::read_dir/remove_file son BLOQUEANTES — llamarlos directo en un
     // handler async de Axum congela el hilo del runtime de Tokio hasta que
@@ -454,7 +517,7 @@ pub async fn clear_signal_sessions(
         }
 
         let entries = match std::fs::read_dir(auth_path) {
-            Ok(e)  => e,
+            Ok(e) => e,
             Err(e) => return Err((format!("no se pudo leer auth_dir: {e}"), auth_dir)),
         };
 
@@ -568,35 +631,54 @@ pub struct SentBody {
 #[derive(Deserialize)]
 pub struct UnsentQuery {
     #[serde(default = "default_unsent_limit")]
-    limit:       i64,
+    limit: i64,
     #[serde(default = "default_max_retries")]
     max_retries: i64,
 }
 
-fn default_unsent_limit() -> i64 { 100 }
-fn default_max_retries() -> i64 { 3 }
+fn default_unsent_limit() -> i64 {
+    100
+}
+fn default_max_retries() -> i64 {
+    3
+}
 
 pub async fn outbox_enqueue(
     State(state): State<AppState>,
     Json(body): Json<EnqueueBody>,
 ) -> (StatusCode, Json<serde_json::Value>) {
     if body.messages.is_empty() {
-        return (StatusCode::BAD_REQUEST, Json(serde_json::json!({ "ok": false, "error": "lista vacía" })));
+        return (
+            StatusCode::BAD_REQUEST,
+            Json(serde_json::json!({ "ok": false, "error": "lista vacía" })),
+        );
     }
     if body.messages.len() > MAX_BATCH {
-        return (StatusCode::BAD_REQUEST, Json(serde_json::json!({
-            "ok": false,
-            "error": format!("lote demasiado grande ({} items, máx {})", body.messages.len(), MAX_BATCH),
-        })));
+        return (
+            StatusCode::BAD_REQUEST,
+            Json(serde_json::json!({
+                "ok": false,
+                "error": format!("lote demasiado grande ({} items, máx {})", body.messages.len(), MAX_BATCH),
+            })),
+        );
     }
     let db = state.db.clone();
     match tokio::task::spawn_blocking(move || db::enqueue(&db, &body.messages)).await {
-        Ok(Ok(n))  => (StatusCode::OK, Json(serde_json::json!({ "ok": true, "queued": n }))),
+        Ok(Ok(n)) => (
+            StatusCode::OK,
+            Json(serde_json::json!({ "ok": true, "queued": n })),
+        ),
         Ok(Err(e)) => {
             tracing::error!(error = %e, "outbox_enqueue DB error");
-            (StatusCode::INTERNAL_SERVER_ERROR, Json(serde_json::json!({ "ok": false, "error": e.to_string() })))
+            (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(serde_json::json!({ "ok": false, "error": e.to_string() })),
+            )
         }
-        Err(e) => (StatusCode::INTERNAL_SERVER_ERROR, Json(serde_json::json!({ "ok": false, "error": e.to_string() }))),
+        Err(e) => (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            Json(serde_json::json!({ "ok": false, "error": e.to_string() })),
+        ),
     }
 }
 
@@ -606,12 +688,21 @@ pub async fn outbox_unsent(
 ) -> (StatusCode, Json<serde_json::Value>) {
     let db = state.db.clone();
     match tokio::task::spawn_blocking(move || db::unsent(&db, q.limit, q.max_retries)).await {
-        Ok(Ok(rows)) => (StatusCode::OK, Json(serde_json::json!({ "ok": true, "messages": rows }))),
-        Ok(Err(e))   => {
+        Ok(Ok(rows)) => (
+            StatusCode::OK,
+            Json(serde_json::json!({ "ok": true, "messages": rows })),
+        ),
+        Ok(Err(e)) => {
             tracing::error!(error = %e, "outbox_unsent DB error");
-            (StatusCode::INTERNAL_SERVER_ERROR, Json(serde_json::json!({ "ok": false, "error": e.to_string() })))
+            (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(serde_json::json!({ "ok": false, "error": e.to_string() })),
+            )
         }
-        Err(e) => (StatusCode::INTERNAL_SERVER_ERROR, Json(serde_json::json!({ "ok": false, "error": e.to_string() }))),
+        Err(e) => (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            Json(serde_json::json!({ "ok": false, "error": e.to_string() })),
+        ),
     }
 }
 
@@ -620,13 +711,25 @@ pub async fn outbox_sent(
     Json(body): Json<SentBody>,
 ) -> (StatusCode, Json<serde_json::Value>) {
     if body.ids.is_empty() {
-        return (StatusCode::BAD_REQUEST, Json(serde_json::json!({ "ok": false, "error": "lista vacía" })));
+        return (
+            StatusCode::BAD_REQUEST,
+            Json(serde_json::json!({ "ok": false, "error": "lista vacía" })),
+        );
     }
     let db = state.db.clone();
     match tokio::task::spawn_blocking(move || db::mark_sent(&db, &body.ids)).await {
-        Ok(Ok(n))  => (StatusCode::OK, Json(serde_json::json!({ "ok": true, "marked": n }))),
-        Ok(Err(e)) => (StatusCode::INTERNAL_SERVER_ERROR, Json(serde_json::json!({ "ok": false, "error": e.to_string() }))),
-        Err(e)     => (StatusCode::INTERNAL_SERVER_ERROR, Json(serde_json::json!({ "ok": false, "error": e.to_string() }))),
+        Ok(Ok(n)) => (
+            StatusCode::OK,
+            Json(serde_json::json!({ "ok": true, "marked": n })),
+        ),
+        Ok(Err(e)) => (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            Json(serde_json::json!({ "ok": false, "error": e.to_string() })),
+        ),
+        Err(e) => (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            Json(serde_json::json!({ "ok": false, "error": e.to_string() })),
+        ),
     }
 }
 
@@ -635,13 +738,25 @@ pub async fn outbox_retry(
     Json(body): Json<SentBody>,
 ) -> (StatusCode, Json<serde_json::Value>) {
     if body.ids.is_empty() {
-        return (StatusCode::BAD_REQUEST, Json(serde_json::json!({ "ok": false, "error": "lista vacía" })));
+        return (
+            StatusCode::BAD_REQUEST,
+            Json(serde_json::json!({ "ok": false, "error": "lista vacía" })),
+        );
     }
     let db = state.db.clone();
     match tokio::task::spawn_blocking(move || db::bump_retry(&db, &body.ids)).await {
-        Ok(Ok(n))  => (StatusCode::OK, Json(serde_json::json!({ "ok": true, "bumped": n }))),
-        Ok(Err(e)) => (StatusCode::INTERNAL_SERVER_ERROR, Json(serde_json::json!({ "ok": false, "error": e.to_string() }))),
-        Err(e)     => (StatusCode::INTERNAL_SERVER_ERROR, Json(serde_json::json!({ "ok": false, "error": e.to_string() }))),
+        Ok(Ok(n)) => (
+            StatusCode::OK,
+            Json(serde_json::json!({ "ok": true, "bumped": n })),
+        ),
+        Ok(Err(e)) => (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            Json(serde_json::json!({ "ok": false, "error": e.to_string() })),
+        ),
+        Err(e) => (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            Json(serde_json::json!({ "ok": false, "error": e.to_string() })),
+        ),
     }
 }
 
@@ -650,22 +765,37 @@ pub async fn messages_track(
     Json(body): Json<TrackBody>,
 ) -> (StatusCode, Json<serde_json::Value>) {
     if body.messages.is_empty() {
-        return (StatusCode::BAD_REQUEST, Json(serde_json::json!({ "ok": false, "error": "lista vacía" })));
+        return (
+            StatusCode::BAD_REQUEST,
+            Json(serde_json::json!({ "ok": false, "error": "lista vacía" })),
+        );
     }
     if body.messages.len() > MAX_BATCH {
-        return (StatusCode::BAD_REQUEST, Json(serde_json::json!({
-            "ok": false,
-            "error": format!("lote demasiado grande ({} items, máx {})", body.messages.len(), MAX_BATCH),
-        })));
+        return (
+            StatusCode::BAD_REQUEST,
+            Json(serde_json::json!({
+                "ok": false,
+                "error": format!("lote demasiado grande ({} items, máx {})", body.messages.len(), MAX_BATCH),
+            })),
+        );
     }
     let db = state.db.clone();
     match tokio::task::spawn_blocking(move || db::track(&db, &body.messages)).await {
-        Ok(Ok(n)) => (StatusCode::OK, Json(serde_json::json!({ "ok": true, "tracked": n, "ts": Utc::now() }))),
+        Ok(Ok(n)) => (
+            StatusCode::OK,
+            Json(serde_json::json!({ "ok": true, "tracked": n, "ts": Utc::now() })),
+        ),
         Ok(Err(e)) => {
             tracing::error!(error = %e, "messages_track DB error");
-            (StatusCode::INTERNAL_SERVER_ERROR, Json(serde_json::json!({ "ok": false, "error": e.to_string() })))
+            (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(serde_json::json!({ "ok": false, "error": e.to_string() })),
+            )
         }
-        Err(e) => (StatusCode::INTERNAL_SERVER_ERROR, Json(serde_json::json!({ "ok": false, "error": e.to_string() }))),
+        Err(e) => (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            Json(serde_json::json!({ "ok": false, "error": e.to_string() })),
+        ),
     }
 }
 
@@ -683,22 +813,37 @@ pub async fn messages_ack(
     Json(body): Json<AckBody>,
 ) -> (StatusCode, Json<serde_json::Value>) {
     if body.updates.is_empty() {
-        return (StatusCode::BAD_REQUEST, Json(serde_json::json!({ "ok": false, "error": "lista vacía" })));
+        return (
+            StatusCode::BAD_REQUEST,
+            Json(serde_json::json!({ "ok": false, "error": "lista vacía" })),
+        );
     }
     if body.updates.len() > MAX_BATCH {
-        return (StatusCode::BAD_REQUEST, Json(serde_json::json!({
-            "ok": false,
-            "error": format!("lote demasiado grande ({} items, máx {})", body.updates.len(), MAX_BATCH),
-        })));
+        return (
+            StatusCode::BAD_REQUEST,
+            Json(serde_json::json!({
+                "ok": false,
+                "error": format!("lote demasiado grande ({} items, máx {})", body.updates.len(), MAX_BATCH),
+            })),
+        );
     }
     let db = state.db.clone();
     match tokio::task::spawn_blocking(move || db::ack(&db, &body.updates)).await {
-        Ok(Ok(n)) => (StatusCode::OK, Json(serde_json::json!({ "ok": true, "updated": n, "ts": Utc::now() }))),
+        Ok(Ok(n)) => (
+            StatusCode::OK,
+            Json(serde_json::json!({ "ok": true, "updated": n, "ts": Utc::now() })),
+        ),
         Ok(Err(e)) => {
             tracing::error!(error = %e, "messages_ack DB error");
-            (StatusCode::INTERNAL_SERVER_ERROR, Json(serde_json::json!({ "ok": false, "error": e.to_string() })))
+            (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(serde_json::json!({ "ok": false, "error": e.to_string() })),
+            )
         }
-        Err(e) => (StatusCode::INTERNAL_SERVER_ERROR, Json(serde_json::json!({ "ok": false, "error": e.to_string() }))),
+        Err(e) => (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            Json(serde_json::json!({ "ok": false, "error": e.to_string() })),
+        ),
     }
 }
 
@@ -710,32 +855,44 @@ pub struct PendingQuery {
     #[serde(default = "default_minutes")]
     minutes: i64,
     #[serde(default = "default_limit")]
-    limit:   i64,
+    limit: i64,
 }
-fn default_minutes() -> i64 { 5  }
-fn default_limit()   -> i64 { 100 }
+fn default_minutes() -> i64 {
+    5
+}
+fn default_limit() -> i64 {
+    100
+}
 
 pub async fn messages_pending(
     State(state): State<AppState>,
     Query(q): Query<PendingQuery>,
 ) -> (StatusCode, Json<serde_json::Value>) {
     let minutes = q.minutes.clamp(1, 10_080); // 1 min – 7 días
-    let limit   = q.limit.clamp(1, 10_000);
-    let db      = state.db.clone();
+    let limit = q.limit.clamp(1, 10_000);
+    let db = state.db.clone();
     let min_age = minutes * 60;
     match tokio::task::spawn_blocking(move || db::get_pending(&db, min_age, limit)).await {
-        Ok(Ok(list)) => (StatusCode::OK, Json(serde_json::json!({
-            "ok":      true,
-            "count":   list.len(),
-            "minutes": minutes,
-            "pending": list,
-            "ts":      Utc::now(),
-        }))),
-        Ok(Err(e)) => (StatusCode::INTERNAL_SERVER_ERROR, Json(serde_json::json!({ "ok": false, "error": e.to_string() }))),
-        Err(e)     => (StatusCode::INTERNAL_SERVER_ERROR, Json(serde_json::json!({ "ok": false, "error": e.to_string() }))),
+        Ok(Ok(list)) => (
+            StatusCode::OK,
+            Json(serde_json::json!({
+                "ok":      true,
+                "count":   list.len(),
+                "minutes": minutes,
+                "pending": list,
+                "ts":      Utc::now(),
+            })),
+        ),
+        Ok(Err(e)) => (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            Json(serde_json::json!({ "ok": false, "error": e.to_string() })),
+        ),
+        Err(e) => (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            Json(serde_json::json!({ "ok": false, "error": e.to_string() })),
+        ),
     }
 }
-
 
 // ── Contadores del bot ───────────────────────────────────────────────────────
 // Sustituyen a /api/v1/stats y /api/v1/stats/top-commands de Python, que leían
@@ -752,9 +909,9 @@ pub async fn messages_pending(
 pub struct CountersBody {
     /// Día al que imputar el lote (YYYY-MM-DD). Lo manda Node porque es quien
     /// sabe en qué día local ocurrieron los mensajes.
-    day:      String,
+    day: String,
     #[serde(default)]
-    metrics:  Vec<db::CounterBump>,
+    metrics: Vec<db::CounterBump>,
     #[serde(default)]
     commands: Vec<db::CommandBump>,
 }
@@ -764,7 +921,9 @@ pub struct TopQuery {
     #[serde(default = "default_top_limit")]
     limit: i64,
 }
-fn default_top_limit() -> i64 { 10 }
+fn default_top_limit() -> i64 {
+    10
+}
 
 pub async fn stats_bump(
     State(state): State<AppState>,
@@ -773,23 +932,42 @@ pub async fn stats_bump(
     let db = state.db.clone();
     match tokio::task::spawn_blocking(move || {
         db::bump_counters(&db, &body.day, &body.metrics, &body.commands)
-    }).await {
-        Ok(Ok(()))  => (StatusCode::OK, Json(serde_json::json!({ "ok": true }))),
-        Ok(Err(e))  => {
+    })
+    .await
+    {
+        Ok(Ok(())) => (StatusCode::OK, Json(serde_json::json!({ "ok": true }))),
+        Ok(Err(e)) => {
             tracing::error!(error = %e, "stats_bump DB error");
-            (StatusCode::INTERNAL_SERVER_ERROR, Json(serde_json::json!({ "ok": false, "error": e.to_string() })))
+            (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(serde_json::json!({ "ok": false, "error": e.to_string() })),
+            )
         }
-        Err(e) => (StatusCode::INTERNAL_SERVER_ERROR, Json(serde_json::json!({ "ok": false, "error": e.to_string() }))),
+        Err(e) => (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            Json(serde_json::json!({ "ok": false, "error": e.to_string() })),
+        ),
     }
 }
 
-pub async fn stats_counters(State(state): State<AppState>) -> (StatusCode, Json<serde_json::Value>) {
+pub async fn stats_counters(
+    State(state): State<AppState>,
+) -> (StatusCode, Json<serde_json::Value>) {
     let today = Utc::now().format("%Y-%m-%d").to_string();
-    let db    = state.db.clone();
+    let db = state.db.clone();
     match tokio::task::spawn_blocking(move || db::get_counters(&db, &today)).await {
-        Ok(Ok(c))  => (StatusCode::OK, Json(serde_json::json!({ "ok": true, "counters": c }))),
-        Ok(Err(e)) => (StatusCode::INTERNAL_SERVER_ERROR, Json(serde_json::json!({ "ok": false, "error": e.to_string() }))),
-        Err(e)     => (StatusCode::INTERNAL_SERVER_ERROR, Json(serde_json::json!({ "ok": false, "error": e.to_string() }))),
+        Ok(Ok(c)) => (
+            StatusCode::OK,
+            Json(serde_json::json!({ "ok": true, "counters": c })),
+        ),
+        Ok(Err(e)) => (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            Json(serde_json::json!({ "ok": false, "error": e.to_string() })),
+        ),
+        Err(e) => (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            Json(serde_json::json!({ "ok": false, "error": e.to_string() })),
+        ),
     }
 }
 
@@ -799,8 +977,17 @@ pub async fn stats_top_commands(
 ) -> (StatusCode, Json<serde_json::Value>) {
     let db = state.db.clone();
     match tokio::task::spawn_blocking(move || db::top_commands(&db, q.limit)).await {
-        Ok(Ok(rows)) => (StatusCode::OK, Json(serde_json::json!({ "ok": true, "commands": rows }))),
-        Ok(Err(e))   => (StatusCode::INTERNAL_SERVER_ERROR, Json(serde_json::json!({ "ok": false, "error": e.to_string() }))),
-        Err(e)       => (StatusCode::INTERNAL_SERVER_ERROR, Json(serde_json::json!({ "ok": false, "error": e.to_string() }))),
+        Ok(Ok(rows)) => (
+            StatusCode::OK,
+            Json(serde_json::json!({ "ok": true, "commands": rows })),
+        ),
+        Ok(Err(e)) => (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            Json(serde_json::json!({ "ok": false, "error": e.to_string() })),
+        ),
+        Err(e) => (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            Json(serde_json::json!({ "ok": false, "error": e.to_string() })),
+        ),
     }
 }

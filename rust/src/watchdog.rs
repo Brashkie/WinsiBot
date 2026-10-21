@@ -23,10 +23,10 @@ pub struct WatchdogState {
 
 #[derive(Debug)]
 struct Inner {
-    last_ping:    Option<Instant>,
-    ping_count:   u64,
-    started_at:   Instant,
-    death_count:  u64,
+    last_ping: Option<Instant>,
+    ping_count: u64,
+    started_at: Instant,
+    death_count: u64,
     last_died_at: Option<u64>, // unix timestamp de la última muerte detectada
 }
 
@@ -34,10 +34,10 @@ impl WatchdogState {
     pub fn new() -> Self {
         Self {
             inner: Arc::new(Mutex::new(Inner {
-                last_ping:    None,
-                ping_count:   0,
-                started_at:   Instant::now(),
-                death_count:  0,
+                last_ping: None,
+                ping_count: 0,
+                started_at: Instant::now(),
+                death_count: 0,
                 last_died_at: None,
             })),
         }
@@ -60,10 +60,13 @@ impl WatchdogState {
                     .unwrap_or_default()
                     .as_secs(),
             );
-            tracing::warn!(deaths = s.death_count, "watchdog: bot resucitado tras muerte detectada");
+            tracing::warn!(
+                deaths = s.death_count,
+                "watchdog: bot resucitado tras muerte detectada"
+            );
         }
 
-        s.last_ping  = Some(Instant::now());
+        s.last_ping = Some(Instant::now());
         s.ping_count += 1;
     }
 
@@ -71,7 +74,7 @@ impl WatchdogState {
         let s = self.inner.lock().unwrap();
         let elapsed_secs = s.last_ping.map(|t| t.elapsed().as_secs());
         let alive = match s.last_ping {
-            None    => false,
+            None => false,
             Some(t) => t.elapsed() < Duration::from_secs(DEAD_THRESHOLD_SECS),
         };
         serde_json::json!({
@@ -94,12 +97,19 @@ pub async fn ping(State(state): State<AppState>) -> Json<serde_json::Value> {
 
 // ── GET /watchdog/status ──────────────────────────────────────────────────────
 pub async fn status(State(state): State<AppState>) -> (StatusCode, Json<serde_json::Value>) {
-    let st      = state.watchdog.status();
-    let alive   = st["alive"].as_bool().unwrap_or(false);
-    let http_st = if alive { StatusCode::OK } else { StatusCode::SERVICE_UNAVAILABLE };
-    (http_st, Json(serde_json::json!({
-        "ok": true,
-        "watchdog": st,
-        "ts": Utc::now(),
-    })))
+    let st = state.watchdog.status();
+    let alive = st["alive"].as_bool().unwrap_or(false);
+    let http_st = if alive {
+        StatusCode::OK
+    } else {
+        StatusCode::SERVICE_UNAVAILABLE
+    };
+    (
+        http_st,
+        Json(serde_json::json!({
+            "ok": true,
+            "watchdog": st,
+            "ts": Utc::now(),
+        })),
+    )
 }

@@ -34,22 +34,22 @@ use crate::routes::AppState;
 #[derive(Deserialize)]
 pub struct HumorData {
     /// Probabilidad de aplicar humor, por modo.
-    pub mode_prob:        HashMap<String, f64>,
+    pub mode_prob: HashMap<String, f64>,
     /// modo → categoría (prefix, suffix, irony, roast...) → frases.
-    pub bank:             HashMap<String, HashMap<String, Vec<String>>>,
+    pub bank: HashMap<String, HashMap<String, Vec<String>>>,
     /// Reemplazos para imitar la jerga del interlocutor.
-    pub slang_inject:     HashMap<String, Vec<String>>,
+    pub slang_inject: HashMap<String, Vec<String>>,
     pub friendly_intents: Vec<String>,
-    pub avoid_intents:    Vec<String>,
+    pub avoid_intents: Vec<String>,
 }
 
 #[derive(Deserialize)]
 pub struct PersonalityData {
-    pub modes:        Vec<String>,
+    pub modes: Vec<String>,
     pub default_mode: String,
     /// modo → intención → frases posibles.
-    pub responses:    HashMap<String, HashMap<String, Vec<String>>>,
-    pub humor:        HumorData,
+    pub responses: HashMap<String, HashMap<String, Vec<String>>>,
+    pub humor: HumorData,
 }
 
 const JSON: &str = include_str!("../assets/personality.json");
@@ -67,12 +67,26 @@ pub fn data() -> &'static PersonalityData {
 
 fn friendly_intents() -> &'static HashSet<&'static str> {
     static S: OnceLock<HashSet<&'static str>> = OnceLock::new();
-    S.get_or_init(|| data().humor.friendly_intents.iter().map(|s| s.as_str()).collect())
+    S.get_or_init(|| {
+        data()
+            .humor
+            .friendly_intents
+            .iter()
+            .map(|s| s.as_str())
+            .collect()
+    })
 }
 
 fn avoid_intents() -> &'static HashSet<&'static str> {
     static S: OnceLock<HashSet<&'static str>> = OnceLock::new();
-    S.get_or_init(|| data().humor.avoid_intents.iter().map(|s| s.as_str()).collect())
+    S.get_or_init(|| {
+        data()
+            .humor
+            .avoid_intents
+            .iter()
+            .map(|s| s.as_str())
+            .collect()
+    })
 }
 
 // ── Modos, persistidos ───────────────────────────────────────────────────────
@@ -173,22 +187,22 @@ pub fn reset_modo(db: &ConvDb, jid: &str) -> Result<(), String> {
 #[derive(Debug, Default, Clone, Deserialize, Serialize)]
 pub struct Contexto {
     #[serde(default)]
-    pub reputation:     String,
+    pub reputation: String,
     #[serde(default)]
     pub response_style: String,
     #[serde(default)]
     pub recent_intents: Vec<String>,
     #[serde(default)]
-    pub uses_slang:     bool,
+    pub uses_slang: bool,
 }
 
 /// Estilo de escritura del usuario, calculado por `conversations.rs`.
 #[derive(Debug, Default, Clone, Deserialize, Serialize)]
 pub struct EstiloUsuario {
     #[serde(default)]
-    pub avg_len:      f64,
+    pub avg_len: f64,
     #[serde(default)]
-    pub emoji_freq:   f64,
+    pub emoji_freq: f64,
     #[serde(default)]
     pub common_words: Vec<String>,
 }
@@ -207,10 +221,10 @@ pub struct TurnoHistorial {
 /// quien viene insultando se le responde más seco.
 fn intensidad(ctx: &Contexto) -> f64 {
     let mut base = match ctx.reputation.as_str() {
-        "trusted"    => 0.3,
+        "trusted" => 0.3,
         "suspicious" => 0.7,
-        "toxic"      => 0.9,
-        _            => 0.5,
+        "toxic" => 0.9,
+        _ => 0.5,
     };
     let negativas = ctx
         .recent_intents
@@ -228,7 +242,11 @@ fn aplicar_intensidad(texto: &str, intensidad: f64, modo: &str) -> String {
     if intensidad > 0.8 && modo == "toxico" {
         // `chars().count()`, no `len()`: con acentos y emojis los bytes no son
         // caracteres, y el umbral es sobre lo que se lee.
-        let mut s = if t.chars().count() < 30 { t.to_uppercase() } else { t.to_string() };
+        let mut s = if t.chars().count() < 30 {
+            t.to_uppercase()
+        } else {
+            t.to_string()
+        };
         if !s.ends_with(['.', '!', '?']) {
             s.push('.');
         }
@@ -237,7 +255,10 @@ fn aplicar_intensidad(texto: &str, intensidad: f64, modo: &str) -> String {
         let sufijo = rng::pick(&[" 😊", " ¿ok?", ""]).copied().unwrap_or("");
         format!("{t}{sufijo}")
     } else if intensidad > 0.7 && modo == "sarcastico" {
-        if ["...", "Wow", "Vaya", "Obvio"].iter().any(|p| t.contains(p)) {
+        if ["...", "Wow", "Vaya", "Obvio"]
+            .iter()
+            .any(|p| t.contains(p))
+        {
             t.to_string()
         } else {
             format!("Claro... {t}")
@@ -268,7 +289,9 @@ fn personalizar(texto: &str, ctx: &Contexto) -> String {
 
     let mut t = if bajo.contains("buenas") || bajo.contains("buenos") {
         if (5..12).contains(&hora) {
-            re_tardes_noches().replace(texto, "Buenos días").into_owned()
+            re_tardes_noches()
+                .replace(texto, "Buenos días")
+                .into_owned()
         } else if (12..19).contains(&hora) {
             re_dias().replace(texto, "Buenas tardes").into_owned()
         } else {
@@ -279,7 +302,11 @@ fn personalizar(texto: &str, ctx: &Contexto) -> String {
     };
 
     if ctx.uses_slang {
-        for (de, a) in [(" amigo", " bro"), (" usuario", " causa"), (" bien", " chido")] {
+        for (de, a) in [
+            (" amigo", " bro"),
+            (" usuario", " causa"),
+            (" bien", " chido"),
+        ] {
             t = t.replace(de, a);
         }
     }
@@ -335,7 +362,9 @@ fn elegir(modo: &str, intent: &str, historial: &[TurnoHistorial]) -> String {
         // Todas usadas hace poco: mejor repetir una que no decir nada.
         rng::pick(pool).cloned().unwrap_or_else(|| "...".into())
     } else {
-        rng::pick(&frescas).map(|s| (*s).clone()).unwrap_or_else(|| "...".into())
+        rng::pick(&frescas)
+            .map(|s| (*s).clone())
+            .unwrap_or_else(|| "...".into())
     }
 }
 
@@ -347,7 +376,12 @@ fn frase_humor(modo: &str, categoria: &str) -> Option<String> {
         .bank
         .get(modo)
         .and_then(|m| m.get(categoria))
-        .or_else(|| d.humor.bank.get(&d.default_mode).and_then(|m| m.get(categoria)))
+        .or_else(|| {
+            d.humor
+                .bank
+                .get(&d.default_mode)
+                .and_then(|m| m.get(categoria))
+        })
         .and_then(|v| rng::pick(v))
         .cloned()
 }
@@ -364,15 +398,23 @@ fn aplicar_humor(texto: &str, modo: &str, intent: &str) -> String {
     }
     let prob = data().humor.mode_prob.get(modo).copied().unwrap_or(0.0);
     // Las intenciones amistosas lo llevan más seguido; el resto, la mitad.
-    let prob = if friendly_intents().contains(intent) { prob } else { prob * 0.5 };
+    let prob = if friendly_intents().contains(intent) {
+        prob
+    } else {
+        prob * 0.5
+    };
     if rng::unit() >= prob {
         return texto.to_string();
     }
 
     match rng::below(3) {
-        0 => frase_humor(modo, "suffix").map_or_else(|| texto.to_string(), |f| format!("{texto} {f}")),
-        1 => frase_humor(modo, "prefix").map_or_else(|| texto.to_string(), |f| format!("{f} {texto}")),
-        _ => frase_humor(modo, "irony").map_or_else(|| texto.to_string(), |f| format!("{texto} {f}")),
+        0 => frase_humor(modo, "suffix")
+            .map_or_else(|| texto.to_string(), |f| format!("{texto} {f}")),
+        1 => frase_humor(modo, "prefix")
+            .map_or_else(|| texto.to_string(), |f| format!("{f} {texto}")),
+        _ => {
+            frase_humor(modo, "irony").map_or_else(|| texto.to_string(), |f| format!("{texto} {f}"))
+        }
     }
 }
 
@@ -403,7 +445,10 @@ pub fn imitar(texto: &str, estilo: &EstiloUsuario) -> String {
             t = format!("{t} {e}");
         }
     } else if estilo.emoji_freq < 0.05 && tiene_emoji {
-        t = t.chars().filter(|c| (*c as u32) <= 0x2500).collect::<String>();
+        t = t
+            .chars()
+            .filter(|c| (*c as u32) <= 0x2500)
+            .collect::<String>();
         t = t.split_whitespace().collect::<Vec<_>>().join(" ");
     }
 
@@ -414,19 +459,19 @@ pub fn imitar(texto: &str, estilo: &EstiloUsuario) -> String {
 
 #[derive(Deserialize)]
 pub struct RespondRequest {
-    pub intent:      String,
+    pub intent: String,
     #[serde(default)]
-    pub text:        String,
+    pub text: String,
     #[serde(default)]
-    pub jid:         String,
+    pub jid: String,
     #[serde(default)]
-    pub use_humor:   bool,
+    pub use_humor: bool,
     #[serde(default)]
-    pub context:     Contexto,
+    pub context: Contexto,
     #[serde(default)]
-    pub history:     Vec<TurnoHistorial>,
+    pub history: Vec<TurnoHistorial>,
     #[serde(default)]
-    pub user_style:  Option<EstiloUsuario>,
+    pub user_style: Option<EstiloUsuario>,
 }
 
 /// El camino local completo: elegir, ajustar intensidad, personalizar, humor e
@@ -437,10 +482,7 @@ pub struct RespondRequest {
 /// `sarcastico` aunque el grupo esté en `amable`. Informar el configurado —que
 /// es lo que hacía la versión de Python— deja al caller viendo "amable" junto
 /// a una respuesta sarcástica, sin forma de explicar por qué.
-pub fn generar(
-    modo_base: &str,
-    req:       &RespondRequest,
-) -> (String, String) {
+pub fn generar(modo_base: &str, req: &RespondRequest) -> (String, String) {
     // El modo puede cambiar según con quién se está hablando.
     let mut modo = modo_base.to_string();
     if req.context.reputation == "toxic" && modo == "amable" {
@@ -469,7 +511,7 @@ pub fn generar(
 
 pub async fn respond(
     State(state): State<AppState>,
-    Json(req):    Json<RespondRequest>,
+    Json(req): Json<RespondRequest>,
 ) -> Json<serde_json::Value> {
     let configurado = modo(&state.conv_db, &req.jid);
     let (texto, usado) = generar(&configurado, &req);
@@ -486,7 +528,7 @@ pub struct ModeRequest {
     #[serde(default)]
     pub mode: String,
     #[serde(default)]
-    pub jid:  String,
+    pub jid: String,
 }
 
 pub async fn mode_get(State(state): State<AppState>) -> Json<serde_json::Value> {
@@ -502,10 +544,10 @@ pub async fn mode_get(State(state): State<AppState>) -> Json<serde_json::Value> 
 
 pub async fn mode_set(
     State(state): State<AppState>,
-    Json(req):    Json<ModeRequest>,
+    Json(req): Json<ModeRequest>,
 ) -> Json<serde_json::Value> {
     match set_modo(&state.conv_db, &req.mode, &req.jid) {
-        Ok(true)  => Json(serde_json::json!({ "success": true, "data": { "mode": req.mode } })),
+        Ok(true) => Json(serde_json::json!({ "success": true, "data": { "mode": req.mode } })),
         Ok(false) => Json(serde_json::json!({
             "success": false,
             "error":   format!("modo desconocido: {}", req.mode),
@@ -517,11 +559,13 @@ pub async fn mode_set(
 
 pub async fn mode_reset(
     State(state): State<AppState>,
-    Json(req):    Json<ModeRequest>,
+    Json(req): Json<ModeRequest>,
 ) -> Json<serde_json::Value> {
     match reset_modo(&state.conv_db, &req.jid) {
-        Ok(())  => Json(serde_json::json!({ "success": true, "data": { "mode": data().default_mode } })),
-        Err(e)  => Json(serde_json::json!({ "success": false, "error": e })),
+        Ok(()) => {
+            Json(serde_json::json!({ "success": true, "data": { "mode": data().default_mode } }))
+        }
+        Err(e) => Json(serde_json::json!({ "success": false, "error": e })),
     }
 }
 
@@ -541,7 +585,10 @@ mod tests {
     }
 
     fn ctx(rep: &str) -> Contexto {
-        Contexto { reputation: rep.into(), ..Default::default() }
+        Contexto {
+            reputation: rep.into(),
+            ..Default::default()
+        }
     }
 
     // ── Los datos incrustados ───────────────────────────────────────────────
@@ -550,12 +597,21 @@ mod tests {
     fn el_json_incrustado_carga_y_esta_completo() {
         let d = data();
         assert_eq!(d.modes.len(), 12, "modos: {:?}", d.modes);
-        assert!(d.modes.contains(&d.default_mode), "el modo por defecto debe estar en la lista");
+        assert!(
+            d.modes.contains(&d.default_mode),
+            "el modo por defecto debe estar en la lista"
+        );
         // Cada modo tiene que tener su banco de frases, o caeria al default
         // sin que nadie se entere.
         for m in &d.modes {
-            assert!(d.responses.contains_key(m), "el modo {m} no tiene respuestas");
-            assert!(d.humor.mode_prob.contains_key(m), "el modo {m} no tiene probabilidad de humor");
+            assert!(
+                d.responses.contains_key(m),
+                "el modo {m} no tiene respuestas"
+            );
+            assert!(
+                d.humor.mode_prob.contains_key(m),
+                "el modo {m} no tiene probabilidad de humor"
+            );
         }
     }
 
@@ -564,7 +620,10 @@ mod tests {
         // Sin fallback, una intencion que ese modo no cubra se va al modo por
         // defecto y el bot cambia de personalidad a mitad de conversacion.
         for (modo, intents) in &data().responses {
-            assert!(intents.contains_key("fallback"), "el modo {modo} no tiene fallback");
+            assert!(
+                intents.contains_key("fallback"),
+                "el modo {modo} no tiene fallback"
+            );
         }
     }
 
@@ -604,7 +663,11 @@ mod tests {
     fn un_modo_desconocido_se_rechaza() {
         let db = db();
         assert!(!set_modo(&db, "inventado", "").unwrap());
-        assert_eq!(modo(&db, ""), data().default_mode, "no debe haber cambiado nada");
+        assert_eq!(
+            modo(&db, ""),
+            data().default_mode,
+            "no debe haber cambiado nada"
+        );
     }
 
     #[test]
@@ -624,7 +687,11 @@ mod tests {
         set_modo(&db, "toxico", "g1@g.us").unwrap();
         reset_modo(&db, "").unwrap();
         assert_eq!(modo(&db, ""), data().default_mode);
-        assert_eq!(modo(&db, "g1@g.us"), data().default_mode, "los grupos tambien");
+        assert_eq!(
+            modo(&db, "g1@g.us"),
+            data().default_mode,
+            "los grupos tambien"
+        );
     }
 
     #[test]
@@ -648,7 +715,10 @@ mod tests {
 
     #[test]
     fn la_intensidad_sube_con_las_intenciones_negativas_recientes() {
-        let limpio = Contexto { reputation: "normal".into(), ..Default::default() };
+        let limpio = Contexto {
+            reputation: "normal".into(),
+            ..Default::default()
+        };
         let sucio = Contexto {
             reputation: "normal".into(),
             recent_intents: vec!["insult".into(), "spam".into(), "nsfw".into()],
@@ -664,8 +734,16 @@ mod tests {
             // Cinco insultos seguidos de cinco neutros: los insultos ya salieron
             // de la ventana y no deben seguir pesando.
             recent_intents: vec![
-                "insult".into(), "insult".into(), "insult".into(), "insult".into(), "insult".into(),
-                "neutral".into(), "neutral".into(), "neutral".into(), "neutral".into(), "neutral".into(),
+                "insult".into(),
+                "insult".into(),
+                "insult".into(),
+                "insult".into(),
+                "insult".into(),
+                "neutral".into(),
+                "neutral".into(),
+                "neutral".into(),
+                "neutral".into(),
+                "neutral".into(),
             ],
             ..Default::default()
         };
@@ -714,7 +792,10 @@ mod tests {
     fn no_repite_las_respuestas_recientes() {
         // Es lo que mas delata que detras hay una lista de frases y no una IA.
         let pool = candidatas("amable", "greeting").to_vec();
-        assert!(pool.len() > 1, "este test necesita un banco con varias frases");
+        assert!(
+            pool.len() > 1,
+            "este test necesita un banco con varias frases"
+        );
 
         let historial: Vec<TurnoHistorial> = pool
             .iter()
@@ -733,17 +814,25 @@ mod tests {
     #[test]
     fn si_todas_fueron_usadas_repite_en_vez_de_callarse() {
         let pool = candidatas("amable", "greeting").to_vec();
-        let historial: Vec<TurnoHistorial> =
-            pool.iter().map(|r| TurnoHistorial { reply: r.clone() }).collect();
+        let historial: Vec<TurnoHistorial> = pool
+            .iter()
+            .map(|r| TurnoHistorial { reply: r.clone() })
+            .collect();
         let r = elegir("amable", "greeting", &historial);
-        assert!(pool.contains(&r), "deberia repetir una del banco, no devolver '...'");
+        assert!(
+            pool.contains(&r),
+            "deberia repetir una del banco, no devolver '...'"
+        );
     }
 
     // ── Personalizacion ─────────────────────────────────────────────────────
 
     #[test]
     fn la_jerga_se_refleja_solo_si_el_usuario_la_usa() {
-        let con = Contexto { uses_slang: true, ..Default::default() };
+        let con = Contexto {
+            uses_slang: true,
+            ..Default::default()
+        };
         let sin = Contexto::default();
         assert_eq!(personalizar("hola amigo", &con), "hola bro");
         assert_eq!(personalizar("hola amigo", &sin), "hola amigo");
@@ -771,35 +860,62 @@ mod tests {
 
     #[test]
     fn la_intensidad_alta_en_sarcastico_no_apila_prefijos() {
-        assert_eq!(aplicar_intensidad("si claro", 0.9, "sarcastico"), "Claro... si claro");
+        assert_eq!(
+            aplicar_intensidad("si claro", 0.9, "sarcastico"),
+            "Claro... si claro"
+        );
         // Si ya lo tiene, no se vuelve a poner.
         let ya = aplicar_intensidad("Claro... si", 0.9, "sarcastico");
-        assert_eq!(ya.matches("Claro...").count(), 1, "duplico el prefijo: {ya:?}");
+        assert_eq!(
+            ya.matches("Claro...").count(),
+            1,
+            "duplico el prefijo: {ya:?}"
+        );
     }
 
     // ── Imitacion ───────────────────────────────────────────────────────────
 
     #[test]
     fn imitar_agrega_emoji_a_quien_los_usa() {
-        let estilo = EstiloUsuario { emoji_freq: 0.9, avg_len: 40.0, ..Default::default() };
+        let estilo = EstiloUsuario {
+            emoji_freq: 0.9,
+            avg_len: 40.0,
+            ..Default::default()
+        };
         let r = imitar("listo", &estilo);
-        assert!(r.chars().any(|c| (c as u32) > 0x2500), "deberia llevar emoji: {r:?}");
+        assert!(
+            r.chars().any(|c| (c as u32) > 0x2500),
+            "deberia llevar emoji: {r:?}"
+        );
     }
 
     #[test]
     fn imitar_quita_los_emojis_a_quien_no_los_usa() {
-        let estilo = EstiloUsuario { emoji_freq: 0.0, avg_len: 40.0, ..Default::default() };
+        let estilo = EstiloUsuario {
+            emoji_freq: 0.0,
+            avg_len: 40.0,
+            ..Default::default()
+        };
         let r = imitar("listo 😄", &estilo);
-        assert!(!r.chars().any(|c| (c as u32) > 0x2500), "no deberia llevar emoji: {r:?}");
+        assert!(
+            !r.chars().any(|c| (c as u32) > 0x2500),
+            "no deberia llevar emoji: {r:?}"
+        );
         assert_eq!(r, "listo", "y no deberia dejar espacios sueltos");
     }
 
     #[test]
     fn imitar_acorta_para_quien_escribe_corto() {
-        let estilo = EstiloUsuario { avg_len: 8.0, ..Default::default() };
+        let estilo = EstiloUsuario {
+            avg_len: 8.0,
+            ..Default::default()
+        };
         let largo = "Primera oracion bastante larga. Segunda oracion que sobra del todo.";
         let r = imitar(largo, &estilo);
-        assert!(r.chars().count() < largo.chars().count(), "no acorto: {r:?}");
+        assert!(
+            r.chars().count() < largo.chars().count(),
+            "no acorto: {r:?}"
+        );
         assert!(r.ends_with('.'));
     }
 
@@ -814,11 +930,19 @@ mod tests {
     #[test]
     fn un_usuario_toxico_cambia_el_modo_amable_por_sarcastico() {
         let req = RespondRequest {
-            intent: "greeting".into(), text: String::new(), jid: String::new(),
-            use_humor: false, context: ctx("toxic"), history: vec![], user_style: None,
+            intent: "greeting".into(),
+            text: String::new(),
+            jid: String::new(),
+            use_humor: false,
+            context: ctx("toxic"),
+            history: vec![],
+            user_style: None,
         };
         let (r, modo_usado) = generar("amable", &req);
-        assert_eq!(modo_usado, "sarcastico", "deberia informar el modo que uso de verdad");
+        assert_eq!(
+            modo_usado, "sarcastico",
+            "deberia informar el modo que uso de verdad"
+        );
         // Y la frase tiene que salir de ESE banco, no del amable.
         let sarcastico = candidatas("sarcastico", "greeting");
         let limpia = r.trim_start_matches("Claro... ").to_string();
@@ -833,8 +957,13 @@ mod tests {
         for modo in &data().modes {
             for intent in ["greeting", "insult", "spam", "intencion_inventada"] {
                 let req = RespondRequest {
-                    intent: intent.into(), text: String::new(), jid: String::new(),
-                    use_humor: true, context: ctx("normal"), history: vec![], user_style: None,
+                    intent: intent.into(),
+                    text: String::new(),
+                    jid: String::new(),
+                    use_humor: true,
+                    context: ctx("normal"),
+                    history: vec![],
+                    user_style: None,
                 };
                 let (r, _) = generar(modo, &req);
                 assert!(!r.trim().is_empty(), "{modo}/{intent} dio vacio");
@@ -862,10 +991,15 @@ mod tests {
     fn el_modo_formal_casi_nunca_hace_humor_y_el_chistoso_casi_siempre() {
         let base = "respuesta";
         let cuenta = |modo: &str| {
-            (0..400).filter(|_| aplicar_humor(base, modo, "greeting") != base).count()
+            (0..400)
+                .filter(|_| aplicar_humor(base, modo, "greeting") != base)
+                .count()
         };
         let formal = cuenta("formal");
         let chistoso = cuenta("chistoso");
-        assert!(chistoso > formal, "chistoso {chistoso} deberia superar a formal {formal}");
+        assert!(
+            chistoso > formal,
+            "chistoso {chistoso} deberia superar a formal {formal}"
+        );
     }
 }

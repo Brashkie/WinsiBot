@@ -34,26 +34,26 @@ use crate::routes::AppState;
 /// Paleta aproximada de colores clásicos de fichas LEGO (RGB).
 /// Es la misma de imagefx.py, en el mismo orden.
 const LEGO_PALETTE: [[i32; 3]; 14] = [
-    [196, 40, 27],    // rojo brillante
-    [245, 205, 47],   // amarillo brillante
-    [13, 105, 171],   // azul brillante
-    [75, 151, 74],    // verde brillante
-    [35, 120, 65],    // verde oscuro
-    [5, 5, 5],        // negro
-    [244, 244, 244],  // blanco
-    [218, 133, 65],   // naranja medio
-    [105, 64, 39],    // marrón rojizo
-    [156, 156, 156],  // gris piedra medio
-    [99, 95, 82],     // gris piedra oscuro
-    [144, 31, 118],   // púrpura brillante
-    [216, 191, 145],  // arena/tan
-    [105, 191, 233],  // azul cielo
+    [196, 40, 27],   // rojo brillante
+    [245, 205, 47],  // amarillo brillante
+    [13, 105, 171],  // azul brillante
+    [75, 151, 74],   // verde brillante
+    [35, 120, 65],   // verde oscuro
+    [5, 5, 5],       // negro
+    [244, 244, 244], // blanco
+    [218, 133, 65],  // naranja medio
+    [105, 64, 39],   // marrón rojizo
+    [156, 156, 156], // gris piedra medio
+    [99, 95, 82],    // gris piedra oscuro
+    [144, 31, 118],  // púrpura brillante
+    [216, 191, 145], // arena/tan
+    [105, 191, 233], // azul cielo
 ];
 
 const MAX_INPUT_SIDE: u32 = 1024;
-const MIN_BRICK:      u32 = 8;
-const MAX_BRICK:      u32 = 48;
-const DEFAULT_BRICK:  u32 = 20;
+const MIN_BRICK: u32 = 8;
+const MAX_BRICK: u32 = 48;
+const DEFAULT_BRICK: u32 = 20;
 
 /// Techo de píxeles de entrada. Se comprueba contra la cabecera, antes de
 /// decodificar — ver el comentario en `legofy()`.
@@ -61,7 +61,7 @@ const MAX_INPUT_PIXELS: u64 = 50_000_000;
 
 #[derive(Deserialize)]
 pub struct LegoRequest {
-    pub image:      String,
+    pub image: String,
     #[serde(default)]
     pub brick_size: Option<u32>,
 }
@@ -89,14 +89,14 @@ fn shade(color: [u8; 3], factor: f32) -> [u8; 3] {
 /// son 42 multiplicaciones por ficha.
 fn nearest_brick(r: u8, g: u8, b: u8) -> [u8; 3] {
     let (r, g, b) = (i32::from(r), i32::from(g), i32::from(b));
-    let mut best      = 0usize;
+    let mut best = 0usize;
     let mut best_dist = i32::MAX;
     for (i, p) in LEGO_PALETTE.iter().enumerate() {
         let (dr, dg, db) = (r - p[0], g - p[1], b - p[2]);
         let dist = dr * dr + dg * dg + db * db;
         if dist < best_dist {
             best_dist = dist;
-            best      = i;
+            best = i;
         }
     }
     let p = LEGO_PALETTE[best];
@@ -104,10 +104,10 @@ fn nearest_brick(r: u8, g: u8, b: u8) -> [u8; 3] {
 }
 
 pub struct LegoResult {
-    pub png:       Vec<u8>,
+    pub png: Vec<u8>,
     pub brick_size: u32,
-    pub original:  (u32, u32),
-    pub bricks:    (u32, u32),
+    pub original: (u32, u32),
+    pub bricks: (u32, u32),
 }
 
 pub fn legofy(png_or_jpeg: &[u8], brick_size: u32) -> Result<LegoResult, String> {
@@ -131,7 +131,9 @@ pub fn legofy(png_or_jpeg: &[u8], brick_size: u32) -> Result<LegoResult, String>
         return Err(format!("imagen demasiado grande: {hdr_w}x{hdr_h}"));
     }
 
-    let img = leer()?.decode().map_err(|e| format!("no se pudo decodificar: {e}"))?;
+    let img = leer()?
+        .decode()
+        .map_err(|e| format!("no se pudo decodificar: {e}"))?;
     let (orig_w, orig_h) = (img.width(), img.height());
 
     // ── Cuántas fichas entran ────────────────────────────────────────────────
@@ -182,7 +184,7 @@ pub fn legofy(png_or_jpeg: &[u8], brick_size: u32) -> Result<LegoResult, String>
             let x1 = ((bx + 1) * w / bricks_w).max(x0 + 1).min(w);
 
             let mut sum = [0u64; 3];
-            let mut n   = 0u64;
+            let mut n = 0u64;
             for y in y0..y1 {
                 for x in x0..x1 {
                     let p = src.get_pixel(x, y).0;
@@ -192,11 +194,7 @@ pub fn legofy(png_or_jpeg: &[u8], brick_size: u32) -> Result<LegoResult, String>
                     n += 1;
                 }
             }
-            let avg = [
-                (sum[0] / n) as u8,
-                (sum[1] / n) as u8,
-                (sum[2] / n) as u8,
-            ];
+            let avg = [(sum[0] / n) as u8, (sum[1] / n) as u8, (sum[2] / n) as u8];
             quantized[(by * bricks_w + bx) as usize] = nearest_brick(avg[0], avg[1], avg[2]);
         }
     }
@@ -206,24 +204,24 @@ pub fn legofy(png_or_jpeg: &[u8], brick_size: u32) -> Result<LegoResult, String>
     let out_h = bricks_h * brick;
     let mut out = RgbImage::new(out_w, out_h);
 
-    let radius   = ((brick as f32 * 0.32) as i32).max(2);
+    let radius = ((brick as f32 * 0.32) as i32).max(2);
     let radius_sq = radius * radius;
     // El borde del stud: PIL dibuja un contorno de 1 px con `outline`, así que
     // el anillo es el que queda entre (radius-1)² y radius².
     let inner_sq = (radius - 1).max(0) * (radius - 1).max(0);
-    let center   = (brick / 2) as i32;
+    let center = (brick / 2) as i32;
 
     for by in 0..bricks_h {
         for bx in 0..bricks_w {
-            let color   = quantized[(by * bricks_w + bx) as usize];
+            let color = quantized[(by * bricks_w + bx) as usize];
             let relleno = shade(color, 0.25);
-            let borde   = shade(color, -0.25);
+            let borde = shade(color, -0.25);
 
             for dy in 0..brick {
                 for dx in 0..brick {
                     let ox = dx as i32 - center;
                     let oy = dy as i32 - center;
-                    let d  = ox * ox + oy * oy;
+                    let d = ox * ox + oy * oy;
                     let px = if d > radius_sq {
                         color
                     } else if d > inner_sq {
@@ -245,21 +243,25 @@ pub fn legofy(png_or_jpeg: &[u8], brick_size: u32) -> Result<LegoResult, String>
     Ok(LegoResult {
         png,
         brick_size: brick,
-        original:   (orig_w, orig_h),
-        bricks:     (bricks_w, bricks_h),
+        original: (orig_w, orig_h),
+        bricks: (bricks_w, bricks_h),
     })
 }
 
 /// POST /imagefx/lego
 pub async fn lego(
     State(_state): State<AppState>,
-    Json(req):     Json<LegoRequest>,
+    Json(req): Json<LegoRequest>,
 ) -> Json<serde_json::Value> {
     let brick = req.brick_size.unwrap_or(DEFAULT_BRICK);
 
     let bytes = match B64.decode(req.image.as_bytes()) {
-        Ok(b)  => b,
-        Err(e) => return Json(serde_json::json!({ "success": false, "error": format!("base64 inválido: {e}") })),
+        Ok(b) => b,
+        Err(e) => {
+            return Json(
+                serde_json::json!({ "success": false, "error": format!("base64 inválido: {e}") }),
+            )
+        }
     };
 
     // spawn_blocking porque esto es trabajo de CPU de verdad —cientos de miles
@@ -276,7 +278,7 @@ pub async fn lego(
             "bricks":     { "w": r.bricks.0,   "h": r.bricks.1 },
         })),
         Ok(Err(e)) => Json(serde_json::json!({ "success": false, "error": e })),
-        Err(e)     => Json(serde_json::json!({ "success": false, "error": e.to_string() })),
+        Err(e) => Json(serde_json::json!({ "success": false, "error": e.to_string() })),
     }
 }
 
@@ -306,9 +308,9 @@ mod tests {
     #[test]
     fn shade_aclara_y_oscurece() {
         let gris = [100, 100, 100];
-        let claro  = shade(gris, 0.25);
+        let claro = shade(gris, 0.25);
         let oscuro = shade(gris, -0.25);
-        assert!(claro[0]  > gris[0], "0.25 deberia aclarar");
+        assert!(claro[0] > gris[0], "0.25 deberia aclarar");
         assert!(oscuro[0] < gris[0], "-0.25 deberia oscurecer");
         assert_eq!(shade(gris, 0.0), gris, "factor 0 no cambia nada");
     }
@@ -318,7 +320,11 @@ mod tests {
         // Son los extremos reales: aclarar blanco y oscurecer negro.
         assert_eq!(shade([255, 255, 255], 1.0), [255, 255, 255]);
         assert_eq!(shade([0, 0, 0], -1.0), [0, 0, 0]);
-        assert_eq!(shade([250, 5, 128], 5.0), [255, 255, 255], "no debe desbordar");
+        assert_eq!(
+            shade([250, 5, 128], 5.0),
+            [255, 255, 255],
+            "no debe desbordar"
+        );
     }
 
     #[test]
@@ -358,14 +364,28 @@ mod tests {
         assert_eq!(r.bricks, (10, 5));
 
         let img = decodificar(&r.png);
-        assert_eq!((img.width(), img.height()), (200, 100), "10x5 fichas de 20 px");
+        assert_eq!(
+            (img.width(), img.height()),
+            (200, 100),
+            "10x5 fichas de 20 px"
+        );
     }
 
     #[test]
     fn el_tamano_de_ficha_se_acota() {
         // Fuera de rango por abajo y por arriba, sin fallar.
-        assert_eq!(legofy(&png_plano(500, 500, [9, 9, 9]), 1).unwrap().brick_size, MIN_BRICK);
-        assert_eq!(legofy(&png_plano(500, 500, [9, 9, 9]), 999).unwrap().brick_size, MAX_BRICK);
+        assert_eq!(
+            legofy(&png_plano(500, 500, [9, 9, 9]), 1)
+                .unwrap()
+                .brick_size,
+            MIN_BRICK
+        );
+        assert_eq!(
+            legofy(&png_plano(500, 500, [9, 9, 9]), 999)
+                .unwrap()
+                .brick_size,
+            MAX_BRICK
+        );
     }
 
     #[test]
@@ -383,9 +403,13 @@ mod tests {
         // Rojo LEGO exacto: el promedio por celda es ese color, y cuantizarlo
         // lo deja igual. Las esquinas quedan fuera del stud, asi que son el
         // color de la ficha sin sombrear.
-        let r   = legofy(&png_plano(120, 120, [196, 40, 27]), 20).unwrap();
+        let r = legofy(&png_plano(120, 120, [196, 40, 27]), 20).unwrap();
         let img = decodificar(&r.png);
-        assert_eq!(img.get_pixel(0, 0).0, [196, 40, 27], "la esquina es la ficha");
+        assert_eq!(
+            img.get_pixel(0, 0).0,
+            [196, 40, 27],
+            "la esquina es la ficha"
+        );
         // El centro de la primera ficha cae dentro del stud, que va aclarado.
         let centro = img.get_pixel(10, 10).0;
         assert_ne!(centro, [196, 40, 27], "el centro deberia ser el stud");
@@ -400,7 +424,11 @@ mod tests {
         let mut img = RgbImage::new(30, 10);
         for y in 0..10 {
             for x in 0..30 {
-                let c = if x < 15 { [0u8, 0, 0] } else { [255u8, 255, 255] };
+                let c = if x < 15 {
+                    [0u8, 0, 0]
+                } else {
+                    [255u8, 255, 255]
+                };
                 img.put_pixel(x, y, image::Rgb(c));
             }
         }
@@ -409,14 +437,22 @@ mod tests {
             .write_to(&mut std::io::Cursor::new(&mut png), image::ImageFormat::Png)
             .unwrap();
 
-        let r   = legofy(&png, 20).unwrap();
+        let r = legofy(&png, 20).unwrap();
         let out = decodificar(&r.png);
         assert_eq!(r.bricks, (1, 1));
         // El promedio de mitad negro y mitad blanco cae en un gris, que la
         // paleta resuelve a uno de los grises — no a negro ni a blanco.
         let esquina = out.get_pixel(0, 0).0;
-        assert_ne!(esquina, [5, 5, 5],       "si fuera negro, se perdio la mitad blanca");
-        assert_ne!(esquina, [244, 244, 244], "si fuera blanco, se perdio la mitad negra");
+        assert_ne!(
+            esquina,
+            [5, 5, 5],
+            "si fuera negro, se perdio la mitad blanca"
+        );
+        assert_ne!(
+            esquina,
+            [244, 244, 244],
+            "si fuera blanco, se perdio la mitad negra"
+        );
     }
 
     #[test]
@@ -424,7 +460,10 @@ mod tests {
         let r = legofy(&png_plano(2000, 1000, [13, 105, 171]), 20).unwrap();
         assert_eq!(r.original, (2000, 1000), "el original se informa sin tocar");
         let img = decodificar(&r.png);
-        assert!(img.width() <= MAX_INPUT_SIDE, "el lado mayor se acota a {MAX_INPUT_SIDE}");
+        assert!(
+            img.width() <= MAX_INPUT_SIDE,
+            "el lado mayor se acota a {MAX_INPUT_SIDE}"
+        );
     }
 
     #[test]

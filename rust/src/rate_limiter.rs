@@ -37,10 +37,10 @@ use std::{
 use crate::routes::AppState;
 
 // ── Configuración ─────────────────────────────────────────────────────────────
-const RATE_LIMIT:    u32 = 15;      // mensajes permitidos por ventana
-const WINDOW_SECS:   u64 = 10;     // tamaño de ventana en segundos
-const CLEANUP_EVERY: u32 = 5_000;  // limpiar entradas inactivas cada N calls
-const INACTIVE_SECS: u64 = 120;    // tiempo sin actividad para considerar inactivo
+const RATE_LIMIT: u32 = 15; // mensajes permitidos por ventana
+const WINDOW_SECS: u64 = 10; // tamaño de ventana en segundos
+const CLEANUP_EVERY: u32 = 5_000; // limpiar entradas inactivas cada N calls
+const INACTIVE_SECS: u64 = 120; // tiempo sin actividad para considerar inactivo
 
 // ── SpamGuard: lo que venía del C de Python ──────────────────────────────────
 // python/cython_ext/spam_guard.c hacía casi lo mismo que este rate limiter
@@ -50,7 +50,7 @@ const INACTIVE_SECS: u64 = 120;    // tiempo sin actividad para considerar inact
 // o sea dos round-trips HTTP para responder casi la misma pregunta. Absorbido
 // acá: una sola llamada, y Python sale del camino crítico.
 const BLOCK_DURATIONS_MS: [u64; 3] = [5_000, 15_000, 60_000];
-const MAX_REPEAT_TRACK:   usize    = 8;
+const MAX_REPEAT_TRACK: usize = 8;
 
 /// Motivo del bloqueo — mismo contrato que devolvía Python, para que el
 /// middleware de Node no tenga que cambiar cómo lo interpreta.
@@ -66,36 +66,36 @@ pub enum SpamReason {
 // ── Estado por sender ─────────────────────────────────────────────────────────
 #[derive(Debug)]
 struct SenderBucket {
-    count:         u32,
-    window_start:  Instant,
-    last_seen:     Instant,
+    count: u32,
+    window_start: Instant,
+    last_seen: Instant,
     /// Contador propio de spam_check, SEPARADO del de check(): los dos miden
     /// frecuencia pero con ventanas distintas (10s contra 5s) y ámbitos
     /// distintos (todo mensaje contra solo comandos). Compartiendo un único
     /// contador, cada llamada a uno falsearía al otro — un usuario que manda
     /// mensajes normales agotaría el presupuesto de comandos y al revés.
-    spam_count:    u32,
-    spam_window:   Instant,
+    spam_count: u32,
+    spam_window: Instant,
     /// Reincidencias: cada bloqueo sube el siguiente castigo (5s → 15s → 60s).
-    warn_count:    u32,
+    warn_count: u32,
     blocked_until: Option<Instant>,
     /// Últimos textos con su conteo, para detectar repetición. Un Vec corto y
     /// lineal le gana a un HashMap con 8 elementos y no asigna por mensaje.
-    recent:        Vec<(u64, u32, Instant)>,   // (hash del texto, veces, visto)
+    recent: Vec<(u64, u32, Instant)>, // (hash del texto, veces, visto)
 }
 
 impl SenderBucket {
     fn new() -> Self {
         let now = Instant::now();
         Self {
-            count:         0,
-            window_start:  now,
-            last_seen:     now,
-            spam_count:    0,
-            spam_window:   now,
-            warn_count:    0,
+            count: 0,
+            window_start: now,
+            last_seen: now,
+            spam_count: 0,
+            spam_window: now,
+            warn_count: 0,
             blocked_until: None,
-            recent:        Vec::new(),
+            recent: Vec::new(),
         }
     }
 }
@@ -113,7 +113,7 @@ fn text_hash(s: &str) -> u64 {
 // ── Rate limiter compartido ───────────────────────────────────────────────────
 #[derive(Clone)]
 pub struct RateLimiter {
-    inner:      Arc<DashMap<String, SenderBucket>>,
+    inner: Arc<DashMap<String, SenderBucket>>,
     call_count: Arc<AtomicU32>,
 }
 
@@ -129,7 +129,7 @@ impl RateLimiter {
             .next_power_of_two();
 
         Self {
-            inner:      Arc::new(DashMap::with_capacity_and_shard_amount(1024, shards)),
+            inner: Arc::new(DashMap::with_capacity_and_shard_amount(1024, shards)),
             call_count: Arc::new(AtomicU32::new(0)),
         }
     }
@@ -138,7 +138,7 @@ impl RateLimiter {
     /// Devuelve (allowed, remaining, reset_ms).
     pub fn check(&self, sender: &str) -> (bool, u32, u64) {
         let calls = self.call_count.fetch_add(1, Ordering::Relaxed);
-        let now   = Instant::now();
+        let now = Instant::now();
 
         // Limpieza periódica — evita que el mapa crezca sin límite. retain()
         // de DashMap toma los locks de shard uno a la vez, nunca todo el
@@ -148,27 +148,33 @@ impl RateLimiter {
             self.inner.retain(|_, v| {
                 now.duration_since(v.last_seen) < Duration::from_secs(INACTIVE_SECS)
             });
-            tracing::debug!(entries = self.inner.len(), "rate_limiter: limpieza periódica");
+            tracing::debug!(
+                entries = self.inner.len(),
+                "rate_limiter: limpieza periódica"
+            );
         }
 
-        let mut entry = self.inner.entry(sender.to_string()).or_insert_with(SenderBucket::new);
+        let mut entry = self
+            .inner
+            .entry(sender.to_string())
+            .or_insert_with(SenderBucket::new);
         entry.last_seen = now;
 
         // Resetear ventana si expiró
         if now.duration_since(entry.window_start) > Duration::from_secs(WINDOW_SECS) {
-            entry.count        = 0;
+            entry.count = 0;
             entry.window_start = now;
         }
 
         entry.count += 1;
-        let count        = entry.count;
+        let count = entry.count;
         let window_start = entry.window_start;
         drop(entry); // soltar el lock del shard antes de seguir — ya no hace falta
 
-        let allowed   = count <= RATE_LIMIT;
+        let allowed = count <= RATE_LIMIT;
         let remaining = RATE_LIMIT.saturating_sub(count);
-        let elapsed   = now.duration_since(window_start);
-        let reset_ms  = Duration::from_secs(WINDOW_SECS)
+        let elapsed = now.duration_since(window_start);
+        let reset_ms = Duration::from_secs(WINDOW_SECS)
             .saturating_sub(elapsed)
             .as_millis() as u64;
 
@@ -193,21 +199,28 @@ impl RateLimiter {
     /// no cambiar el comportamiento afinado que ya tenía el middleware.
     pub fn spam_check(
         &self,
-        sender:          &str,
-        text:            &str,
-        max_hits:        u32,
-        window_ms:       u64,
-        max_repeats:     u32,
+        sender: &str,
+        text: &str,
+        max_hits: u32,
+        window_ms: u64,
+        max_repeats: u32,
         flood_window_ms: u64,
     ) -> (bool, SpamReason, u64) {
         let now = Instant::now();
-        let mut entry = self.inner.entry(sender.to_string()).or_insert_with(SenderBucket::new);
+        let mut entry = self
+            .inner
+            .entry(sender.to_string())
+            .or_insert_with(SenderBucket::new);
         entry.last_seen = now;
 
         // 1. ¿Sigue castigado de antes?
         if let Some(until) = entry.blocked_until {
             if until > now {
-                return (false, SpamReason::Blocked, until.duration_since(now).as_millis() as u64);
+                return (
+                    false,
+                    SpamReason::Blocked,
+                    until.duration_since(now).as_millis() as u64,
+                );
             }
             entry.blocked_until = None;
         }
@@ -215,22 +228,26 @@ impl RateLimiter {
         // 2. Texto repetido. Se mira ANTES de contar el mensaje: repetir lo
         //    mismo 5 veces es flood aunque no llegue al límite de frecuencia.
         if !text.is_empty() {
-            let h      = text_hash(text);
+            let h = text_hash(text);
             let cutoff = Duration::from_millis(flood_window_ms);
-            entry.recent.retain(|(_, _, seen)| now.duration_since(*seen) < cutoff);
+            entry
+                .recent
+                .retain(|(_, _, seen)| now.duration_since(*seen) < cutoff);
 
             if let Some(slot) = entry.recent.iter_mut().find(|(hh, _, _)| *hh == h) {
                 slot.1 += 1;
-                slot.2  = now;
+                slot.2 = now;
                 if slot.1 > max_repeats {
                     entry.warn_count += 1;
-                    let idx  = (entry.warn_count as usize - 1).min(BLOCK_DURATIONS_MS.len() - 1);
-                    let dur  = Duration::from_millis(BLOCK_DURATIONS_MS[idx]);
+                    let idx = (entry.warn_count as usize - 1).min(BLOCK_DURATIONS_MS.len() - 1);
+                    let dur = Duration::from_millis(BLOCK_DURATIONS_MS[idx]);
                     entry.blocked_until = Some(now + dur);
                     return (false, SpamReason::Flood, dur.as_millis() as u64);
                 }
             } else {
-                if entry.recent.len() >= MAX_REPEAT_TRACK { entry.recent.remove(0); }
+                if entry.recent.len() >= MAX_REPEAT_TRACK {
+                    entry.recent.remove(0);
+                }
                 entry.recent.push((h, 1, now));
             }
         }
@@ -238,7 +255,7 @@ impl RateLimiter {
         // 3. Frecuencia, con su propia ventana y su propio contador — ver el
         //    comentario de spam_count en SenderBucket.
         if now.duration_since(entry.spam_window) > Duration::from_millis(window_ms) {
-            entry.spam_count  = 0;
+            entry.spam_count = 0;
             entry.spam_window = now;
         }
         entry.spam_count += 1;
@@ -264,7 +281,7 @@ pub struct RateCheckBody {
 // ── POST /rate/check ──────────────────────────────────────────────────────────
 pub async fn rate_check(
     State(state): State<AppState>,
-    Json(body):   Json<RateCheckBody>,
+    Json(body): Json<RateCheckBody>,
 ) -> (StatusCode, Json<serde_json::Value>) {
     if body.sender.is_empty() {
         return (
@@ -295,7 +312,6 @@ pub async fn rate_check(
     )
 }
 
-
 // ── Request body de /spam/check ───────────────────────────────────────────────
 // Los defaults replican los que Node venía mandando a Python (ver
 // spamGuardCheck en plugins/middlewares/rateLimit.ts), para que el
@@ -315,10 +331,18 @@ pub struct SpamCheckBody {
     pub flood_window_ms: u64,
 }
 
-fn d_max_hits() -> u32 { 8 }
-fn d_window_ms() -> u64 { 5_000 }
-fn d_max_repeats() -> u32 { 3 }
-fn d_flood_window_ms() -> u64 { 30_000 }
+fn d_max_hits() -> u32 {
+    8
+}
+fn d_window_ms() -> u64 {
+    5_000
+}
+fn d_max_repeats() -> u32 {
+    3
+}
+fn d_flood_window_ms() -> u64 {
+    30_000
+}
 
 // ── POST /spam/check ──────────────────────────────────────────────────────────
 // Sustituye a /api/v1/spam/check de Python. Devuelve 200 SIEMPRE, incluso al
@@ -327,7 +351,7 @@ fn d_flood_window_ms() -> u64 { 30_000 }
 // Node no debe verlo como que el servicio falla.
 pub async fn spam_check(
     State(state): State<AppState>,
-    Json(body):   Json<SpamCheckBody>,
+    Json(body): Json<SpamCheckBody>,
 ) -> (StatusCode, Json<serde_json::Value>) {
     if body.sender.is_empty() {
         return (

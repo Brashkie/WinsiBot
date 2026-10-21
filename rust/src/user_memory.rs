@@ -36,9 +36,8 @@ use crate::routes::AppState;
 
 /// Marcadores de habla informal. Misma lista que tenía user_memory.py.
 const SLANG: [&str; 23] = [
-    "xd", "jaja", "jeje", "lol", "we", "wey", "bro", "men",
-    "oe", "pe", "causa", "pata", "ctm", "wtf", "omg", "gg",
-    "uwu", "owo", "sksksk", "ntp", "nmms", "nel", "simon",
+    "xd", "jaja", "jeje", "lol", "we", "wey", "bro", "men", "oe", "pe", "causa", "pata", "ctm",
+    "wtf", "omg", "gg", "uwu", "owo", "sksksk", "ntp", "nmms", "nel", "simon",
 ];
 
 fn slang() -> &'static HashSet<&'static str> {
@@ -52,21 +51,21 @@ const RECIENTES_MAX: usize = 20;
 
 #[derive(Debug, Default, Clone, Serialize, Deserialize)]
 pub struct Perfil {
-    pub jid:              String,
-    pub uses_slang:       bool,
-    pub insult_count:     i64,
-    pub spam_count:       i64,
-    pub nsfw_count:       i64,
-    pub command_count:    i64,
-    pub msg_count:        i64,
-    pub top_intents:      HashMap<String, i64>,
-    pub first_seen:       i64,
-    pub last_seen:        i64,
-    pub active_hours:     Vec<i64>,
-    pub reputation:       String,
+    pub jid: String,
+    pub uses_slang: bool,
+    pub insult_count: i64,
+    pub spam_count: i64,
+    pub nsfw_count: i64,
+    pub command_count: i64,
+    pub msg_count: i64,
+    pub top_intents: HashMap<String, i64>,
+    pub first_seen: i64,
+    pub last_seen: i64,
+    pub active_hours: Vec<i64>,
+    pub reputation: String,
     pub reputation_score: f64,
-    pub response_style:   String,
-    pub recent_intents:   Vec<String>,
+    pub response_style: String,
+    pub recent_intents: Vec<String>,
 }
 
 pub fn init_schema(db: &ConvDb) {
@@ -117,21 +116,21 @@ fn leer(db: &ConvDb, jid: &str) -> Result<Perfil, String> {
         params![jid],
         |r| {
             Ok(Perfil {
-                jid:              jid.to_string(),
-                uses_slang:       r.get::<_, i64>(0)? != 0,
-                insult_count:     r.get(1)?,
-                spam_count:       r.get(2)?,
-                nsfw_count:       r.get(3)?,
-                command_count:    r.get(4)?,
-                msg_count:        r.get(5)?,
-                top_intents:      json_a(&r.get::<_, String>(6)?),
-                first_seen:       r.get(7)?,
-                last_seen:        r.get(8)?,
-                active_hours:     json_a(&r.get::<_, String>(9)?),
-                reputation:       r.get(10)?,
+                jid: jid.to_string(),
+                uses_slang: r.get::<_, i64>(0)? != 0,
+                insult_count: r.get(1)?,
+                spam_count: r.get(2)?,
+                nsfw_count: r.get(3)?,
+                command_count: r.get(4)?,
+                msg_count: r.get(5)?,
+                top_intents: json_a(&r.get::<_, String>(6)?),
+                first_seen: r.get(7)?,
+                last_seen: r.get(8)?,
+                active_hours: json_a(&r.get::<_, String>(9)?),
+                reputation: r.get(10)?,
                 reputation_score: r.get(11)?,
-                response_style:   r.get(12)?,
-                recent_intents:   json_a(&r.get::<_, String>(13)?),
+                response_style: r.get(12)?,
+                recent_intents: json_a(&r.get::<_, String>(13)?),
             })
         },
     );
@@ -140,10 +139,10 @@ fn leer(db: &ConvDb, jid: &str) -> Result<Perfil, String> {
         Ok(p) => Ok(p),
         // Usuario nuevo: un perfil en blanco, no un error.
         Err(rusqlite::Error::QueryReturnedNoRows) => Ok(Perfil {
-            jid:              jid.to_string(),
-            reputation:       "normal".into(),
+            jid: jid.to_string(),
+            reputation: "normal".into(),
             reputation_score: 50.0,
-            response_style:   "neutral".into(),
+            response_style: "neutral".into(),
             ..Default::default()
         }),
         Err(e) => Err(e.to_string()),
@@ -170,11 +169,18 @@ fn escribir(db: &ConvDb, p: &Perfil) -> Result<(), String> {
         params![
             p.jid,
             i64::from(p.uses_slang),
-            p.insult_count, p.spam_count, p.nsfw_count, p.command_count, p.msg_count,
+            p.insult_count,
+            p.spam_count,
+            p.nsfw_count,
+            p.command_count,
+            p.msg_count,
             serde_json::to_string(&p.top_intents).unwrap_or_else(|_| "{}".into()),
-            p.first_seen, p.last_seen,
+            p.first_seen,
+            p.last_seen,
             serde_json::to_string(&p.active_hours).unwrap_or_else(|_| "[]".into()),
-            p.reputation, p.reputation_score, p.response_style,
+            p.reputation,
+            p.reputation_score,
+            p.response_style,
             serde_json::to_string(&p.recent_intents).unwrap_or_else(|_| "[]".into()),
         ],
     )
@@ -201,14 +207,20 @@ fn escribir(db: &ConvDb, p: &Perfil) -> Result<(), String> {
 pub fn reputacion(p: &Perfil) -> (f64, &'static str) {
     let mut score = 50.0_f64;
 
-    if p.msg_count > 50 { score += 5.0; }
-    if p.msg_count > 200 { score += 10.0; }
-    if p.command_count > 20 { score += 5.0; }
+    if p.msg_count > 50 {
+        score += 5.0;
+    }
+    if p.msg_count > 200 {
+        score += 10.0;
+    }
+    if p.command_count > 20 {
+        score += 5.0;
+    }
 
     let total = p.msg_count.max(1) as f64;
     score -= (p.insult_count as f64 / total) * 40.0;
-    score -= (p.spam_count   as f64 / total) * 30.0;
-    score -= (p.nsfw_count   as f64 / total) * 20.0;
+    score -= (p.spam_count as f64 / total) * 30.0;
+    score -= (p.nsfw_count as f64 / total) * 20.0;
 
     let score = (score.clamp(0.0, 100.0) * 10.0).round() / 10.0;
     let etiqueta = if score >= 70.0 {
@@ -253,7 +265,7 @@ fn tiene_jerga(texto: &str) -> bool {
 
 #[derive(Deserialize)]
 pub struct UpdateRequest {
-    pub text:   String,
+    pub text: String,
     #[serde(default)]
     pub intent: String,
     #[serde(default)]
@@ -284,7 +296,11 @@ pub fn actualizar(db: &ConvDb, jid: &str, req: &UpdateRequest) -> Result<Perfil,
         p.uses_slang = true;
     }
 
-    let intent = if req.intent.is_empty() { "neutral" } else { req.intent.as_str() };
+    let intent = if req.intent.is_empty() {
+        "neutral"
+    } else {
+        req.intent.as_str()
+    };
     *p.top_intents.entry(intent.to_string()).or_insert(0) += 1;
 
     p.recent_intents.push(intent.to_string());
@@ -295,8 +311,8 @@ pub fn actualizar(db: &ConvDb, jid: &str, req: &UpdateRequest) -> Result<Perfil,
 
     match intent {
         "insult" => p.insult_count += 1,
-        "spam"   => p.spam_count += 1,
-        "nsfw"   => p.nsfw_count += 1,
+        "spam" => p.spam_count += 1,
+        "nsfw" => p.nsfw_count += 1,
         _ => {}
     }
     if req.is_cmd {
@@ -318,10 +334,10 @@ pub fn actualizar(db: &ConvDb, jid: &str, req: &UpdateRequest) -> Result<Perfil,
 /// El resumen que `personality.rs` necesita para adaptar el tono.
 pub fn contexto(p: &Perfil) -> Contexto {
     Contexto {
-        reputation:     p.reputation.clone(),
+        reputation: p.reputation.clone(),
         response_style: p.response_style.clone(),
         recent_intents: p.recent_intents.clone(),
-        uses_slang:     p.uses_slang,
+        uses_slang: p.uses_slang,
     }
 }
 
@@ -329,26 +345,26 @@ pub fn contexto(p: &Perfil) -> Contexto {
 
 pub async fn update(
     State(state): State<AppState>,
-    Path(jid):    Path<String>,
-    Json(req):    Json<UpdateRequest>,
+    Path(jid): Path<String>,
+    Json(req): Json<UpdateRequest>,
 ) -> Json<serde_json::Value> {
     let db = state.conv_db.clone();
     match tokio::task::spawn_blocking(move || actualizar(&db, &jid, &req)).await {
-        Ok(Ok(p))  => Json(serde_json::json!({ "success": true, "data": p })),
+        Ok(Ok(p)) => Json(serde_json::json!({ "success": true, "data": p })),
         Ok(Err(e)) => Json(serde_json::json!({ "success": false, "error": e })),
-        Err(e)     => Json(serde_json::json!({ "success": false, "error": e.to_string() })),
+        Err(e) => Json(serde_json::json!({ "success": false, "error": e.to_string() })),
     }
 }
 
 pub async fn get(
     State(state): State<AppState>,
-    Path(jid):    Path<String>,
+    Path(jid): Path<String>,
 ) -> Json<serde_json::Value> {
     let db = state.conv_db.clone();
     match tokio::task::spawn_blocking(move || leer(&db, &jid)).await {
-        Ok(Ok(p))  => Json(serde_json::json!({ "success": true, "data": p })),
+        Ok(Ok(p)) => Json(serde_json::json!({ "success": true, "data": p })),
         Ok(Err(e)) => Json(serde_json::json!({ "success": false, "error": e })),
-        Err(e)     => Json(serde_json::json!({ "success": false, "error": e.to_string() })),
+        Err(e) => Json(serde_json::json!({ "success": false, "error": e.to_string() })),
     }
 }
 
@@ -380,7 +396,7 @@ pub async fn toxic(State(state): State<AppState>) -> Json<serde_json::Value> {
                 .collect::<Vec<_>>(),
         })),
         Ok(Err(e)) => Json(serde_json::json!({ "success": false, "error": e })),
-        Err(e)     => Json(serde_json::json!({ "success": false, "error": e.to_string() })),
+        Err(e) => Json(serde_json::json!({ "success": false, "error": e.to_string() })),
     }
 }
 
@@ -400,7 +416,11 @@ mod tests {
     }
 
     fn msg(texto: &str, intent: &str) -> UpdateRequest {
-        UpdateRequest { text: texto.into(), intent: intent.into(), is_cmd: false }
+        UpdateRequest {
+            text: texto.into(),
+            intent: intent.into(),
+            is_cmd: false,
+        }
     }
 
     #[test]
@@ -463,14 +483,25 @@ mod tests {
         for _ in 0..(RECIENTES_MAX + 10) {
             actualizar(&db, "a@s", &msg("hola", "greeting")).unwrap();
         }
-        assert_eq!(leer(&db, "a@s").unwrap().recent_intents.len(), RECIENTES_MAX);
+        assert_eq!(
+            leer(&db, "a@s").unwrap().recent_intents.len(),
+            RECIENTES_MAX
+        );
     }
 
     #[test]
     fn la_reputacion_penaliza_por_tasa_y_no_por_cantidad() {
         // Tres insultos en cinco mensajes es muy distinto de tres en mil.
-        let pocos = Perfil { msg_count: 5, insult_count: 3, ..Default::default() };
-        let muchos = Perfil { msg_count: 1000, insult_count: 3, ..Default::default() };
+        let pocos = Perfil {
+            msg_count: 5,
+            insult_count: 3,
+            ..Default::default()
+        };
+        let muchos = Perfil {
+            msg_count: 1000,
+            insult_count: 3,
+            ..Default::default()
+        };
         assert!(reputacion(&pocos).0 < reputacion(&muchos).0);
     }
 
@@ -478,46 +509,104 @@ mod tests {
     fn la_reputacion_da_las_cuatro_etiquetas() {
         // "trusted" tiene que ser ALCANZABLE: con el umbral original de 80 no
         // lo era, porque el techo real del calculo es 70.
-        assert_eq!(reputacion(&Perfil { msg_count: 300, command_count: 30, ..Default::default() }).1, "trusted");
-        assert_eq!(reputacion(&Perfil { msg_count: 10, ..Default::default() }).1, "normal");
-        assert_eq!(reputacion(&Perfil { msg_count: 10, insult_count: 1, ..Default::default() }).1, "suspicious");
-        assert_eq!(reputacion(&Perfil { msg_count: 10, insult_count: 9, spam_count: 5, ..Default::default() }).1, "toxic");
+        assert_eq!(
+            reputacion(&Perfil {
+                msg_count: 300,
+                command_count: 30,
+                ..Default::default()
+            })
+            .1,
+            "trusted"
+        );
+        assert_eq!(
+            reputacion(&Perfil {
+                msg_count: 10,
+                ..Default::default()
+            })
+            .1,
+            "normal"
+        );
+        assert_eq!(
+            reputacion(&Perfil {
+                msg_count: 10,
+                insult_count: 1,
+                ..Default::default()
+            })
+            .1,
+            "suspicious"
+        );
+        assert_eq!(
+            reputacion(&Perfil {
+                msg_count: 10,
+                insult_count: 9,
+                spam_count: 5,
+                ..Default::default()
+            })
+            .1,
+            "toxic"
+        );
     }
 
     #[test]
     fn el_techo_de_la_reputacion_alcanza_para_trusted() {
         // Si alguien vuelve a tocar los bonos o el umbral, esto avisa: el
         // mejor usuario posible tiene que llegar a "trusted".
-        let mejor = Perfil { msg_count: 100_000, command_count: 10_000, ..Default::default() };
+        let mejor = Perfil {
+            msg_count: 100_000,
+            command_count: 10_000,
+            ..Default::default()
+        };
         let (score, etiqueta) = reputacion(&mejor);
         assert_eq!(etiqueta, "trusted", "el techo real es {score}");
     }
 
     #[test]
     fn la_reputacion_no_se_sale_del_rango() {
-        let pesimo = Perfil { msg_count: 10, insult_count: 10, spam_count: 10, nsfw_count: 10, ..Default::default() };
-        let optimo = Perfil { msg_count: 10_000, command_count: 1000, ..Default::default() };
+        let pesimo = Perfil {
+            msg_count: 10,
+            insult_count: 10,
+            spam_count: 10,
+            nsfw_count: 10,
+            ..Default::default()
+        };
+        let optimo = Perfil {
+            msg_count: 10_000,
+            command_count: 1000,
+            ..Default::default()
+        };
         assert!((0.0..=100.0).contains(&reputacion(&pesimo).0));
         assert!((0.0..=100.0).contains(&reputacion(&optimo).0));
     }
 
     #[test]
     fn un_usuario_toxico_recibe_estilo_sarcastico() {
-        let p = Perfil { reputation: "toxic".into(), ..Default::default() };
+        let p = Perfil {
+            reputation: "toxic".into(),
+            ..Default::default()
+        };
         assert_eq!(estilo_respuesta(&p), "sarcastic");
     }
 
     #[test]
     fn el_estilo_sale_de_las_intenciones_frecuentes() {
-        let mut p = Perfil { reputation: "normal".into(), ..Default::default() };
+        let mut p = Perfil {
+            reputation: "normal".into(),
+            ..Default::default()
+        };
         p.top_intents.insert("joke".into(), 10);
         assert_eq!(estilo_respuesta(&p), "humor");
 
-        let mut q = Perfil { reputation: "normal".into(), ..Default::default() };
+        let mut q = Perfil {
+            reputation: "normal".into(),
+            ..Default::default()
+        };
         q.top_intents.insert("complaint".into(), 10);
         assert_eq!(estilo_respuesta(&q), "formal");
 
-        let mut r = Perfil { reputation: "normal".into(), ..Default::default() };
+        let mut r = Perfil {
+            reputation: "normal".into(),
+            ..Default::default()
+        };
         r.top_intents.insert("praise".into(), 10);
         assert_eq!(estilo_respuesta(&r), "friendly");
     }
@@ -546,7 +635,16 @@ mod tests {
     #[test]
     fn una_intencion_vacia_cuenta_como_neutral() {
         let db = db();
-        actualizar(&db, "a@s", &UpdateRequest { text: "hola".into(), intent: String::new(), is_cmd: false }).unwrap();
+        actualizar(
+            &db,
+            "a@s",
+            &UpdateRequest {
+                text: "hola".into(),
+                intent: String::new(),
+                is_cmd: false,
+            },
+        )
+        .unwrap();
         let p = leer(&db, "a@s").unwrap();
         assert_eq!(p.top_intents.get("neutral"), Some(&1));
     }
@@ -554,7 +652,16 @@ mod tests {
     #[test]
     fn los_comandos_se_cuentan_aparte() {
         let db = db();
-        actualizar(&db, "a@s", &UpdateRequest { text: "#menu".into(), intent: "command_attempt".into(), is_cmd: true }).unwrap();
+        actualizar(
+            &db,
+            "a@s",
+            &UpdateRequest {
+                text: "#menu".into(),
+                intent: "command_attempt".into(),
+                is_cmd: true,
+            },
+        )
+        .unwrap();
         actualizar(&db, "a@s", &msg("hola", "greeting")).unwrap();
         let p = leer(&db, "a@s").unwrap();
         assert_eq!(p.command_count, 1);

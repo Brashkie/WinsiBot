@@ -2628,7 +2628,7 @@ checksum = "d6bbff5f0aada427a1e5a6da5f1f98158182f26556f345ac9e04d36d0ebed650"
 
 [[package]]
 name = "winsibot-session-api"
-version = "5.7.0"
+version = "5.8.0"
 dependencies = [
  "axum",
  "base64 0.22.1",

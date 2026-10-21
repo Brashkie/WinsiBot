@@ -1,9 +1,9 @@
 // Los módulos viven en la lib (src/lib.rs) para que benches y tests puedan
 // importarlos; el binario los reutiliza desde ahí.
 use winsibot_session_api::{
-    ai_chat, analytics, auth, bad_mac, config, conversations, db, imagefx, imagesearch,
-    lock_manager, metrics, nlp, personality, platform, rate_limiter, routes, session_id,
-    snapshot, subbots, tasks, user_memory, vision, watchdog,
+    ai_chat, analytics, antiban, auth, bad_mac, config, conversations, db, imagefx, imagesearch,
+    lock_manager, metrics, nlp, personality, platform, rate_limiter, routes, session_id, snapshot,
+    subbots, tasks, user_memory, vision, watchdog,
 };
 
 use axum::{
@@ -68,8 +68,8 @@ async fn shutdown_signal(state: AppState) {
     let sessions_dir = state.sessions_dir.clone();
     let (ok, total) = tokio::task::spawn_blocking(move || {
         let sessions = session_id::list_sessions(&sessions_dir);
-        let total    = sessions.len();
-        let mut ok   = 0u32;
+        let total = sessions.len();
+        let mut ok = 0u32;
 
         for sid in &sessions {
             if let Ok(path) = session_id::resolve(&sessions_dir, sid) {
@@ -79,7 +79,9 @@ async fn shutdown_signal(state: AppState) {
             }
         }
         (ok, total)
-    }).await.unwrap_or((0, 0));
+    })
+    .await
+    .unwrap_or((0, 0));
 
     tracing::warn!(ok, total, "snapshot final completado — cerrando proceso");
 }
@@ -127,7 +129,7 @@ async fn main() {
         )
         .init();
 
-    let cfg      = config::Config::load();
+    let cfg = config::Config::load();
     let platform = platform::detect();
 
     tracing::info!(
@@ -137,11 +139,12 @@ async fn main() {
         "winsibot-session-api v{} iniciando", env!("CARGO_PKG_VERSION")
     );
     tracing::info!(
-        os     = platform.os,
-        arch   = platform.arch,
+        os = platform.os,
+        arch = platform.arch,
         family = platform.family,
-        cores  = platform.cores,
-        "plataforma detectada — {}", platform.summary()
+        cores = platform.cores,
+        "plataforma detectada — {}",
+        platform.summary()
     );
 
     // Crear directorio para la DB si no existe
@@ -155,24 +158,33 @@ async fn main() {
 
     // Conexión SQLite única, compartida entre conversations.rs y bad_mac.rs
     // (mismo archivo) — ver comentario al inicio de conversations.rs.
-    let conv_db = conversations::init(&cfg.conv_db_path)
-        .expect("no se pudo abrir la DB de conversaciones");
+    let conv_db =
+        conversations::init(&cfg.conv_db_path).expect("no se pudo abrir la DB de conversaciones");
     bad_mac::init_schema(&conv_db);
     personality::init_schema(&conv_db);
     user_memory::init_schema(&conv_db);
 
     let state = AppState {
-        sessions_dir:  cfg.sessions_dir.clone(),
-        auth_dir:      cfg.auth_dir.clone(),
-        locks:         lock_manager::LockManager::new(),
-        db:            database,
-        conv_db:       conv_db.clone(),
-        bad_mac:       bad_mac::BadMacTracker::new(),
-        rate_limiter:  rate_limiter::RateLimiter::new(),
-        watchdog:      watchdog::WatchdogState::new(),
-        subbots:       subbots::SubBotManager::new(),
-        metrics:       metrics::Metrics::new(),
+        sessions_dir: cfg.sessions_dir.clone(),
+        auth_dir: cfg.auth_dir.clone(),
+        locks: lock_manager::LockManager::new(),
+        db: database,
+        conv_db: conv_db.clone(),
+        bad_mac: bad_mac::BadMacTracker::new(),
+        rate_limiter: rate_limiter::RateLimiter::new(),
+        watchdog: watchdog::WatchdogState::new(),
+        subbots: subbots::SubBotManager::new(),
+        metrics: metrics::Metrics::new(),
         alert_webhook_url: cfg.alert_webhook_url.clone(),
+        // Junto a la base de datos: es estado del bot, como ella, y `data/`
+        // ya esta ignorado por git.
+        antiban: antiban::Antiban::cargar(
+            &Path::new(&cfg.db_path)
+                .parent()
+                .unwrap_or_else(|| Path::new("."))
+                .join("antiban.json"),
+            antiban::Politica::desde_entorno(),
+        ),
     };
 
     // Hidratar reincidencia de Bad MAC desde el historial persistido (últimas
@@ -187,85 +199,103 @@ async fn main() {
 
     // Rutas públicas (sin API key)
     let public = Router::new()
-        .route("/health",       get(routes::health))
-        .route("/health/live",  get(routes::liveness))
+        .route("/health", get(routes::health))
+        .route("/health/live", get(routes::liveness))
         .route("/health/ready", get(routes::readiness));
 
     // Rutas protegidas por API key
     let protected = Router::new()
         // ─── Sesión ───────────────────────────────────────────────────────────
-        .route("/write",                  post(routes::write))
-        .route("/read",                   get(routes::read))
-        .route("/snapshot",               post(routes::snapshot_route))
-        .route("/recover",                post(routes::recover))
-        .route("/healthy",                get(routes::is_healthy))
-        .route("/sessions",               get(routes::list_sessions))
-        .route("/sessions/signal/clear",  post(routes::clear_signal_sessions))
-        .route("/sessions/backup",        get(routes::read_backup))
+        .route("/write", post(routes::write))
+        .route("/read", get(routes::read))
+        .route("/snapshot", post(routes::snapshot_route))
+        .route("/recover", post(routes::recover))
+        .route("/healthy", get(routes::is_healthy))
+        .route("/sessions", get(routes::list_sessions))
+        .route(
+            "/sessions/signal/clear",
+            post(routes::clear_signal_sessions),
+        )
+        .route("/sessions/backup", get(routes::read_backup))
         // ─── NLP fast-path ───────────────────────────────────────────────────
-        .route("/nlp/fast",               post(nlp::nlp_fast))
+        .route("/nlp/fast", post(nlp::nlp_fast))
         // ─── AI conversations (SQLite) ────────────────────────────────────────
-        .route("/ai/learn",               post(conversations::ai_learn))
-        .route("/ai/context/:sender",     get(conversations::ai_context))
-        .route("/ai/observe",             post(conversations::ai_observe))
-        .route("/ai/profile/:jid",        get(conversations::ai_profile)
-                                            .delete(conversations::ai_delete_profile))
-        .route("/ai/group-style/:gjid",   get(conversations::ai_group_style))
-        .route("/ai/corpus/stats",        get(conversations::ai_corpus_stats))
+        .route("/ai/learn", post(conversations::ai_learn))
+        .route("/ai/context/:sender", get(conversations::ai_context))
+        .route("/ai/observe", post(conversations::ai_observe))
+        .route(
+            "/ai/profile/:jid",
+            get(conversations::ai_profile).delete(conversations::ai_delete_profile),
+        )
+        .route("/ai/group-style/:gjid", get(conversations::ai_group_style))
+        .route("/ai/corpus/stats", get(conversations::ai_corpus_stats))
         // Portados de Python en la 8.11.0 (ver imagefx.rs e imagesearch.rs).
-        .route("/imagefx/lego",           post(imagefx::lego))
-        .route("/search/image",           post(imagesearch::search_image))
-        .route("/search/images",          post(imagesearch::search_images))
+        .route("/imagefx/lego", post(imagefx::lego))
+        .route("/search/image", post(imagesearch::search_image))
+        .route("/search/images", post(imagesearch::search_images))
         // Portados de Python en la 8.11.0: personalidad, reputacion y la IA
         // de verdad (ver personality.rs, user_memory.rs y ai_chat.rs).
         .route("/ai/personality/respond", post(personality::respond))
-        .route("/ai/personality/mode",    get(personality::mode_get)
-                                            .post(personality::mode_set))
-        .route("/ai/personality/reset",   post(personality::mode_reset))
-        .route("/ai/memory/toxic",        get(user_memory::toxic))
-        .route("/ai/memory/:jid",         get(user_memory::get))
-        .route("/ai/memory/:jid/update",  post(user_memory::update))
-        .route("/ai/chat/respond",        post(ai_chat::respond))
-        .route("/ai/chat/imitate",        post(ai_chat::imitate))
+        .route(
+            "/ai/personality/mode",
+            get(personality::mode_get).post(personality::mode_set),
+        )
+        .route("/ai/personality/reset", post(personality::mode_reset))
+        .route("/ai/memory/toxic", get(user_memory::toxic))
+        .route("/ai/memory/:jid", get(user_memory::get))
+        .route("/ai/memory/:jid/update", post(user_memory::update))
+        .route("/ai/chat/respond", post(ai_chat::respond))
+        .route("/ai/chat/imitate", post(ai_chat::imitate))
         // Modelos de imagen con ONNX Runtime (ver vision.rs). Portados de
         // Python: dos de los tres comandos de anime ni siquiera usaban torch.
-        .route("/vision/removebg",        post(vision::removebg))
-        .route("/vision/toanime",         post(vision::toanime))
-        .route("/vision/upscale",         post(vision::upscale_handler))
+        .route("/vision/removebg", post(vision::removebg))
+        .route("/vision/toanime", post(vision::toanime))
+        .route("/vision/upscale", post(vision::upscale_handler))
         // ─── Bad MAC per-group tracker ────────────────────────────────────────
-        .route("/badmac/report",          post(bad_mac::report_bad_mac))
+        .route("/badmac/report", post(bad_mac::report_bad_mac))
+        // ─── Ritmo de salida por cuenta (ver antiban.rs) ──────────────────────
+        .route("/antiban/permit", post(antiban::permit))
+        .route("/antiban/report", post(antiban::report))
+        .route("/antiban/paired", post(antiban::paired))
+        .route("/antiban/status", get(antiban::status))
         // ─── Rate limiter per-sender ──────────────────────────────────────────
-        .route("/rate/check",             post(rate_limiter::rate_check))
-        .route("/spam/check",             post(rate_limiter::spam_check))
+        .route("/rate/check", post(rate_limiter::rate_check))
+        .route("/spam/check", post(rate_limiter::spam_check))
         // ─── Watchdog — heartbeat desde Node.js ────────────────────────────────
-        .route("/watchdog/ping",          post(watchdog::ping))
-        .route("/watchdog/status",        get(watchdog::status))
+        .route("/watchdog/ping", post(watchdog::ping))
+        .route("/watchdog/status", get(watchdog::status))
         // ─── Métricas internas y dashboard agregado ───────────────────────────
-        .route("/metrics",                get(metrics::get_metrics))
-        .route("/analytics",              get(analytics::analytics))
+        .route("/metrics", get(metrics::get_metrics))
+        .route("/analytics", get(analytics::analytics))
         // ─── Message delivery tracking ────────────────────────────────────────
-        .route("/messages/track",         post(routes::messages_track))
-        .route("/messages/ack",           post(routes::messages_ack))
-        .route("/messages/pending",       get(routes::messages_pending))
-        .route("/outbox/enqueue",         post(routes::outbox_enqueue))
-        .route("/outbox/unsent",          get(routes::outbox_unsent))
-        .route("/outbox/sent",            post(routes::outbox_sent))
-        .route("/outbox/retry",           post(routes::outbox_retry))
-        .route("/stats/bump",             post(routes::stats_bump))
-        .route("/stats/counters",         get(routes::stats_counters))
-        .route("/stats/top-commands",     get(routes::stats_top_commands))
+        .route("/messages/track", post(routes::messages_track))
+        .route("/messages/ack", post(routes::messages_ack))
+        .route("/messages/pending", get(routes::messages_pending))
+        .route("/outbox/enqueue", post(routes::outbox_enqueue))
+        .route("/outbox/unsent", get(routes::outbox_unsent))
+        .route("/outbox/sent", post(routes::outbox_sent))
+        .route("/outbox/retry", post(routes::outbox_retry))
+        .route("/stats/bump", post(routes::stats_bump))
+        .route("/stats/counters", get(routes::stats_counters))
+        .route("/stats/top-commands", get(routes::stats_top_commands))
         // ─── Sub-bots (100 cap, DashMap, quota, cooldown) ─────────────────────
-        .route("/subbots/register",       post(subbots::register))
-        .route("/subbots/stats",          get(subbots::stats))
-        .route("/subbots/can-create",     get(subbots::can_create))
-        .route("/subbots/cleanup",        post(subbots::cleanup))
-        .route("/subbots",                get(subbots::list_all))
-        .route("/subbots/config",         get(subbots::get_config).patch(subbots::patch_config))
-        .route("/subbots/:id",            get(subbots::get_one).delete(subbots::unregister))
-        .route("/subbots/:id/state",      put(subbots::update_state))
-        .route("/subbots/:id/heartbeat",  post(subbots::heartbeat))
-        .route("/subbots/:id/messages",   post(subbots::inc_messages))
-        .route("/subbots/:id/errors",     post(subbots::inc_errors))
+        .route("/subbots/register", post(subbots::register))
+        .route("/subbots/stats", get(subbots::stats))
+        .route("/subbots/can-create", get(subbots::can_create))
+        .route("/subbots/cleanup", post(subbots::cleanup))
+        .route("/subbots", get(subbots::list_all))
+        .route(
+            "/subbots/config",
+            get(subbots::get_config).patch(subbots::patch_config),
+        )
+        .route(
+            "/subbots/:id",
+            get(subbots::get_one).delete(subbots::unregister),
+        )
+        .route("/subbots/:id/state", put(subbots::update_state))
+        .route("/subbots/:id/heartbeat", post(subbots::heartbeat))
+        .route("/subbots/:id/messages", post(subbots::inc_messages))
+        .route("/subbots/:id/errors", post(subbots::inc_errors))
         .layer(middleware::from_fn_with_state(
             cfg.api_key.clone(),
             auth::require_api_key,

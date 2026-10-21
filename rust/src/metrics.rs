@@ -3,7 +3,6 @@
 /// Sin Prometheus: sólo AtomicU64 + serde_json.
 /// Los handlers principales llaman inc_* explícitamente.
 /// Expuesto en GET /metrics (protegido por API key).
-
 use std::{
     sync::{
         atomic::{AtomicU64, Ordering::Relaxed},
@@ -26,30 +25,30 @@ pub struct Metrics {
 
 #[derive(Debug)]
 struct Inner {
-    started_at:       Instant,
-    writes_total:     AtomicU64,
-    reads_total:      AtomicU64,
-    bytes_in:         AtomicU64,
-    bytes_out:        AtomicU64,
-    snapshots_auto:   AtomicU64,
+    started_at: Instant,
+    writes_total: AtomicU64,
+    reads_total: AtomicU64,
+    bytes_in: AtomicU64,
+    bytes_out: AtomicU64,
+    snapshots_auto: AtomicU64,
     snapshots_manual: AtomicU64,
-    recoveries:       AtomicU64,
-    api_errors:       AtomicU64,
+    recoveries: AtomicU64,
+    api_errors: AtomicU64,
 }
 
 impl Metrics {
     pub fn new() -> Self {
         Self {
             inner: Arc::new(Inner {
-                started_at:       Instant::now(),
-                writes_total:     AtomicU64::new(0),
-                reads_total:      AtomicU64::new(0),
-                bytes_in:         AtomicU64::new(0),
-                bytes_out:        AtomicU64::new(0),
-                snapshots_auto:   AtomicU64::new(0),
+                started_at: Instant::now(),
+                writes_total: AtomicU64::new(0),
+                reads_total: AtomicU64::new(0),
+                bytes_in: AtomicU64::new(0),
+                bytes_out: AtomicU64::new(0),
+                snapshots_auto: AtomicU64::new(0),
                 snapshots_manual: AtomicU64::new(0),
-                recoveries:       AtomicU64::new(0),
-                api_errors:       AtomicU64::new(0),
+                recoveries: AtomicU64::new(0),
+                api_errors: AtomicU64::new(0),
             }),
         }
     }
@@ -64,14 +63,22 @@ impl Metrics {
         self.inner.bytes_out.fetch_add(bytes as u64, Relaxed);
     }
 
-    pub fn inc_snapshot_auto(&self)   { self.inner.snapshots_auto.fetch_add(1, Relaxed); }
-    pub fn inc_snapshot_manual(&self) { self.inner.snapshots_manual.fetch_add(1, Relaxed); }
-    pub fn inc_recovery(&self)        { self.inner.recoveries.fetch_add(1, Relaxed); }
-    pub fn inc_error(&self)           { self.inner.api_errors.fetch_add(1, Relaxed); }
+    pub fn inc_snapshot_auto(&self) {
+        self.inner.snapshots_auto.fetch_add(1, Relaxed);
+    }
+    pub fn inc_snapshot_manual(&self) {
+        self.inner.snapshots_manual.fetch_add(1, Relaxed);
+    }
+    pub fn inc_recovery(&self) {
+        self.inner.recoveries.fetch_add(1, Relaxed);
+    }
+    pub fn inc_error(&self) {
+        self.inner.api_errors.fetch_add(1, Relaxed);
+    }
 
     pub fn snapshot(&self) -> serde_json::Value {
         let i = &self.inner;
-        let bytes_in  = i.bytes_in.load(Relaxed);
+        let bytes_in = i.bytes_in.load(Relaxed);
         let bytes_out = i.bytes_out.load(Relaxed);
         serde_json::json!({
             "uptimeSecs":      i.started_at.elapsed().as_secs(),

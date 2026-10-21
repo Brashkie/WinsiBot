@@ -7,6 +7,7 @@
 pub mod ai_chat;
 pub mod alerts;
 pub mod analytics;
+pub mod antiban;
 pub mod atomic;
 pub mod auth;
 pub mod bad_mac;

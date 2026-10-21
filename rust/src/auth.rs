@@ -31,6 +31,11 @@ pub async fn require_api_key(
 }
 
 fn constant_time_eq(a: &str, b: &str) -> bool {
-    if a.len() != b.len() { return false; }
-    a.bytes().zip(b.bytes()).fold(0u8, |acc, (x, y)| acc | (x ^ y)) == 0
+    if a.len() != b.len() {
+        return false;
+    }
+    a.bytes()
+        .zip(b.bytes())
+        .fold(0u8, |acc, (x, y)| acc | (x ^ y))
+        == 0
 }

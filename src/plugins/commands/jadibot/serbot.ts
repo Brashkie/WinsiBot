@@ -356,6 +356,31 @@ export async function startSubBot(
   let codeSent     = false
   let qrSent       = false
 
+  // Mismo antiban que el principal, con el número como cuenta: los acks con
+  // error (429, 463) son lo único que dice que WhatsApp está frenando a ESTE
+  // número, y el vínculo nuevo es lo que le arranca el calentamiento. Un
+  // sub-bot casi siempre es un número recién vinculado, que es el caso para
+  // el que existe el calentamiento. Ver rust/src/antiban.rs.
+  subSock.ev.on('messages.update', (updates: any[]) => {
+    for (const upd of updates) {
+      if (upd?.update?.status !== 0 || !upd?.key?.fromMe) continue
+      const code = Number(upd.update?.messageStubParameters?.[0])
+      if (Number.isFinite(code) && code > 0) {
+        logger.warn({ phone, code, jid: upd.key.remoteJid }, 'Sub-bot: WhatsApp rechazó un envío (error en el ack)')
+        import('@lib/session.js')
+          .then(({ sessionClient }) => sessionClient.antibanReport(phone, upd.key.remoteJid ?? '', code))
+          .catch(() => {})
+      }
+    }
+  })
+  subSock.ev.on('connection.update', (update: any) => {
+    if (update?.isNewLogin) {
+      import('@lib/session.js')
+        .then(({ sessionClient }) => sessionClient.antibanPaired(phone))
+        .catch(() => {})
+    }
+  })
+
   subSock.ev.on('connection.update', async (update: any) => {
     // Todo el cuerpo envuelto en try/catch — antes un error inesperado acá
     // (Baileys no espera el resultado de listeners async, así que un throw

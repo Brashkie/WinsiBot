@@ -1,3 +1,4 @@
+use crate::atomic::atomic_write;
 /// snapshot.rs v3
 ///
 /// Rotación de snapshots:
@@ -5,19 +6,19 @@
 ///   creds_002.snap
 ///   ...
 ///   creds_005.snap  ← más antiguo (se elimina al rotar)
-
 use chrono::{DateTime, Utc};
 use serde::Serialize;
 use std::fs;
 use std::path::{Path, PathBuf};
-use crate::atomic::atomic_write;
 
 const MAX: usize = 10; // 10 versiones rotativas — suficiente para recuperar tras horas de corrupción
 
 /// Crea un snapshot rotativo del archivo de sesión.
 /// Rota: 004→005, 003→004, 002→003, 001→002, nuevo→001
 pub fn create(path: &Path) -> std::io::Result<()> {
-    if !path.exists() { return Ok(()); }
+    if !path.exists() {
+        return Ok(());
+    }
 
     let dir = snap_dir(path);
     fs::create_dir_all(&dir)?;
@@ -58,21 +59,21 @@ pub fn recover(path: &Path) -> Option<String> {
 /// Usado por el endpoint /healthy para observabilidad.
 #[derive(Serialize)]
 pub struct SnapMeta {
-    pub index:      usize,
-    pub name:       String,
+    pub index: usize,
+    pub name: String,
     pub size_bytes: u64,
-    pub ts:         DateTime<Utc>,
+    pub ts: DateTime<Utc>,
 }
 
 pub fn latest_meta(session_path: &Path) -> Option<SnapMeta> {
-    let s    = snap(session_path, 1);
+    let s = snap(session_path, 1);
     let meta = fs::metadata(&s).ok()?;
     let name = s.file_name()?.to_string_lossy().to_string();
     Some(SnapMeta {
-        index:      1,
+        index: 1,
         name,
         size_bytes: meta.len(),
-        ts:         DateTime::<Utc>::from(meta.modified().ok()?),
+        ts: DateTime::<Utc>::from(meta.modified().ok()?),
     })
 }
 

@@ -3,13 +3,14 @@
 /// Si ALERT_WEBHOOK_URL no está configurado, fire() es un no-op silencioso.
 /// Pensado para eventos poco frecuentes (watchdog muerto/recuperado) — no usar
 /// para spam de alta frecuencia, no tiene rate-limiting propio.
-
 use std::time::Duration;
 
 use crate::routes::AppState;
 
 pub async fn fire(state: &AppState, message: &str) {
-    let Some(url) = &state.alert_webhook_url else { return };
+    let Some(url) = &state.alert_webhook_url else {
+        return;
+    };
 
     let body = serde_json::json!({ "content": message });
 

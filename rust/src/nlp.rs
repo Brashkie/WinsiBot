@@ -30,7 +30,9 @@ use crate::routes::AppState;
 // nonsense_re() más abajo.
 fn has_repeated_char_run(text: &str, min_run: usize) -> bool {
     let mut chars = text.chars();
-    let Some(mut prev) = chars.next() else { return false };
+    let Some(mut prev) = chars.next() else {
+        return false;
+    };
     let mut run = 1usize;
     for c in chars {
         if c == prev {
@@ -198,7 +200,7 @@ pub fn classify(text: &str) -> (&'static str, f64) {
 
 pub async fn nlp_fast(
     State(_state): State<AppState>,
-    Json(body):    Json<NlpBody>,
+    Json(body): Json<NlpBody>,
 ) -> (StatusCode, Json<serde_json::Value>) {
     let (intent, confidence) = classify(&body.text);
     fast_ok(intent, confidence)
@@ -238,11 +240,34 @@ mod tests {
         // Estos 22 estaban en la regex local de TypeScript pero NO en Rust, y
         // por el respaldo de Python la regex local nunca se llegaba a evaluar.
         for t in [
-            "imbecil", "verga", "chucha", "maricon", "perra", "zorra", "carajo",
-            "cabron", "capullo", "cagon", "pedorro", "pinga", "chupame", "chupala",
-            "hijodeputa", "hijueputa", "mamahuevo", "concha", "coño", "joto",
-            "baboso", "naco", "faggot", "bastard", "bitch", "motherfucker",
-            "asshole", "cunt",
+            "imbecil",
+            "verga",
+            "chucha",
+            "maricon",
+            "perra",
+            "zorra",
+            "carajo",
+            "cabron",
+            "capullo",
+            "cagon",
+            "pedorro",
+            "pinga",
+            "chupame",
+            "chupala",
+            "hijodeputa",
+            "hijueputa",
+            "mamahuevo",
+            "concha",
+            "coño",
+            "joto",
+            "baboso",
+            "naco",
+            "faggot",
+            "bastard",
+            "bitch",
+            "motherfucker",
+            "asshole",
+            "cunt",
         ] {
             assert_eq!(intent(t), "insult", "deberia detectar {t:?}");
         }
@@ -251,8 +276,19 @@ mod tests {
     #[test]
     fn sigue_detectando_los_insultos_que_ya_tenia() {
         for t in [
-            "mierda", "idiota", "estupido", "inutil", "asco", "pendejo", "hdp",
-            "ctm", "puta", "basura", "porqueria", "malparido", "gonorrea",
+            "mierda",
+            "idiota",
+            "estupido",
+            "inutil",
+            "asco",
+            "pendejo",
+            "hdp",
+            "ctm",
+            "puta",
+            "basura",
+            "porqueria",
+            "malparido",
+            "gonorrea",
         ] {
             assert_eq!(intent(t), "insult", "deberia detectar {t:?}");
         }
@@ -268,17 +304,32 @@ mod tests {
     fn los_insultos_necesitan_palabra_completa() {
         // \b en los dos extremos: "asco" no debe disparar dentro de "bascoso",
         // ni "sex" dentro de "sexto". Es lo que evita castigar texto inocente.
-        assert_eq!(intent("una frase larga sin nada raro bascoso aqui"), "unknown");
-        assert_eq!(intent("llegue en el sexto puesto de la tabla final"), "unknown");
+        assert_eq!(
+            intent("una frase larga sin nada raro bascoso aqui"),
+            "unknown"
+        );
+        assert_eq!(
+            intent("llegue en el sexto puesto de la tabla final"),
+            "unknown"
+        );
     }
 
     #[test]
     fn detecta_nsfw_incluidos_los_terminos_nuevos() {
-        for t in ["nsfw", "porn", "porno", "xxx", "hentai", "nude", "nudes",
-                  "onlyfans", "sexo", "putita", "putito", "erotico"] {
+        for t in [
+            "nsfw", "porn", "porno", "xxx", "hentai", "nude", "nudes", "onlyfans", "sexo",
+            "putita", "putito", "erotico",
+        ] {
             assert_eq!(intent(t), "nsfw", "deberia detectar {t:?}");
         }
-        for t in ["desnudo", "desnuda", "desnudos", "desnudas", "pornos", "pornografia"] {
+        for t in [
+            "desnudo",
+            "desnuda",
+            "desnudos",
+            "desnudas",
+            "pornos",
+            "pornografia",
+        ] {
             assert_eq!(intent(t), "nsfw", "deberia detectar {t:?}");
         }
         // Y el prefijo suelto NO: es justo lo que hacia que `desnud`
@@ -313,9 +364,9 @@ mod tests {
 
     #[test]
     fn detecta_flood_de_caracteres_repetidos() {
-        assert_eq!(intent("holaaaaaaaaa"), "spam");          // 9 'a' seguidas
-        assert_eq!(intent("aaaaaaaa"), "spam");              // exactamente 8
-        assert_ne!(intent("aaaaaaa"), "spam");               // 7, por debajo del umbral
+        assert_eq!(intent("holaaaaaaaaa"), "spam"); // 9 'a' seguidas
+        assert_eq!(intent("aaaaaaaa"), "spam"); // exactamente 8
+        assert_ne!(intent("aaaaaaa"), "spam"); // 7, por debajo del umbral
     }
 
     #[test]
@@ -341,7 +392,10 @@ mod tests {
     fn un_mensaje_normal_queda_en_unknown() {
         // Y eso esta bien: "unknown" no es un fallo, es "no hay certeza". Cada
         // consumidor del lado TypeScript cae entonces a su propia regex local.
-        assert_eq!(intent("mañana a las ocho jugamos el partido en la cancha"), "unknown");
+        assert_eq!(
+            intent("mañana a las ocho jugamos el partido en la cancha"),
+            "unknown"
+        );
     }
 
     #[test]

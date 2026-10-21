@@ -3,12 +3,11 @@
 /// Agrega en una sola respuesta: sesiones activas, stats de mensajes (24h),
 /// estado de subbots, watchdog y métricas internas de la API.
 /// Pensado para un futuro panel de control sin tener que golpear 5 endpoints.
-
 use axum::{extract::State, response::Json};
 use chrono::Utc;
 
-use crate::{db, session_id};
 use crate::routes::AppState;
+use crate::{db, session_id};
 
 pub async fn analytics(State(state): State<AppState>) -> Json<serde_json::Value> {
     // list_sessions hace std::fs::read_dir + stat por cada sesión — bloqueante,
@@ -26,8 +25,8 @@ pub async fn analytics(State(state): State<AppState>) -> Json<serde_json::Value>
         .ok()
         .and_then(|r| r.ok());
 
-    let bots    = state.subbots.stats();
-    let dog     = state.watchdog.status();
+    let bots = state.subbots.stats();
+    let dog = state.watchdog.status();
     let metrics = state.metrics.snapshot();
 
     Json(serde_json::json!({

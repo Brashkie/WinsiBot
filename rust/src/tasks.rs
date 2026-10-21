@@ -6,25 +6,40 @@
 ///  - cleanup_badmac : cada 30 min libera memoria de grupos Bad MAC inactivos
 ///    sin historial de clears (>1h sin actividad).
 ///  - watchdog_check : cada 60 s registra advertencia si Node.js no responde.
-
 use std::time::Duration;
 
 use crate::routes::AppState;
 use crate::{alerts, db, session_id, snapshot};
 
-const SNAP_INTERVAL_SECS:     u64 = 300;   // 5 min
-const CLEANUP_MSG_SECS:       u64 = 1_800; // 30 min
-const CLEANUP_BOT_SECS:       u64 = 600;   // 10 min
-const CLEANUP_BADMAC_SECS:    u64 = 1_800; // 30 min
-const BADMAC_INACTIVE_SECS:   u64 = 3_600; // 1h sin actividad → elegible para liberar
-const WATCHDOG_CHECK_SECS:    u64 = 60;    // 1 min
+const SNAP_INTERVAL_SECS: u64 = 300; // 5 min
+const CLEANUP_MSG_SECS: u64 = 1_800; // 30 min
+const CLEANUP_BOT_SECS: u64 = 600; // 10 min
+const CLEANUP_BADMAC_SECS: u64 = 1_800; // 30 min
+const BADMAC_INACTIVE_SECS: u64 = 3_600; // 1h sin actividad → elegible para liberar
+const WATCHDOG_CHECK_SECS: u64 = 60; // 1 min
 
 pub fn start(state: AppState) {
     tokio::spawn(auto_snapshot(state.clone()));
     tokio::spawn(cleanup_msgs(state.clone()));
     tokio::spawn(cleanup_bots(state.clone()));
     tokio::spawn(cleanup_badmac(state.clone()));
+    tokio::spawn(guardar_antiban(state.clone()));
     tokio::spawn(watchdog_check(state));
+}
+
+/// Guarda el estado del antiban cada minuto, si cambio. Un reinicio pierde
+/// como mucho un minuto de envios contados, y no puede saltarse el tope del
+/// calentamiento reiniciando, que es lo que importa.
+async fn guardar_antiban(state: AppState) {
+    let mut timer = tokio::time::interval(Duration::from_secs(60));
+    timer.tick().await;
+    loop {
+        timer.tick().await;
+        if state.antiban.hay_cambios() {
+            let a = state.antiban.clone();
+            let _ = tokio::task::spawn_blocking(move || a.guardar()).await;
+        }
+    }
 }
 
 async fn auto_snapshot(state: AppState) {
@@ -53,7 +68,9 @@ async fn auto_snapshot(state: AppState) {
                 }
             }
             (ok, total)
-        }).await.unwrap_or((0, 0));
+        })
+        .await
+        .unwrap_or((0, 0));
 
         if total > 0 {
             tracing::info!(ok, total, "auto-snapshot completado");
@@ -68,9 +85,11 @@ async fn cleanup_msgs(state: AppState) {
         timer.tick().await;
         let db = state.db.clone();
         match tokio::task::spawn_blocking(move || db::cleanup(&db, 7)).await {
-            Ok(Ok(n)) if n > 0 => tracing::info!(deleted = n, "outbox: registros antiguos eliminados (tarea)"),
-            Ok(Err(e))         => tracing::warn!(error = %e, "cleanup_msgs: error de DB"),
-            _                  => {}
+            Ok(Ok(n)) if n > 0 => {
+                tracing::info!(deleted = n, "outbox: registros antiguos eliminados (tarea)")
+            }
+            Ok(Err(e)) => tracing::warn!(error = %e, "cleanup_msgs: error de DB"),
+            _ => {}
         }
     }
 }
@@ -94,7 +113,10 @@ async fn cleanup_badmac(state: AppState) {
         timer.tick().await;
         let removed = state.bad_mac.cleanup(BADMAC_INACTIVE_SECS);
         if removed > 0 {
-            tracing::info!(removed, "bad_mac: grupos inactivos liberados de memoria (tarea)");
+            tracing::info!(
+                removed,
+                "bad_mac: grupos inactivos liberados de memoria (tarea)"
+            );
         }
     }
 }
@@ -106,13 +128,16 @@ async fn watchdog_check(state: AppState) {
 
     loop {
         timer.tick().await;
-        let st    = state.watchdog.status();
+        let st = state.watchdog.status();
         let alive = st["alive"].as_bool().unwrap_or(true);
 
         if !alive && was_alive {
             // Transición vivo → muerto
             let secs = st["lastPingSecs"].as_u64().unwrap_or(0);
-            tracing::warn!(secs_without_ping = secs, "WATCHDOG MUERTO — Node.js sin respuesta");
+            tracing::warn!(
+                secs_without_ping = secs,
+                "WATCHDOG MUERTO — Node.js sin respuesta"
+            );
 
             let db = state.db.clone();
             let detail = serde_json::json!({ "lastPingSecs": secs }).to_string();
@@ -120,9 +145,14 @@ async fn watchdog_check(state: AppState) {
                 let _ = db::audit_log(&db, "watchdog", "death", Some(&detail));
             });
 
-            alerts::fire(&state, &format!(
-                "🔴 WinsiBot: Node.js dejó de responder ({}s sin ping)", secs
-            )).await;
+            alerts::fire(
+                &state,
+                &format!(
+                    "🔴 WinsiBot: Node.js dejó de responder ({}s sin ping)",
+                    secs
+                ),
+            )
+            .await;
         } else if alive && !was_alive {
             // Transición muerto → vivo
             tracing::info!("watchdog: Node.js volvió a responder");

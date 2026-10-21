@@ -13,18 +13,18 @@ pub const MAX_SESSION_BYTES: usize = 10_000_000;
 /// puerto explícito: ahí no se puede adivinar en cuál escuchar.
 fn puerto_de_url(url: &str) -> Option<u16> {
     let sin_esquema = url.split("//").nth(1).unwrap_or(url);
-    let autoridad   = sin_esquema.split('/').next()?;
+    let autoridad = sin_esquema.split('/').next()?;
     autoridad.rsplit_once(':')?.1.parse().ok()
 }
 
 #[derive(Clone, Debug)]
 pub struct Config {
-    pub port:              u16,
-    pub api_key:           String,
-    pub sessions_dir:      String,
-    pub auth_dir:          String,
-    pub db_path:           String,
-    pub conv_db_path:      String,
+    pub port: u16,
+    pub api_key: String,
+    pub sessions_dir: String,
+    pub auth_dir: String,
+    pub db_path: String,
+    pub conv_db_path: String,
     pub alert_webhook_url: Option<String>,
 }
 
@@ -47,9 +47,16 @@ impl Config {
         // para no romper a quien ya tenía `API_KEY`/`PORT` puestos.
         let api_key = env::var("SESSION_API_KEY")
             .or_else(|_| env::var("API_KEY"))
-            .expect("SESSION_API_KEY es obligatorio en .env (el nombre viejo, API_KEY, sigue valiendo)");
+            .expect(
+                "SESSION_API_KEY es obligatorio en .env (el nombre viejo, API_KEY, sigue valiendo)",
+            );
 
-        let weak = ["cambia_esto_por_una_clave_segura", "changeme", "secret", "password"];
+        let weak = [
+            "cambia_esto_por_una_clave_segura",
+            "changeme",
+            "secret",
+            "password",
+        ];
         if weak.contains(&api_key.as_str()) || api_key.len() < 32 {
             panic!("SESSION_API_KEY insegura — debe tener al menos 32 caracteres. Genera una con: openssl rand -hex 32");
         }
@@ -61,30 +68,39 @@ impl Config {
         let port = env::var("SESSION_API_PORT")
             .or_else(|_| env::var("PORT"))
             .ok()
-            .or_else(|| env::var("SESSION_API_URL").ok().and_then(|u| puerto_de_url(&u).map(|p| p.to_string())))
+            .or_else(|| {
+                env::var("SESSION_API_URL")
+                    .ok()
+                    .and_then(|u| puerto_de_url(&u).map(|p| p.to_string()))
+            })
             .unwrap_or_else(|| "3001".into())
             .parse::<u16>()
             .expect("SESSION_API_PORT debe ser un número válido");
 
-        let sessions_dir = env::var("SESSIONS_DIR")
-            .unwrap_or_else(|_| "./sessions".into());
+        let sessions_dir = env::var("SESSIONS_DIR").unwrap_or_else(|_| "./sessions".into());
 
         // Directorio de auth de Baileys — donde están session-*.json, sender-key-*.json, etc.
-        let auth_dir = env::var("AUTH_DIR")
-            .unwrap_or_else(|_| "../auth".into());
+        let auth_dir = env::var("AUTH_DIR").unwrap_or_else(|_| "../auth".into());
 
         // Ruta del archivo SQLite para tracking de delivery de mensajes
-        let db_path = env::var("DB_PATH")
-            .unwrap_or_else(|_| "./data/messages.db".into());
+        let db_path = env::var("DB_PATH").unwrap_or_else(|_| "./data/messages.db".into());
 
         // Ruta del archivo SQLite para conversaciones de IA
-        let conv_db_path = env::var("CONV_DB_PATH")
-            .unwrap_or_else(|_| "./data/ai_conversations.db".into());
+        let conv_db_path =
+            env::var("CONV_DB_PATH").unwrap_or_else(|_| "./data/ai_conversations.db".into());
 
         // Webhook opcional (Discord-compatible) para alertas de watchdog muerto/recuperado
         let alert_webhook_url = env::var("ALERT_WEBHOOK_URL").ok().filter(|s| !s.is_empty());
 
-        Config { port, api_key, sessions_dir, auth_dir, db_path, conv_db_path, alert_webhook_url }
+        Config {
+            port,
+            api_key,
+            sessions_dir,
+            auth_dir,
+            db_path,
+            conv_db_path,
+            alert_webhook_url,
+        }
     }
 }
 
@@ -102,7 +118,10 @@ mod tests {
     fn ignora_la_ruta_que_venga_detras() {
         // Sin cortar en la primera '/', "18080/health" no parsea y el servidor
         // se iría al 3001 por defecto — justo el bug que esto arregla.
-        assert_eq!(puerto_de_url("http://127.0.0.1:18080/health/live"), Some(18080));
+        assert_eq!(
+            puerto_de_url("http://127.0.0.1:18080/health/live"),
+            Some(18080)
+        );
         assert_eq!(puerto_de_url("http://127.0.0.1:18080/"), Some(18080));
     }
 

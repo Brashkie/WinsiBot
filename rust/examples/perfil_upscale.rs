@@ -76,21 +76,48 @@ fn main() {
     let pct = |x: f64| x / t_total * 100.0;
 
     println!();
-    println!("  {}  {}x{} -> {}x{}  (escala {escala}, mediana de {VUELTAS})", ruta, w0, h0, w, h);
+    println!(
+        "  {}  {}x{} -> {}x{}  (escala {escala}, mediana de {VUELTAS})",
+        ruta, w0, h0, w, h
+    );
     println!();
     println!("    {:<34}{:>9}{:>9}", "etapa", "ms", "%");
     println!("    {}", "-".repeat(52));
-    println!("    {:<34}{:>9.1}{:>8.1}%", "decodificar", t_decode, pct(t_decode));
-    println!("    {:<34}{:>9.1}{:>8.1}%", "resize bicubico (CatmullRom)", t_resize, pct(t_resize));
-    println!("    {:<34}{:>9.1}{:>8.1}%", "kernels Anime4K (por resta)", t_kernels, pct(t_kernels));
-    println!("    {:<34}{:>9.1}{:>8.1}%", "codificar PNG", t_png, pct(t_png));
+    println!(
+        "    {:<34}{:>9.1}{:>8.1}%",
+        "decodificar",
+        t_decode,
+        pct(t_decode)
+    );
+    println!(
+        "    {:<34}{:>9.1}{:>8.1}%",
+        "resize bicubico (CatmullRom)",
+        t_resize,
+        pct(t_resize)
+    );
+    println!(
+        "    {:<34}{:>9.1}{:>8.1}%",
+        "kernels Anime4K (por resta)",
+        t_kernels,
+        pct(t_kernels)
+    );
+    println!(
+        "    {:<34}{:>9.1}{:>8.1}%",
+        "codificar PNG",
+        t_png,
+        pct(t_png)
+    );
     println!("    {}", "-".repeat(52));
     println!("    {:<34}{:>9.1}{:>8.1}%", "total", t_total, 100.0);
     println!();
     println!("    salida: {} KB", salida.0.len() / 1024);
     println!();
     println!("    Techo de Amdahl: si los kernels tardaran CERO, el comando");
-    println!("    entero bajaria de {:.1} ms a {:.1} ms, o sea {:.2}x.",
-             t_total, t_total - t_kernels, t_total / (t_total - t_kernels).max(0.001));
+    println!(
+        "    entero bajaria de {:.1} ms a {:.1} ms, o sea {:.2}x.",
+        t_total,
+        t_total - t_kernels,
+        t_total / (t_total - t_kernels).max(0.001)
+    );
     println!();
 }

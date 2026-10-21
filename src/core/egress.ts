@@ -23,6 +23,7 @@
 
 import type { WASocket } from '@whiskeysockets/baileys'
 import { rateLimiter } from '@lib/rateLimiter.js'
+import { sessionClient } from '@lib/session.js'
 import { logger } from './logger.js'
 
 /** Marca para no envolver dos veces el mismo socket (p. ej. en reconexiones). */
@@ -42,15 +43,56 @@ export function wrapEgress(sock: WASocket, label = 'main'): WASocket {
 
   // La firma se conserva exacta para que los 850 puntos de llamada no noten
   // nada: mismos argumentos, misma promesa de vuelta.
-  const limited: WASocket['sendMessage'] = ((jid: any, content: any, options: any) =>
-    rateLimiter.directForJid(String(jid ?? ''), () => original(jid, content, options))
-  ) as WASocket['sendMessage']
+  const limited: WASocket['sendMessage'] = (async (jid: any, content: any, options: any) => {
+    const to = String(jid ?? '')
+    await antibanTurn(label, to)
+    return rateLimiter.directForJid(to, () => original(jid, content, options))
+  }) as WASocket['sendMessage']
 
   sock.sendMessage = limited
   s[WRAPPED] = true
 
   logger.debug({ label }, 'embudo de salida activo — sendMessage pasa por el rate limiter')
   return sock
+}
+
+/** Error de un envío que el antiban no dejó salir. Lleva cuándo reintentar. */
+export class AntibanRejected extends Error {
+  constructor(
+    readonly reason: string,
+    readonly retryInMs: number,
+  ) {
+    super(`antiban: envío rechazado (${reason}), reintentar en ${Math.round(retryInMs / 1000)}s`)
+    this.name = 'AntibanRejected'
+  }
+}
+
+/**
+ * Espera el turno que da el antiban de Rust (rust/src/antiban.rs): topes por
+ * minuto, hora y día, calentamiento de números nuevos, pausa con jitter y
+ * enfriamiento tras un 429 o un 463.
+ *
+ * Va ANTES del limitador local y no lo reemplaza: el local sigue poniendo el
+ * techo por segundo y la cubeta por chat, que son los que actúan en una
+ * ráfaga; el de Rust ve las ventanas largas y lo que WhatsApp contestó.
+ *
+ * Si Rust no contesta, no espera nada: queda el limitador local, que es como
+ * funcionaba el bot hasta ahora. Que la API se caiga no puede dejar al bot
+ * sin enviar.
+ */
+async function antibanTurn(account: string, jid: string): Promise<void> {
+  const turn = await sessionClient.antibanPermit(account, jid)
+  if (!turn) return
+  if (!turn.send) {
+    logger.warn({ account, jid, reason: turn.reason, retryInMs: turn.retryInMs }, 'antiban: envío rechazado')
+    throw new AntibanRejected(turn.reason, turn.retryInMs)
+  }
+  if (turn.waitMs > 0) {
+    if (turn.waitMs > 5_000) {
+      logger.info({ account, jid, reason: turn.reason, waitMs: turn.waitMs }, 'antiban: envío demorado')
+    }
+    await new Promise<void>((r) => setTimeout(r, turn.waitMs))
+  }
 }
 
 /**

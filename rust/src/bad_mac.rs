@@ -48,18 +48,18 @@ use std::{
 use crate::{alerts, conversations::ConvDb, db, routes::AppState};
 
 // ── Configuración ─────────────────────────────────────────────────────────────
-const BAD_MAC_THRESHOLD:    u32 = 5;   // eventos por grupo antes de shouldClear
-const BAD_MAC_WINDOW_SECS:  u64 = 30;  // ventana deslizante (segundos)
-const COOLDOWN_BASE_SECS:   u64 = 10;  // cooldown tras el primer clear (por grupo)
-const COOLDOWN_MAX_SECS:    u64 = 600; // tope — 10 min
+const BAD_MAC_THRESHOLD: u32 = 5; // eventos por grupo antes de shouldClear
+const BAD_MAC_WINDOW_SECS: u64 = 30; // ventana deslizante (segundos)
+const COOLDOWN_BASE_SECS: u64 = 10; // cooldown tras el primer clear (por grupo)
+const COOLDOWN_MAX_SECS: u64 = 600; // tope — 10 min
 
 // Umbral global — ver comentario del módulo. Ventana más ancha y umbral más
 // alto que el de un grupo individual porque agrega eventos de TODOS los
 // grupos; el cooldown parte más alto porque un clear global es más
 // disruptivo (reconecta el socket completo, no solo afecta a un grupo).
-const GLOBAL_BAD_MAC_THRESHOLD:   u32 = 8;
+const GLOBAL_BAD_MAC_THRESHOLD: u32 = 8;
 const GLOBAL_BAD_MAC_WINDOW_SECS: u64 = 60;
-const GLOBAL_COOLDOWN_BASE_SECS:  u64 = 30;
+const GLOBAL_COOLDOWN_BASE_SECS: u64 = 30;
 
 // Sentinel usado para persistir/hidratar el estado global en la misma tabla
 // bad_mac_events (que está indexada por jid) sin necesitar una tabla aparte.
@@ -69,7 +69,9 @@ const GLOBAL_MARKER: &str = "*global*";
 /// base → base×3 → base×9 → ... capado en COOLDOWN_MAX_SECS.
 fn cooldown_for(lifetime_clears: u32, base_secs: u64) -> u64 {
     let exp = lifetime_clears.min(6); // 3^6 * base ya excede el tope, no hace falta más
-    base_secs.saturating_mul(3u64.saturating_pow(exp)).min(COOLDOWN_MAX_SECS)
+    base_secs
+        .saturating_mul(3u64.saturating_pow(exp))
+        .min(COOLDOWN_MAX_SECS)
 }
 
 // ── Estado por grupo ──────────────────────────────────────────────────────────
@@ -85,16 +87,16 @@ fn cooldown_for(lifetime_clears: u32, base_secs: u64) -> u64 {
 // timestamp se empuja y se saca como máximo una vez.
 #[derive(Debug)]
 struct GroupState {
-    events:          VecDeque<Instant>,
-    cleared_at:      Option<Instant>,
+    events: VecDeque<Instant>,
+    cleared_at: Option<Instant>,
     lifetime_clears: u32,
 }
 
 impl GroupState {
     fn new() -> Self {
         Self {
-            events:          VecDeque::new(),
-            cleared_at:      None,
+            events: VecDeque::new(),
+            cleared_at: None,
             lifetime_clears: 0,
         }
     }
@@ -127,22 +129,25 @@ type GlobalState = GroupState;
 // compartido por diseño (agrega TODOS los grupos), no hay nada que shardear.
 #[derive(Clone)]
 pub struct BadMacTracker {
-    inner:  Arc<DashMap<String, GroupState>>,
+    inner: Arc<DashMap<String, GroupState>>,
     global: Arc<Mutex<GlobalState>>,
 }
 
 impl BadMacTracker {
     pub fn new() -> Self {
         Self {
-            inner:  Arc::new(DashMap::new()),
+            inner: Arc::new(DashMap::new()),
             global: Arc::new(Mutex::new(GlobalState::new())),
         }
     }
 
     /// Registra un Bad MAC para `jid`. Devuelve (count, should_clear, lifetime_clears).
     pub fn report(&self, jid: &str) -> (u32, bool, u32) {
-        let mut entry = self.inner.entry(jid.to_string()).or_insert_with(GroupState::new);
-        let now       = Instant::now();
+        let mut entry = self
+            .inner
+            .entry(jid.to_string())
+            .or_insert_with(GroupState::new);
+        let now = Instant::now();
 
         // Si el último clear fue hace menos que el cooldown (escalonado), suprimir
         if let Some(cleared) = entry.cleared_at {
@@ -179,7 +184,7 @@ impl BadMacTracker {
     /// del módulo. Devuelve (count, should_clear, lifetime_clears).
     pub fn report_global(&self) -> (u32, bool, u32) {
         let mut global = self.global.lock().unwrap();
-        let now        = Instant::now();
+        let now = Instant::now();
 
         if let Some(cleared) = global.cleared_at {
             let cooldown = cooldown_for(global.lifetime_clears, GLOBAL_COOLDOWN_BASE_SECS);
@@ -219,7 +224,10 @@ impl BadMacTracker {
             global.lifetime_clears = lifetime_clears;
             return;
         }
-        let mut entry = self.inner.entry(jid.to_string()).or_insert_with(GroupState::new);
+        let mut entry = self
+            .inner
+            .entry(jid.to_string())
+            .or_insert_with(GroupState::new);
         entry.lifetime_clears = lifetime_clears;
     }
 
@@ -233,7 +241,7 @@ impl BadMacTracker {
     /// cero, tratando a un grupo crónicamente problemático como si fuera la
     /// primera vez que pasa.
     pub fn cleanup(&self, inactive_secs: u64) -> usize {
-        let now    = Instant::now();
+        let now = Instant::now();
         let before = self.inner.len();
         self.inner.retain(|_, v| {
             v.lifetime_clears > 0
@@ -280,19 +288,20 @@ pub fn init_schema(conv_db: &ConvDb) {
 }
 
 fn record_clear(
-    conv_db:         &ConvDb,
-    jid:             &str,
-    count:           u32,
+    conv_db: &ConvDb,
+    jid: &str,
+    count: u32,
     lifetime_clears: u32,
-    cooldown_secs:   u64,
+    cooldown_secs: u64,
 ) -> Result<(), String> {
     let conn = conv_db.lock().map_err(|e| e.to_string())?;
-    let ts   = Utc::now().timestamp_millis();
+    let ts = Utc::now().timestamp_millis();
     conn.execute(
         "INSERT INTO bad_mac_events (jid, ts, count, lifetime_clears, cooldown_secs)
          VALUES (?, ?, ?, ?, ?)",
         params![jid, ts, count, lifetime_clears, cooldown_secs as i64],
-    ).map_err(|e| e.to_string())?;
+    )
+    .map_err(|e| e.to_string())?;
     Ok(())
 }
 
@@ -300,28 +309,36 @@ fn record_clear(
 /// para hidratar el tracker en memoria (ver main.rs).
 pub fn recent_clear_counts(conv_db: &ConvDb, hours: i64) -> Vec<(String, u32)> {
     let conn = match conv_db.lock() {
-        Ok(c)  => c,
-        Err(e) => { tracing::warn!("SQLite lock error (bad_mac hydrate): {}", e); return Vec::new() }
+        Ok(c) => c,
+        Err(e) => {
+            tracing::warn!("SQLite lock error (bad_mac hydrate): {}", e);
+            return Vec::new();
+        }
     };
 
     let since = Utc::now().timestamp_millis() - hours * 3_600_000;
 
-    let mut stmt = match conn.prepare(
-        "SELECT jid, COUNT(*) FROM bad_mac_events WHERE ts > ? GROUP BY jid",
-    ) {
-        Ok(s)  => s,
-        Err(e) => { tracing::warn!("SQLite prepare error (bad_mac hydrate): {}", e); return Vec::new() }
-    };
+    let mut stmt =
+        match conn.prepare("SELECT jid, COUNT(*) FROM bad_mac_events WHERE ts > ? GROUP BY jid") {
+            Ok(s) => s,
+            Err(e) => {
+                tracing::warn!("SQLite prepare error (bad_mac hydrate): {}", e);
+                return Vec::new();
+            }
+        };
 
     let rows = stmt.query_map(params![since], |row| {
-        let jid:   String = row.get(0)?;
-        let count: i64     = row.get(1)?;
+        let jid: String = row.get(0)?;
+        let count: i64 = row.get(1)?;
         Ok((jid, count as u32))
     });
 
     match rows {
         Ok(iter) => iter.filter_map(|r| r.ok()).collect(),
-        Err(e)   => { tracing::warn!("SQLite query error (bad_mac hydrate): {}", e); Vec::new() }
+        Err(e) => {
+            tracing::warn!("SQLite query error (bad_mac hydrate): {}", e);
+            Vec::new()
+        }
     }
 }
 
@@ -334,7 +351,7 @@ pub struct JidBody {
 // ── POST /badmac/report ───────────────────────────────────────────────────────
 pub async fn report_bad_mac(
     State(state): State<AppState>,
-    Json(body):   Json<JidBody>,
+    Json(body): Json<JidBody>,
 ) -> (StatusCode, Json<serde_json::Value>) {
     if body.jid.is_empty() {
         return (
@@ -362,7 +379,7 @@ pub async fn report_bad_mac(
         // Persistencia — fire-and-forget, no bloquea la respuesta ni afecta
         // la decisión en caliente (que ya se tomó arriba, en memoria).
         let conv_db = state.conv_db.clone();
-        let jid_c   = body.jid.clone();
+        let jid_c = body.jid.clone();
         tokio::task::spawn_blocking(move || {
             if let Err(e) = record_clear(&conv_db, &jid_c, count, lifetime_clears, cooldown) {
                 tracing::warn!(error = %e, "bad_mac: fallo al persistir evento");
@@ -373,7 +390,8 @@ pub async fn report_bad_mac(
         let detail = serde_json::json!({
             "jid": body.jid, "count": count,
             "lifetimeClears": lifetime_clears, "cooldownSecs": cooldown,
-        }).to_string();
+        })
+        .to_string();
         tokio::task::spawn_blocking(move || {
             let _ = db::audit_log(&audit_db, "bad_mac", "clear", Some(&detail));
         });
@@ -391,7 +409,13 @@ pub async fn report_bad_mac(
 
         let conv_db = state.conv_db.clone();
         tokio::task::spawn_blocking(move || {
-            if let Err(e) = record_clear(&conv_db, GLOBAL_MARKER, global_count, global_lifetime_clears, cooldown) {
+            if let Err(e) = record_clear(
+                &conv_db,
+                GLOBAL_MARKER,
+                global_count,
+                global_lifetime_clears,
+                cooldown,
+            ) {
                 tracing::warn!(error = %e, "bad_mac: fallo al persistir evento global");
             }
         });
@@ -400,7 +424,8 @@ pub async fn report_bad_mac(
         let detail = serde_json::json!({
             "scope": "global", "count": global_count,
             "lifetimeClears": global_lifetime_clears, "cooldownSecs": cooldown,
-        }).to_string();
+        })
+        .to_string();
         tokio::task::spawn_blocking(move || {
             let _ = db::audit_log(&audit_db, "bad_mac", "clear_global", Some(&detail));
         });
@@ -427,4 +452,3 @@ pub async fn report_bad_mac(
         })),
     )
 }
-

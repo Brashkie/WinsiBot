@@ -58,9 +58,17 @@ async function apiFetch<T>(
       signal:  ctrl.signal,
       headers: { ..._headers, ...init?.headers },
     })
-    const json = (await res.json()) as T & { ok: boolean; error?: string }
+    // Cualquier respuesta HTTP es Rust vivo, tenga o no un JSON adentro. Antes
+    // esto se marcaba DESPUES de parsear, y una ruta que el binario no conoce
+    // —un 404 sin cuerpo, el caso de un bot actualizado con un binario de
+    // Rust viejo— contaba como caída: con /antiban/permit en cada envío, eso
+    // abría el circuito y cortaba TODAS las funciones de Rust.
     responded = true
     rustCircuit.recordSuccess()
+    const json = (await res.json().catch(() => ({ ok: false, error: `HTTP ${res.status}` }))) as T & {
+      ok: boolean
+      error?: string
+    }
 
     if (!json.ok || (!opts?.allowNon2xx && !res.ok)) throw new Error(json.error ?? `HTTP ${res.status}`)
     return json
@@ -116,6 +124,11 @@ export interface AckItem {
   id:     string
   status: number  // 0=enviado, 1=entregado, 2=leido, 3=reproducido, -1=fallido
 }
+
+/** Respuesta de /antiban/permit. `reason` dice qué limitó el turno. */
+export type AntibanPermit =
+  | { send: true;  waitMs: number;    reason: string }
+  | { send: false; retryInMs: number; reason: string }
 
 export interface PendingMsg {
   id:          string
@@ -254,6 +267,50 @@ export class SessionClient {
     } catch {
       return { count: 0, shouldClear: false, scope: 'group' }
     }
+  }
+
+  /**
+   * Pide turno al antiban de Rust para un envío de la cuenta `account` (el
+   * principal es 'main', cada sub-bot su número). Ver rust/src/antiban.rs.
+   *
+   * `null` si Rust no contesta: quien llama sigue con el limitador local, que
+   * es lo que había antes. El timeout es corto a propósito, porque esto está
+   * en el camino de CADA envío y Rust contesta en menos de un milisegundo.
+   */
+  async antibanPermit(account: string, jid: string): Promise<AntibanPermit | null> {
+    // Un binario de Rust anterior a la 8.14.0 no tiene la ruta: se deja de
+    // preguntar un rato en vez de pagar un viaje inútil en cada envío.
+    if (Date.now() < this._antibanOffUntil) return null
+    try {
+      return await apiFetch<AntibanPermit>(
+        '/antiban/permit',
+        { method: 'POST', body: JSON.stringify({ session: account, jid }) },
+        { timeoutMs: 500 },
+      )
+    } catch (err: any) {
+      if (String(err?.message ?? '').includes('HTTP 404')) {
+        this._antibanOffUntil = Date.now() + 10 * 60_000
+        logger.warn('antiban: la Session API no tiene /antiban (binario anterior a la 8.14.0) — sigue el limitador local')
+      }
+      return null
+    }
+  }
+  private _antibanOffUntil = 0
+
+  /** WhatsApp devolvió un error en el ack de un envío (429, 463...). */
+  async antibanReport(account: string, jid: string, code: number): Promise<void> {
+    await apiFetch('/antiban/report', {
+      method: 'POST',
+      body:   JSON.stringify({ session: account, jid, code }),
+    }).catch(() => {})
+  }
+
+  /** El número `account` se acaba de vincular: empieza su calentamiento. */
+  async antibanPaired(account: string): Promise<void> {
+    await apiFetch('/antiban/paired', {
+      method: 'POST',
+      body:   JSON.stringify({ session: account }),
+    }).catch(() => {})
   }
 
   /**

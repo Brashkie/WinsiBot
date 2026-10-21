@@ -10,7 +10,6 @@
 ///   2  = leído / visto               (2 palomitas azules)
 ///   3  = reproducido (audio/video)
 ///  -1  = fallido / rechazado
-
 use std::sync::{Arc, Mutex};
 
 use chrono::Utc;
@@ -95,60 +94,62 @@ pub fn open(path: &str) -> Result<Db, rusqlite::Error> {
 
 #[derive(Debug, serde::Deserialize)]
 pub struct TrackItem {
-    pub id:       String,
-    pub jid:      String,
+    pub id: String,
+    pub jid: String,
     #[serde(default = "default_type")]
     pub msg_type: String,
-    pub ts:       i64,
+    pub ts: i64,
 }
 
 #[derive(Debug, Deserialize)]
 pub struct EnqueueItem {
-    pub id:       String,
-    pub jid:      String,
+    pub id: String,
+    pub jid: String,
     #[serde(default = "default_type")]
     pub msg_type: String,
     /// Lo necesario para reconstruir el envío (JSON serializado por el llamador).
-    pub payload:  String,
+    pub payload: String,
 }
 
 #[derive(Debug, serde::Serialize)]
 pub struct QueuedMsg {
-    pub id:          String,
-    pub jid:         String,
-    pub msg_type:    String,
-    pub payload:     String,
+    pub id: String,
+    pub jid: String,
+    pub msg_type: String,
+    pub payload: String,
     pub retry_count: i64,
-    pub queued_at:   i64,
+    pub queued_at: i64,
 }
 
-fn default_type() -> String { "text".into() }
+fn default_type() -> String {
+    "text".into()
+}
 
 #[derive(Debug, serde::Deserialize)]
 pub struct AckItem {
-    pub id:     String,
+    pub id: String,
     pub status: i32,
 }
 
 #[derive(Debug, serde::Serialize)]
 pub struct PendingMsg {
-    pub id:          String,
-    pub jid:         String,
-    pub msg_type:    String,
-    pub sent_at:     i64,
+    pub id: String,
+    pub jid: String,
+    pub msg_type: String,
+    pub sent_at: i64,
     pub elapsed_sec: i64,
-    pub is_group:    bool,
+    pub is_group: bool,
 }
 
 #[derive(Debug, serde::Serialize)]
 pub struct DeliveryStats {
-    pub total:        i64,
-    pub sent:         i64,   // status=0: en tránsito
-    pub delivered:    i64,   // status=1
-    pub read:         i64,   // status>=2
-    pub failed:       i64,   // status=-1
-    pub delivery_pct: f64,   // (delivered+read)/total*100
-    pub read_pct:     f64,   // read/total*100
+    pub total: i64,
+    pub sent: i64,         // status=0: en tránsito
+    pub delivered: i64,    // status=1
+    pub read: i64,         // status>=2
+    pub failed: i64,       // status=-1
+    pub delivery_pct: f64, // (delivered+read)/total*100
+    pub read_pct: f64,     // read/total*100
 }
 
 // ─── Operaciones ─────────────────────────────────────────────────────────────
@@ -199,7 +200,15 @@ pub fn enqueue(db: &Db, items: &[EnqueueItem]) -> Result<usize, rusqlite::Error>
         n += tx.execute(
             "INSERT OR IGNORE INTO outbox (id, jid, msg_type, status, sent_at, is_group, payload)
              VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)",
-            params![m.id, m.jid, m.msg_type, STATUS_QUEUED, now, is_group, m.payload],
+            params![
+                m.id,
+                m.jid,
+                m.msg_type,
+                STATUS_QUEUED,
+                now,
+                is_group,
+                m.payload
+            ],
         )?;
     }
     tx.commit()?;
@@ -222,12 +231,12 @@ pub fn unsent(db: &Db, limit: i64, max_retries: i64) -> Result<Vec<QueuedMsg>, r
     )?;
     let rows = stmt.query_map(params![STATUS_QUEUED, max_retries, limit], |r| {
         Ok(QueuedMsg {
-            id:          r.get(0)?,
-            jid:         r.get(1)?,
-            msg_type:    r.get(2)?,
-            payload:     r.get(3)?,
+            id: r.get(0)?,
+            jid: r.get(1)?,
+            msg_type: r.get(2)?,
+            payload: r.get(3)?,
             retry_count: r.get(4)?,
-            queued_at:   r.get(5)?,
+            queued_at: r.get(5)?,
         })
     })?;
     rows.collect()
@@ -237,7 +246,7 @@ pub fn unsent(db: &Db, limit: i64, max_retries: i64) -> Result<Vec<QueuedMsg>, r
 /// hace falta: guardarlo indefinidamente haría crecer la base sin motivo.
 pub fn mark_sent(db: &Db, ids: &[String]) -> Result<usize, rusqlite::Error> {
     let mut conn = db.lock().unwrap();
-    let tx  = conn.transaction()?;
+    let tx = conn.transaction()?;
     let now = Utc::now().timestamp();
     let mut n = 0usize;
     for id in ids {
@@ -273,8 +282,8 @@ pub fn bump_retry(db: &Db, ids: &[String]) -> Result<usize, rusqlite::Error> {
 /// Misma transacción única que track() — ver comentario ahí.
 pub fn ack(db: &Db, items: &[AckItem]) -> Result<usize, rusqlite::Error> {
     let mut conn = db.lock().unwrap();
-    let tx    = conn.transaction()?;
-    let now   = Utc::now().timestamp();
+    let tx = conn.transaction()?;
+    let now = Utc::now().timestamp();
     let mut n = 0usize;
     for a in items {
         if !matches!(a.status, -1..=3) {
@@ -293,9 +302,13 @@ pub fn ack(db: &Db, items: &[AckItem]) -> Result<usize, rusqlite::Error> {
 }
 
 /// Mensajes que llevan más de `min_age_sec` sin confirmar entrega (status=0).
-pub fn get_pending(db: &Db, min_age_sec: i64, limit: i64) -> Result<Vec<PendingMsg>, rusqlite::Error> {
-    let conn   = db.lock().unwrap();
-    let now    = Utc::now().timestamp();
+pub fn get_pending(
+    db: &Db,
+    min_age_sec: i64,
+    limit: i64,
+) -> Result<Vec<PendingMsg>, rusqlite::Error> {
+    let conn = db.lock().unwrap();
+    let now = Utc::now().timestamp();
     let cutoff = now - min_age_sec;
 
     let mut stmt = conn.prepare(
@@ -306,23 +319,24 @@ pub fn get_pending(db: &Db, min_age_sec: i64, limit: i64) -> Result<Vec<PendingM
          LIMIT ?3",
     )?;
 
-    let rows: Vec<_> = stmt.query_map(params![now, cutoff, limit], |row| {
-        Ok(PendingMsg {
-            id:          row.get(0)?,
-            jid:         row.get(1)?,
-            msg_type:    row.get(2)?,
-            sent_at:     row.get(3)?,
-            elapsed_sec: row.get(4)?,
-            is_group:    row.get::<_, i32>(5)? != 0,
-        })
-    })?
-    .collect();
+    let rows: Vec<_> = stmt
+        .query_map(params![now, cutoff, limit], |row| {
+            Ok(PendingMsg {
+                id: row.get(0)?,
+                jid: row.get(1)?,
+                msg_type: row.get(2)?,
+                sent_at: row.get(3)?,
+                elapsed_sec: row.get(4)?,
+                is_group: row.get::<_, i32>(5)? != 0,
+            })
+        })?
+        .collect();
     rows.into_iter().collect()
 }
 
 /// Estadísticas de delivery para las últimas `hours` horas.
 pub fn get_stats(db: &Db, hours: i64) -> Result<DeliveryStats, rusqlite::Error> {
-    let conn  = db.lock().unwrap();
+    let conn = db.lock().unwrap();
     let since = Utc::now().timestamp() - hours * 3600;
 
     conn.query_row(
@@ -335,23 +349,39 @@ pub fn get_stats(db: &Db, hours: i64) -> Result<DeliveryStats, rusqlite::Error> 
          FROM outbox WHERE sent_at > ?1",
         params![since],
         |row| {
-            let total:     i64 = row.get(0)?;
-            let sent:      i64 = row.get(1)?;
+            let total: i64 = row.get(0)?;
+            let sent: i64 = row.get(1)?;
             let delivered: i64 = row.get(2)?;
-            let read:      i64 = row.get(3)?;
-            let failed:    i64 = row.get(4)?;
+            let read: i64 = row.get(3)?;
+            let failed: i64 = row.get(4)?;
 
-            let del_pct  = if total > 0 { (delivered + read) as f64 / total as f64 * 100.0 } else { 100.0 };
-            let read_pct = if total > 0 { read as f64 / total as f64 * 100.0 } else { 0.0 };
+            let del_pct = if total > 0 {
+                (delivered + read) as f64 / total as f64 * 100.0
+            } else {
+                100.0
+            };
+            let read_pct = if total > 0 {
+                read as f64 / total as f64 * 100.0
+            } else {
+                0.0
+            };
 
-            Ok(DeliveryStats { total, sent, delivered, read, failed, delivery_pct: del_pct, read_pct })
+            Ok(DeliveryStats {
+                total,
+                sent,
+                delivered,
+                read,
+                failed,
+                delivery_pct: del_pct,
+                read_pct,
+            })
         },
     )
 }
 
 /// Eliminar registros más viejos que `days` días.
 pub fn cleanup(db: &Db, days: i64) -> Result<usize, rusqlite::Error> {
-    let conn   = db.lock().unwrap();
+    let conn = db.lock().unwrap();
     let cutoff = Utc::now().timestamp() - days * 86_400;
     let n = conn.execute("DELETE FROM outbox WHERE sent_at < ?1", params![cutoff])?;
     tracing::info!(n, days, "outbox: registros eliminados");
@@ -363,10 +393,10 @@ pub fn cleanup(db: &Db, days: i64) -> Result<usize, rusqlite::Error> {
 // detail: JSON serializado opcional con contexto adicional.
 
 pub fn audit_log(
-    db:       &Db,
+    db: &Db,
     category: &str,
-    event:    &str,
-    detail:   Option<&str>,
+    event: &str,
+    detail: Option<&str>,
 ) -> Result<(), rusqlite::Error> {
     let conn = db.lock().unwrap();
     conn.execute(
@@ -375,7 +405,6 @@ pub fn audit_log(
     )?;
     Ok(())
 }
-
 
 // ─── Contadores del bot ──────────────────────────────────────────────────────
 // El conteo caliente ocurre en memoria dentro de Node (un ++ por mensaje, sin
@@ -386,29 +415,31 @@ pub fn audit_log(
 pub struct CounterBump {
     /// 'messages' | 'commands'
     pub metric: String,
-    pub count:  i64,
+    pub count: i64,
 }
 
 #[derive(Debug, Deserialize)]
 pub struct CommandBump {
     pub command: String,
-    pub count:   i64,
+    pub count: i64,
 }
 
 /// Suma el lote acumulado. Se usa UPSERT para que sumar sea atómico: si dos
 /// vuelcos coinciden, ninguno pisa al otro.
 pub fn bump_counters(
-    db:       &Db,
-    day:      &str,
-    metrics:  &[CounterBump],
+    db: &Db,
+    day: &str,
+    metrics: &[CounterBump],
     commands: &[CommandBump],
 ) -> Result<(), rusqlite::Error> {
     let mut conn = db.lock().unwrap();
-    let tx  = conn.transaction()?;
+    let tx = conn.transaction()?;
     let now = Utc::now().timestamp();
 
     for m in metrics {
-        if m.count <= 0 { continue }
+        if m.count <= 0 {
+            continue;
+        }
         tx.execute(
             "INSERT INTO bot_counters (day, metric, count) VALUES (?1, ?2, ?3)
              ON CONFLICT(day, metric) DO UPDATE SET count = count + ?3",
@@ -416,7 +447,9 @@ pub fn bump_counters(
         )?;
     }
     for c in commands {
-        if c.count <= 0 { continue }
+        if c.count <= 0 {
+            continue;
+        }
         tx.execute(
             "INSERT INTO command_counters (command, count, last_at) VALUES (?1, ?2, ?3)
              ON CONFLICT(command) DO UPDATE SET count = count + ?2, last_at = ?3",
@@ -429,10 +462,10 @@ pub fn bump_counters(
 
 #[derive(Debug, serde::Serialize)]
 pub struct BotCounters {
-    pub total_messages:  i64,
-    pub total_commands:  i64,
-    pub messages_today:  i64,
-    pub commands_today:  i64,
+    pub total_messages: i64,
+    pub total_commands: i64,
+    pub messages_today: i64,
+    pub commands_today: i64,
 }
 
 pub fn get_counters(db: &Db, today: &str) -> Result<BotCounters, rusqlite::Error> {
@@ -441,14 +474,17 @@ pub fn get_counters(db: &Db, today: &str) -> Result<BotCounters, rusqlite::Error
     let sum = |metric: &str| -> Result<i64, rusqlite::Error> {
         conn.query_row(
             "SELECT COALESCE(SUM(count), 0) FROM bot_counters WHERE metric = ?1",
-            params![metric], |r| r.get(0),
+            params![metric],
+            |r| r.get(0),
         )
     };
     let today_of = |metric: &str| -> Result<i64, rusqlite::Error> {
         conn.query_row(
             "SELECT COALESCE(count, 0) FROM bot_counters WHERE metric = ?1 AND day = ?2",
-            params![metric, today], |r| r.get(0),
-        ).or(Ok(0))
+            params![metric, today],
+            |r| r.get(0),
+        )
+        .or(Ok(0))
     };
 
     Ok(BotCounters {
@@ -462,16 +498,18 @@ pub fn get_counters(db: &Db, today: &str) -> Result<BotCounters, rusqlite::Error
 #[derive(Debug, serde::Serialize)]
 pub struct TopCommand {
     pub command: String,
-    pub count:   i64,
+    pub count: i64,
 }
 
 pub fn top_commands(db: &Db, limit: i64) -> Result<Vec<TopCommand>, rusqlite::Error> {
     let conn = db.lock().unwrap();
-    let mut stmt = conn.prepare(
-        "SELECT command, count FROM command_counters ORDER BY count DESC LIMIT ?1",
-    )?;
+    let mut stmt =
+        conn.prepare("SELECT command, count FROM command_counters ORDER BY count DESC LIMIT ?1")?;
     let rows = stmt.query_map(params![limit], |r| {
-        Ok(TopCommand { command: r.get(0)?, count: r.get(1)? })
+        Ok(TopCommand {
+            command: r.get(0)?,
+            count: r.get(1)?,
+        })
     })?;
     rows.collect()
 }

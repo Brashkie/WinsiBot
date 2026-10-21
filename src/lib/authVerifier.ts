@@ -350,8 +350,20 @@ async function verifyAuthDir(authDir: string): Promise<VerifyReport> {
           report.deleted.push(file)
           logger.warn(`[authVerifier] ${file} — inválido (confirmado tras reintento) → eliminado`)
         } else {
-          logger.error(`[authVerifier] ${file} — inválido → necesita re-autenticación (QR)`)
-          report.credsStatus = 'corrupted'
+          // Ilegible es el caso MÁS común de creds roto —una escritura
+          // cortada lo deja vacío o a medias—, y era justo el que no
+          // intentaba la copia de Rust: solo la buscaba cuando el archivo se
+          // leía bien y fallaban las claves. Si Rust no tiene copia,
+          // authStateCbor todavía prueba el .bak local antes de pedir QR.
+          const restored = await _restoreCredsFromRust(path)
+          if (restored) {
+            report.credsStatus = 'ok'
+            report.valid++
+            logger.warn(`[authVerifier] ${file} ilegible — restaurado desde ${restored}, sin QR`)
+          } else {
+            logger.error(`[authVerifier] ${file} — ilegible y sin copia en Rust (se prueba el .bak local)`)
+            report.credsStatus = 'corrupted'
+          }
         }
         continue
       }

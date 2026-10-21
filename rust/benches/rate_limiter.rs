@@ -19,7 +19,9 @@ use winsibot_session_api::rate_limiter::RateLimiter;
 /// Caso real: muchos senders distintos, cada uno tocando su propia entrada.
 /// Es el patrón para el que se eligió DashMap (shards independientes).
 fn senders(n: usize) -> Vec<String> {
-    (0..n).map(|i| format!("52199{:08}@s.whatsapp.net", i)).collect()
+    (0..n)
+        .map(|i| format!("52199{:08}@s.whatsapp.net", i))
+        .collect()
 }
 
 fn bench_check(c: &mut Criterion) {
@@ -33,8 +35,8 @@ fn bench_check(c: &mut Criterion) {
 
     // Muchos senders: el caso real de un grupo activo.
     for n in [100usize, 10_000] {
-        let rl   = RateLimiter::new();
-        let ids  = senders(n);
+        let rl = RateLimiter::new();
+        let ids = senders(n);
         let mut i = 0usize;
         group.bench_with_input(BenchmarkId::new("n_senders", n), &n, |b, _| {
             b.iter(|| {
@@ -53,7 +55,7 @@ fn bench_spam_check(c: &mut Criterion) {
     // Texto distinto cada vez: el camino normal, sin flood.
     // Los textos se generan ANTES del iter() — con un format! dentro se estaría
     // midiendo también la asignación del String, que no es parte de la función.
-    let rl    = RateLimiter::new();
+    let rl = RateLimiter::new();
     let textos: Vec<String> = (0..1_000).map(|i| format!("mensaje numero {i}")).collect();
     let mut i = 0usize;
     group.bench_function("texto_distinto", |b| {
@@ -62,7 +64,7 @@ fn bench_spam_check(c: &mut Criterion) {
             black_box(rl.spam_check(
                 black_box("5219999@s.whatsapp.net"),
                 black_box(&textos[i]),
-                1_000_000,   // límites altos: se mide el coste, no el bloqueo
+                1_000_000, // límites altos: se mide el coste, no el bloqueo
                 5_000,
                 1_000_000,
                 30_000,
@@ -87,7 +89,7 @@ fn bench_spam_check(c: &mut Criterion) {
 
     // Texto largo: el hash recorre hasta 512 bytes, así que conviene ver
     // cuánto cambia respecto a un mensaje corto.
-    let rl3  = RateLimiter::new();
+    let rl3 = RateLimiter::new();
     let long = "x".repeat(4_000);
     group.bench_function("texto_largo_4kb", |b| {
         b.iter(|| {

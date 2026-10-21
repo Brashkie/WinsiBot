@@ -134,6 +134,22 @@ export class WinsiSocket extends EventEmitter3<WinsiEvents> {
   private lastGroupPreloadAt = 0
   private readonly GROUP_PRELOAD_COOLDOWN_MS = 30 * 60_000
 
+  // ─── Backlog de mensajes pendientes ───────────────────────────────────────
+  // Al reconectar después de horas apagado, WhatsApp entrega de golpe todo lo
+  // que quedó pendiente, y Baileys avisa cuando terminó con
+  // `receivedPendingNotifications`. En ese backlog los Bad MAC son lo
+  // esperable —mensajes viejos cifrados con claves de grupo que rotaron
+  // mientras el bot no estaba— y Baileys ya pide el reenvío de cada uno por su
+  // cuenta. Contarlos para el umbral GLOBAL borraba TODAS las sesiones Signal
+  // (miles de archivos) en plena recuperación, y con las sesiones borradas
+  // llegan más Bad MAC, que disparan otro borrado: el bot quedaba girando y
+  // sordo justo después de una noche apagado. Mientras dura el backlog se
+  // cuentan y se loguean, pero no limpian nada.
+  private backlogDone = false
+  private backlogTimer: ReturnType<typeof setTimeout> | null = null
+  private readonly BACKLOG_MAX_MS = 3 * 60_000
+  private backlogBadMacs = 0
+
   // Per-group Bad MAC tracking (fallback local cuando Rust no responde)
   private badMacByGroup = new Map<
     string,
@@ -158,6 +174,10 @@ export class WinsiSocket extends EventEmitter3<WinsiEvents> {
     if (this.presencePulseTimer) {
       clearInterval(this.presencePulseTimer)
       this.presencePulseTimer = null
+    }
+    if (this.backlogTimer) {
+      clearTimeout(this.backlogTimer)
+      this.backlogTimer = null
     }
     if (this.sock) {
       try {
@@ -251,6 +271,9 @@ export class WinsiSocket extends EventEmitter3<WinsiEvents> {
 
     const { state, saveCreds } = await useMultiFileAuthStateCBOR(config.sessionPath)
     const { version } = await fetchLatestBaileysVersion()
+
+    this.backlogDone = false
+    this.backlogBadMacs = 0
 
     this.sock = makeWASocket({
       version,
@@ -393,6 +416,17 @@ export class WinsiSocket extends EventEmitter3<WinsiEvents> {
         const msgId = upd.key?.id
         const baileysSt = (upd.update as any)?.status as number | undefined
         if (!msgId || baileysSt === undefined) continue
+        // Un ack con error (429, 463...) NO rechaza la promesa de
+        // sendMessage: llega después y solo por acá, con el código en
+        // messageStubParameters. Es lo único que dice que WhatsApp está
+        // frenando a la cuenta, así que va al antiban. Ver core/egress.ts.
+        if (baileysSt === 0 && upd.key?.fromMe) {
+          const code = Number((upd.update as any)?.messageStubParameters?.[0])
+          if (Number.isFinite(code) && code > 0) {
+            logger.warn({ code, jid: upd.key.remoteJid, id: msgId }, 'WhatsApp rechazó un envío (error en el ack)')
+            sessionClient.antibanReport('main', upd.key.remoteJid ?? '', code)
+          }
+        }
         const rustSt = STATUS_MAP[baileysSt]
         if (rustSt !== undefined) bufferAck(msgId, rustSt)
       }
@@ -410,15 +444,41 @@ export class WinsiSocket extends EventEmitter3<WinsiEvents> {
       }
     })
 
-    this.sock.ev.on('connection.update', async ({ connection, lastDisconnect, qr }) => {
+    this.sock.ev.on('connection.update', async ({ connection, lastDisconnect, qr, isNewLogin, receivedPendingNotifications }) => {
       if (qr) {
         const qrcode = await import('qrcode-terminal')
         qrcode.default.generate(qr, { small: true })
-        logger.info('Escanea el QR para conectar')
+        // Por qué pide QR, que es lo primero que hay que saber cuando pasa
+        // sin que nadie haya cerrado la sesión. Con `registered` en true las
+        // credenciales existían y algo las invalidó; sin `me`, se crearon
+        // nuevas porque no había (o no se pudieron leer: ver authStateCbor.ts).
+        logger.warn(
+          { registered: !!state.creds.registered, hadAccount: !!state.creds.me?.id },
+          state.creds.me?.id
+            ? 'Escanea el QR para conectar — había una cuenta vinculada y WhatsApp pide vincular de nuevo'
+            : 'Escanea el QR para conectar — no hay credenciales (primera vez, o no se pudieron leer)',
+        )
+      }
+
+      // Recién vinculado: es un número que empieza, y el antiban le aplica el
+      // calentamiento. Las sesiones que ya existían no pasan nunca por acá.
+      if (isNewLogin) {
+        logger.info('Número vinculado — empieza el calentamiento del antiban')
+        sessionClient.antibanPaired('main')
+      }
+
+      if (receivedPendingNotifications && !this.backlogDone) {
+        this._endBacklog('WhatsApp terminó de entregar lo pendiente')
       }
 
       if (connection === 'close') {
         const code = (lastDisconnect?.error as Boom)?.output?.statusCode
+        // El motivo completo, no solo el código: un 401 de "device_removed" y
+        // uno de credenciales rotas piden cosas distintas.
+        logger.info(
+          { code, reason: lastDisconnect?.error?.message, data: (lastDisconnect?.error as Boom)?.data },
+          'connection.update: close',
+        )
 
         if (code && SILENT_CODES.has(code)) return
 
@@ -441,6 +501,15 @@ export class WinsiSocket extends EventEmitter3<WinsiEvents> {
         this.retryCount = 0
         this.isReconnecting = false
         this.lastMessageEventAt = Date.now()
+        // Techo por si `receivedPendingNotifications` no llega nunca: pasado
+        // este tiempo los Bad MAC vuelven a contar como siempre.
+        if (!this.backlogDone && !this.backlogTimer) {
+          this.backlogTimer = setTimeout(
+            () => this._endBacklog(`sin aviso de fin en ${this.BACKLOG_MAX_MS / 60_000} min`),
+            this.BACKLOG_MAX_MS,
+          )
+          this.backlogTimer.unref()
+        }
         this._startZombieWatchdog()
         this._startPresencePulse()
         logger.info(`${config.botName} conectado`)
@@ -675,9 +744,26 @@ export class WinsiSocket extends EventEmitter3<WinsiEvents> {
   // umbral GLOBAL (agregado de todos los grupos — ver rust/src/bad_mac.rs).
   // Si Rust no está disponible, cae al fallback local en TS de abajo, que
   // hace lo mismo (por grupo + global) pero en memoria del proceso.
+  private _endBacklog(why: string): void {
+    this.backlogDone = true
+    if (this.backlogTimer) {
+      clearTimeout(this.backlogTimer)
+      this.backlogTimer = null
+    }
+    logger.info(
+      { badMacsDuringBacklog: this.backlogBadMacs },
+      `Backlog terminado (${why}) — los Bad MAC vuelven a contar para la limpieza`,
+    )
+  }
+
   private _handleBadMac(groupJid: string): void {
     if (!groupJid) return
     if (this.clearingGroups.has(groupJid)) return
+    // Ver comentario de backlogDone: en el backlog no se limpia nada.
+    if (!this.backlogDone) {
+      this.backlogBadMacs++
+      return
+    }
 
     // Intentar con Rust primero (async, no bloquea el hilo)
     import('@lib/session.js')

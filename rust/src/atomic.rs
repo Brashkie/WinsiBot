@@ -1,7 +1,7 @@
+use crate::config::MAX_SESSION_BYTES;
 use std::fs::{self, OpenOptions};
 use std::io::Write;
 use std::path::Path;
-use crate::config::MAX_SESSION_BYTES;
 
 pub fn atomic_write(path: &Path, data: &[u8]) -> std::io::Result<()> {
     if let Some(parent) = path.parent() {
@@ -10,7 +10,9 @@ pub fn atomic_write(path: &Path, data: &[u8]) -> std::io::Result<()> {
     let tmp = path.with_extension("tmp");
     {
         let mut f = OpenOptions::new()
-            .write(true).create(true).truncate(true)
+            .write(true)
+            .create(true)
+            .truncate(true)
             .open(&tmp)?;
         f.write_all(data)?;
         f.sync_all()?; // fsync — datos en disco antes del rename

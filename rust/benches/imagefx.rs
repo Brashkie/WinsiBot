@@ -38,18 +38,30 @@ fn bench_legofy(c: &mut Criterion) {
     // El tamaño real de una foto de WhatsApp después del recorte de entrada.
     let foto = png_degradado(1280, 851);
     g.bench_function("1280x851 ficha=20", |b| {
-        b.iter_batched(|| foto.clone(), |p| legofy(&p, 20).unwrap(), BatchSize::SmallInput)
+        b.iter_batched(
+            || foto.clone(),
+            |p| legofy(&p, 20).unwrap(),
+            BatchSize::SmallInput,
+        )
     });
 
     // Ficha chica = más celdas = más studs que dibujar. Es el peor caso real.
     g.bench_function("1280x851 ficha=8", |b| {
-        b.iter_batched(|| foto.clone(), |p| legofy(&p, 8).unwrap(), BatchSize::SmallInput)
+        b.iter_batched(
+            || foto.clone(),
+            |p| legofy(&p, 8).unwrap(),
+            BatchSize::SmallInput,
+        )
     });
 
     // Por encima de MAX_INPUT_SIDE se paga además el redimensionado Lanczos3.
     let grande = png_degradado(2400, 1600);
     g.bench_function("2400x1600 (se reduce a 1024)", |b| {
-        b.iter_batched(|| grande.clone(), |p| legofy(&p, 20).unwrap(), BatchSize::SmallInput)
+        b.iter_batched(
+            || grande.clone(),
+            |p| legofy(&p, 20).unwrap(),
+            BatchSize::SmallInput,
+        )
     });
 
     g.finish();

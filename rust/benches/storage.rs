@@ -21,21 +21,23 @@ const QUEUED: i64 = -2;
 /// Lo que tendrías en RAM si el outbox fuera un AOF cargado al arrancar.
 #[derive(Clone)]
 struct Row {
-    id:          String,
-    status:      i64,
+    id: String,
+    status: i64,
     retry_count: i64,
-    sent_at:     i64,
+    sent_at: i64,
 }
 
 fn seed(n: usize) -> Vec<Row> {
-    (0..n).map(|i| Row {
-        id:          format!("MSG_{i:08}"),
-        // 1 de cada 50 quedó sin enviar: proporción realista — la inmensa
-        // mayoría de los mensajes SÍ salen.
-        status:      if i % 50 == 0 { QUEUED } else { 0 },
-        retry_count: (i % 5) as i64,
-        sent_at:     1_700_000_000 + i as i64,
-    }).collect()
+    (0..n)
+        .map(|i| Row {
+            id: format!("MSG_{i:08}"),
+            // 1 de cada 50 quedó sin enviar: proporción realista — la inmensa
+            // mayoría de los mensajes SÍ salen.
+            status: if i % 50 == 0 { QUEUED } else { 0 },
+            retry_count: (i % 5) as i64,
+            sent_at: 1_700_000_000 + i as i64,
+        })
+        .collect()
 }
 
 fn sqlite_with(rows: &[Row]) -> Connection {
@@ -45,13 +47,15 @@ fn sqlite_with(rows: &[Row]) -> Connection {
              id TEXT PRIMARY KEY, status INTEGER, retry_count INTEGER, sent_at INTEGER
          );
          CREATE INDEX idx ON outbox (status, sent_at);",
-    ).unwrap();
+    )
+    .unwrap();
     let tx = conn.unchecked_transaction().unwrap();
     for r in rows {
         tx.execute(
             "INSERT INTO outbox (id, status, retry_count, sent_at) VALUES (?1, ?2, ?3, ?4)",
             params![r.id, r.status, r.retry_count, r.sent_at],
-        ).unwrap();
+        )
+        .unwrap();
     }
     tx.commit().unwrap();
     conn
@@ -59,18 +63,23 @@ fn sqlite_with(rows: &[Row]) -> Connection {
 
 /// La consulta real de replayOutbox, resuelta sobre SQLite con índice.
 fn query_sqlite(conn: &Connection) -> usize {
-    let mut stmt = conn.prepare_cached(
-        "SELECT id FROM outbox
+    let mut stmt = conn
+        .prepare_cached(
+            "SELECT id FROM outbox
           WHERE status = ?1 AND retry_count < ?2
           ORDER BY sent_at ASC LIMIT 100",
-    ).unwrap();
-    let rows = stmt.query_map(params![QUEUED, 3i64], |r| r.get::<_, String>(0)).unwrap();
+        )
+        .unwrap();
+    let rows = stmt
+        .query_map(params![QUEUED, 3i64], |r| r.get::<_, String>(0))
+        .unwrap();
     rows.count()
 }
 
 /// La misma consulta, resuelta a mano sobre lo que un AOF deja en memoria.
 fn query_memory(rows: &[Row]) -> usize {
-    let mut hits: Vec<&Row> = rows.iter()
+    let mut hits: Vec<&Row> = rows
+        .iter()
         .filter(|r| r.status == QUEUED && r.retry_count < 3)
         .collect();
     hits.sort_by_key(|r| r.sent_at);
@@ -108,10 +117,10 @@ fn bench_update(c: &mut Criterion) {
         b.iter(|| {
             i = (i + 1) % 50_000;
             let id = format!("MSG_{i:08}");
-            black_box(conn.execute(
-                "UPDATE outbox SET status = 0 WHERE id = ?1",
-                params![id],
-            ).unwrap())
+            black_box(
+                conn.execute("UPDATE outbox SET status = 0 WHERE id = ?1", params![id])
+                    .unwrap(),
+            )
         })
     });
 

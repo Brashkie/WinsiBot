@@ -10,7 +10,7 @@
 [![Rust](https://img.shields.io/badge/Rust-1.75%2B-CE422B?style=for-the-badge&logo=rust&logoColor=white)](https://rust-lang.org)
 
 [![License](https://img.shields.io/badge/License-GPL--3.0-blue?style=flat-square)](LICENSE)
-[![Version](https://img.shields.io/badge/Version-8.12.0-6C63FF?style=flat-square)](CHANGELOG.md)
+[![Version](https://img.shields.io/badge/Version-8.14.0-6C63FF?style=flat-square)](CHANGELOG.md)
 [![Platform](https://img.shields.io/badge/Platform-Windows%20%7C%20Linux%20%7C%20macOS%20%7C%20Android-lightgrey?style=flat-square)](https://github.com/Brashkie/WinsiBot)
 [![PRs Welcome](https://img.shields.io/badge/PRs-welcome-brightgreen?style=flat-square)](https://github.com/Brashkie/WinsiBot/pulls)
 
@@ -18,7 +18,7 @@
 
 > Bot de WhatsApp de alto rendimiento con arquitectura multi-lenguaje de tres capas.<br/>
 > Sin límite artificial de grupos, pensado para miles de mensajes por hora y múltiples instancias.<br/>
-> v8.12.0 — **El bot deja de llamar a Python, y lo que queda de él se compila.** Los tres comandos de imagen están ahora en Rust: `#toanime` pasa de **3,7 GB de torch a un ONNX de 8 MB**, `#removebg` usa el mismo modelo con el crate `ort`, y `#upscale` es **Anime4K portado** — sin modelo que bajar y sin archivos temporales. Con ellos se fue la API de Python entera, que había quedado con un solo endpoint para decir que estaba viva. Instalar es **`npm install` y nada más**: el binario de la Session API se baja precompilado para la plataforma —5 targets, Termux incluido— con su SHA-256 verificado. **Nueve bugs reales** encontrados de camino, entre ellos que `npm run build` **nunca limpiaba `dist/`** y el bot servía **35 comandos con código sin fuente** —dos de ellos borrados siete versiones atrás— y que la **Session API no podía arrancar** siguiendo `.env.example`, con el panic invisible porque se lanza con `stdio: 'ignore'`.<br/>
+> v8.14.0 — **La sesión deja de perderse, y el ritmo de salida se decide en un solo sitio.** El bot pedía QR otra vez sin que nadie cerrara la sesión porque `creds` se escribía **en el lugar**: si el proceso moría a mitad de la escritura —cerrar la consola, apagar, Termux matado por Android— el archivo quedaba vacío, y al arrancar se creaban **credenciales nuevas sin avisar**. Ahora toda escritura es atómica, `creds` deja una copia de la versión anterior y un archivo roto se recupera en vez de reemplazarse. Y un **antiban nuevo en Rust**, sin dependencias nuevas: topes por minuto, hora y día, **calentamiento** para números recién vinculados, pausa con forma humana en vez de 300 ms fijos, y por fin se escuchan los errores **463 y 429** de WhatsApp, que llegan en el *ack* y no en la promesa de envío y por eso nunca se habían visto.<br/>
 
 <br/>
 
@@ -66,24 +66,20 @@
 | ⚙️ **Session + IA** | Rust / Axum | Creds atómicas y snapshots, tracker Bad MAC, rate limiter, clasificación de intenciones, personalidad y humor, reputación, perfiles de estilo, Ollama y APIs cloud, imágenes |
 | 🐍 **Opcional** | Python | Solo el watchdog de consola y el CLI de mantenimiento, que se abren a mano. **El bot funciona sin esto y nadie lo arranca** |
 
-### Novedades en v8.12.0
+### Novedades en v8.14.0
 
-**El bot ya no llama a Python para nada, y lo que queda de él se compila.** La 8.11.0 lo bajó a 16 archivos pero dejó tres comandos que necesitaban un intérprete y una API entera para servirlos. Los tres están en Rust, la API no existe, y Python queda en 9 archivos que son solo herramienta de consola.
+**La sesión deja de perderse, y el ritmo de salida se decide en un solo sitio.**
 
 | Área | Cambio |
 |------|--------|
-| **Los tres comandos de imagen a Rust, y dos no necesitaban torch** | `#toanime` pasa de **3,7 GB de torch a un modelo ONNX de 8 MB**; `#removebg` usa el mismo `isnetis.onnx` de antes con el crate `ort`; y `#upscale` es **Anime4K portado** — no una red sino un algoritmo de cinco pasos, así que no baja ningún modelo y tarda **175 ms** contra los segundos que costaba escribiendo archivos temporales. Al migrarlos salió que **dos de los tres ni siquiera usaban torch**: `dghs-imgutils` ya corría con ONNX Runtime |
-| **`npm install` y listo: binarios de Rust precompilados** | Compilar la Session API eran **~4 minutos** y pedía Rust instalado. Ahora `postinstall` baja el binario de la plataforma desde las releases y verifica su SHA-256, con un workflow que compila **5 targets** —Termux incluido, que tiene el suyo propio porque Android usa Bionic y no glibc—. Si no hay binario, lo dice en una línea y compilar sigue funcionando |
-| **Python ya no está en el camino de ningún mensaje** | Lo último en irse fueron los tres comandos de imagen, y con ellos la API de Python entera: había quedado con **un solo endpoint**, `GET /health`, que solo consultaban `monitor.py` y `manage.py` para mostrar "FastAPI: online". Un servicio cuyo único trabajo era responder que estaba vivo |
-| **Las herramientas de consola también se compilan** | `npm run tools:build` pasa `monitor` y `manage` por Nuitka y saca ejecutables que corren **sin Python instalado**, `rich` incluido — que es Python puro, 77 módulos y cero binarios nativos, así que no hay un `.so` suyo que bajar: hay que compilarlo. Medido: 16,0 y 16,1 MB, ~3 min cada uno con la caché de C caliente |
-| **Fix grave: el bot ejecutaba código borrado** | `tsc` compila pero no limpia, y `loadCommands()` registra **todo** `.js` que encuentre en `dist/`. Había 38 archivos huérfanos de versiones anteriores y **35 claves de comando las servía código sin fuente** — entre ellas `#registro` y `#unreg`, eliminados a propósito **siete versiones atrás** y que seguían funcionando, y `#image`, que servía la versión vieja y **tapaba la migración a Rust**. `npm run build` ahora limpia `dist/` primero |
-| **Fix grave: la Session API no arrancaba siguiendo `.env.example`** | El servidor de Rust leía `API_KEY` y `PORT`; el cliente y el `.env.example` usan `SESSION_API_KEY` y `SESSION_API_URL`, y los dos primeros **no estaban documentados en ninguna parte**. Quien clonara el repo se quedaba sin API y sin saber por qué: `index.ts` la lanza con `stdio: 'ignore'`, así que el panic no salía en ningún log y solo se veía un reintento cada 3 segundos. Ahora la clave tiene **un solo nombre** y el puerto sale de `SESSION_API_URL`, así que cliente y servidor no pueden quedar en puertos distintos |
-| **Fix: los binarios compilados no encontraban el proyecto** | Bajo Nuitka `--onefile`, `__file__` apunta al directorio temporal donde el binario se extrae en cada arranque, así que los 8 sitios que calculaban la raíz del proyecto daban una ruta que se borra al salir: `manage.exe` informaba *"auth dir missing"* teniendo **8.422 archivos** en `auth/`. Ni `sys.frozen` ni `sys.executable` sirven ahí; el que sí es `__compiled__.containing_dir` |
-| **Fix: `npm run manage` crasheaba en cualquier Windows en español** | Con una codepage heredada —cp1252, el caso por defecto— `rich` cae a su renderizador legacy y lanza `UnicodeEncodeError` con el primero de sus símbolos: **moría antes de mostrar nada**. No era cosa de compilar, la versión interpretada hacía lo mismo. Las dos herramientas fuerzan UTF-8 antes de crear la `Console` |
-| **Fix: el Health Monitor podía no arrancar nunca, en silencio** | Compartía un `try` con el AI Brain y arrancaba **después** del import de este, así que cualquier fallo del segundo se llevaba al primero sin que nadie se enterara. Se vio en vivo al correr el binario compilado, donde `numpy` está excluido a propósito |
-| **Fix: el postinstall rompía `npm install` con un 404** | `process.exit(0)` con una petición HTTP en vuelo hacía que libuv abortara con **código 127**, que npm lee como postinstall fallido y corta la instalación entera — justo en el camino más común mientras no haya release publicada |
-| **Fix: `chaos` y `ruff` mentían** | `chaos` reportaba *"API key inválida o faltante"* en 8 comprobaciones cuando la clave estaba bien y lo que faltaba era que el script leyera el `.env`. Y `ruff` y `py:deps` excluían el nombre exacto `venv`, así que cualquier `venv.roto` o `venv_tools` al lado los metía a recorrer site-packages: **26.165 avisos** de código que no es de este proyecto. Ahora un entorno se reconoce por su `pyvenv.cfg` |
-| **140 tests unitarios en Rust y dos benchmarks** | 19 más en esta versión. Lo que depende de un modelo ONNX no se prueba con assert, pero sí todo lo que lo rodea: el encuadre con relleno, la conversión a tensor NCHW y **Anime4K entero**, incluido un test que comprueba que marca el borde más que una bicúbica sola — que es justo lo que lo distingue de un redimensionado |
+| **Fix grave: el bot pedía QR sin que nadie cerrara la sesión** | `creds` se escribía en el lugar —truncar y después escribir—, así que si el proceso moría entre las dos cosas quedaba vacío o a medias. Y al leerlo, un `creds` ilegible caía en un `catch` que devolvía `null`, y el `\|\| initAuthCreds()` de al lado creaba **credenciales nuevas sin decir nada**: una identidad que WhatsApp no conoce, o sea QR. Ahora toda escritura de `auth/` va a un `.tmp` y se renombra encima, `creds` además pasa por `fsync` y deja `creds.cbor.bak`, y un `creds` ilegible se recupera del `.bak` o de la copia de Rust; si no hay ninguna, el roto se aparta con otro nombre en vez de pisarlo. Probado simulando la escritura cortada: **misma identidad, sin QR** |
+| **Antiban en Rust, sin dependencias nuevas** | `rust/src/antiban.rs`, por el que pasa cada envío antes del limitador de siempre. **Topes por minuto, hora y día** en ventanas deslizantes; **calentamiento** de 7 días para números recién vinculados —sub-bots, o el principal tras escanear—, que **no** se aplica a sesiones que ya existían; **pausa normal** con media y desvío en vez de 300 ms fijos, que es la firma de un programa; y estado guardado, para que reiniciar no sirva para saltarse el tope. Todo configurable con `ANTIBAN_*` en `.env`, y `GET /antiban/status` dice cuánto envía el bot de verdad para ajustarlo con datos |
+| **Los errores 463 y 429 por fin se escuchan** | WhatsApp los manda en el *ack*, que llega después por `messages.update`; la promesa de `sendMessage` se resuelve bien igual. El limitador buscaba el código en la excepción, así que **nunca vio ninguno**. Ahora un 463 deja en espera a ese contacto con escalada (1 h, 2 h, 4 h...), muchos 463 en una hora frenan la cuenta entera, y un 429 la enfría de 30 s a 15 min |
+| **Fix: el retroceso por 429 no estaba en el camino de los envíos** | Existía solo en la cola de prioridades, por la que no pasa casi nada; `directForJid`, por el que pasa todo desde el embudo de salida, no retrocedía nunca |
+| **Fix: tras una noche apagado, el bot borraba sus propias sesiones** | Al volver, WhatsApp entrega de golpe lo pendiente, y ahí los Bad MAC son lo esperable: mensajes viejos con claves que rotaron. Contaban para el umbral global, que borraba **todas** las sesiones Signal en plena recuperación, y sin sesiones llegaban más Bad MAC. Mientras dura ese backlog se cuentan pero no limpian nada |
+| **Por qué pide QR, en el log** | Al mostrar el QR se dice si había una cuenta vinculada (WhatsApp la invalidó) o no había credenciales; y cada desconexión registra el motivo completo, no solo el código |
+| **153 tests en Rust** | 13 nuevos del antiban: las ventanas, el calentamiento día por día, la escalada del 429 y del 463, y que el estado sobrevive a un reinicio |
+
 ---
 
 ## Stack técnico
@@ -131,6 +127,8 @@
 - 10 snapshots rotativos con recovery automático
 - Verificación de claves Curve25519 al arrancar
 - Restauración automática de creds sin QR
+- Escritura atómica de `auth/` en Node también, con `creds.cbor.bak` y sin crear credenciales nuevas a escondidas
+- Antiban en Rust: topes por minuto/hora/día, calentamiento de números nuevos, 463 y 429
 - Reconexión infinita con backoff exponencial (máx 64s)
 - Monitor Python con watchdog y freeze detection
 
@@ -201,7 +199,7 @@
 
 ```
 ╔═══════════════════════════════════════════════════════════════════════╗
-║                           WinsiBot v8.12.0                            ║
+║                           WinsiBot v8.14.0                            ║
 ╠═════════════════════╦══════════════════════════╦══════════════════════╣
 ║      TypeScript     ║           Rust           ║        Python        ║
 ║    Node.js :4001    ║                          ║    nadie lo lanza    ║
@@ -666,6 +664,10 @@ curl -H "x-api-key: TU_CLAVE" http://127.0.0.1:3001/messages/pending
 | `GET` | `/sessions/backup` | Mejor creds válido para restauración sin QR |
 | `POST` | `/badmac/report` | Reportar Bad MAC de un grupo (cooldown escalonado) |
 | | **Flujo** | |
+| `POST` | `/antiban/permit` | Turno para un envío de una cuenta: espera, o rechazo con motivo |
+| `POST` | `/antiban/report` | Error en el *ack* de WhatsApp (429, 463) — enfría la cuenta o el contacto |
+| `POST` | `/antiban/paired` | Número recién vinculado — empieza su calentamiento |
+| `GET` | `/antiban/status` | Envíos del último minuto, hora y 24 h, y qué limita ahora |
 | `POST` | `/rate/check` | Si un sender está dentro del rate limit |
 | `POST` | `/spam/check` | Frecuencia + texto repetido + bloqueo progresivo |
 | `POST` | `/watchdog/ping` | Heartbeat desde Node.js |
@@ -812,7 +814,7 @@ WinsiBot/
 │   └── terminal/
 │       ├── monitor.py                # Watchdog interactivo con auto-restart
 │       └── manage.py                 # CLI de mantenimiento
-├── rust/                             # Rust — Session API v5.7.0
+├── rust/                             # Rust — Session API v5.8.0
 │   ├── assets/                       # Datos incrustados en el binario con include_str!
 │   │   ├── personality.json          # 489 frases en 12 modos + 121 de humor
 │   │   └── commands.json             # Catálogo de 28 comandos para el contexto de la IA

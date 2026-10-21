@@ -40,15 +40,15 @@ const UA: &str = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) \
                   AppleWebKit/537.36 (KHTML, like Gecko) \
                   Chrome/120.0.0.0 Safari/537.36";
 
-const TIMEOUT:      Duration = Duration::from_secs(10);
-const MAX_RESULTS:  usize    = 15;
+const TIMEOUT: Duration = Duration::from_secs(10);
+const MAX_RESULTS: usize = 15;
 /// Techo de bytes a descargar de una imagen. Sin esto, una URL que apunte a un
 /// archivo enorme se traería entero a memoria de este proceso.
 const MAX_IMG_BYTES: usize = 12 * 1024 * 1024;
 /// Cuántas URLs probar antes de rendirse: las primeras suelen estar caídas o
 /// bloquear por referer. Es el mismo número que usaba search.py.
 const MAX_INTENTOS: usize = 5;
-const JPEG_QUALITY: u8    = 85;
+const JPEG_QUALITY: u8 = 85;
 
 /// Las URLs vienen en el HTML como `murl&quot;:&quot;https://...&quot;`.
 /// Es la misma expresión que usaba search.py, verificada contra Bing al portar
@@ -60,7 +60,7 @@ fn murl_re() -> &'static Regex {
 
 #[derive(Deserialize)]
 pub struct SearchRequest {
-    pub query:       String,
+    pub query: String,
     #[serde(default)]
     pub max_results: Option<usize>,
 }
@@ -70,7 +70,7 @@ pub struct SearchRequest {
 /// Separada de la petición HTTP para poder probarla con HTML fijo, sin red.
 pub fn extraer_urls(html: &str, max: usize) -> Vec<String> {
     let mut vistas = std::collections::HashSet::new();
-    let mut urls   = Vec::new();
+    let mut urls = Vec::new();
     for c in murl_re().captures_iter(html) {
         let u = c[1].to_string();
         // Deduplicar conservando el orden: Bing repite la misma imagen en
@@ -102,7 +102,10 @@ pub async fn buscar_urls(query: &str, max: usize) -> Result<Vec<String>, String>
     let res = cliente()?
         .get(&url)
         .header("Referer", "https://www.bing.com/")
-        .header("Accept", "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8")
+        .header(
+            "Accept",
+            "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+        )
         .send()
         .await
         .map_err(|e| format!("Bing no respondió: {e}"))?;
@@ -138,8 +141,8 @@ fn urlencoding(s: &str) -> String {
 }
 
 pub struct ImagenDescargada {
-    pub jpeg:   Vec<u8>,
-    pub width:  u32,
+    pub jpeg: Vec<u8>,
+    pub width: u32,
     pub height: u32,
 }
 
@@ -192,7 +195,11 @@ pub async fn descargar(url: &str) -> Result<ImagenDescargada, String> {
         enc.encode_image(&DynamicImage::ImageRgb8(rgb))
             .map_err(|e| format!("no se pudo codificar el JPEG: {e}"))?;
 
-        Ok(ImagenDescargada { jpeg, width, height })
+        Ok(ImagenDescargada {
+            jpeg,
+            width,
+            height,
+        })
     })
     .await
     .map_err(|e| e.to_string())?
@@ -221,7 +228,7 @@ fn mezclar<T>(v: &mut [T]) {
 /// POST /search/images — solo las URLs.
 pub async fn search_images(
     State(_state): State<AppState>,
-    Json(req):     Json<SearchRequest>,
+    Json(req): Json<SearchRequest>,
 ) -> Json<serde_json::Value> {
     let max = req.max_results.unwrap_or(10).clamp(1, MAX_RESULTS);
     match buscar_urls(&req.query, max).await {
@@ -235,10 +242,10 @@ pub async fn search_images(
 /// POST /search/image — busca y devuelve una imagen ya descargada.
 pub async fn search_image(
     State(_state): State<AppState>,
-    Json(req):     Json<SearchRequest>,
+    Json(req): Json<SearchRequest>,
 ) -> Json<serde_json::Value> {
     let mut urls = match buscar_urls(&req.query, MAX_RESULTS).await {
-        Ok(u)  => u,
+        Ok(u) => u,
         Err(e) => return Json(serde_json::json!({ "success": false, "error": e })),
     };
     let total = urls.len();

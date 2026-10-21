@@ -21,7 +21,6 @@
 /// register() serializa sus checks de cuota + inserción con `register_lock`
 /// para evitar que dos registros concurrentes del mismo owner pasen ambos
 /// la validación de cuota antes de que cualquiera inserte (TOCTOU).
-
 use axum::{
     extract::{Path, Query, State},
     http::StatusCode,
@@ -50,20 +49,20 @@ fn unix_now() -> u64 {
 #[derive(Clone, Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct SubBotConfig {
-    pub max_subbots:                usize,
-    pub max_per_user:               usize,
-    pub cooldown_seconds:           u64,
-    pub max_reconnect_attempts:     i32,
+    pub max_subbots: usize,
+    pub max_per_user: usize,
+    pub cooldown_seconds: u64,
+    pub max_reconnect_attempts: i32,
     pub connection_timeout_seconds: u64,
 }
 
 impl Default for SubBotConfig {
     fn default() -> Self {
         Self {
-            max_subbots:                100,
-            max_per_user:               5,
-            cooldown_seconds:           60,
-            max_reconnect_attempts:     20,
+            max_subbots: 100,
+            max_per_user: 5,
+            cooldown_seconds: 60,
+            max_reconnect_attempts: 20,
             connection_timeout_seconds: 120,
         }
     }
@@ -85,13 +84,13 @@ pub enum SubBotState {
 impl SubBotState {
     fn from_str(s: &str) -> Option<Self> {
         match s {
-            "Pending"      => Some(Self::Pending),
-            "Connecting"   => Some(Self::Connecting),
-            "Connected"    => Some(Self::Connected),
+            "Pending" => Some(Self::Pending),
+            "Connecting" => Some(Self::Connecting),
+            "Connected" => Some(Self::Connected),
             "Disconnected" => Some(Self::Disconnected),
             "Reconnecting" => Some(Self::Reconnecting),
-            "Failed"       => Some(Self::Failed),
-            "LoggedOut"    => Some(Self::LoggedOut),
+            "Failed" => Some(Self::Failed),
+            "LoggedOut" => Some(Self::LoggedOut),
             _ => None,
         }
     }
@@ -108,32 +107,32 @@ impl SubBotState {
 
 #[derive(Clone, Debug)]
 pub struct SubBotEntry {
-    pub session_id:         String,
-    pub parent_session_id:  String,
-    pub owner_jid:          String,
-    pub state:              SubBotState,
-    pub created_at:         u64,
-    pub connected_at:       Option<u64>,
-    pub last_activity:      u64,
+    pub session_id: String,
+    pub parent_session_id: String,
+    pub owner_jid: String,
+    pub state: SubBotState,
+    pub created_at: u64,
+    pub connected_at: Option<u64>,
+    pub last_activity: u64,
     pub reconnect_attempts: i32,
-    pub messages_handled:   u64,
-    pub errors_count:       u64,
-    pub session_path:       String,
-    pub metadata_json:      Option<String>,
+    pub messages_handled: u64,
+    pub errors_count: u64,
+    pub session_path: String,
+    pub metadata_json: Option<String>,
 }
 
 // ─── Manager (shared state) ───────────────────────────────────────────────────
 
 pub struct SubBotManager {
-    subbots:        DashMap<String, SubBotEntry>,
-    cooldowns:      DashMap<String, u64>,
-    config:         RwLock<SubBotConfig>,
+    subbots: DashMap<String, SubBotEntry>,
+    cooldowns: DashMap<String, u64>,
+    config: RwLock<SubBotConfig>,
     total_messages: AtomicU64,
-    total_errors:   AtomicU64,
+    total_errors: AtomicU64,
     // Serializa el check-de-cuota + inserción de register() — sin esto, dos
     // registros concurrentes del mismo owner podrían pasar ambos la validación
     // de max_per_user antes de que cualquiera inserte (TOCTOU).
-    register_lock:  Mutex<()>,
+    register_lock: Mutex<()>,
 }
 
 impl SubBotManager {
@@ -146,12 +145,12 @@ impl SubBotManager {
             .next_power_of_two();
 
         Arc::new(Self {
-            subbots:        DashMap::with_capacity_and_shard_amount(cfg.max_subbots, cpus),
-            cooldowns:      DashMap::new(),
-            config:         RwLock::new(cfg),
+            subbots: DashMap::with_capacity_and_shard_amount(cfg.max_subbots, cpus),
+            cooldowns: DashMap::new(),
+            config: RwLock::new(cfg),
             total_messages: AtomicU64::new(0),
-            total_errors:   AtomicU64::new(0),
-            register_lock:  Mutex::new(()),
+            total_errors: AtomicU64::new(0),
+            register_lock: Mutex::new(()),
         })
     }
 
@@ -173,12 +172,17 @@ impl SubBotManager {
         // Serializa check-de-cuota + inserción — ver comentario en el campo register_lock.
         let _guard = self.register_lock.lock().unwrap_or_else(|e| e.into_inner());
 
-        let cfg = self.config.read().unwrap_or_else(|e| e.into_inner()).clone();
+        let cfg = self
+            .config
+            .read()
+            .unwrap_or_else(|e| e.into_inner())
+            .clone();
 
         if self.subbots.len() >= cfg.max_subbots {
             return RegisterResult::err(format!(
                 "Límite global de subbots alcanzado ({}/{})",
-                self.subbots.len(), cfg.max_subbots
+                self.subbots.len(),
+                cfg.max_subbots
             ));
         }
 
@@ -202,34 +206,37 @@ impl SubBotManager {
 
         if self.subbots.contains_key(&input.session_id) {
             return RegisterResult {
-                ok:         false,
-                message:    format!("SubBot {} ya existe", input.session_id),
+                ok: false,
+                message: format!("SubBot {} ya existe", input.session_id),
                 session_id: Some(input.session_id),
             };
         }
 
         let now = unix_now();
-        self.subbots.insert(input.session_id.clone(), SubBotEntry {
-            session_id:         input.session_id.clone(),
-            parent_session_id:  input.parent_session_id,
-            owner_jid:          input.owner_jid.clone(),
-            state:              SubBotState::Pending,
-            created_at:         now,
-            connected_at:       None,
-            last_activity:      now,
-            reconnect_attempts: 0,
-            messages_handled:   0,
-            errors_count:       0,
-            session_path:       input.session_path,
-            metadata_json:      input.metadata_json,
-        });
+        self.subbots.insert(
+            input.session_id.clone(),
+            SubBotEntry {
+                session_id: input.session_id.clone(),
+                parent_session_id: input.parent_session_id,
+                owner_jid: input.owner_jid.clone(),
+                state: SubBotState::Pending,
+                created_at: now,
+                connected_at: None,
+                last_activity: now,
+                reconnect_attempts: 0,
+                messages_handled: 0,
+                errors_count: 0,
+                session_path: input.session_path,
+                metadata_json: input.metadata_json,
+            },
+        );
         self.cooldowns.insert(input.owner_jid, now);
 
         tracing::info!(session_id = %input.session_id, total = self.subbots.len(), "subbot registrado");
 
         RegisterResult {
-            ok:         true,
-            message:    format!("SubBot {} registrado", input.session_id),
+            ok: true,
+            message: format!("SubBot {} registrado", input.session_id),
             session_id: Some(input.session_id),
         }
     }
@@ -264,7 +271,13 @@ impl SubBotManager {
     }
 
     pub fn heartbeat(&self, session_id: &str) -> bool {
-        self.subbots.get_mut(session_id).map(|mut e| { e.last_activity = unix_now(); true }).unwrap_or(false)
+        self.subbots
+            .get_mut(session_id)
+            .map(|mut e| {
+                e.last_activity = unix_now();
+                true
+            })
+            .unwrap_or(false)
     }
 
     pub fn inc_messages(&self, session_id: &str) -> bool {
@@ -273,7 +286,9 @@ impl SubBotManager {
             e.last_activity = unix_now();
             self.total_messages.fetch_add(1, Ordering::Relaxed);
             true
-        } else { false }
+        } else {
+            false
+        }
     }
 
     pub fn inc_errors(&self, session_id: &str) -> bool {
@@ -281,7 +296,9 @@ impl SubBotManager {
             e.errors_count += 1;
             self.total_errors.fetch_add(1, Ordering::Relaxed);
             true
-        } else { false }
+        } else {
+            false
+        }
     }
 
     pub fn get_info(&self, session_id: &str) -> Option<SubBotInfo> {
@@ -293,14 +310,26 @@ impl SubBotManager {
     }
 
     pub fn can_create(&self, owner_jid: &str) -> CanCreateResult {
-        let cfg = self.config.read().unwrap_or_else(|e| e.into_inner()).clone();
-        let user_count  = self.count_active_by_owner(owner_jid);
+        let cfg = self
+            .config
+            .read()
+            .unwrap_or_else(|e| e.into_inner())
+            .clone();
+        let user_count = self.count_active_by_owner(owner_jid);
         let total_count = self.subbots.len();
 
-        let cooldown_remaining = self.cooldowns.get(owner_jid).map(|last| {
-            let elapsed = unix_now().saturating_sub(*last);
-            if elapsed < cfg.cooldown_seconds { cfg.cooldown_seconds - elapsed } else { 0 }
-        }).unwrap_or(0);
+        let cooldown_remaining = self
+            .cooldowns
+            .get(owner_jid)
+            .map(|last| {
+                let elapsed = unix_now().saturating_sub(*last);
+                if elapsed < cfg.cooldown_seconds {
+                    cfg.cooldown_seconds - elapsed
+                } else {
+                    0
+                }
+            })
+            .unwrap_or(0);
 
         let can_create = user_count < cfg.max_per_user
             && total_count < cfg.max_subbots
@@ -316,19 +345,26 @@ impl SubBotManager {
                 } else {
                     format!("Cooldown: {}s restantes", cooldown_remaining)
                 })
-            } else { None },
-            user_count:                user_count as i64,
-            user_max:                  cfg.max_per_user as i64,
-            total_count:               total_count as i64,
-            total_max:                 cfg.max_subbots as i64,
+            } else {
+                None
+            },
+            user_count: user_count as i64,
+            user_max: cfg.max_per_user as i64,
+            total_count: total_count as i64,
+            total_max: cfg.max_subbots as i64,
             cooldown_remaining_seconds: cooldown_remaining as i64,
         }
     }
 
     pub fn stats(&self) -> StatsResult {
-        let cfg = self.config.read().unwrap_or_else(|e| e.into_inner()).clone();
+        let cfg = self
+            .config
+            .read()
+            .unwrap_or_else(|e| e.into_inner())
+            .clone();
         let now = unix_now();
-        let (mut connected, mut connecting, mut disconnected, mut failed) = (0i64, 0i64, 0i64, 0i64);
+        let (mut connected, mut connecting, mut disconnected, mut failed) =
+            (0i64, 0i64, 0i64, 0i64);
         let (mut total_uptime, mut connected_count) = (0u64, 0u64);
 
         for e in self.subbots.iter() {
@@ -340,31 +376,36 @@ impl SubBotManager {
                         connected_count += 1;
                     }
                 }
-                SubBotState::Connecting | SubBotState::Pending   => connecting += 1,
+                SubBotState::Connecting | SubBotState::Pending => connecting += 1,
                 SubBotState::Disconnected | SubBotState::Reconnecting => disconnected += 1,
-                SubBotState::Failed | SubBotState::LoggedOut     => failed += 1,
+                SubBotState::Failed | SubBotState::LoggedOut => failed += 1,
             }
         }
 
         StatsResult {
-            ok:                     true,
-            total:                  self.subbots.len() as i64,
+            ok: true,
+            total: self.subbots.len() as i64,
             connected,
             connecting,
             disconnected,
             failed,
-            max_subbots:            cfg.max_subbots as i64,
-            max_per_user:           cfg.max_per_user as i64,
+            max_subbots: cfg.max_subbots as i64,
+            max_per_user: cfg.max_per_user as i64,
             total_messages_handled: self.total_messages.load(Ordering::Relaxed) as i64,
-            total_errors:           self.total_errors.load(Ordering::Relaxed) as i64,
-            avg_uptime_seconds:     if connected_count > 0 {
+            total_errors: self.total_errors.load(Ordering::Relaxed) as i64,
+            avg_uptime_seconds: if connected_count > 0 {
                 total_uptime as f64 / connected_count as f64
-            } else { 0.0 },
+            } else {
+                0.0
+            },
         }
     }
 
     pub fn get_config(&self) -> SubBotConfig {
-        self.config.read().unwrap_or_else(|e| e.into_inner()).clone()
+        self.config
+            .read()
+            .unwrap_or_else(|e| e.into_inner())
+            .clone()
     }
 
     /// Aplica un parche parcial a la config en caliente — sin reiniciar el proceso.
@@ -372,28 +413,44 @@ impl SubBotManager {
     /// por accidente con un valor de 0.
     pub fn update_config(&self, patch: ConfigPatch) -> SubBotConfig {
         let mut cfg = self.config.write().unwrap_or_else(|e| e.into_inner());
-        if let Some(v) = patch.max_subbots              { cfg.max_subbots = v.max(1); }
-        if let Some(v) = patch.max_per_user              { cfg.max_per_user = v.max(1); }
-        if let Some(v) = patch.cooldown_seconds          { cfg.cooldown_seconds = v; }
-        if let Some(v) = patch.max_reconnect_attempts    { cfg.max_reconnect_attempts = v; }
-        if let Some(v) = patch.connection_timeout_seconds { cfg.connection_timeout_seconds = v; }
+        if let Some(v) = patch.max_subbots {
+            cfg.max_subbots = v.max(1);
+        }
+        if let Some(v) = patch.max_per_user {
+            cfg.max_per_user = v.max(1);
+        }
+        if let Some(v) = patch.cooldown_seconds {
+            cfg.cooldown_seconds = v;
+        }
+        if let Some(v) = patch.max_reconnect_attempts {
+            cfg.max_reconnect_attempts = v;
+        }
+        if let Some(v) = patch.connection_timeout_seconds {
+            cfg.connection_timeout_seconds = v;
+        }
         cfg.clone()
     }
 
     pub fn cleanup_dead(&self, max_inactive_seconds: u64) -> i64 {
         let now = unix_now();
-        let to_remove: Vec<String> = self.subbots.iter()
-            .filter(|e|
+        let to_remove: Vec<String> = self
+            .subbots
+            .iter()
+            .filter(|e| {
                 matches!(e.state, SubBotState::Failed | SubBotState::LoggedOut)
-                || now.saturating_sub(e.last_activity) > max_inactive_seconds
-            )
+                    || now.saturating_sub(e.last_activity) > max_inactive_seconds
+            })
             .map(|e| e.session_id.clone())
             .collect();
 
         let removed = to_remove.len() as i64;
-        for id in to_remove { self.subbots.remove(&id); }
+        for id in to_remove {
+            self.subbots.remove(&id);
+        }
 
-        if removed > 0 { tracing::info!(removed, "subbots inactivos eliminados"); }
+        if removed > 0 {
+            tracing::info!(removed, "subbots inactivos eliminados");
+        }
         removed
     }
 }
@@ -401,27 +458,32 @@ impl SubBotManager {
 fn to_info(e: &SubBotEntry) -> SubBotInfo {
     let now = unix_now();
     SubBotInfo {
-        ok:                 true,
-        session_id:         e.session_id.clone(),
-        parent_session_id:  e.parent_session_id.clone(),
-        owner_jid:          e.owner_jid.clone(),
-        state:              format!("{:?}", e.state),
-        created_at:         e.created_at as i64,
-        connected_at:       e.connected_at.map(|t| t as i64),
-        last_activity:      e.last_activity as i64,
+        ok: true,
+        session_id: e.session_id.clone(),
+        parent_session_id: e.parent_session_id.clone(),
+        owner_jid: e.owner_jid.clone(),
+        state: format!("{:?}", e.state),
+        created_at: e.created_at as i64,
+        connected_at: e.connected_at.map(|t| t as i64),
+        last_activity: e.last_activity as i64,
         reconnect_attempts: e.reconnect_attempts,
-        messages_handled:   e.messages_handled as i64,
-        errors_count:       e.errors_count as i64,
-        uptime_seconds:     e.connected_at.map(|t| now.saturating_sub(t) as i64).unwrap_or(0),
-        session_path:       e.session_path.clone(),
-        metadata_json:      e.metadata_json.clone(),
+        messages_handled: e.messages_handled as i64,
+        errors_count: e.errors_count as i64,
+        uptime_seconds: e
+            .connected_at
+            .map(|t| now.saturating_sub(t) as i64)
+            .unwrap_or(0),
+        session_path: e.session_path.clone(),
+        metadata_json: e.metadata_json.clone(),
     }
 }
 
 fn is_valid_id(id: &str) -> bool {
     !id.is_empty()
         && id.len() <= 128
-        && id.chars().all(|c| c.is_alphanumeric() || matches!(c, '-' | '_' | '+'))
+        && id
+            .chars()
+            .all(|c| c.is_alphanumeric() || matches!(c, '-' | '_' | '+'))
 }
 
 // ─── Serde types ──────────────────────────────────────────────────────────────
@@ -429,18 +491,20 @@ fn is_valid_id(id: &str) -> bool {
 #[derive(Deserialize)]
 pub struct RegisterInput {
     #[serde(rename = "sessionId")]
-    pub session_id:        String,
+    pub session_id: String,
     #[serde(rename = "parentSessionId", default = "default_main")]
     pub parent_session_id: String,
     #[serde(rename = "ownerJid")]
-    pub owner_jid:         String,
+    pub owner_jid: String,
     #[serde(rename = "sessionPath", default)]
-    pub session_path:      String,
+    pub session_path: String,
     #[serde(rename = "metadataJson", default)]
-    pub metadata_json:     Option<String>,
+    pub metadata_json: Option<String>,
 }
 
-fn default_main() -> String { "main".to_string() }
+fn default_main() -> String {
+    "main".to_string()
+}
 
 #[derive(Deserialize)]
 pub struct UpdateStateInput {
@@ -453,7 +517,9 @@ pub struct CleanupInput {
     pub max_inactive_seconds: u64,
 }
 
-fn default_inactive() -> u64 { 300 }
+fn default_inactive() -> u64 {
+    300
+}
 
 #[derive(Deserialize)]
 pub struct OwnerQuery {
@@ -463,68 +529,72 @@ pub struct OwnerQuery {
 #[derive(Deserialize, Default)]
 #[serde(rename_all = "camelCase")]
 pub struct ConfigPatch {
-    pub max_subbots:                Option<usize>,
-    pub max_per_user:                Option<usize>,
-    pub cooldown_seconds:            Option<u64>,
-    pub max_reconnect_attempts:      Option<i32>,
-    pub connection_timeout_seconds:  Option<u64>,
+    pub max_subbots: Option<usize>,
+    pub max_per_user: Option<usize>,
+    pub cooldown_seconds: Option<u64>,
+    pub max_reconnect_attempts: Option<i32>,
+    pub connection_timeout_seconds: Option<u64>,
 }
 
 #[derive(Serialize)]
 pub struct RegisterResult {
-    pub ok:         bool,
-    pub message:    String,
+    pub ok: bool,
+    pub message: String,
     pub session_id: Option<String>,
 }
 
 impl RegisterResult {
     fn err(msg: impl Into<String>) -> Self {
-        Self { ok: false, message: msg.into(), session_id: None }
+        Self {
+            ok: false,
+            message: msg.into(),
+            session_id: None,
+        }
     }
 }
 
 #[derive(Serialize)]
 pub struct SubBotInfo {
-    pub ok:                 bool,
-    pub session_id:         String,
-    pub parent_session_id:  String,
-    pub owner_jid:          String,
-    pub state:              String,
-    pub created_at:         i64,
-    pub connected_at:       Option<i64>,
-    pub last_activity:      i64,
+    pub ok: bool,
+    pub session_id: String,
+    pub parent_session_id: String,
+    pub owner_jid: String,
+    pub state: String,
+    pub created_at: i64,
+    pub connected_at: Option<i64>,
+    pub last_activity: i64,
     pub reconnect_attempts: i32,
-    pub messages_handled:   i64,
-    pub errors_count:       i64,
-    pub uptime_seconds:     i64,
-    pub session_path:       String,
-    pub metadata_json:      Option<String>,
+    pub messages_handled: i64,
+    pub errors_count: i64,
+    pub uptime_seconds: i64,
+    pub session_path: String,
+    pub metadata_json: Option<String>,
 }
 
 #[derive(Serialize)]
 pub struct CanCreateResult {
-    pub can_create:                bool,
-    pub reason:                    Option<String>,
-    pub user_count:                i64,
-    pub user_max:                  i64,
-    pub total_count:               i64,
-    pub total_max:                 i64,
+    pub can_create: bool,
+    pub reason: Option<String>,
+    pub user_count: i64,
+    pub user_max: i64,
+    pub total_count: i64,
+    pub total_max: i64,
     pub cooldown_remaining_seconds: i64,
 }
 
 #[derive(Serialize)]
 pub struct StatsResult {
-    pub ok:                     bool,
-    pub total:                  i64,
-    pub connected:              i64,
-    pub connecting:             i64,
-    pub disconnected:           i64,
-    pub failed:                 i64,
-    pub max_subbots:            i64,
-    pub max_per_user:           i64,
+    pub ok: bool,
+    pub total: i64,
+    pub connected: i64,
+    pub connecting: i64,
+    pub disconnected: i64,
+    pub failed: i64,
+    pub max_subbots: i64,
+    pub max_per_user: i64,
     pub total_messages_handled: i64,
-    pub total_errors:           i64,
-    pub avg_uptime_seconds:     f64,
+    pub total_errors: i64,
+    pub avg_uptime_seconds: f64,
 }
 
 // ─── Axum handlers ────────────────────────────────────────────────────────────
@@ -539,7 +609,11 @@ fn audit(db: &crate::db::Db, category: &'static str, event: &'static str, detail
 /// Respuesta uniforme para operaciones touch-by-id (heartbeat/contadores):
 /// 200 + {"ok":true} si el subbot existe, 404 + {"ok":false} si no.
 fn ok_or_not_found(found: bool) -> (StatusCode, Json<serde_json::Value>) {
-    let status = if found { StatusCode::OK } else { StatusCode::NOT_FOUND };
+    let status = if found {
+        StatusCode::OK
+    } else {
+        StatusCode::NOT_FOUND
+    };
     (status, Json(serde_json::json!({ "ok": found })))
 }
 
@@ -557,7 +631,11 @@ pub async fn register(
     if result.ok {
         audit(&st.db, "subbot", "register", detail);
     }
-    let status = if result.ok { StatusCode::OK } else { StatusCode::BAD_REQUEST };
+    let status = if result.ok {
+        StatusCode::OK
+    } else {
+        StatusCode::BAD_REQUEST
+    };
     (status, Json(result))
 }
 
@@ -567,10 +645,21 @@ pub async fn unregister(
 ) -> (StatusCode, Json<serde_json::Value>) {
     let removed = st.subbots.unregister(&session_id);
     if removed {
-        audit(&st.db, "subbot", "unregister", serde_json::json!({ "sessionId": session_id }).to_string());
-        (StatusCode::OK, Json(serde_json::json!({ "ok": true, "sessionId": session_id })))
+        audit(
+            &st.db,
+            "subbot",
+            "unregister",
+            serde_json::json!({ "sessionId": session_id }).to_string(),
+        );
+        (
+            StatusCode::OK,
+            Json(serde_json::json!({ "ok": true, "sessionId": session_id })),
+        )
     } else {
-        (StatusCode::NOT_FOUND, Json(serde_json::json!({ "ok": false, "error": "not found" })))
+        (
+            StatusCode::NOT_FOUND,
+            Json(serde_json::json!({ "ok": false, "error": "not found" })),
+        )
     }
 }
 
@@ -581,18 +670,30 @@ pub async fn update_state(
 ) -> (StatusCode, Json<serde_json::Value>) {
     let new_state = match SubBotState::from_str(&body.state) {
         Some(s) => s,
-        None => return (
-            StatusCode::BAD_REQUEST,
-            Json(serde_json::json!({ "ok": false, "error": format!("estado inválido: {}", body.state) })),
-        ),
+        None => {
+            return (
+                StatusCode::BAD_REQUEST,
+                Json(
+                    serde_json::json!({ "ok": false, "error": format!("estado inválido: {}", body.state) }),
+                ),
+            )
+        }
     };
     let updated = st.subbots.update_state(&session_id, new_state);
     if updated {
-        let detail = serde_json::json!({ "sessionId": session_id.clone(), "state": body.state }).to_string();
+        let detail =
+            serde_json::json!({ "sessionId": session_id.clone(), "state": body.state }).to_string();
         audit(&st.db, "subbot", "state_change", detail);
     }
-    let status = if updated { StatusCode::OK } else { StatusCode::NOT_FOUND };
-    (status, Json(serde_json::json!({ "ok": updated, "sessionId": session_id })))
+    let status = if updated {
+        StatusCode::OK
+    } else {
+        StatusCode::NOT_FOUND
+    };
+    (
+        status,
+        Json(serde_json::json!({ "ok": updated, "sessionId": session_id })),
+    )
 }
 
 // ─── GET /subbots/config — PATCH /subbots/config (hot-reload) ────────────────
@@ -606,7 +707,12 @@ pub async fn patch_config(
     Json(patch): Json<ConfigPatch>,
 ) -> Json<SubBotConfig> {
     let cfg = st.subbots.update_config(patch);
-    audit(&st.db, "subbot", "config_update", serde_json::to_string(&cfg).unwrap_or_default());
+    audit(
+        &st.db,
+        "subbot",
+        "config_update",
+        serde_json::to_string(&cfg).unwrap_or_default(),
+    );
     tracing::info!(?cfg, "subbots: configuración actualizada en caliente");
     Json(cfg)
 }
@@ -632,9 +738,7 @@ pub async fn inc_errors(
     ok_or_not_found(st.subbots.inc_errors(&session_id))
 }
 
-pub async fn list_all(
-    State(st): State<AppState>,
-) -> Json<serde_json::Value> {
+pub async fn list_all(State(st): State<AppState>) -> Json<serde_json::Value> {
     let bots = st.subbots.list_all();
     Json(serde_json::json!({ "ok": true, "subbots": bots, "total": bots.len() }))
 }
@@ -655,9 +759,7 @@ pub async fn get_one(
     }
 }
 
-pub async fn stats(
-    State(st): State<AppState>,
-) -> Json<StatsResult> {
+pub async fn stats(State(st): State<AppState>) -> Json<StatsResult> {
     Json(st.subbots.stats())
 }
 
