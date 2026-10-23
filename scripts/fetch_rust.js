@@ -26,7 +26,10 @@ import { arch, platform } from 'node:os'
 import { readFileSync } from 'node:fs'
 
 const ROOT  = process.cwd()
-const DEST  = join(ROOT, 'rust', 'target', 'release')
+// En bin/, junto a ffmpeg y yt-dlp. Hasta la 8.14.0 iba a rust/target/release,
+// mezclado con lo que compila cargo; separados, bajar una release nueva nunca
+// pisa una compilación local, que queda en target/ del workspace.
+const DEST  = join(ROOT, 'bin')
 const REPO  = process.env.WINSIBOT_REPO ?? 'Brashkie/WinsiBot'
 
 /** Target de Rust para esta máquina, o null si no lo publicamos. */
@@ -54,12 +57,19 @@ function target() {
   }
 }
 
-/** La versión del crate, que es la que etiqueta la release. */
+/**
+ * La versión del BOT, que es la que etiqueta la release.
+ *
+ * Hasta la 8.14.0 se leía la del crate (5.x), y las releases se etiquetan con
+ * la del bot (v8.x): la URL pedía un tag que nunca existió, todas las
+ * descargas daban 404, y "npm install y nada más" no bajó el binario ni una
+ * vez desde que existe. El 404 se informaba como "no disponible", que es justo
+ * lo que se espera ver cuando todavía no hay release, así que no se notó.
+ */
 function version() {
-  const toml = readFileSync(join(ROOT, 'rust', 'Cargo.toml'), 'utf8')
-  const m = toml.match(/^version\s*=\s*"([^"]+)"/m)
-  if (!m) throw new Error('no pude leer la versión de rust/Cargo.toml')
-  return m[1]
+  const v = JSON.parse(readFileSync(join(ROOT, 'package.json'), 'utf8')).version
+  if (!v) throw new Error('no pude leer la versión de package.json')
+  return v
 }
 
 /**
@@ -87,16 +97,16 @@ async function main() {
   if (process.env.WINSIBOT_SKIP_PREBUILT) salir('salteado por WINSIBOT_SKIP_PREBUILT')
 
   const exe = platform() === 'win32' ? 'winsibot-session-api.exe' : 'winsibot-session-api'
-  if (existsSync(join(DEST, exe))) {
-    // Ya hay uno, sea bajado o compilado. No se pisa: puede ser una
-    // compilación local con cambios que el binario publicado no tiene.
-    return
-  }
+  const v   = version()
+  // Al lado del binario queda la versión que se bajó. Antes bastaba con que
+  // existiera un binario para no bajar nada, así que actualizar el bot dejaba
+  // la API vieja para siempre.
+  const marca = join(DEST, `${exe}.version`)
+  if (existsSync(join(DEST, exe)) && existsSync(marca) && readFileSync(marca, 'utf8').trim() === v) return
 
   const t = target()
   if (!t) salir(`no publicamos binario para ${platform()}-${arch()}`)
 
-  const v    = version()
   const base = `https://github.com/${REPO}/releases/download/v${v}`
   const nombre = `winsibot-session-api-${t}${platform() === 'win32' ? '.exe' : ''}`
 
@@ -131,6 +141,7 @@ async function main() {
     try { unlinkSync(tmp) } catch {}
     salir(`no se pudo instalar (${e.message})`)
   }
+  writeFileSync(marca, v)
 
   console.log(`  ✔ Binario listo (${(bin.length / 1048576).toFixed(1)} MB) — no hace falta compilar Rust`)
 }

@@ -19,6 +19,7 @@ import pino from 'pino'
 import qrcode from 'qrcode'
 import path from 'path'
 import fs from 'fs'
+import { rustRequest } from '@lib/rustHttp.js'
 
 // ─── Config ────────────────────────────────────────────────────────────────────
 
@@ -34,8 +35,6 @@ const SUB_DIR        = path.join(process.cwd(), 'data', 'subbots')
 // nunca estuvo documentado en ningún .env.example (la variable real es
 // SESSION_API_KEY, la misma que usa session.ts), así que esto mandaba un
 // x-api-key vacío en cada llamada y Rust las rechazaba con 401.
-const RUST_URL       = config.rustApiUrl
-const RUST_KEY       = config.sessionApiKey
 const RECONNECT_CAP  = 64_000       // ms — backoff cap per bot
 
 fs.mkdirSync(SUB_DIR, { recursive: true })
@@ -124,15 +123,11 @@ const intentionalCloses = new Set<string>()
 
 // ─── Rust API helpers ─────────────────────────────────────────────────────────
 
-async function rustFetch(path: string, method: string, body?: unknown): Promise<any> {
+// Por el cliente único de la Session API (ver lib/rustHttp.ts).
+async function rustFetch(path: string, method: 'GET' | 'POST' | 'PUT' | 'PATCH' | 'DELETE', body?: unknown): Promise<any> {
   try {
-    const init: RequestInit = {
-      method,
-      headers: { 'Content-Type': 'application/json', 'x-api-key': RUST_KEY },
-    }
-    if (body !== undefined) init.body = JSON.stringify(body)
-    const res = await fetch(`${RUST_URL}${path}`, init)
-    return res.json().catch(() => ({ ok: false }))
+    const r = await rustRequest(method, path, body ?? (method === 'GET' || method === 'DELETE' ? undefined : {}))
+    return r.data ?? { ok: false }
   } catch {
     return { ok: false }
   }
@@ -161,11 +156,9 @@ async function rustHeartbeat(sessionId: string): Promise<void> {
 
 async function rustCanCreate(ownerJid: string): Promise<{ can_create: boolean; reason?: string; unavailable?: boolean }> {
   try {
-    const res = await fetch(`${RUST_URL}/subbots/can-create?owner=${encodeURIComponent(ownerJid)}`, {
-      headers: { 'x-api-key': RUST_KEY },
-    })
-    if (!res.ok) return { can_create: false, reason: `Rust respondió ${res.status}`, unavailable: true }
-    return await res.json()
+    const res = await rustRequest('GET', '/subbots/can-create', undefined, { params: { owner: ownerJid } })
+    if (res.status < 200 || res.status >= 300) return { can_create: false, reason: `Rust respondió ${res.status}`, unavailable: true }
+    return res.data
   } catch {
     // Distinguir "Rust caído/puerto mal configurado" de "cuota realmente excedida"
     // — antes ambos casos mostraban el mismo "cuota excedida", lo que escondió

@@ -13,7 +13,6 @@
       "!dist/**",
       "!node_modules/**",
       "!rust/**",
-      "!python/**",
       "!web/**",
       "!data/**",
       "!sessions/**",

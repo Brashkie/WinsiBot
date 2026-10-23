@@ -1,5 +1,6 @@
 import 'dotenv/config'
 import { config } from '@config'
+import { rustRequest } from '@lib/rustHttp.js'
 import { type ChildProcess, spawn } from 'child_process'
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -7,7 +8,7 @@ import { type ChildProcess, spawn } from 'child_process'
 //  sin intervención manual.
 //
 //  El bot (dist/index.js) ya se auto-gestiona a sí mismo internamente
-//  (Rust/Python — ver ensureX() en index.ts), pero nada reinicia
+//  (la Session API — ver ensureRust() en index.ts), pero nada reinicia
 //  al propio proceso Node si crashea o si el event loop se cuelga sin morir.
 //  Este proceso resuelve esas dos cosas:
 //
@@ -17,18 +18,28 @@ import { type ChildProcess, spawn } from 'child_process'
 //      (mecanismo que ya existía — ver comentario en index.ts sobre "un
 //      monitor externo puede alertar o reiniciar") y fuerza un reinicio.
 //
-//  No reemplaza nada de cómo index.ts ya supervisa a Rust/Python
-//  — es una capa por encima, no una reescritura de la orquestación existente.
+//  No reemplaza nada de cómo index.ts ya supervisa a la Session API — es una
+//  capa por encima. Desde la 8.15.0 es además el único supervisor: el de
+//  Python (python/terminal/monitor.py) hacía lo mismo y se fue con Python.
 // ─────────────────────────────────────────────────────────────────────────────
 
-const RUST_URL = process.env.SESSION_API_URL ?? 'http://127.0.0.1:3001'
-const RUST_KEY = process.env.RUST_API_KEY ?? ''
+// La URL y la clave salen de config, por el cliente único (lib/rustHttp.ts).
+// Acá se leía RUST_API_KEY, el nombre que se retiró en la 8.12.0:
+// /watchdog/status contestaba 401, isHung() lo leía como "no colgado", y la
+// detección de cuelgues no funcionó desde entonces.
 
 const RESTART_BACKOFF_MS = 3_000
 const BOOT_GRACE_MS      = 120_000 // no chequear cuelgue hasta que todo el stack tuvo tiempo de arrancar
 const HANG_CHECK_MS      = 30_000
 const HANG_KILL_GRACE_MS = 5_000   // espera SIGTERM antes de forzar SIGKILL
 const HANG_RESTART_COOLDOWN_MS = 5 * 60_000 // no forzar reinicios por cuelgue más seguido que esto
+
+// Banderas de V8 para el bot. `--max-semi-space-size=4` es la que importa: la
+// generación joven por defecto de Node 24 está pensada para servidores con RAM
+// de sobra. Medido con una carga parecida a la del bot —crear, serializar y
+// descartar objetos de mensaje—: RAM máxima de 262 a 73 MB, con el mismo CPU y
+// el mismo tiempo dentro del ruido. WINSI_NODE_FLAGS las reemplaza.
+const NODE_FLAGS = (process.env.WINSI_NODE_FLAGS ?? '--max-semi-space-size=4').split(/\s+/).filter(Boolean)
 
 let child:        ChildProcess | null = null
 let stopping                          = false
@@ -37,7 +48,7 @@ let lastHangRestart                   = 0
 
 function startChild(): void {
   startedAt = Date.now()
-  child = spawn('node', ['dist/index.js'], { stdio: 'inherit' })
+  child = spawn('node', [...NODE_FLAGS, 'dist/index.js'], { stdio: 'inherit' })
 
   child.on('exit', (code, signal) => {
     child = null
@@ -53,12 +64,16 @@ function startChild(): void {
 
 async function isHung(): Promise<boolean> {
   try {
-    const res = await fetch(`${RUST_URL}/watchdog/status`, {
-      headers: RUST_KEY ? { 'x-api-key': RUST_KEY } : {},
-      signal:  AbortSignal.timeout(5_000),
-    })
-    const data = await res.json() as { watchdog?: { alive?: boolean } }
-    return data?.watchdog?.alive === false
+    const res = await rustRequest<{ watchdog?: { alive?: boolean; pingCount?: number } }>(
+      'GET', '/watchdog/status', undefined, { timeout: 5_000 },
+    )
+    const data = res.data
+    const w = data?.watchdog
+    // Solo es un cuelgue si HUBO latidos y dejaron de llegar. "Nunca llegó
+    // ninguno" no prueba que el bot esté colgado —puede ser una clave mal
+    // puesta, o la API recién reiniciada— y reiniciar el bot no lo arreglaría:
+    // entraría en un bucle de reinicios cada 5 minutos.
+    return w?.alive === false && (w.pingCount ?? 0) > 0
   } catch {
     // Rust puede estar caído o todavía arrancando — no concluir cuelgue por esto.
     return false

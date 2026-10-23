@@ -6,11 +6,10 @@
 
 [![Node](https://img.shields.io/badge/Node.js-20%2B-339933?style=for-the-badge&logo=node.js&logoColor=white)](https://nodejs.org)
 [![TypeScript](https://img.shields.io/badge/TypeScript-5.x-3178C6?style=for-the-badge&logo=typescript&logoColor=white)](https://www.typescriptlang.org)
-[![Python](https://img.shields.io/badge/Python-3.11%2B-3776AB?style=for-the-badge&logo=python&logoColor=white)](https://python.org)
 [![Rust](https://img.shields.io/badge/Rust-1.75%2B-CE422B?style=for-the-badge&logo=rust&logoColor=white)](https://rust-lang.org)
 
 [![License](https://img.shields.io/badge/License-GPL--3.0-blue?style=flat-square)](LICENSE)
-[![Version](https://img.shields.io/badge/Version-8.14.0-6C63FF?style=flat-square)](CHANGELOG.md)
+[![Version](https://img.shields.io/badge/Version-8.15.0-6C63FF?style=flat-square)](CHANGELOG.md)
 [![Platform](https://img.shields.io/badge/Platform-Windows%20%7C%20Linux%20%7C%20macOS%20%7C%20Android-lightgrey?style=flat-square)](https://github.com/Brashkie/WinsiBot)
 [![PRs Welcome](https://img.shields.io/badge/PRs-welcome-brightgreen?style=flat-square)](https://github.com/Brashkie/WinsiBot/pulls)
 
@@ -18,7 +17,7 @@
 
 > Bot de WhatsApp de alto rendimiento con arquitectura multi-lenguaje de tres capas.<br/>
 > Sin límite artificial de grupos, pensado para miles de mensajes por hora y múltiples instancias.<br/>
-> v8.14.0 — **La sesión deja de perderse, y el ritmo de salida se decide en un solo sitio.** El bot pedía QR otra vez sin que nadie cerrara la sesión porque `creds` se escribía **en el lugar**: si el proceso moría a mitad de la escritura —cerrar la consola, apagar, Termux matado por Android— el archivo quedaba vacío, y al arrancar se creaban **credenciales nuevas sin avisar**. Ahora toda escritura es atómica, `creds` deja una copia de la versión anterior y un archivo roto se recupera en vez de reemplazarse. Y un **antiban nuevo en Rust**, sin dependencias nuevas: topes por minuto, hora y día, **calentamiento** para números recién vinculados, pausa con forma humana en vez de 300 ms fijos, y por fin se escuchan los errores **463 y 429** de WhatsApp, que llegan en el *ack* y no en la promesa de envío y por eso nunca se habían visto.<br/>
+> v8.15.0 — **Python sale del proyecto, entran C y Zig, y el bot entero se vuelve más liviano, todo medido.** RAM máxima bajo carga de **262 a 73 MB** y arranque de **148 a 100 MB**; un medidor de carga que despertaba la CPU 3000 veces por minuto, ahora 240; un códec JPEG propio en C y Zig **3,35x más rápido** que el de Rust con salidas 7 veces más chicas; los kernels de `#upscale` en C y Zig; un solo cliente HTTP hacia la Session API y el mismo texto clasificado una vez en lugar de cuatro. `rust/` pasa a `crates/session-api/` y sus datos a `data/session-api/`, movidos solos. Y tres fixes graves que no se veían: **`npm install` nunca había bajado el binario**, **el supervisor no detectaba cuelgues** y **el latido a la API nunca llegó**.<br/>
 
 <br/>
 
@@ -63,22 +62,25 @@
 | Capa | Tecnología | Responsabilidad |
 |------|-----------|----------------|
 | 🟦 **Core** | TypeScript / Node.js | Protocolo WhatsApp, dispatcher de comandos, RPG, economía, panel web |
-| ⚙️ **Session + IA** | Rust / Axum | Creds atómicas y snapshots, tracker Bad MAC, rate limiter, clasificación de intenciones, personalidad y humor, reputación, perfiles de estilo, Ollama y APIs cloud, imágenes |
-| 🐍 **Opcional** | Python | Solo el watchdog de consola y el CLI de mantenimiento, que se abren a mano. **El bot funciona sin esto y nadie lo arranca** |
+| ⚙️ **Session + IA** | Rust / Axum | Creds atómicas y snapshots, tracker Bad MAC, rate limiter, antiban, clasificación de intenciones, personalidad y humor, reputación, perfiles de estilo, Ollama y APIs cloud, imágenes |
+| 🧮 **Kernels nativos** | C + Zig | Anime4K y el códec JPEG, compilados con Zig dentro del binario de la Session API. Se usa el que gana midiendo |
 
-### Novedades en v8.14.0
+### Novedades en v8.15.0
 
-**La sesión deja de perderse, y el ritmo de salida se decide en un solo sitio.**
+**Python sale del proyecto, entran C y Zig, y el bot entero se vuelve más liviano, todo medido.**
 
 | Área | Cambio |
 |------|--------|
-| **Fix grave: el bot pedía QR sin que nadie cerrara la sesión** | `creds` se escribía en el lugar —truncar y después escribir—, así que si el proceso moría entre las dos cosas quedaba vacío o a medias. Y al leerlo, un `creds` ilegible caía en un `catch` que devolvía `null`, y el `\|\| initAuthCreds()` de al lado creaba **credenciales nuevas sin decir nada**: una identidad que WhatsApp no conoce, o sea QR. Ahora toda escritura de `auth/` va a un `.tmp` y se renombra encima, `creds` además pasa por `fsync` y deja `creds.cbor.bak`, y un `creds` ilegible se recupera del `.bak` o de la copia de Rust; si no hay ninguna, el roto se aparta con otro nombre en vez de pisarlo. Probado simulando la escritura cortada: **misma identidad, sin QR** |
-| **Antiban en Rust, sin dependencias nuevas** | `rust/src/antiban.rs`, por el que pasa cada envío antes del limitador de siempre. **Topes por minuto, hora y día** en ventanas deslizantes; **calentamiento** de 7 días para números recién vinculados —sub-bots, o el principal tras escanear—, que **no** se aplica a sesiones que ya existían; **pausa normal** con media y desvío en vez de 300 ms fijos, que es la firma de un programa; y estado guardado, para que reiniciar no sirva para saltarse el tope. Todo configurable con `ANTIBAN_*` en `.env`, y `GET /antiban/status` dice cuánto envía el bot de verdad para ajustarlo con datos |
-| **Los errores 463 y 429 por fin se escuchan** | WhatsApp los manda en el *ack*, que llega después por `messages.update`; la promesa de `sendMessage` se resuelve bien igual. El limitador buscaba el código en la excepción, así que **nunca vio ninguno**. Ahora un 463 deja en espera a ese contacto con escalada (1 h, 2 h, 4 h...), muchos 463 en una hora frenan la cuenta entera, y un 429 la enfría de 30 s a 15 min |
-| **Fix: el retroceso por 429 no estaba en el camino de los envíos** | Existía solo en la cola de prioridades, por la que no pasa casi nada; `directForJid`, por el que pasa todo desde el embudo de salida, no retrocedía nunca |
-| **Fix: tras una noche apagado, el bot borraba sus propias sesiones** | Al volver, WhatsApp entrega de golpe lo pendiente, y ahí los Bad MAC son lo esperable: mensajes viejos con claves que rotaron. Contaban para el umbral global, que borraba **todas** las sesiones Signal en plena recuperación, y sin sesiones llegaban más Bad MAC. Mientras dura ese backlog se cuentan pero no limpian nada |
-| **Por qué pide QR, en el log** | Al mostrar el QR se dice si había una cuenta vinculada (WhatsApp la invalidó) o no había credenciales; y cada desconexión registra el motivo completo, no solo el código |
-| **153 tests en Rust** | 13 nuevos del antiban: las ventanas, el calentamiento día por día, la escalada del 429 y del 463, y que el estado sobrevive a un reinicio |
+| **El bot entero, más liviano** | Arranque de **148 a 100 MB** (comandos al usarlos, logger sin hilo aparte); RAM máxima bajo carga de **262 a 73 MB** con la generación joven de V8 a 4 MB; el medidor de carga ya no despierta la CPU 3000 veces por minuto; la Session API con 4 hilos en vez de 12 y la mitad de CPU; un solo cliente HTTP con 2-3x menos CPU por viaje; y el mismo texto se clasifica una vez en lugar de cuatro |
+| **Un códec JPEG propio en C y Zig** | 3,35x más rápido que el de Rust y más rápido que el PNG que se mandaba, con salidas 7 veces más chicas: menos CPU, menos subida, menos batería. `#upscale`, `#toanime` y `#removebg` lo usan; `#lego` se queda en PNG porque ahí PNG gana, medido |
+| **C y Zig, en los kernels de `#upscale`** | Cada kernel de Anime4K existe en Rust, C y Zig, y se usa el que gana: el Sobel en Zig con SIMD va **3,7x** más rápido, los otros dos en C **1,35x**. `#upscale` entero, **1,22x**. Dan lo mismo bit a bit que Rust, se compilan con Zig dentro del binario y `npm install` ya los trae |
+| **Python, fuera del todo** | `npm run manage` está en Node con los mismos ocho comandos y el mismo formato de backups; `npm run monitor` hacía lo mismo que el supervisor de `npm start`. Se van `python/`, sus scripts, su job de CI y su Dockerfile |
+| **`crates/session-api/` en vez de `rust/`** | Workspace de Cargo en la raíz; todo compila a `target/`. Los datos de la API viven en `data/session-api/` y el bot mueve lo que quedó en `rust/` en el primer arranque, sin pisar nada |
+| **Fix grave: `npm install` nunca bajó el binario** | Pedía la release por la versión del crate (`v5.x`) y se publican con la del bot (`v8.x`): 404 siempre. Ahora baja, verifica el SHA-256 y se actualiza al actualizar el bot |
+| **Fix: el supervisor no detectaba cuelgues** | Leía una clave con el nombre que se retiró en la 8.12.0, y cada comprobación daba 401 |
+| **`npm run mem:profile`** | El arranque ocupaba 148 MB: Node 33, Baileys 43, núcleo 33, comandos 29. Con los comandos cargados al usarlos, **117 MB** |
+| **cheerio y stickers, al usarlos** | ~11 MB y ~0,26 s menos al arrancar para todo bot que no los usa |
+| **`manage repair` ya no borra las sesiones Signal** | Borrarlas en cada reparación provocaba Bad MAC; eso queda en `reset-signal`, explícito |
 
 ---
 
@@ -93,8 +95,8 @@
 | WhatsApp | Baileys 6.x | Protocolo WA Web multi-device |
 | IA y NLP | Rust | Intenciones por reglas, personalidad y humor, reputación, perfiles de estilo |
 | Modelos de lenguaje | Ollama → GPT → Gemini → Claude | Cascada, con caída a plantillas locales si ninguno responde |
-| Opcional | Python 3.11 | Watchdog de consola y CLI de mantenimiento — el bot corre sin esto |
 | Session Store | Rust + Axum + SQLite | Creds atómicas, delivery tracking, outbox con dead-letter |
+| Cálculo pesado | C + Zig (feature `native`) | Kernels de Anime4K con SIMD y códec JPEG propio: Zig para lo vectorizable, C para lo que decide bit a bit |
 | Criptografía | `@brashkie/signalis-core` | Curve25519 / Ed25519 / HKDF / AES-GCM (Rust NAPI) |
 | Persistencia — usuarios | `strenor` (Rust NAPI) | `data/users.aof`, log de deltas: solo se escribe el usuario que cambió |
 | Persistencia — resto | JSON en `data/` (`core/persistence.ts`) | groupConfigs, clanes, inventario — se reescriben solo si cambian |
@@ -130,7 +132,7 @@
 - Escritura atómica de `auth/` en Node también, con `creds.cbor.bak` y sin crear credenciales nuevas a escondidas
 - Antiban en Rust: topes por minuto/hora/día, calentamiento de números nuevos, 463 y 429
 - Reconexión infinita con backoff exponencial (máx 64s)
-- Monitor Python con watchdog y freeze detection
+- Supervisor (`npm start`) que reinicia el bot si el proceso muere o se cuelga sin heartbeat
 
 </td>
 </tr>
@@ -198,38 +200,38 @@
 ## Arquitectura
 
 ```
-╔═══════════════════════════════════════════════════════════════════════╗
-║                           WinsiBot v8.14.0                            ║
-╠═════════════════════╦══════════════════════════╦══════════════════════╣
-║      TypeScript     ║           Rust           ║        Python        ║
-║    Node.js :4001    ║                          ║    nadie lo lanza    ║
-║                     ║                          ║                      ║
-║  ┌───────────────┐  ║ ┌──────────────────────┐ ║ ┌──────────────────┐ ║
-║  │  Baileys WS   │  ║ │   Session API :3001  │ ║ │   (OPCIONAL)     │ ║
-║  ├───────────────┤  ║ ├──────────────────────┤ ║ │  solo consola    │ ║
-║  │    Handler    │  ║ │ ● creds atómicas     │ ║ ├──────────────────┤ ║
-║  │   (semáforo)  │  ║ │ ● snapshots ×10      │ ║ │  monitor         │ ║
-║  ├───────────────┤  ║ │ ● bad_mac tracker    │ ║ │  watchdog con    │ ║
-║  │   125+ Cmds   │  ║ │ ● rate_limiter+spam  │ ║ │  auto-restart    │ ║
-║  ├───────────────┤  ║ │ ● watchdog heartbeat │ ║ ├──────────────────┤ ║
-║  │    egress     │  ║ │ ● outbox + DLQ       │ ║ │  manage          │ ║
-║  │ (rate limit)  │  ║ ├──────────────────────┤ ║ │  backup/reparar  │ ║
-║  ├───────────────┤  ║ │ nlp      intenciones │ ║ └──────────────────┘ ║
-║  │  persistence  │  ║ │ person.  12 modos    │ ║                      ║
-║  │   (strenor)   │  ║ │ memory   reputación  │ ║                      ║
-║  ├───────────────┤  ║ │ ai_chat  Ollama→GPT→ │ ║                      ║
-║  │ authVerifier  │  ║ │          Gemini→     │ ║                      ║
-║  │  Curve25519   │  ║ │          Claude      │ ║                      ║
-║  └───────────────┘  ║ │ convers. perfiles    │ ║                      ║
-║                     ║ │ imagefx  mosaico     │ ║                      ║
-║                     ║ │ imagesrc búsqueda    │ ║                      ║
-║                     ║ │ vision   anime+ONNX  │ ║                      ║
-║                     ║ └──────────────────────┘ ║                      ║
-╚═════════════════════╩══════════════════════════╩══════════════════════╝
-           │                        │                        │           
-           └────────────────────────┴────────────────────────┘           
-                                    │
-                            WhatsApp Network
+╔════════════════════════════════════════════════╗
+║                WinsiBot v8.15.0                ║
+╠═════════════════════╦══════════════════════════╣
+║      TypeScript     ║           Rust           ║
+║    Node.js :4001    ║                          ║
+║                     ║                          ║
+║  ┌───────────────┐  ║ ┌──────────────────────┐ ║
+║  │  Baileys WS   │  ║ │   Session API :3001  │ ║
+║  ├───────────────┤  ║ ├──────────────────────┤ ║
+║  │    Handler    │  ║ │ ● creds atómicas     │ ║
+║  │   (semáforo)  │  ║ │ ● snapshots ×10      │ ║
+║  ├───────────────┤  ║ │ ● bad_mac tracker    │ ║
+║  │   125+ Cmds   │  ║ │ ● rate_limiter+spam  │ ║
+║  ├───────────────┤  ║ │ ● watchdog heartbeat │ ║
+║  │    egress     │  ║ │ ● outbox + DLQ       │ ║
+║  │ (rate limit)  │  ║ ├──────────────────────┤ ║
+║  ├───────────────┤  ║ │ nlp      intenciones │ ║
+║  │  persistence  │  ║ │ person.  12 modos    │ ║
+║  │   (strenor)   │  ║ │ memory   reputación  │ ║
+║  ├───────────────┤  ║ │ ai_chat  Ollama→GPT→ │ ║
+║  │ authVerifier  │  ║ │          Gemini→     │ ║
+║  │  Curve25519   │  ║ │          Claude      │ ║
+║  └───────────────┘  ║ │ convers. perfiles    │ ║
+║                     ║ │ imagefx  mosaico     │ ║
+║                     ║ │ imagesrc búsqueda    │ ║
+║                     ║ │ vision   anime+ONNX  │ ║
+║                     ║ └──────────────────────┘ ║
+╚═════════════════════╩══════════════════════════╝
+           │                        │
+           └───────────┬────────────┘
+                       │
+               WhatsApp Network
 ```
 
 ---
@@ -240,10 +242,10 @@
 |-------------|---------------|:---------:|-------|
 | Node.js | 20.x LTS | ✅ | `node --version` |
 | npm | 9.x | ✅ | incluido con Node |
-| Python | 3.11+ | ❌ | **Ya no hace falta** — desde la 8.12.0 ni los comandos de imagen lo usan. Solo para `npm run monitor` y `npm run manage`, que se abren a mano (y que también se pueden compilar) |
-| Rust + Cargo | 1.75+ | ✅ | para compilar Session API |
+| Rust + Cargo | 1.75+ | ❌ | solo para compilar la Session API vos mismo: `npm install` baja el binario de tu plataforma |
 | Ollama **o** [Cosxamix](https://github.com/Brashkie/Cosxamix) | latest | ❌ | IA local (recomendado, 16 GB RAM+). Los dos hablan el mismo dialecto, así que cambiar de uno a otro son tres líneas del `.env` — ver `.env.example` |
 | FFmpeg | 6.x | ❌ | conversión de media |
+| yt-dlp | reciente | ❌ | descargas de YouTube y otros sitios. Ejecutable en `bin/` o en el `PATH`; en Termux, `pkg install yt-dlp` |
 
 **Sistemas operativos soportados:** Windows 10/11 · Ubuntu 20.04+ · Debian 11+ · macOS 12+ · Android (Termux)
 
@@ -252,7 +254,7 @@
 > **Dos cosas a tener en cuenta en dispositivos débiles (Termux/Android, ARM de placa única):**
 >
 > - De las dependencias de Node, la que de verdad compila desde código fuente en Android es **`sharp`** (lleva libvips): necesitás `clang`, `make` y `pkg-config` instalados *antes* de correr `npm install` (ver sección Termux más abajo). `cbor-x` se mencionaba acá y no hacía falta — su parte nativa (`cbor-extract`) es una dependencia **opcional**, y si no compila cae a la implementación en JavaScript puro sin que nada deje de funcionar.
-> - **Python ya no hace falta para correr el bot.** No queda nada suyo en el camino de ningún mensaje y nadie lo arranca; solo lo usan `npm run monitor` y `npm run manage`, que se abren a mano. La 8.11.0 se llevó `pyarrow`, `duckdb`, `spacy`, `ddgs`, `requests` y `transformers`, y la 8.12.0 el resto: `torch`, `pillow`, `pyanime4k`, `dghs-imgutils`, `onnxruntime` y `opencv` — más de 4 GB de dependencias entre las dos.
+> - **Python salió del proyecto en la 8.15.0.** Ya no estaba en el camino de ningún mensaje desde la 8.12.0; ahora tampoco quedan las dos herramientas de consola, que pasaron a Node. Lo único externo que puede tirar de Python es **yt-dlp**, para los comandos de descarga: sus releases traen un ejecutable autónomo para Windows, Linux y macOS que no lo necesita, y en Termux `pkg install yt-dlp` lo instala.
 > - La primera compilación de Rust (`npm run rust:build`) tarda unos minutos (~3 min en un PC de escritorio; bastante más en un teléfono) porque compila todo el árbol de dependencias con LTO. Es normal — no cierres la terminal, solo dale tiempo (y evitá que el dispositivo se duerma).
 
 > **Ollama:** Descarga un modelo antes de iniciar — `ollama pull llama3` o `ollama pull mistral`. El bot intenta Ollama primero y cae en las APIs cloud automáticamente si no está disponible.
@@ -284,29 +286,10 @@ npm run web:build
 npm start
 ```
 
-> **Python ya no hace falta.** Hasta la 8.12.0 había que crear un entorno
-> virtual e instalar dependencias; desde entonces no queda nada de Python en el
-> camino de ningún mensaje y el bot no lo arranca. Solo se usa para dos
-> herramientas que se abren a mano:
->
-> ```bash
-> cd python && python -m venv venv
-> venv\Scripts\activate          # Windows
-> # source venv/bin/activate      # Linux / macOS / Termux
-> pip install -r requirements.txt
-> ```
->
-> Con eso andan `npm run monitor` (watchdog interactivo) y `npm run manage`
-> (CLI de mantenimiento). Si no las vas a usar, saltate el paso. Para
-> `npm run py:lint` y `npm run tools:build` usa `requirements-dev.txt`, que
-> incluye al otro.
->
-> **Si actualizas Python, hay que recrear el entorno.** Un venv guarda la
-> ruta absoluta del interprete que lo creo, y sus extensiones compiladas
-> llevan la version en el nombre (`cp311`), asi que no se puede reapuntar a
-> otra: `npm run py:lint`, `py:deps`, `tools:build`, `monitor` y `manage`
-> fallan todos con `No Python at '...'`. Se arregla borrando `python/venv` y
-> repitiendo los comandos de arriba.
+> **No hace falta Python.** Desde la 8.15.0 no queda nada de Python en el
+> proyecto: el CLI de mantenimiento (`npm run manage`) está en Node y el
+> supervisor (`npm start`) reemplaza al viejo `monitor.py`. Si tenías una
+> carpeta `python/` de una versión anterior, se puede borrar entera.
 ---
 
 ### Instalación en Termux (Android)
@@ -325,7 +308,7 @@ termux-setup-storage
 
 Y después los mismos 5 pasos de [Instalación](#instalación), sin cambios.
 
-**Ya no hace falta `rust`, `python`, `clang`, `make` ni `pkg-config`.** Hasta la 8.12.0 había que compilar la Session API en el teléfono —varios minutos— y crear un entorno virtual de Python. Ahora `npm install` baja el binario ya compilado para `aarch64-linux-android`, que es el target propio de Termux: Android usa la libc **Bionic**, no glibc, así que un binario de Linux ARM normal bajaría bien y no arrancaría.
+**Ya no hace falta `rust`, `python`, `clang`, `make` ni `pkg-config`.** Hasta la 8.12.0 había que compilar la Session API en el teléfono —varios minutos— y crear un entorno virtual de Python. Ahora `npm install` baja el binario ya compilado para `aarch64-linux-android`, que es el target propio de Termux: Android usa la libc **Bionic**, no glibc, así que un binario de Linux ARM normal bajaría bien y no arrancaría. Para los comandos de descarga hace falta yt-dlp: `pkg install yt-dlp`.
 
 Los comandos de imagen (`#toanime`, `#removebg`, `#upscale`) **funcionan en el teléfono**, porque ONNX Runtime publica build para ese target con **NNAPI**, la aceleración por hardware de Android.
 
@@ -370,8 +353,7 @@ SESSION_API_KEY=                         # openssl rand -hex 32
 WEBHOOK_PORT=4001
 WEBHOOK_SECRET=                          # openssl rand -hex 32
 
-# ─── Servicios Python ─────────────────────────────────────────────────────────
-PYTHON_API_URL=http://localhost:5000
+# ─── Otros ────────────────────────────────────────────────────────────────────
 API_SECRET_KEY=                          # openssl rand -hex 32
 
 # ─── Spotify (opcional) ───────────────────────────────────────────────────────
@@ -379,16 +361,23 @@ SPOTIFY_CLIENT_ID=
 SPOTIFY_CLIENT_SECRET=
 ```
 
-### `rust/.env` — Session API
+### `data/session-api/.env` — Session API *(opcional)*
+
+La Session API lee el `.env` de la raíz —`SESSION_API_URL` y `SESSION_API_KEY`
+son los mismos para el bot y para ella—, así que normalmente no hace falta
+nada más. El bot la arranca con `data/session-api/` como carpeta de trabajo,
+y ahí viven sus datos: `data/messages.db`, `data/ai_conversations.db`,
+`sessions/`, `antiban.json` y `logs/`. Un `.env` en esa carpeta, si existe, se
+lee primero; sirve para lo que sea solo de la API:
 
 ```env
-PORT=3001
-API_KEY=                   # Mismo valor que SESSION_API_KEY
-SESSIONS_DIR=./sessions
-AUTH_DIR=../auth
-DB_PATH=./data/messages.db
 RUST_LOG=winsibot_session_api=info
+# SESSIONS_DIR, DB_PATH, CONV_DB_PATH y MODELS_DIR: relativos a data/session-api/
 ```
+
+> Hasta la 8.14.0 todo esto vivía en `rust/`, mezclado con el código. Al
+> actualizar, el bot mueve `rust/data`, `rust/sessions`, `rust/logs` y
+> `rust/.env` a `data/session-api/` en el primer arranque, sin pisar nada.
 
 > **Generar claves seguras:** `openssl rand -hex 32`
 
@@ -424,9 +413,7 @@ npm run start
 
 Compila e inicia el bot **detrás de un supervisor liviano** (`src/supervisor.ts`)
 que lo reinicia solo si crashea o si se cuelga sin heartbeat. El bot, a su vez,
-levanta sus propias dependencias (la Session API de Rust y, **si está instalada**,
-la API de Python)
-si no están corriendo ya, y cada una se reinicia sola si crashea — cada una con
+levanta su propia dependencia —la Session API— si no está corriendo ya, y cada una se reinicia sola si crashea — cada una con
 su propio indicador de estado, y un solo Ctrl+C para apagar todo junto.
 
 ### Por componentes *(para desarrollo)*
@@ -434,7 +421,6 @@ su propio indicador de estado, y un solo Ctrl+C para apagar todo junto.
 ```bash
 npm run rust:start      # Solo Session API Rust, de forma aislada
 npm run dev             # Solo Node.js sin compilar — desarrollo rápido / escanear QR
-npm run monitor         # Watchdog de consola — opcional, necesita Python
 ```
 
 <details>
@@ -442,9 +428,8 @@ npm run monitor         # Watchdog de consola — opcional, necesita Python
 
 | Script | Descripción |
 |--------|-------------|
-| `start` | Compila e inicia el bot **vía supervisor** — reinicia solo si crashea o se cuelga, y levanta Rust (y Python si está instalado) por su cuenta (cada uno con su propio auto-restart) |
+| `start` | Compila e inicia el bot **vía supervisor** — reinicia solo si crashea o se cuelga, y levanta la Session API por su cuenta, con su propio auto-restart |
 | `start:unsupervised` | Igual que `start` pero sin la capa de supervisor — arranca `dist/index.js` directo |
-| `monitor` | Watchdog de consola — opcional, necesita Python (`python/requirements.txt`) |
 | `dev` | Node.js directo — desarrollo / escanear QR |
 | `build` | Compilar TypeScript → `dist/`. **Borra `dist/` primero**: `tsc` no limpia, y el cargador de comandos registra todo `.js` que encuentre ahí, así que un archivo de una versión anterior seguiría ejecutándose |
 | `rust:start` | Session API de Rust |
@@ -467,14 +452,15 @@ npm run monitor         # Watchdog de consola — opcional, necesita Python
 | `format` / `format:fix` | Biome — formateo de `src/`/`scripts/` (solo mostrar diff / escribir) |
 | `check` / `check:fix` | Biome — lint + formato + orden de imports en un solo paso |
 | `rust:lint` | `cargo clippy` sobre la Session API de Rust |
-| `rust:bench` | Benchmarks de Criterion sobre el camino caliente (informes HTML en `rust/target/criterion/`) |
-| `py:lint` / `py:lint:fix` | Ruff — linter de `python/` (requiere `pip install -r python/requirements-dev.txt`) |
-| `py:deps` | Comprueba que lo que `python/` importa esté declarado en los requirements, en las dos direcciones. Sale con error si falta algo |
-| `tools:build` | Compila `monitor` y `manage` a ejecutables nativos con Nuitka — corren sin Python instalado. No cruza plataformas: el binario sirve para la máquina donde se compiló |
+| `rust:bench` | Benchmarks de Criterion sobre el camino caliente (informes HTML en `target/criterion/`) |
+| `native:build` | Compila la Session API con los kernels de C y Zig (`--features native`). Necesita [Zig](https://ziglang.org) 0.14 |
+| `native:test` | Tests que comparan los kernels de C y Zig con los de Rust, bit a bit |
+| `native:bench` | Los kernels de Anime4K en Rust, C y Zig, y PNG contra los dos JPEG, medidos con Criterion |
+| `bench:hops` | Cuánto cuesta un viaje de Node a la Session API —latencia y CPU de Node—, con la API corriendo |
+| `mem:profile` | Cuánta RAM agrega cada pieza al arrancar —Baileys, el núcleo, los comandos— y lo que se ahorra cargando algo al usarlo. `-- --deps` mide cada dependencia sola |
 | `ai:bench` | Mide cuánto cuesta que Ollama tenga el modelo frío contra caliente, y comprueba si el endpoint que usa el bot respeta `keep_alive`. Necesita Ollama corriendo |
 | `rust:test` | Tests unitarios de Rust (`cargo test`) |
-| `py:format` | Ruff — formateo de `python/` |
-| `lint:all` | Corre `lint` + `rust:lint` + `py:lint` + `py:deps` de una |
+| `lint:all` | Corre `lint` + `rust:lint` de una |
 | `test` | Vitest |
 
 </details>
@@ -519,13 +505,13 @@ El bot tiene **125+ comandos** en **19 categorías**.
 npm run manage
 ```
 
-Menú interactivo multi-servicio que orquesta Python, Rust y Node.js.
+Menú interactivo, o un comando directo con `npm run manage -- <comando>`. Está en Node desde la 8.15.0 —antes era Python— y lee los backups que dejó la versión anterior.
 
 | Opción | Comando | Cuándo usarlo |
 |:------:|---------|---------------|
 | 1 | `manage:status` | Ver estado de Rust / Webhook / Panel web |
 | 2 | `manage:diagnose` | Analizar sesión, archivos Signal, Rust, logs |
-| 3 | `manage:repair` | Signal corrupto → intenta restauración sin QR → recupera backup |
+| 3 | `manage:repair` | creds roto → copia de la Session API → último backup válido → QR solo si no queda nada. **No borra las sesiones Signal**: eso es `reset-signal` |
 | 4 | `manage:reset-signal` | Solo borrar `session-*.json` (conserva `creds.json`) |
 | 5 | `manage:reset-qr` | Eliminar sesión completa y obtener QR nuevo |
 | 6 | `manage:backup` | Crear backup verificado con SHA-256 |
@@ -553,11 +539,11 @@ El receiver escucha en `http://127.0.0.1:4001` y permite controlar el bot desde 
 
 Todas las peticiones requieren el header `x-webhook-signature` con firma HMAC-SHA256:
 
-```python
-import hmac, hashlib
+```js
+import { createHmac } from 'crypto'
 
-sig = hmac.new(WEBHOOK_SECRET.encode(), body.encode(), hashlib.sha256).hexdigest()
-headers = { "x-webhook-signature": f"sha256={sig}" }
+const sig = createHmac('sha256', WEBHOOK_SECRET).update(body).digest('hex')
+const headers = { 'x-webhook-signature': `sha256=${sig}` }
 ```
 
 <details>
@@ -642,7 +628,7 @@ curl -H "x-api-key: TU_CLAVE" http://127.0.0.1:3001/messages/pending
 }
 ```
 
-> Si `delivery_pct` baja de **80%**, ejecuta `npm run manage:repair`.
+> Si `delivery_pct` baja de **80%**, ejecuta `npm run manage:diagnose`; si apunta a las sesiones Signal, `npm run manage:reset-signal`.
 
 ---
 
@@ -806,15 +792,14 @@ WinsiBot/
 │       ├── server.ts                 # API + WS + estático de web/dist
 │       ├── auth.ts                   # Login vinculando WhatsApp (#login <código>)
 │       └── routes/                   # /api/subbots, /api/groups, /api/admin
-├── python/                           # Python — OPCIONAL, solo herramientas de consola
-│   ├── requirements.txt              # Lo que necesitan `npm run monitor` y `manage`
-│   ├── paths.py                      # La raíz del proyecto, interpretado o compilado
-│   ├── ai/                           # Salud, roturas, anomalías, alertas
-│   ├── session/                      # Backup / restore / checksum SHA-256
-│   └── terminal/
-│       ├── monitor.py                # Watchdog interactivo con auto-restart
-│       └── manage.py                 # CLI de mantenimiento
-├── rust/                             # Rust — Session API v5.8.0
+├── crates/session-api/               # Session API v5.9.0 (Rust) — workspace en Cargo.toml de la raíz
+│   ├── native/                       # Kernels en C y Zig, compilados con Zig dentro del binario
+│   │   ├── lib.zig                   # Raíz: trae los demás .zig
+│   │   ├── anime4k.c                 # push_color y push_gradient (1,35x sobre Rust)
+│   │   ├── anime4k.zig               # Sobel con @Vector(8, f32) (3,7x sobre Rust)
+│   │   ├── jpeg.zig                  # Color, 4:2:0 y DCT con vectores
+│   │   └── jpeg.c                    # Tablas, cabeceras y Huffman (3,35x sobre el JPEG de Rust)
+│   ├── build.rs                      # Llama a Zig con la feature `native`
 │   ├── assets/                       # Datos incrustados en el binario con include_str!
 │   │   ├── personality.json          # 489 frases en 12 modos + 121 de humor
 │   │   └── commands.json             # Catálogo de 28 comandos para el contexto de la IA
@@ -846,7 +831,7 @@ WinsiBot/
 │   ├── commands.md                   # Referencia completa de comandos (ES)
 │   └── commands.en.md                # Full command reference (EN)
 ├── .env.example                      # Plantilla de configuración principal
-├── rust/.env.example                 # Plantilla de Rust
+├── crates/session-api/.env.example   # Plantilla de la Session API
 └── package.json
 ```
 
@@ -895,7 +880,7 @@ npm run manage:reset-qr
 
 Desde v8.4.0 esto puede ser el **supervisor** (`src/supervisor.ts`) actuando como se espera: reinicia el bot si crashea (código de salida != 0) o si detecta, vía `GET /watchdog/status`, que el event loop se colgó sin heartbeat por un buen rato. Es intencional — así el bot se auto-recupera sin intervención manual.
 
-Si el reinicio no parece justificado, revisa `HANG_TIMEOUT` en `python/terminal/monitor.py` (default 15 min) y el estado del watchdog con `GET /watchdog/status`. Para descartar que sea el supervisor, arranca sin él con `npm run start:unsupervised`.
+Si el reinicio no parece justificado, revisa el estado del watchdog con `GET /watchdog/status`: el supervisor reinicia cuando la Session API dice que el bot dejó de mandar heartbeat. Para descartar que sea el supervisor, arranca sin él con `npm run start:unsupervised`.
 
 </details>
 
@@ -946,7 +931,7 @@ No hay ningún límite artificial de grupos en el código. El rate limiter de Ru
 <details>
 <summary><b>¿Cada cuánto tiempo hacer backup?</b></summary>
 
-El monitor hace backup automático al iniciar (si la sesión es válida) y al recibir señal de cierre. Puedes forzarlo con `npm run manage:backup`. Rust conserva los últimos **10 snapshots**, además de los backups manuales.
+La Session API guarda una copia de `creds` con cada cambio y conserva los últimos **10 snapshots**, y `creds.cbor.bak` guarda la versión anterior al lado. Un backup completo de `auth/` se hace a mano con `npm run manage:backup`, que deja los 5 más recientes.
 
 </details>
 

@@ -1,0 +1,69 @@
+[package]
+name = "winsibot-session-api"
+version = "5.9.0"
+edition = "2021"
+
+[lib]
+name = "winsibot_session_api"
+path = "src/lib.rs"
+
+[[bin]]
+name = "winsibot-session-api"
+path = "src/main.rs"
+
+[dependencies]
+dashmap = "6"
+axum = "0.7"
+tokio = { version = "1", features = ["full"] }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+tower = "0.4"
+tower-http = { version = "0.5", features = ["trace", "compression-gzip", "timeout"] }
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+uuid = { version = "1", features = ["v4"] }
+base64 = "0.22"
+dotenvy = "0.15"
+chrono = { version = "0.4", features = ["serde"] }
+rusqlite = { version = "0.31", features = ["bundled"] }
+regex    = { version = "1", features = ["unicode"] }
+reqwest  = { version = "0.12", default-features = false, features = ["json", "rustls-tls"] }
+tracing-appender = "0.2.5"
+# Solo PNG y JPEG: default-features trae una docena de decodificadores (webp,
+# tiff, bmp, ico, avif...) que este proyecto no usa y que alargan el build y
+# engordan el binario.
+image    = { version = "0.25", default-features = false, features = ["png", "jpeg"] }
+# ONNX Runtime para los modelos de imagen (ver vision.rs). `download-binaries`
+# baja el runtime nativo al compilar, asi que no hay que instalarlo aparte.
+ort      = { version = "=2.0.0-rc.13", default-features = false, features = ["std", "download-binaries", "tls-rustls", "ndarray"] }
+ndarray  = "0.17"
+
+[features]
+# Los kernels de Anime4K en C y Zig (native/), compilados con Zig dentro del
+# binario. Apagada por defecto: sin Zig instalado el crate compila igual, con
+# los kernels de Rust. Los binarios de las releases salen con ella puesta.
+native = []
+
+[dev-dependencies]
+criterion = { version = "0.5", features = ["html_reports"] }
+
+# harness = false: Criterion trae el suyo, el de libtest estorba.
+[[bench]]
+name = "rate_limiter"
+harness = false
+
+[[bench]]
+name = "storage"
+harness = false
+
+[[bench]]
+name = "imagefx"
+harness = false
+
+[[bench]]
+name = "anime4k"
+harness = false
+
+[[bench]]
+name = "codec"
+harness = false

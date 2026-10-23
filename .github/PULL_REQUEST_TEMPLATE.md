@@ -30,8 +30,8 @@ Closes #<!-- número de issue, si aplica -->
 
 - `src/plugins/commands/…` — 
 - `src/lib/…` — 
-- `python/…` — 
-- `rust/…` — 
+- `crates/session-api/src/…` — 
+- `crates/session-api/native/…` — 
 - `docs/…` — 
 
 ---

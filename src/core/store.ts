@@ -28,13 +28,15 @@ interface ExtendedParticipant {
 interface StoreData {
   contacts: Record<string, StoreContact>
   chats:    Record<string, { id: string; name?: string }>
-  messages: Record<string, any[]>
 }
 
-// Máximo de mensajes a mantener por chat privado.
-// Los mensajes de grupos NO se almacenan — son voluminosos y la mayoría de
-// comandos no necesita historial; solo usan el mensaje actual del contexto.
-const MAX_MSGS_PER_CHAT = 20
+// Hasta la 8.14.0 se guardaban también los últimos 20 mensajes COMPLETOS de
+// cada chat privado —el objeto entero de Baileys, con miniaturas en base64 de
+// hasta 162 KB—, en memoria y reescritos a disco con todo lo demás. Nadie los
+// leía: ni un solo llamador de getMessages(), y al socket no se le pasa
+// getMessage. Eran 2 de los 3,6 MB de store.json, serializados en cada
+// guardado. Un store.json viejo los trae todavía: se descartan al cargar y
+// desaparecen del archivo en el próximo guardado.
 // Rotar contactos cuando superan este límite (LRU aproximado) — configurable
 // por env (MAX_CONTACTS), ver src/config.ts
 const MAX_CONTACTS      = config.maxContacts
@@ -44,7 +46,6 @@ class WinsiStore {
   private data: StoreData = {
     contacts: {},
     chats:    {},
-    messages: {},
   }
 
   private lidMap  = new Map<string, string>()
@@ -70,7 +71,9 @@ class WinsiStore {
     try {
       if (!existsSync(this.path)) return
       const raw = await readFile(this.path, 'utf-8')
-      this.data = JSON.parse(raw)
+      const leido = JSON.parse(raw) as StoreData & { messages?: unknown }
+      this.data = { contacts: leido.contacts ?? {}, chats: leido.chats ?? {} }
+      if (leido.messages) this.dirty = true // que el próximo guardado los saque
 
       for (const [jid, c] of Object.entries(this.data.contacts)) {
         if (c.name || c.notify) this.nameMap.set(jid, c.name ?? c.notify ?? '')
@@ -228,17 +231,6 @@ class WinsiStore {
           }
         }
 
-        // Solo cachear historial en chats privados — los grupos son voluminosos
-        // y los comandos usan el mensaje del contexto actual, no el historial.
-        const chatId = msg.key.remoteJid ?? ''
-        if (chatId && !chatId.endsWith('@g.us')) {
-          if (!this.data.messages[chatId]) this.data.messages[chatId] = []
-          this.data.messages[chatId].push(msg)
-          if (this.data.messages[chatId].length > MAX_MSGS_PER_CHAT) {
-            this.data.messages[chatId] = this.data.messages[chatId].slice(-MAX_MSGS_PER_CHAT)
-          }
-          this.scheduleSave()
-        }
       }
 
       // Rotar si la tabla de contactos creció mucho
@@ -302,10 +294,6 @@ class WinsiStore {
       ?? this.data.contacts[jid]?.name
       ?? this.data.contacts[jid]?.notify
       ?? jid.replace('@s.whatsapp.net', '').replace('@lid', '')
-  }
-
-  getMessages(chatId: string): any[] {
-    return this.data.messages[chatId] ?? []
   }
 
   get contacts() { return this.data.contacts }

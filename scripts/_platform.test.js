@@ -22,10 +22,8 @@ describe('_platform.js vs src/lib/platform.ts', () => {
     expect(js.exeName('yt-dlp')).toBe(ts.exeName('yt-dlp'))
   })
 
-  it('venvPythonPath()/venvBinPath()/systemPython() coinciden', () => {
+  it('binPath() coincide', () => {
     const cwd = 'C:/fake/project'
-    expect(js.venvPythonPath(cwd)).toBe(ts.venvPythonPath(cwd))
-    expect(js.venvBinPath('yt-dlp', cwd)).toBe(ts.venvBinPath('yt-dlp', cwd))
-    expect(js.systemPython()).toBe(ts.systemPython())
+    expect(js.binPath('yt-dlp', cwd)).toBe(ts.binPath('yt-dlp', cwd))
   })
 })

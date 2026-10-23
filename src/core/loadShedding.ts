@@ -67,9 +67,14 @@ export function priorityOf(category: string | undefined): Priority {
 }
 
 // ─── Medición del lag ────────────────────────────────────────────────────────
-// resolution 20ms: suficiente para distinguir "va bien" de "está atascado" sin
-// que el propio muestreo cueste nada apreciable.
-const histogram = monitorEventLoopDelay({ resolution: 20 })
+// resolution 250 ms. Era 20, y eso NO era gratis: monitorEventLoopDelay mide
+// con un temporizador de libuv que se dispara a esa resolución, así que eran
+// 50 despertares por segundo —3000 por minuto, contra ~55 de todos los demás
+// temporizadores del bot juntos— durante todo el día, haya mensajes o no. En
+// un teléfono eso no deja dormir a la CPU. Medido en reposo durante 20 s: a
+// 20 ms, 32 ms de CPU; a 250 ms, 0,0. Y alcanza de sobra: los umbrales son
+// 400 y 1500 ms, y un bloqueo de esa duración se mide igual.
+const histogram = monitorEventLoopDelay({ resolution: 250 })
 histogram.enable()
 
 // Umbrales en ms sobre el MÁXIMO lag de la ventana, no sobre un percentil.

@@ -1,7 +1,7 @@
 import 'dotenv/config'
 import readline from 'readline'
 import { spawn, type ChildProcess } from 'child_process'
-import { join } from 'path'
+import { join, resolve } from 'path'
 import { existsSync, readFileSync } from 'fs'
 import ffmpegStatic from 'ffmpeg-static'
 import { winsiSocket } from '@core/socket.js'
@@ -12,7 +12,9 @@ import { config } from '@config'
 import { loadAll, saveAll, startAutoSave, stopAutoSave } from '@core/persistence.js'
 import { sessionClient } from '@lib/session.js'
 import { flush as flushBotStats } from '@core/botStats.js'
-import { venvPythonPath, systemPython, exeName } from '@lib/platform.js'
+import { exeName } from '@lib/platform.js'
+import { rustRequest } from '@lib/rustHttp.js'
+import { SESSION_API, sessionApiBinary, sessionApiHome } from '@lib/sessionApiPaths.js'
 import { color, gradient, loader, ascii, themes, configure, components, BG, animate } from 'ansimax'
 
 // ffmpeg-static ya era una dependencia del proyecto, pero nada la usaba —
@@ -256,12 +258,10 @@ process.on('SIGTERM', () => {
 
 // ─── Rust Session API auto-arranque ──────────────────────────────────────────
 
-const RUST_URL_FOR_BOOT = process.env.SESSION_API_URL ?? 'http://127.0.0.1:3001'
-
 async function isRustApiUp(): Promise<boolean> {
   try {
-    const res = await fetch(`${RUST_URL_FOR_BOOT}/health/live`, { signal: AbortSignal.timeout(2_000) })
-    return res.ok
+    const res = await rustRequest('GET', '/health/live', undefined, { timeout: 2_000 })
+    return res.status >= 200 && res.status < 300
   } catch {
     return false
   }
@@ -270,15 +270,23 @@ async function isRustApiUp(): Promise<boolean> {
 async function ensureRust(): Promise<void> {
   if (await isRustApiUp()) return
 
-  const rustDir   = join(process.cwd(), 'rust')
-  const exe       = join(rustDir, 'target', 'release', exeName('winsibot-session-api'))
-  const hasBinary = existsSync(exe)
+  const exe       = sessionApiBinary()
+  const hasBinary = exe !== null
+  const home      = sessionApiHome()
+  // AUTH_DIR absoluto: un .env viejo traído de rust/ puede decir `../auth`,
+  // que era relativo a rust/ y desde data/session-api/ apuntaría a otro lado.
+  // dotenvy no pisa variables que ya vienen en el entorno, así que esta gana.
+  const env = { ...process.env, AUTH_DIR: resolve(config.sessionPath) }
 
   const stopSpin = loader.spin('Iniciando Rust Session API...')
 
   const proc = hasBinary
-    ? spawn(exe, [], { cwd: rustDir, stdio: ['ignore', 'ignore', 'ignore'] })
-    : spawn('cargo', ['run', '--release'], { cwd: rustDir, stdio: ['ignore', 'ignore', 'ignore'], shell: process.platform === 'win32' })
+    ? spawn(exe, [], { cwd: home, env, stdio: ['ignore', 'ignore', 'ignore'] })
+    : spawn(
+        'cargo',
+        ['run', '--release', '-p', SESSION_API, '--manifest-path', join(process.cwd(), 'Cargo.toml')],
+        { cwd: home, env, stdio: ['ignore', 'ignore', 'ignore'], shell: process.platform === 'win32' },
+      )
   spawnedChildren.push(proc)
 
   proc.on('error', (err) => {
@@ -520,17 +528,15 @@ function startHeartbeatLogger(): void {
 // Si el event loop se congela, los pings dejan de llegar y Rust lo detecta.
 // GET /watchdog/status desde un monitor externo puede alertar o reiniciar.
 function startWatchdogPing(): void {
-  const RUST_URL = process.env.SESSION_API_URL ?? 'http://127.0.0.1:3001'
-  const RUST_KEY = process.env.RUST_API_KEY ?? ''
-  setInterval(async () => {
-    try {
-      await fetch(`${RUST_URL}/watchdog/ping`, {
-        method:  'POST',
-        headers: { 'x-api-key': RUST_KEY, 'Content-Type': 'application/json' },
-        body:    '{}',
-        signal:  AbortSignal.timeout(2_000),
-      })
-    } catch { /* silencioso si Rust no está corriendo */ }
+  // Por el cliente único (lib/rustHttp.ts), que pone la clave de config.
+  //
+  // Acá se leía RUST_API_KEY, el nombre que se retiró en la 8.12.0: todos los
+  // latidos daban 401, y Rust nunca recibió uno. No se notaba porque el
+  // supervisor tenía el mismo error y tampoco podía preguntar; al arreglarlo
+  // solo a él, habría visto "nunca hubo latido = colgado" y reiniciado el bot a
+  // los 2 minutos de arrancar, y después cada 5.
+  setInterval(() => {
+    rustRequest('POST', '/watchdog/ping', {}, { timeout: 2_000 }).catch(() => { /* Rust no está corriendo */ })
   }, 20_000).unref()
 }
 

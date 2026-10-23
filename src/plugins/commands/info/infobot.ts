@@ -41,7 +41,7 @@ const command: Command = {
       `> Powerful. Secure. Intelligent.`,
       ``,
       `🛡 Secure       — sesión cifrada, anti-ban`,
-      `⚡ Fast         — Node.js + Rust + Python`,
+      `⚡ Fast         — Node.js + Rust`,
       `🧠 Intelligent  — IA conversacional integrada`,
       `🌐 Enterprise   — multi-bot, multi-sesión`,
       ``,

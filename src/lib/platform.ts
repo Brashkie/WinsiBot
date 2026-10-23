@@ -1,10 +1,7 @@
-// platform.ts — resolución de rutas/binarios que cambian según el sistema
-// operativo, en un solo lugar. Antes cada script/archivo que necesitaba
-// encontrar el Python del venv o un binario del venv (yt-dlp, etc.) repetía
-// a mano `python/venv/Scripts/python.exe` (layout de Windows) sin ninguna
-// rama para Linux/macOS/Termux (`python/venv/bin/python`) — funcionaba en
-// Windows y fallaba o caía silenciosamente al binario del sistema en
-// cualquier otro SO. Ver plan de multiplataforma.
+// platform.ts — lo que cambia según el sistema operativo, en un solo lugar.
+//
+// Hasta la 8.14.0 también resolvía el Python del venv y sus binarios. Python
+// salió del proyecto en la 8.15.0, y con él esas tres funciones.
 //
 // Duplicado a propósito en scripts/_platform.js (JS plano, sin tsc) — ver el
 // comentario de ese archivo para el porqué. scripts/_platform.test.js
@@ -21,21 +18,7 @@ export function exeName(name: string): string {
   return IS_WINDOWS ? `${name}.exe` : name
 }
 
-/** Ruta al Python del venv del proyecto: Scripts/python.exe en Windows, bin/python en el resto. */
-export function venvPythonPath(cwd: string = process.cwd()): string {
-  return IS_WINDOWS
-    ? join(cwd, 'python', 'venv', 'Scripts', 'python.exe')
-    : join(cwd, 'python', 'venv', 'bin', 'python')
-}
-
-/** Ruta a un binario instalado dentro del venv (yt-dlp, etc.) — mismo criterio que venvPythonPath. */
-export function venvBinPath(name: string, cwd: string = process.cwd()): string {
-  return IS_WINDOWS
-    ? join(cwd, 'python', 'venv', 'Scripts', exeName(name))
-    : join(cwd, 'python', 'venv', 'bin', name)
-}
-
-/** Nombre del Python del sistema fuera del venv — 'python' en Windows, 'python3' en el resto. */
-export function systemPython(): string {
-  return IS_WINDOWS ? 'python' : 'python3'
+/** Ruta a un binario externo del proyecto (ffmpeg, yt-dlp...), que viven en bin/. */
+export function binPath(name: string, cwd: string = process.cwd()): string {
+  return join(cwd, 'bin', exeName(name))
 }

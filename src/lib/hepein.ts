@@ -34,7 +34,7 @@ import {
   deleteUserStyle, getCorpusStats,
   aiRespond, aiImitate, updateUserMemory,
   type UserStyleProfile, type GroupStyleProfile,
-} from './pythonBridge.js'
+} from './nativeBridge.js'
 import { logger } from '../core/logger.js'
 
 // ─── Tipos ────────────────────────────────────────────────────────────────────

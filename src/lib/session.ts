@@ -6,15 +6,7 @@
 
 import { logger } from '@core/logger.js'
 import { rustCircuit } from '@lib/circuitBreaker.js'
-import { config } from '@config'
-
-const API_URL = config.rustApiUrl
-const API_KEY  = config.sessionApiKey
-
-const _headers = {
-  'Content-Type': 'application/json',
-  'x-api-key':    API_KEY,
-}
+import { rustRequest } from '@lib/rustHttp.js'
 
 // ─── Fetch helper ─────────────────────────────────────────────────────────────
 // Timeout hardcoded de 3s — Rust debe responder sub-ms, 3s es el worst-case.
@@ -42,8 +34,6 @@ async function apiFetch<T>(
   // nota en cada mensaje — checkRate() está en el camino crítico del handler.
   if (!rustCircuit.canAttempt()) throw new Error('Rust API no disponible (circuito abierto)')
 
-  const ctrl = new AbortController()
-  const timer = setTimeout(() => ctrl.abort(), opts?.timeoutMs ?? FETCH_TIMEOUT_MS)
 
   // Lo que mide el circuito es si Rust CONTESTA, no si nos gustó la respuesta.
   // Un 429 de /rate/check (bloqueo intencional, ver allowNon2xx arriba) o un
@@ -53,11 +43,14 @@ async function apiFetch<T>(
   // rechazada, DNS.
   let responded = false
   try {
-    const res  = await fetch(`${API_URL}${path}`, {
-      ...init,
-      signal:  ctrl.signal,
-      headers: { ..._headers, ...init?.headers },
+    // El cliente único (rustHttp.ts). Acá era `fetch`, que en Windows tardaba
+    // ~14 ms por llamada contra ~0,3 ms de este, y por acá pasan checkRate en
+    // cada mensaje y el antiban en CADA envío.
+    const method = (init?.method ?? 'GET') as 'GET' | 'POST' | 'PUT' | 'PATCH' | 'DELETE'
+    const r = await rustRequest(method, path, init?.body ? JSON.parse(String(init.body)) : undefined, {
+      timeout: opts?.timeoutMs ?? FETCH_TIMEOUT_MS,
     })
+    const res = { ok: r.status >= 200 && r.status < 300, status: r.status, json: async () => r.data }
     // Cualquier respuesta HTTP es Rust vivo, tenga o no un JSON adentro. Antes
     // esto se marcaba DESPUES de parsear, y una ruta que el binario no conoce
     // —un 404 sin cuerpo, el caso de un bot actualizado con un binario de
@@ -75,8 +68,6 @@ async function apiFetch<T>(
   } catch (err) {
     if (!responded) rustCircuit.recordFailure()
     throw err
-  } finally {
-    clearTimeout(timer)
   }
 }
 

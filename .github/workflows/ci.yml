@@ -37,48 +37,33 @@ jobs:
       - name: Setup Rust
         uses: dtolnay/rust-toolchain@stable
 
+      # El workspace está en la raíz desde la 8.15.0 (crates/*). Ya no se
+      # escribe un .env de mentira: `cargo check` compila, no ejecuta, y la
+      # configuración solo se lee al arrancar.
       - name: Cache Rust
         uses: Swatinem/rust-cache@v2
-        with:
-          workspaces: rust
-
-      - name: Create dummy .env for Rust
-        run: |
-          echo "PORT=3001" > rust/.env
-          echo "API_KEY=00000000000000000000000000000000" >> rust/.env
-          echo "SESSIONS_DIR=./sessions" >> rust/.env
-          echo "AUTH_DIR=../auth" >> rust/.env
-          echo "DB_PATH=./data/messages.db" >> rust/.env
 
       - name: Cargo check
-        working-directory: rust
-        run: cargo check
+        run: cargo check --workspace --all-targets
 
-  # ─── Python ──────────────────────────────────────────────────────────────────
-  python:
-    name: Python lint
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
+      - name: Tests
+        run: cargo test --workspace --release
 
-      - name: Setup Python
-        uses: actions/setup-python@v5
-        with:
-          python-version: "3.11"
+      # Los kernels de C y Zig contra Rust: Anime4K bit a bit, y el códec
+      # JPEG decodificado y comparado con el original. Es lo que demuestra que
+      # calculan bien, que es lo único que justifica tenerlos.
+      - uses: ./.github/actions/instalar-zig
 
-      - name: Check syntax
-        run: |
-          python -m compileall python/terminal/manage.py
-          python -m compileall python/terminal/monitor.py
-          python -m compileall python/session/manager.py
+      - name: Tests con los kernels nativos
+        run: cargo test --release -p winsibot-session-api --features native
 
   # ─── Release ─────────────────────────────────────────────────────────────────
   # Solo corre al pushear un tag "vX.Y.Z" — crea el Release en GitHub con notas
-  # autogeneradas, y solo después de que los 3 checks de arriba pasen en verde.
+  # autogeneradas, y solo después de que los 2 checks de arriba pasen en verde.
   release:
     name: Create GitHub Release
     if: startsWith(github.ref, 'refs/tags/v')
-    needs: [typescript, rust, python]
+    needs: [typescript, rust]
     runs-on: ubuntu-latest
     permissions:
       contents: write

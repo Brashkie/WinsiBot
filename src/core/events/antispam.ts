@@ -1,6 +1,6 @@
 import type { WASocket } from '@whiskeysockets/baileys'
 import { getGroupConfig } from './index.js'
-import { analyzeIntent } from '@lib/pythonBridge.js'
+import { analyzeIntent } from '@lib/nativeBridge.js'
 import { getNumber } from '@lib/jid_utils.js'
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -59,7 +59,7 @@ function resetStrikes(key: string): void {
  * Lo resuelve `/nlp/fast` de Rust; si no hay respuesta cae a la regex local,
  * que es el motivo por el que el respaldo a Python se quitó en la 8.11.0 — ese
  * respaldo devolvía siempre un objeto válido y hacía que esta regex no se
- * evaluara nunca (ver analyzeIntent en lib/pythonBridge.ts).
+ * evaluara nunca (ver analyzeIntent en lib/nativeBridge.ts).
  */
 export async function isContentSpam(text: string): Promise<boolean> {
   try {

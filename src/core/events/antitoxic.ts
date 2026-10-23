@@ -1,6 +1,6 @@
 import type { WASocket } from '@whiskeysockets/baileys'
 import { getGroupConfig } from './index.js'
-import { analyzeIntent } from '@lib/pythonBridge.js'
+import { analyzeIntent } from '@lib/nativeBridge.js'
 import { getNumber } from '@lib/jid_utils.js'
 
 // ─────────────────────────────────────────────────────────────────────────────

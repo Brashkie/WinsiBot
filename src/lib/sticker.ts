@@ -1,4 +1,7 @@
-import { StickerTypes, createSticker } from 'wa-sticker-formatter'
+// wa-sticker-formatter —y sharp, que trae detrás— se carga al hacer el primer
+// sticker, no al arrancar: 5,5 MB de RAM y 0,6 s de arranque medidos con
+// `npm run mem:profile`, que pagaba todo bot aunque no hiciera stickers.
+const stickerLib = () => import('wa-sticker-formatter')
 import { readFile } from 'fs/promises'
 import { getTempPath } from './utils.js'
 import { writeFile } from 'fs/promises'
@@ -16,6 +19,7 @@ export async function makeSticker(
 ): Promise<string> {
   const output = getTempPath('webp')
 
+  const { createSticker, StickerTypes } = await stickerLib()
   const sticker = await createSticker(
     await readFile(inputPath),
     {
@@ -38,6 +42,7 @@ export async function makeStickerFromUrl(
   const buf = Buffer.from(await res.arrayBuffer())
   const output = getTempPath('webp')
 
+  const { createSticker, StickerTypes } = await stickerLib()
   const sticker = await createSticker(buf, {
     pack: opts.pack ?? config.botName,
     author: opts.author ?? 'Hepein',

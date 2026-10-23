@@ -137,17 +137,14 @@ export class CircuitBreaker {
 }
 
 // ─── Circuitos del proyecto ──────────────────────────────────────────────────
-// Uno por dependencia: que Python esté caída no debe cortar las llamadas a
-// Rust ni al revés.
-
-// Python está en el camino de cada comando (spam/check) — abrir rápido.
-export const pythonCircuit = new CircuitBreaker('python', { failureThreshold: 5, openMs: 30_000 })
+// Uno por dependencia. Había otro para la API de Python, que ya no existe: se
+// fue con Python en la 8.15.0.
 
 // Rust está en el camino de cada mensaje (rate/check) y es más crítico para la
 // sesión, así que se le da algo más de margen antes de cortar.
 export const rustCircuit = new CircuitBreaker('rust', { failureThreshold: 8, openMs: 20_000 })
 
-const registry = [pythonCircuit, rustCircuit]
+const registry = [rustCircuit]
 
 export function circuitStats() {
   return registry.map(c => c.stats())

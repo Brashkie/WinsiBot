@@ -118,7 +118,7 @@ const command: Command = {
 
       if (!ok) {
         await safeSend(() => sock.sendMessage(jid, {
-          text: `✗ No se pudo cambiar el modo — Python API no disponible`,
+          text: `✗ No se pudo cambiar el modo — la Session API no responde`,
         }, { quoted: msg }))
         return
       }

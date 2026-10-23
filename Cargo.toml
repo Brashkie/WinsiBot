@@ -1,0 +1,27 @@
+# Workspace de las partes nativas de WinsiBot.
+#
+# Cada crate vive en crates/<nombre>/. Hasta la 8.14.0 había uno solo y se
+# llamaba por el lenguaje, rust/; con el workspace, la carpeta dice QUÉ es cada
+# cosa y no en qué está escrita, y el próximo crate entra al lado sin mover
+# nada.
+#
+#   crates/session-api   la Session API: sesión, IA, imágenes, antiban...
+#
+# Se compila desde la raíz y deja todo en target/:
+#
+#   cargo build --release -p winsibot-session-api
+#
+# Los datos de la API NO viven acá: el bot la arranca con data/session-api/
+# como carpeta de trabajo (ver ensureRust() en src/index.ts). Así mover o
+# renombrar código no puede volver a dejar sus datos atrás.
+
+[workspace]
+resolver = "2"
+members = ["crates/*"]
+
+# Los perfiles van en la raíz del workspace: Cargo ignora, con un aviso, los
+# que estén en el Cargo.toml de un miembro.
+[profile.release]
+lto = true
+codegen-units = 1
+strip = true

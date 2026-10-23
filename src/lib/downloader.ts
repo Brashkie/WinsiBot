@@ -10,7 +10,7 @@ import axios from 'axios'
 import ffmpegStatic from 'ffmpeg-static'
 import { Queue } from './queue.js'
 import { createCache, registerCache } from './cacheManager.js'
-import { venvBinPath, exeName } from './platform.js'
+import { binPath, exeName } from './platform.js'
 import { USER_AGENT } from '@config'
 
 const execAsync = promisify(exec)
@@ -72,11 +72,15 @@ async function withVideoDedup(
 }
 
 // ─── Path a yt-dlp ────────────────────────────────────────────────────────────
+// yt-dlp es un programa externo, como ffmpeg: se usa su ejecutable, no se
+// importa. Antes se buscaba primero dentro de python/venv, que se fue con
+// Python en la 8.15.0. Ahora: bin/ (donde ya está ffmpeg), la raíz, o el PATH.
+// Sus releases traen un ejecutable autónomo por plataforma que no pide Python
+// instalado; en Termux, `pkg install yt-dlp`.
 function getYtdlp(): string {
-  const venvExe  = venvBinPath('yt-dlp')
-  const localExe = join(process.cwd(), exeName('yt-dlp'))
-  if (existsSync(venvExe))  return venvExe
-  if (existsSync(localExe)) return localExe
+  for (const p of [binPath('yt-dlp'), join(process.cwd(), exeName('yt-dlp'))]) {
+    if (existsSync(p)) return p
+  }
   return 'yt-dlp'
 }
 

@@ -1,5 +1,5 @@
 import type { Command } from '../../../types/index.js'
-import { searchImage } from '@lib/pythonBridge.js'
+import { searchImage } from '@lib/nativeBridge.js'
 
 const BANNED_WORDS = [
   'porn','porno','xxx','nsfw','hentai','nude','nudes',

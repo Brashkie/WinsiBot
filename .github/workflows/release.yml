@@ -84,7 +84,6 @@ jobs:
       - name: Cache de cargo
         uses: Swatinem/rust-cache@v2
         with:
-          workspaces: rust
           key: ${{ matrix.target }}
 
       - name: Linker cruzado (Linux ARM)
@@ -104,14 +103,21 @@ jobs:
           echo "CC_aarch64_linux_android=$NDK/aarch64-linux-android24-clang" >> $GITHUB_ENV
           echo "AR_aarch64_linux_android=$NDK/llvm-ar" >> $GITHUB_ENV
 
+      # Zig compila los kernels nativos de crates/session-api/native/ —el C y
+      # el Zig— y cruza a cualquier target sin toolchain aparte, Android
+      # incluido. Versión fija y SHA-256 verificado, como en Cosxamix.
+      - uses: ./.github/actions/instalar-zig
+
+      # Con `native`: los kernels de Anime4K en C y Zig, que hacen #upscale
+      # 1,22x más rápido (ver src/anime4k.rs). Lo que baja `npm install` es
+      # este binario, así que es el que tiene que llevarlos.
       - name: Compilar
-        working-directory: rust
-        run: cargo build --release --target ${{ matrix.target }}
+        run: cargo build --release -p winsibot-session-api --features native --target ${{ matrix.target }}
 
       - name: Renombrar y firmar con SHA-256
         shell: bash
         run: |
-          cd rust/target/${{ matrix.target }}/release
+          cd target/${{ matrix.target }}/release
           NOMBRE="winsibot-session-api-${{ matrix.target }}${{ matrix.ext }}"
           mv "winsibot-session-api${{ matrix.ext }}" "$NOMBRE"
           # Ninguna de las dos herramientas está en los tres runners, así que
@@ -136,7 +142,7 @@ jobs:
         with:
           name: ${{ matrix.target }}
           path: |
-            rust/target/${{ matrix.target }}/release/winsibot-session-api-*
+            target/${{ matrix.target }}/release/winsibot-session-api-*
           if-no-files-found: error
 
   publicar:

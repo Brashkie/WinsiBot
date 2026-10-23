@@ -18,18 +18,6 @@ export function exeName(name) {
   return IS_WINDOWS ? `${name}.exe` : name
 }
 
-export function venvPythonPath(cwd = process.cwd()) {
-  return IS_WINDOWS
-    ? join(cwd, 'python', 'venv', 'Scripts', 'python.exe')
-    : join(cwd, 'python', 'venv', 'bin', 'python')
-}
-
-export function venvBinPath(name, cwd = process.cwd()) {
-  return IS_WINDOWS
-    ? join(cwd, 'python', 'venv', 'Scripts', exeName(name))
-    : join(cwd, 'python', 'venv', 'bin', name)
-}
-
-export function systemPython() {
-  return IS_WINDOWS ? 'python' : 'python3'
+export function binPath(name, cwd = process.cwd()) {
+  return join(cwd, 'bin', exeName(name))
 }

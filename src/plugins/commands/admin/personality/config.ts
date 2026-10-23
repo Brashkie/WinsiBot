@@ -1,6 +1,6 @@
 import {
   getPersonalityModes, setPersonalityMode, resetPersonalityMode,
-} from '@lib/pythonBridge.js'
+} from '@lib/nativeBridge.js'
 import { hepein }               from '@lib/hepein.js'
 
 export const MODES = [

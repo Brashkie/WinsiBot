@@ -1,5 +1,5 @@
 import type { Command } from '../../../types/index.js'
-import { vision } from '@lib/pythonBridge.js'
+import { vision } from '@lib/nativeBridge.js'
 import { downloadContentFromMessage } from '@whiskeysockets/baileys'
 
 import { sleep } from '@lib/utils.js'

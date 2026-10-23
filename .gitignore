@@ -2,7 +2,6 @@
 auth/
 data/session_backups/
 data/emergency_*/
-rust/sessions/
 
 # ─── Node.js ──────────────────────────────────────────────────────────────────
 node_modules/
@@ -11,43 +10,31 @@ dist/
 
 # ─── Variables de entorno (contienen secretos) ────────────────────────────────
 .env
-rust/.env
 !.env.example
-!rust/.env.example
-
-# ─── Python ───────────────────────────────────────────────────────────────────
-# Cualquier entorno virtual, no solo el que se llame exactamente `venv`: al
-# recrearlo queda un `venv.roto`/`venv.old` al lado, y con el patrón exacto ese
-# directorio salía como no rastreado — un `git add -A` se habría llevado 14 GB
-# de site-packages al commit.
-python/venv*/
-python/.venv*/
-python/__pycache__/
-python/**/__pycache__/
-__pycache__/
-*.pyc
-*.pyo
-*.pyd
-*.egg-info/
-*.egg
-.Python
-python/build/
-python/data/
+!crates/*/.env.example
 
 # ─── Rust ─────────────────────────────────────────────────────────────────────
-rust/target/
+# El workspace compila en target/ de la raíz desde la 8.15.0.
+/target/
+# Y rust/ ENTERO, aunque ya no tenga código: es donde vivían la API y sus
+# datos hasta la 8.14.0, y en una máquina que actualiza sigue teniendo .env y
+# sessions/ —copias de creds, o sea claves privadas— hasta que el bot los mueve
+# a data/session-api/ en su primer arranque. Un `git add -A` hecho antes de eso
+# no puede llevárselos.
+/rust/
 
 # ─── Bases de datos y logs (pueden ser grandes o sensibles) ───────────────────
 #
-# `data/` es a propósito un patrón ANCHO: no ancla en la raíz, así que también
-# tapa `rust/data/`, donde viven las SQLite de la Session API. Eso ya costó una
-# vez — los JSON de personalidades se habían puesto en `rust/data/` y no se
+# `data/` es a propósito un patrón ANCHO: no ancla en la raíz, así que tapa
+# cualquier directorio llamado `data` en cualquier nivel. Eso ya costó una vez —
+# los JSON de personalidades se habían puesto en un `data/` de la API y no se
 # habrían subido, con lo que el build fallaba en cualquier clon; por eso están
-# en `rust/assets/`. Si agregás datos que SÍ deben viajar con el repo, no los
-# pongas en ningún directorio llamado `data`.
+# en `crates/session-api/assets/`. Si agregás datos que SÍ deben viajar con el
+# repo, no los pongas en ningún directorio llamado `data`. Los datos de la
+# Session API viven en `data/session-api/` desde la 8.15.0.
 # Y OJO con "arreglarlo" a `data/*` para poder negar algo de dentro: ese patrón
 # lleva una barra en medio, así que se ancla a la raíz del repo y dejaría de
-# tapar `rust/data/`. Tampoco sirve un `!data/.gitkeep`: git no desciende a un
+# tapar los `data/` de más adentro. Tampoco sirve un `!data/.gitkeep`: git no desciende a un
 # directorio ignorado, así que la negación de un archivo de dentro no lo
 # rescata. `data/.gitkeep` sigue en el repo porque se rastreó ANTES de que esta
 # regla existiera, y lo rastreado no se desrastrea solo.
@@ -80,11 +67,8 @@ yarn-error.log*
 # ─── Binarios ─────────────────────────────────────────────────────────────────
 *.tsbuildinfo
 #
-# `bin/` también es ANCHO a propósito, y conviene saber por qué antes de
-# tocarlo: en la raíz hay un `bin/` con ffmpeg, ffplay y ffprobe — **305 MB**
-# que no tienen por qué estar en el repo. De paso tapa `python/bin/`, donde
-# `npm run tools:build` deja los ejecutables de `monitor` y `manage`, que
-# también son artefactos de compilación. Estrecharlo a `python/bin/` subiría
-# los 305 MB de ffmpeg.
+# `bin/` es donde viven los ejecutables externos: ffmpeg, ffplay y ffprobe
+# —**305 MB**—, yt-dlp, y desde la 8.15.0 el binario de la Session API que baja
+# `npm install`. Nada de eso va al repo.
 bin/
 mensaje-commit.txt

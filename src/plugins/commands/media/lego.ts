@@ -1,5 +1,5 @@
 import type { Command } from '../../../types/index.js'
-import { legofyImage } from '@lib/pythonBridge.js'
+import { legofyImage } from '@lib/nativeBridge.js'
 import { downloadContentFromMessage } from '@whiskeysockets/baileys'
 
 import { sleep } from '@lib/utils.js'

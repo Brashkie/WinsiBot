@@ -545,11 +545,12 @@ export class WinsiSocket extends EventEmitter3<WinsiEvents> {
 
     // ─── mensajes entrantes ───────────────────────────────────────────────────
     this.sock.ev.on('messages.upsert', ({ messages, type }) => {
-      // Log incondicional ANTES de cualquier filtro — si esto deja de aparecer
-      // durante un "colgado", el problema es que Baileys dejó de emitir el
-      // evento (socket realmente zombie). Si SÍ aparece pero no hay log de
-      // "Handler" después, el mensaje se está filtrando o el semáforo está lleno.
-      logger.info({ count: messages.length, type }, 'messages.upsert')
+      // En debug, no en info: se escribía en CADA evento, y para diagnosticar
+      // un "colgado" alcanza con LOG_LEVEL=debug. Si esto deja de aparecer, el
+      // problema es que Baileys dejó de emitir el evento (socket zombie, que el
+      // watchdog ya detecta solo); si aparece pero no hay línea de "Handler"
+      // después, el mensaje se está filtrando o el semáforo está lleno.
+      logger.debug({ count: messages.length, type }, 'messages.upsert')
       this.lastMessageEventAt = Date.now()
 
       // 'notify' = mensaje nuevo normal
@@ -602,9 +603,10 @@ export class WinsiSocket extends EventEmitter3<WinsiEvents> {
           continue
         }
 
-        console.log(
-          `  ${color.blue('◈')} ${color.bold('Mensaje')}  ${chatLabel} ${color.dim(jidShort)}  ${meLabel}`,
-        )
+        // Acá había otra línea de consola por mensaje ("Mensaje"), con los
+        // mismos datos que la de "Handler" que escribe handler.ts un momento
+        // después, que además trae el texto: dos escrituras a la consola por
+        // mensaje para decir lo mismo.
 
         // ─── antidelete — "borrar para todos" llega como protocolMessage REVOKE,
         // no como un mensaje normal. El key adentro apunta al mensaje original

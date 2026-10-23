@@ -1,5 +1,10 @@
 import axios from 'axios'
-import { load } from 'cheerio'
+// cheerio se carga al usarlo, no al arrancar: son 16 MB de RAM y 0,4 s de
+// arranque medidos con `npm run mem:profile`, y este archivo es el ÚNICO que lo
+// usa. Importado arriba, cada instancia del bot lo pagaba aunque nadie usara
+// nunca este comando, porque loadCommands importa todos los comandos al
+// arrancar y este se arrastraba con ellos.
+const cheerio = () => import('cheerio').then((m) => m.load)
 import { downloadBuffer } from './downloader.js'
 import { USER_AGENT } from '@config'
 
@@ -34,7 +39,7 @@ export async function searchRule34Video(query: string): Promise<Rule34VideoSearc
     headers: { 'User-Agent': UA },
   })
 
-  const $ = load(res.data as string)
+  const $ = (await cheerio())(res.data as string)
   const results: Rule34VideoSearchResult[] = []
 
   $('a.th.js-open-popup').each((_, el) => {
@@ -101,7 +106,7 @@ export interface Rule34VideoDetails {
 export async function getRule34VideoDetails(pageUrl: string): Promise<Rule34VideoDetails | null> {
   const res = await axios.get<string>(pageUrl, { timeout: 15_000, headers: { 'User-Agent': UA } })
   const html = res.data
-  const $ = load(html)
+  const $ = (await cheerio())(html)
 
   const title = $('h1.title_video').first().text().trim() || $('title').first().text().trim()
   if (!title) return null

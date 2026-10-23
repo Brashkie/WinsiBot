@@ -42,7 +42,7 @@ assignees: Brashkie
 
 ## 📋 Logs / Output del terminal
 
-> Pega el output de `npm run monitor` o `npm run dev` donde se ve el error.
+> Pega el output de `npm start` o `npm run dev` donde se ve el error. `npm run manage -- diagnose` también ayuda.
 > **Elimina cualquier creds.json, token o número de teléfono antes de pegar.**
 
 ```
@@ -67,9 +67,9 @@ Pega aquí
 | OS | Windows 11 / Ubuntu 22.04 / Debian 12 |
 | Node.js | `node --version` → |
 | npm | `npm --version` → |
-| Python | `python --version` → |
+| Zig (solo si compilaste con `native`) | `zig version` → |
 | Rust | `rustc --version` → |
-| WinsiBot | v8.1.0 |
+| WinsiBot | `npm pkg get version` → |
 | Baileys | `npm list @whiskeysockets/baileys` → |
 
 ---
@@ -79,8 +79,8 @@ Pega aquí
 > Marca con `x` donde aplica.
 
 - [ ] 🟦 TypeScript / Core (handler, comandos, eventos)
-- [ ] 🐍 Python (monitor, FastAPI, watchdog)
-- [ ] ⚙️ Rust (Session API, snapshots, atomic write)
+- [ ] ⚙️ Rust (Session API, snapshots, atomic write, antiban)
+- [ ] 🧮 C / Zig (kernels nativos: Anime4K, códec JPEG)
 - [ ] 🔐 Sesión / QR / Reconexión
 - [ ] 🤖 IA (GPT, Claude, Gemini)
 - [ ] 🎮 RPG / Economía / Gacha

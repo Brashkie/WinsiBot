@@ -8,6 +8,7 @@ import { join }       from 'path'
 import { ascii, color, themes } from 'ansimax'
 
 const WIN  = process.platform === 'win32'
+const API_EXE = WIN ? 'winsibot-session-api.exe' : 'winsibot-session-api'
 const ROOT = process.cwd()
 
 // Puertos leídos de .env — antes estaban hardcodeados (Rust en 3001), pero
@@ -73,7 +74,7 @@ const checks = [
   { label: 'Bot dist/',   paths: [join(ROOT, 'dist', 'index.js')],     missing: 'npm run build' },
   // La sesión puede vivir en creds.json o creds.cbor — ver authStateCbor.ts
   { label: 'Session',     paths: [join(ROOT, 'auth', 'creds.json'), join(ROOT, 'auth', 'creds.cbor')], missing: 'npm run qr' },
-  { label: 'Rust bin',    paths: [join(ROOT, 'rust', 'target', 'release')], missing: 'npm run rust:build' },
+  { label: 'Session API', paths: [join(ROOT, 'bin', API_EXE), join(ROOT, 'target', 'release', API_EXE)], missing: 'npm install (la baja) o npm run rust:build' },
 ]
 
 const checkRows = [['Chequeo', 'Estado']]

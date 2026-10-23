@@ -7,7 +7,7 @@ import { registerSemaphore, shouldShed, priorityOf, loadLevel } from './loadShed
 import { color, themes } from 'ansimax'
 import type { BotContext } from '../types/index.js'
 import { handleNotFound } from '@plugins/commands/general/notfound.js'
-import { analyzeIntent, learnConversation, getAIContext } from '@lib/pythonBridge.js'
+import { analyzeIntent, learnConversation, getAIContext } from '@lib/nativeBridge.js'
 import { hepein } from '@lib/hepein.js'
 import { safeSend } from '@lib/media_sender.js'
 import {
@@ -405,7 +405,8 @@ export async function handleMessage(msg: WAMessage, sock: WASocket): Promise<voi
   }
 
   const _startedAt = Date.now()
-  logger.info({ id: msg.key.id, active: _activeHandlers }, 'handleMessage START')
+  // En debug: era info, y con END eran dos líneas de log por mensaje.
+  logger.debug({ id: msg.key.id, active: _activeHandlers }, 'handleMessage START')
 
   // Techo duro por mensaje — sin esto, una llamada externa lenta (Python con
   // reintentos/backoff puede tardar 20-30s en fallar) deja el slot del
@@ -856,10 +857,11 @@ export async function handleMessage(msg: WAMessage, sock: WASocket): Promise<voi
     logger.error({ err }, 'Error en handleMessage')
   } finally {
     releaseSlot()
-    logger.info(
-      { id: msg.key.id, active: _activeHandlers, ms: Date.now() - _startedAt, timedOut },
-      'handleMessage END'
-    )
+    // Solo se ve cuando importa: si el mensaje tardó o se cortó por tiempo.
+    // Lo normal queda en debug.
+    const ms = Date.now() - _startedAt
+    const nivel = timedOut || ms > 2_000 ? 'warn' : 'debug'
+    logger[nivel]({ id: msg.key.id, active: _activeHandlers, ms, timedOut }, 'handleMessage END')
   }
 }
 

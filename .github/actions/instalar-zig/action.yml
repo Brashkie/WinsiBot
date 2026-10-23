@@ -1,0 +1,69 @@
+name: Instalar Zig
+description: >
+  Baja Zig del sitio oficial, con la version fijada y el SHA-256 verificado, y
+  lo deja en el PATH. No usa una action de terceros a proposito: es lo que
+  decide que compilador entra en el binario que se publica.
+
+runs:
+  using: composite
+  steps:
+    - name: Zig 0.14.1
+      shell: bash
+      run: |
+        set -euo pipefail
+
+        # Version fijada y checksums tomados de https://ziglang.org/download/index.json
+        # Para subir de version hay que cambiar las cuatro lineas de aca: el
+        # nombre del archivo cambia de forma entre versiones (en 0.15 pasaron
+        # de `zig-x86_64-linux-X` a otro orden), asi que no se puede construir
+        # la URL a partir de la version sola.
+        case "${{ runner.os }}-${{ runner.arch }}" in
+          Linux-X64)
+            nombre=zig-x86_64-linux-0.14.1 ; ext=tar.xz
+            sha=24aeeec8af16c381934a6cd7d95c807a8cb2cf7df9fa40d359aa884195c4716c ;;
+          # Para el job `arm`, que EJECUTA en ARM y no solo cruza.
+          Linux-ARM64)
+            nombre=zig-aarch64-linux-0.14.1 ; ext=tar.xz
+            sha=f7a654acc967864f7a050ddacfaa778c7504a0eca8d2b678839c21eea47c992b ;;
+          macOS-ARM64)
+            nombre=zig-aarch64-macos-0.14.1 ; ext=tar.xz
+            sha=39f3dc5e79c22088ce878edc821dedb4ca5a1cd9f5ef915e9b3cc3053e8faefa ;;
+          Windows-X64)
+            nombre=zig-x86_64-windows-0.14.1 ; ext=zip
+            sha=554f5378228923ffd558eac35e21af020c73789d87afeabf4bfd16f2e6feed2c ;;
+          *)
+            echo "no tengo Zig 0.14.1 fijado para ${{ runner.os }}-${{ runner.arch }}"
+            echo "agregalo en .github/actions/instalar-zig/action.yml"
+            exit 1 ;;
+        esac
+
+        url="https://ziglang.org/download/0.14.1/${nombre}.${ext}"
+        cd "$RUNNER_TEMP"
+        curl -fsSL -o "zig.${ext}" "$url"
+
+        # Ninguna de las dos herramientas de sha256 esta en los tres sistemas:
+        # `sha256sum` esta en Linux y en el Git Bash de Windows pero no en
+        # macOS, y `shasum` esta en macOS y Linux pero no en Windows. Dar por
+        # buena una de las dos es lo que rompio el release de WinsiBot, con un
+        # "shasum: command not found" despues de compilar bien.
+        if command -v sha256sum >/dev/null 2>&1; then
+          echo "${sha}  zig.${ext}" | sha256sum -c -
+        elif command -v shasum >/dev/null 2>&1; then
+          echo "${sha}  zig.${ext}" | shasum -a 256 -c -
+        else
+          echo "no encontre ni sha256sum ni shasum: no puedo verificar la descarga"
+          exit 1
+        fi
+
+        if [ "$ext" = "zip" ]; then
+          unzip -q "zig.${ext}"
+        else
+          tar -xf "zig.${ext}"
+        fi
+        rm -f "zig.${ext}"
+
+        echo "$RUNNER_TEMP/$nombre" >> "$GITHUB_PATH"
+
+    - name: Confirmar
+      shell: bash
+      run: zig version

@@ -1,5 +1,4 @@
 import type { Command } from '../../../types/index.js'
-import { createSticker, StickerTypes } from 'wa-sticker-formatter'
 import axios from 'axios'
 import { config } from '@config'
 
@@ -72,6 +71,8 @@ const command: Command = {
         })
         const buf = Buffer.from(imgRes.data)
 
+        // Cargado al usarlo: ver lib/sticker.ts.
+        const { createSticker, StickerTypes } = await import('wa-sticker-formatter')
         const webp = await createSticker(buf, {
           pack:    config.botName,
           author:  'Hepein',

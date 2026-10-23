@@ -51,9 +51,9 @@ assignees: Brashkie
 > Marca con `x` donde crees que encaja mejor.
 
 - [ ] 🟦 TypeScript — nuevo comando en `src/plugins/commands/`
-- [ ] 🐍 Python — nuevo endpoint en FastAPI
-- [ ] ⚙️ Rust — mejora en Session API
-- [ ] 📦 Nueva dependencia npm / pip / crate
+- [ ] ⚙️ Rust — mejora en la Session API (`crates/session-api/`)
+- [ ] 🧮 C / Zig — kernel nativo en `crates/session-api/native/`
+- [ ] 📦 Nueva dependencia npm / crate
 - [ ] 🗄️ Base de datos — nueva tabla o campo en SQLite
 - [ ] ⚙️ Configuración — nuevo campo en `.env`
 - [ ] ❓ No lo sé

@@ -13,9 +13,6 @@ const WIN    = process.platform === 'win32'
 // 'linux' según el build de Node, sin garantía).
 const TERMUX = !!(process.env.PREFIX && process.env.PREFIX.includes('com.termux'))
 const ROOT = process.cwd()
-const VENV = join(ROOT, 'python', 'venv')
-const VENV_PY = join(VENV, WIN ? 'Scripts/python.exe' : 'bin/python')
-const REQS    = join(ROOT, 'python', 'requirements.txt')
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
@@ -46,34 +43,9 @@ async function main() {
     fail(`Requiere Node 20+, tienes ${process.version}`)
   ok()
 
-  // 2. Python
-  step('Python 3.10+ ...')
-  const pyR  = run('python --version')
-  const pyVer = (pyR.stdout + pyR.stderr).trim()
-  if (!pyVer.match(/Python 3\.(1[0-9]|\d{2,})/))
-    warn(pyVer ? `${pyVer} — instala 3.10+` : 'no encontrado en PATH')
-  else
-    ok()
+  // Python ya no es un paso: salió del proyecto en la 8.15.0.
 
-  // 3. Venv
-  step('Entorno virtual Python (venv) ...')
-  if (!existsSync(VENV)) {
-    const r = run(`python -m venv "${VENV}"`)
-    if (r.status !== 0) fail(r.stderr.slice(0, 200))
-  }
-  ok()
-
-  // 4. pip install
-  step('Dependencias Python ...')
-  if (existsSync(REQS)) {
-    const r = run(`"${VENV_PY}" -m pip install -r "${REQS}" --quiet --disable-pip-version-check`)
-    if (r.status !== 0) warn(r.stderr.slice(0, 250))
-    else ok()
-  } else {
-    warn('python/requirements.txt no encontrado')
-  }
-
-  // 5. npm install
+  // 2. npm install
   if (TERMUX) {
     console.log('\n  ℹ️  Termux detectado — algunas dependencias nativas (sharp, cbor-x) compilan desde fuente.')
     console.log('     Si falta algo: pkg install clang make pkg-config\n')
@@ -87,7 +59,7 @@ async function main() {
     ok()
   }
 
-  // 6. TypeScript build
+  // 3. TypeScript build
   step('Compilar TypeScript ...')
   const tscR = run('npx tsc')
   if (tscR.status !== 0) {
@@ -98,12 +70,12 @@ async function main() {
     ok()
   }
 
-  // 7. Rust — solo si no bajó ya el binario compilado
+  // 4. Session API — solo si no bajó ya el binario compilado
   //
   // `npm install` corre scripts/fetch_rust.js, que baja el binario de esta
   // plataforma desde las releases de GitHub. Si ya está, no hay nada que
   // preguntar ni que compilar.
-  const binRust = join(ROOT, 'rust', 'target', 'release', exeName('winsibot-session-api'))
+  const binRust = join(ROOT, 'bin', exeName('winsibot-session-api'))
   const yaEsta  = existsSync(binRust)
   if (yaEsta) {
     console.log('  ✅ Binario de Rust ya presente (bajado durante npm install).')

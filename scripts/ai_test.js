@@ -9,7 +9,7 @@
 // insulto/pregunta, así que nunca podía devolver las etiquetas contra las que
 // comparan los consumidores (insult, nsfw, spam, nonsense), pero sí devolvía un
 // objeto válido, y eso hacía que la regex local de respaldo no se evaluara
-// nunca. Ver el comentario de analyzeIntent en src/lib/pythonBridge.ts.
+// nunca. Ver el comentario de analyzeIntent en src/lib/nativeBridge.ts.
 //
 // De paso quedó a la vista que el proyecto tenía DOS clasificadores en Python y
 // el bot llamaba al equivocado: ai/intent_classifier.py sí usa el vocabulario
@@ -83,7 +83,7 @@ try {
   await clasificar('hola')
 } catch (err) {
   console.error(`  ${themes.error('La API de Rust no responde')} ${color.dim(String(err.message))}`)
-  console.error(`  ${color.dim('Levantala con `npm run rust:build && cd rust && cargo run --release`, o corre el bot.')}\n`)
+  console.error(`  ${color.dim('Levantala con `npm run rust:build && npm run rust:start`, o corre el bot.')}\n`)
   process.exit(1)
 }
 
