@@ -46,17 +46,27 @@ fn sobel(arriba: [*]const u8, medio: [*]const u8, abajo: [*]const u8, x: usize) 
     return 255 - redondear(@sqrt(gx * gx + gy * gy));
 }
 
-/// Sobel sobre el alfa, invertido. Solo el interior: `dst` tiene que llegar
-/// con una copia de `src`, porque el borde queda como está.
-export fn winsi_a4k_gradient_zig(src: [*]const u8, dst: [*]u8, w: u32, h: u32) callconv(.C) void {
-    if (w < 3 or h < 3) return;
+/// Sobel sobre el alfa, invertido, de las filas [y0, y1) de la salida: Rust
+/// reparte la imagen en franjas entre los núcleos, cada hilo con las suyas.
+///
+/// Cada fila se copia de `src` a `dst` y después se le reescribe el alfa del
+/// interior; el borde queda copiado. Antes Rust clonaba la imagen entera antes
+/// de llamar, en un solo hilo, y eso pesaba más que el cálculo repartido.
+export fn winsi_a4k_gradient_zig(src: [*]const u8, dst: [*]u8, w: u32, h: u32, y0: u32, y1: u32) callconv(.C) void {
     const ancho: usize = w;
+    const tope: usize = @min(y1, h);
+    var fila: usize = y0;
+    while (fila < tope) : (fila += 1) {
+        @memcpy(dst[fila * ancho * 4 ..][0 .. ancho * 4], src[fila * ancho * 4 ..][0 .. ancho * 4]);
+    }
+    if (w < 3 or h < 3) return;
     const dos: V = @splat(2.0);
     const medio_: V = @splat(0.5);
     const techo: V = @splat(255.0);
 
-    var y: usize = 1;
-    while (y < h - 1) : (y += 1) {
+    var y: usize = @max(y0, 1);
+    const fin: usize = @min(y1, h - 1);
+    while (y < fin) : (y += 1) {
         const arriba = src + (y - 1) * ancho * 4;
         const medio = src + y * ancho * 4;
         const abajo = src + (y + 1) * ancho * 4;

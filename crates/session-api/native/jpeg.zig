@@ -180,6 +180,8 @@ export fn winsi_jpeg_coefs(
     qc: *const [64]u8,
     out: [*]i16,
     scratch: [*]f32,
+    my0: u32,
+    my1: u32,
 ) callconv(.C) void {
     const div_y = divisores(qy);
     const div_c = divisores(qc);
@@ -195,8 +197,11 @@ export fn winsi_jpeg_coefs(
     const CB = scratch + 48 * pw;
     const CR = CB + 8 * pc;
 
-    var my: usize = 0;
-    while (my < mcuy) : (my += 1) {
+    // Solo las filas de MCU [my0, my1): Rust reparte la imagen en franjas entre
+    // los núcleos. Cada franja escribe sus propios coeficientes —la posición
+    // de cada MCU es fija— y tiene su propio `scratch`, así que no se pisan.
+    var my: usize = my0;
+    while (my < @min(my1, mcuy)) : (my += 1) {
         // La franja: 16 filas a Y/Cb/Cr, repitiendo la última si no alcanzan.
         for (0..16) |fila| {
             const sy = @min(my * 16 + fila, h - 1);

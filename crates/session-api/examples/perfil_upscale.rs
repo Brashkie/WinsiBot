@@ -16,7 +16,6 @@
 
 use std::time::Instant;
 
-use image::imageops::FilterType;
 use winsibot_session_api::{jpeg, vision};
 
 /// Mediana de varias corridas: una sola medición en un portátil con turbo y
@@ -52,7 +51,7 @@ fn main() {
     // 2. El mismo redimensionado bicúbico que hace upscale().
     let rgba = img.to_rgba8();
     let (t_resize, ampliada) = medir(VUELTAS, || {
-        image::imageops::resize(&rgba, w, h, FilterType::CatmullRom)
+        winsibot_session_api::resize::catmullrom_rgba(&rgba, w, h)
     });
 
     // 3. Codificar a JPEG una imagen del tamaño de salida, como el handler
@@ -87,7 +86,7 @@ fn main() {
     );
     println!(
         "    {:<34}{:>9.1}{:>8.1}%",
-        "resize bicubico (CatmullRom)",
+        "resize bicubico (Catmull-Rom)",
         t_resize,
         pct(t_resize)
     );

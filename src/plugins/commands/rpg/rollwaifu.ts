@@ -5,8 +5,11 @@ import { downloadBuffer } from '@lib/downloader.js'
 import { createCache, registerCache } from '@lib/cacheManager.js'
 import { userData } from '@core/events/index.js'
 import { USER_AGENT } from '@config'
+import { randomChoice } from '@lib/utils.js'
+import { fmtCooldown } from '@core/events.js'
 
-function ownerName(jid: string): string {
+/** El nombre del dueño de un personaje (lo usa también #winfo). */
+export function ownerName(jid: string): string {
   return userData.get(jid)?.name || jid.replace(/@s\.whatsapp\.net|@lid/g, '').replace(/[^0-9]/g, '')
 }
 
@@ -170,17 +173,6 @@ export function pickImage(image: string | string[]): string {
   return Array.isArray(image) ? image[Math.floor(Math.random() * image.length)]! : image
 }
 
-function pickRandom<T>(arr: T[]): T {
-  return arr[Math.floor(Math.random() * arr.length)]!
-}
-
-function formatTime(ms: number): string {
-  const m = Math.floor(ms / 60_000)
-  const s = Math.floor((ms % 60_000) / 1000)
-  if (m > 0) return `${m}m ${s}s`
-  return `${s}s`
-}
-
 // ─── Comando ──────────────────────────────────────────────────────────────────
 const command: Command = {
   name: 'rw',
@@ -192,7 +184,7 @@ const command: Command = {
 
   async execute({ sock, jid, msg, args, sender, prefix }) {
     // Sin argumento → ruleta entre todas las fuentes (no solo Marvel)
-    const source = args[0]?.toLowerCase() ?? pickRandom(Object.keys(SOURCES))
+    const source = args[0]?.toLowerCase() ?? randomChoice(Object.keys(SOURCES))
 
     if (!SOURCES[source]) {
       await sock.sendMessage(jid, {
@@ -211,7 +203,7 @@ const command: Command = {
     const elapsed  = Date.now() - lastRoll
     if (elapsed < RW_COOLDOWN) {
       await sock.sendMessage(jid, {
-        text: `✗ Debes esperar *${formatTime(RW_COOLDOWN - elapsed)}* para volver a rodar.`,
+        text: `✗ Debes esperar *${fmtCooldown(RW_COOLDOWN - elapsed)}* para volver a rodar.`,
       }, { quoted: msg })
       return
     }
@@ -223,7 +215,7 @@ const command: Command = {
       await sock.sendMessage(jid, {
         text: [
           `✗ Ya tenés un personaje activo: *${existing.char.name}*`,
-          `  § Expira en ${formatTime(remaining)}`,
+          `  § Expira en ${fmtCooldown(remaining)}`,
           `  § Responde al mensaje del personaje con *${prefix}c* para reclamarlo`,
         ].join('\n'),
       }, { quoted: msg })
@@ -282,7 +274,7 @@ const command: Command = {
         return
       }
 
-      const char = pickRandom(available)
+      const char = randomChoice(available)
 
       // descargar imagen
       let buffer: Buffer | null = null

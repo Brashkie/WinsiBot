@@ -1,14 +1,11 @@
 import type { Command } from '../../../types/index.js'
+import { randomChoice } from '@lib/utils.js'
 
 const EMOJIS = [
   '🤓','😅','😂','😳','😎','🥵','😱','🤑','🙄','💩',
   '🍑','🤨','🥴','🔥','👇','😔','👀','🌚','🗿','💀',
   '🫡','🤡','😈','👑','⚡','🎯','🏆','🎪','🎭','🎰',
 ]
-
-function pickRandom<T>(arr: T[]): T {
-  return arr[Math.floor(Math.random() * arr.length)]!
-}
 
 function pickRandomN<T>(arr: T[], n: number): T[] {
   const shuffled = [...arr].sort(() => Math.random() - 0.5)
@@ -51,7 +48,7 @@ const command: Command = {
 
     // tomar hasta 10 miembros aleatorios sin repetir
     const selected = pickRandomN(ids, Math.min(10, ids.length))
-    const emoji    = pickRandom(EMOJIS)
+    const emoji    = randomChoice(EMOJIS)
     const medals   = ['🥇','🥈','🥉','4️⃣','5️⃣','6️⃣','7️⃣','8️⃣','9️⃣','🔟']
 
     // resolver nombres reales desde groupMetadata

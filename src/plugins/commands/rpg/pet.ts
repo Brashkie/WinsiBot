@@ -1,9 +1,20 @@
+import type { WASocket, WAMessage } from '@whiskeysockets/baileys'
 import type { Command, DragonDef } from '../../../types/index.js'
 import type { OwnedDragon } from '@core/events.js'
-import { getUserData, patchUserData } from '@core/events.js'
+import {
+  getUserData, patchUserData,
+  isOnCooldown, setCooldown, getCooldownLeft, fmtCooldown,
+} from '@core/events.js'
+import {
+  elegirCria,
+  NIVEL_MIN as CRIA_NIVEL_MIN, COSTO_ORO as CRIA_COSTO_ORO,
+  COSTO_DINERO as CRIA_COSTO_DINERO, ESPERA as CRIA_ESPERA,
+} from '@lib/cria.js'
+import { aplicarExp } from '@lib/dragonNivel.js'
+import { companeroDe, esCompanero, ganadoHoy, TOPE_DIA } from '@lib/companero.js'
 import {
   getDragons, findDragon, pickRandomDragon,
-  expForLevel, stageForLevel, imageForStage, videoForStage,
+  imageForStage, videoForStage,
   goldPerMinute, pendingGold, translatedDesc, generateEggShakeVideo, transcodeToMp4,
   HATCH_COST_MONEY, FEED_EXP, feedCostOro,
   STAGE3_LEVEL,
@@ -29,18 +40,31 @@ function resolveOwned(dragons: OwnedDragon[], query: string): { dragon: OwnedDra
   return { dragon: dragons[index]!, index }
 }
 
-/** Sube de nivel un dragón consumiendo `exp`, devolviendo si evolucionó a la etapa final. */
-function applyExp(dragon: OwnedDragon, exp: number): { leveled: boolean; evolvedToFinal: boolean } {
-  const oldLevel  = dragon.level
-  const wasStage3 = dragon.stage === 3
-  dragon.exp += exp
-  while (dragon.exp >= expForLevel(dragon.level)) {
-    dragon.exp -= expForLevel(dragon.level)
-    dragon.level++
-  }
-  dragon.stage = stageForLevel(dragon.level)
-  return { leveled: dragon.level > oldLevel, evolvedToFinal: !wasStage3 && dragon.stage === 3 }
+/** El dragón recién nacido: su video de etapa 1, o la imagen, o el texto solo. */
+async function revelar(sock: WASocket, jid: string, msg: WAMessage, def: DragonDef, caption: string): Promise<void> {
+  try {
+    const vidUrl = videoForStage(def, 1)
+    const webm   = vidUrl ? await downloadBuffer(vidUrl) : null
+    const buffer = webm ? await transcodeToMp4(webm) : null
+    if (buffer) {
+      await safeSend(() => sock.sendMessage(jid, { video: buffer, caption, gifPlayback: true }, { quoted: msg }))
+      return
+    }
+  } catch { /* cae a imagen abajo */ }
+
+  try {
+    const imgUrl = imageForStage(def, 1)
+    const buffer = imgUrl ? await downloadBuffer(imgUrl) : null
+    if (buffer) {
+      await safeSend(() => sock.sendMessage(jid, { image: buffer, caption }, { quoted: msg }))
+      return
+    }
+  } catch { /* cae a texto abajo */ }
+
+  await safeSend(() => sock.sendMessage(jid, { text: caption }, { quoted: msg }))
 }
+
+const applyExp = aplicarExp
 
 const command: Command = {
   name:        'pet',
@@ -72,6 +96,7 @@ const command: Command = {
       const rows = user.dragons.slice(0, 25).map((d, i) => {
         const pending = pendingGold(d.level, d.lastCollect)
         return `│ ${STAGE_EMOJI[d.stage]} \`${i + 1}\` *${d.name}* — Nv.${d.level} · ${stageLabel(d.stage)}` +
+               (esCompanero(user, d) ? '  ⭐' : '') +
                (pending > 0 ? `  (+${pending.toLocaleString()} oro)` : '')
       })
       const extra = user.dragons.length > 25 ? [`│`, `│ … y ${user.dragons.length - 25} más`] : []
@@ -84,6 +109,7 @@ const command: Command = {
           ...extra,
           `│`,
           `> Oro » *${user.oro.toLocaleString()}*`,
+          `> ⭐ compañero: gana exp con tus mensajes (${ganadoHoy(user)}/${TOPE_DIA} hoy) y pelea en #raid`,
           `> ${prefix}pet info <#|nombre> — ver detalle`,
           `> ${prefix}pet feed <#|nombre> — alimentar`,
           `> ${prefix}pet collect — cobrar oro acumulado`,
@@ -153,39 +179,91 @@ const command: Command = {
 
       // ── mensaje 2: revelación — video real de la etapa 1, con la info ────
       const newIndex = user.dragons.length + 1
-      const caption = [
+      await revelar(sock, jid, msg, picked, [
         `🐣 *¡Nació ${picked.name}!*`,
         `${picked.rarity} · ${picked.elements.join('/')}`,
         ``,
         `> +${goldPerMinute(1)} oro/min en este nivel`,
         `> ${prefix}pet feed ${newIndex} — para alimentarlo y subirlo de nivel`,
-      ].join('\n')
+      ].join('\n'))
+      return
+    }
 
-      let sentMedia = false
+    // ── criar — cruzar dos dragones propios ──────────────────────────────────
+    if (sub === 'criar' || sub === 'breed' || sub === 'cruzar') {
+      const [qa, qb] = [args[1], args[2]]
+      const a = qa ? resolveOwned(user.dragons, qa) : null
+      const b = qb ? resolveOwned(user.dragons, qb) : null
+      if (!a || !b || a.index === b.index) {
+        await safeSend(() => sock.sendMessage(jid, {
+          text: [
+            `✗ Uso: \`${prefix}pet criar <#> <#>\` — dos dragones distintos de tu colección`,
+            `> Los dos en nivel ${CRIA_NIVEL_MIN} o más · ${CRIA_COSTO_ORO.toLocaleString()} oro + ¥${CRIA_COSTO_DINERO.toLocaleString()} · una cría cada ${CRIA_ESPERA / 3_600_000} h`,
+          ].join('\n'),
+        }, { quoted: msg }))
+        return
+      }
+      const bajos = [a, b].filter(x => x.dragon.level < CRIA_NIVEL_MIN).map(x => `*${x.dragon.name}* (Nv.${x.dragon.level})`)
+      if (bajos.length) {
+        await safeSend(() => sock.sendMessage(jid, {
+          text: `✗ Para criar, los dos tienen que estar en nivel ${CRIA_NIVEL_MIN} o más: ${bajos.join(', ')}.`,
+        }, { quoted: msg }))
+        return
+      }
+      if (isOnCooldown(sender, 'lastBreed', CRIA_ESPERA)) {
+        await safeSend(() => sock.sendMessage(jid, {
+          text: `✗ El nido todavía está ocupado. Vuelve en *${fmtCooldown(getCooldownLeft(sender, 'lastBreed', CRIA_ESPERA))}*.`,
+        }, { quoted: msg }))
+        return
+      }
+      if (user.oro < CRIA_COSTO_ORO || user.money < CRIA_COSTO_DINERO) {
+        await safeSend(() => sock.sendMessage(jid, {
+          text: `✗ Criar cuesta *${CRIA_COSTO_ORO.toLocaleString()} oro + ¥${CRIA_COSTO_DINERO.toLocaleString()}*. Tienes ${user.oro.toLocaleString()} oro y ¥${user.money.toLocaleString()}.`,
+        }, { quoted: msg }))
+        return
+      }
+
+      let catalogo: DragonDef[] = []
+      let defA: DragonDef | undefined
+      let defB: DragonDef | undefined
       try {
-        const vidUrl = videoForStage(picked, 1)
-        const webm   = vidUrl ? await downloadBuffer(vidUrl) : null
-        const buffer = webm ? await transcodeToMp4(webm) : null
-        if (buffer) {
-          await safeSend(() => sock.sendMessage(jid, { video: buffer, caption, gifPlayback: true }, { quoted: msg }))
-          sentMedia = true
-        }
-      } catch { /* cae a imagen abajo */ }
-
-      if (!sentMedia) {
-        try {
-          const imgUrl = imageForStage(picked, 1)
-          const buffer = imgUrl ? await downloadBuffer(imgUrl) : null
-          if (buffer) {
-            await safeSend(() => sock.sendMessage(jid, { image: buffer, caption }, { quoted: msg }))
-            sentMedia = true
-          }
-        } catch { /* cae a texto abajo */ }
+        catalogo = await getDragons()
+        defA = catalogo.find(d => d.id === a.dragon.id)
+        defB = catalogo.find(d => d.id === b.dragon.id)
+      } catch { /* abajo */ }
+      if (!defA || !defB) {
+        await safeSend(() => sock.sendMessage(jid, {
+          text: `✗ No se pudo conectar con el catálogo de dragones. Probá de nuevo en un rato.`,
+        }, { quoted: msg }))
+        return
       }
 
-      if (!sentMedia) {
-        await safeSend(() => sock.sendMessage(jid, { text: caption }, { quoted: msg }))
+      // El catálogo es un viaje de red: en ese rato pudo gastar oro o dinero
+      // con otro comando. `user` es el objeto vivo, así que se vuelve a mirar.
+      if (user.oro < CRIA_COSTO_ORO || user.money < CRIA_COSTO_DINERO || isOnCooldown(sender, 'lastBreed', CRIA_ESPERA)) {
+        await safeSend(() => sock.sendMessage(jid, { text: `✗ Ya no te alcanza para criar.` }, { quoted: msg }))
+        return
       }
+
+      const cria = elegirCria(defA, defB, catalogo)
+      const owned: OwnedDragon = {
+        id: cria.id, slug: cria.slug, name: cria.name,
+        level: 1, exp: 0, stage: 1, hatchedAt: Date.now(), lastCollect: Date.now(),
+      }
+      setCooldown(sender, 'lastBreed')
+      patchUserData(sender, {
+        oro:     user.oro - CRIA_COSTO_ORO,
+        money:   user.money - CRIA_COSTO_DINERO,
+        dragons: [...user.dragons, owned],
+      })
+
+      await revelar(sock, jid, msg, cria, [
+        `💞 *${a.dragon.name}* y *${b.dragon.name}* tuvieron una cría:`,
+        `🐣 *¡Nació ${cria.name}!*`,
+        `${cria.rarity} · ${cria.elements.join('/')}`,
+        ``,
+        `> ${prefix}pet feed ${user.dragons.length + 1} — para subirlo de nivel`,
+      ].join('\n'))
       return
     }
 
@@ -365,6 +443,28 @@ const command: Command = {
       return
     }
 
+    // ── companero — el que gana exp con la actividad y pelea en #raid ─────────
+    if (sub === 'companero' || sub === 'compañero' || sub === 'acompanante' || sub === 'equipar') {
+      const query = args.slice(1).join(' ').trim()
+      const found = query ? resolveOwned(user.dragons, query) : null
+      if (!found) {
+        const actual = companeroDe(user)
+        await safeSend(() => sock.sendMessage(jid, {
+          text: [
+            actual ? `⭐ Tu compañero es *${actual.name}* (Nv.${actual.level}).` : `✗ No tenés dragones todavía.`,
+            `> \`${prefix}pet companero <#|nombre>\` — elegir otro`,
+            `> Gana hasta ${TOPE_DIA} exp por día con tus mensajes, y es el que pelea a tu lado en #raid.`,
+          ].join('\n'),
+        }, { quoted: msg }))
+        return
+      }
+      patchUserData(sender, { companero: found.dragon.hatchedAt })
+      await safeSend(() => sock.sendMessage(jid, {
+        text: `⭐ *${found.dragon.name}* es tu compañero: gana exp con tus mensajes y pelea a tu lado en #raid.`,
+      }, { quoted: msg }))
+      return
+    }
+
     // ── rename — renombrar un dragón propio ───────────────────────────────────
     if (sub === 'rename' || sub === 'renombrar') {
       const query   = args[1]
@@ -414,6 +514,8 @@ const command: Command = {
         `│ \`${prefix}pet feed <#|nombre>\`    — alimentar (con oro)`,
         `│ \`${prefix}pet collect\`            — cobrar oro acumulado`,
         `│ \`${prefix}pet info <#|nombre>\`    — detalle de un dragón`,
+        `│ \`${prefix}pet criar <#> <#>\`       — cruzar dos (Nv.${CRIA_NIVEL_MIN}+)`,
+        `│ \`${prefix}pet companero <#>\`       — el que te acompaña (exp por actividad, #raid)`,
         `│ \`${prefix}pet rename <#> <nombre>\` — renombrar`,
         `│ \`${prefix}pet release <#|nombre>\`  — liberar`,
         `│`,

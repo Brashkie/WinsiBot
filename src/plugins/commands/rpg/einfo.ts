@@ -21,6 +21,7 @@ const CDS: Array<{ label: string; key: Parameters<typeof isOnCooldown>[1]; ms: n
   { label: 'Cofre', key: 'lastCofre' as const, ms: null },
   { label: 'Invertir', key: 'lastBet' as const, ms: 10_000 },
   { label: 'Roulette', key: 'lastRoulette' as const, ms: 15_000 },
+  { label: 'Raid', key: 'lastDungeon' as const, ms: 60_000 },
 ]
 
 function fmtLeft(ms: number): string {

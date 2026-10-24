@@ -1,3 +1,4 @@
+import { idCorto } from './utils.js'
 // ─── Full Clan System ─────────────────────────────────────────────────────────
 // Extiende el ClanData básico de events/index.ts
 
@@ -73,8 +74,6 @@ const TERRITORY_MAP = new Map(TERRITORIES.map(t => [t.id, t]))
 // Maps clan tag → extended data (separate from core ClanData in index.ts)
 
 const clanExtended = new Map<string, ClanExtended>()
-
-function uid() { return Math.random().toString(36).slice(2, 10) }
 
 const WAR_DURATION = 24 * 3_600_000   // 24h
 const WAR_COOLDOWN = 48 * 3_600_000   // 48h cooldown between wars
@@ -162,7 +161,7 @@ export class ClanManager {
 
   static startWar(ext: ClanExtended, enemyTag: string): ClanWar {
     const war: ClanWar = {
-      id:         uid(),
+      id:         idCorto(),
       enemy:      enemyTag.toUpperCase(),
       startTime:  Date.now(),
       endTime:    Date.now() + WAR_DURATION,

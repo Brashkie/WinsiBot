@@ -1,3 +1,4 @@
+import { randomChoice } from './utils.js'
 // ─── Avatar Library ───────────────────────────────────────────────────────────
 
 export type AvatarRarity = 'common' | 'rare' | 'epic' | 'legendary'
@@ -105,10 +106,6 @@ function partsForRarity(category: string, rarity: AvatarRarity): AvatarPart[] {
   return filtered.length ? filtered : parts.filter(p => p.rarity === 'common')
 }
 
-function pick<T>(arr: T[]): T {
-  return arr[Math.floor(Math.random() * arr.length)]!
-}
-
 function overallRarity(parts: AvatarRarity[]): AvatarRarity {
   const score = { common: 0, rare: 1, epic: 2, legendary: 3 }
   const avg   = parts.reduce((s, r) => s + score[r], 0) / parts.length
@@ -142,12 +139,12 @@ export class Avatar {
 
   static _random(): AvatarRecord {
     const rarity = weightedRarity()
-    const face   = pick(partsForRarity('face', rarity))!
-    const eyes   = pick(partsForRarity('eyes', rarity))!
-    const mouth  = pick(partsForRarity('mouth', rarity))!
-    const hair   = pick(partsForRarity('hair', rarity))!
-    const acc    = pick(partsForRarity('accessory', rarity))!
-    const bg     = pick(partsForRarity('background', rarity))!
+    const face   = randomChoice(partsForRarity('face', rarity))!
+    const eyes   = randomChoice(partsForRarity('eyes', rarity))!
+    const mouth  = randomChoice(partsForRarity('mouth', rarity))!
+    const hair   = randomChoice(partsForRarity('hair', rarity))!
+    const acc    = randomChoice(partsForRarity('accessory', rarity))!
+    const bg     = randomChoice(partsForRarity('background', rarity))!
     const actual = overallRarity([face.rarity, eyes.rarity, mouth.rarity, hair.rarity, acc.rarity, bg.rarity])
 
     return {

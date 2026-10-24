@@ -689,9 +689,11 @@ export async function handleMessage(msg: WAMessage, sock: WASocket): Promise<voi
     }
 
     // ─── Procesar comando ─────────────────────────────────────────────────────
-    const command =
-      commandRegistry.get(ctx.command) ??
-      [...commandRegistry.values()].find(c => c.aliases?.includes(ctx.command))
+    // Los alias ya son claves del registro (ver plugins/commands/index.ts): un
+    // solo get. Había además un recorrido de todos los comandos buscando el
+    // alias, que nunca podía encontrar lo que el Map no tuviera, y copiaba
+    // ~400 entradas en cada comando mal escrito.
+    const command = commandRegistry.get(ctx.command)
 
     if (!command) {
       await handleNotFound(ctx)

@@ -2,8 +2,7 @@ import type { Command } from '../../../types/index.js'
 import { safeSend } from '@lib/media_sender.js'
 import { getUserData, patchUserData } from '@core/events.js'
 import { market, resolveSymbol, fmtPrice, fmtPct, trendArrow } from '@lib/market.js'
-import { readFileSync, writeFileSync, mkdirSync } from 'fs'
-import { join } from 'path'
+import { enData, leerJson, guardarJson, esObjeto } from '@lib/archivoJson.js'
 
 // ─── Portafolio spot (comprar y mantener) ────────────────────────────────────
 
@@ -19,20 +18,16 @@ interface Portfolio {
   [jid: string]: Position[]
 }
 
-const DATA_DIR   = join(process.cwd(), 'data')
-const PORT_FILE  = join(DATA_DIR, 'portfolio.json')
+const PORT_FILE = enData('portfolio.json')
 
+// Son posiciones compradas con BrasCoins: un JSON cortado a mitad de una
+// escritura se leía como "no hay nada" y se perdían las de todos.
 function loadPortfolio(): Portfolio {
-  try {
-    mkdirSync(DATA_DIR, { recursive: true })
-    return JSON.parse(readFileSync(PORT_FILE, 'utf-8'))
-  } catch {
-    return {}
-  }
+  return leerJson(PORT_FILE, {}, esObjeto)
 }
 
 function savePortfolio(p: Portfolio): void {
-  writeFileSync(PORT_FILE, JSON.stringify(p, null, 2))
+  guardarJson(PORT_FILE, p)
 }
 
 function getUserPositions(jid: string): Position[] {

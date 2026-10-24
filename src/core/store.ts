@@ -41,6 +41,17 @@ interface StoreData {
 // por env (MAX_CONTACTS), ver src/config.ts
 const MAX_CONTACTS      = config.maxContacts
 
+/**
+ * Un contacto que no aporta nada: sin nombre, y sin un LID que lleve a otro
+ * jid (o con un LID que apunta a sí mismo). Las entradas inversas —clave LID,
+ * id con el jid real— sí sirven y se conservan.
+ */
+function esVacio(clave: string, c: StoreContact): boolean {
+  if (c.name || c.notify) return false
+  if (c.id && c.id !== clave) return false
+  return !c.lid || c.lid === clave
+}
+
 // ─── Store ────────────────────────────────────────────────────────────────────
 class WinsiStore {
   private data: StoreData = {
@@ -75,9 +86,19 @@ class WinsiStore {
       this.data = { contacts: leido.contacts ?? {}, chats: leido.chats ?? {} }
       if (leido.messages) this.dirty = true // que el próximo guardado los saque
 
+      let vacios = 0
       for (const [jid, c] of Object.entries(this.data.contacts)) {
+        if (esVacio(jid, c)) {
+          delete this.data.contacts[jid]
+          vacios++
+          continue
+        }
         if (c.name || c.notify) this.nameMap.set(jid, c.name ?? c.notify ?? '')
         if (c.lid)              this.lidMap.set(c.lid, jid)
+      }
+      if (vacios) {
+        this.dirty = true
+        logger.info(`Store: ${vacios} contactos sin información descartados`)
       }
     } catch (err) {
       logger.error({ err }, 'Store: error al cargar')
@@ -111,6 +132,10 @@ class WinsiStore {
   // ─── Registrar contacto ─────────────────────────────────────────────────────
   private registerContact(id: string, name?: string, lid?: string): void {
     const existing = this.data.contacts[id] ?? { id }
+    // Un participante de un grupo con LID llega con id = lid y sin nombre: un
+    // LID que apunta a sí mismo, que no resuelve nada. Eran el 90% de la
+    // tabla (17.989 de 20.070 en una cuenta real).
+    if (!name && !existing.name && !existing.notify && (!lid || lid === id) && !existing.lid) return
 
     const updated: StoreContact = {
       id,

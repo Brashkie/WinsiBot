@@ -18,7 +18,7 @@ import { subbotsRoutes } from './routes/subbots.js'
 import { groupsRoutes } from './routes/groups.js'
 import { adminRoutes } from './routes/admin.js'
 import { requireAuth, requireOwner } from './middleware.js'
-import { attachWebSocket, broadcast } from './ws.js'
+import { attachWebSocket } from './ws.js'
 import { setMainSock } from './mainSock.js'
 
 const PORT      = Number(process.env.DASHBOARD_PORT ?? 4002)
@@ -65,8 +65,7 @@ export function startDashboard(sock: WASocket): void {
 
   attachWebSocket(server as unknown as import('node:http').Server)
 
-  // Empuja un "algo cambió, refrescá stats" cada 15s — mucho más barato que
-  // mandar los números en sí (evita duplicar la forma de /api/admin/stats
-  // acá); el cliente hace un solo GET liviano al recibirlo.
-  setInterval(() => broadcast('stats_tick', {}), 15_000).unref()
+  // El "algo cambió, refrescá stats" cada 15 s —más barato que mandar los
+  // números en sí; el cliente hace un solo GET liviano al recibirlo— vive en
+  // ws.ts y solo corre mientras haya alguien conectado al panel.
 }

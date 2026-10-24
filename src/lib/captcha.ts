@@ -1,3 +1,6 @@
+import { randomChoice } from './utils.js'
+import { mezclar } from './utils.js'
+import { idCorto } from './utils.js'
 // ─── Captcha Library ──────────────────────────────────────────────────────────
 
 export type CaptchaType = 'math' | 'emoji' | 'pattern' | 'quiz'
@@ -64,11 +67,11 @@ const EMOJI_SETS = [
 ]
 
 function makeEmojiChallenge(): EmojiChallenge {
-  const item = pick(EMOJI_SETS)!
+  const item = randomChoice(EMOJI_SETS)!
   return {
     question: `¿Qué representa este emoji? ${item.emoji}`,
     answer:   item.name,
-    options:  shuffle([...item.options]),
+    options:  mezclar([...item.options]),
   }
 }
 
@@ -90,11 +93,11 @@ const PATTERNS = [
 ]
 
 function makePatternChallenge(): PatternChallenge {
-  const p = pick(PATTERNS)!
+  const p = randomChoice(PATTERNS)!
   return {
     question: `Completa la secuencia: ${p.seq}`,
     answer:   p.answer,
-    options:  shuffle([...p.options]),
+    options:  mezclar([...p.options]),
   }
 }
 
@@ -116,27 +119,17 @@ const QUIZ_ITEMS = [
 ]
 
 function makeQuizChallenge(): QuizChallenge {
-  const item = pick(QUIZ_ITEMS)!
+  const item = randomChoice(QUIZ_ITEMS)!
   return {
     question: item.q,
     answer:   item.a,
-    options:  shuffle([...item.opts]),
+    options:  mezclar([...item.opts]),
   }
 }
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
 function rand(min: number, max: number)       { return Math.floor(Math.random() * (max - min + 1)) + min }
-function pick<T>(arr: readonly T[]): T        { return arr[Math.floor(Math.random() * arr.length)]! }
-function shuffle<T>(arr: T[]): T[] {
-  for (let i = arr.length - 1; i > 0; i--) {
-    const j = Math.floor(Math.random() * (i + 1));
-    [arr[i], arr[j]] = [arr[j]!, arr[i]!]
-  }
-  return arr
-}
-function uid() { return Math.random().toString(36).slice(2, 10) }
-
 // ─── Main classes ─────────────────────────────────────────────────────────────
 
 export class CaptchaGenerator {
@@ -149,13 +142,13 @@ export class CaptchaGenerator {
   }
 
   generate(type?: CaptchaType): CaptchaChallenge {
-    const t = type ?? pick<CaptchaType>(['math', 'emoji', 'pattern', 'quiz'])
+    const t = type ?? randomChoice<CaptchaType>(['math', 'emoji', 'pattern', 'quiz'])
     return this._build(t)
   }
 
   private _build(type: CaptchaType): CaptchaChallenge {
     const base = {
-      id:         uid(),
+      id:         idCorto(),
       type,
       expiresAt:  Date.now() + this.ttl,
       attempts:   0,
@@ -163,14 +156,14 @@ export class CaptchaGenerator {
     }
 
     if (type === 'math') {
-      const fn = pick(MATH_TYPES as readonly (() => MathChallenge)[])!
+      const fn = randomChoice(MATH_TYPES as readonly (() => MathChallenge)[])!
       const c  = fn()
       const opts = [String(c.answer)]
       while (opts.length < 4) {
-        const wrong = c.answer + pick([-3,-2,-1,1,2,3])
+        const wrong = c.answer + randomChoice([-3,-2,-1,1,2,3])
         if (!opts.includes(String(wrong))) opts.push(String(wrong))
       }
-      return { ...base, question: c.question, answer: String(c.answer), options: shuffle(opts) }
+      return { ...base, question: c.question, answer: String(c.answer), options: mezclar(opts) }
     }
 
     if (type === 'emoji') {

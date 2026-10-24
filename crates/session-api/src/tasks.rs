@@ -24,7 +24,23 @@ pub fn start(state: AppState) {
     tokio::spawn(cleanup_bots(state.clone()));
     tokio::spawn(cleanup_badmac(state.clone()));
     tokio::spawn(guardar_antiban(state.clone()));
+    tokio::spawn(vaciar_conversaciones(state.clone()));
     tokio::spawn(watchdog_check(state));
+}
+
+/// Escribe cada segundo lo que la escritura diferida de conversations.rs
+/// tenga en cola —mensajes observados y perfiles de memoria— en UNA
+/// transacción. Si no hay nada, no toca la base.
+async fn vaciar_conversaciones(state: AppState) {
+    let mut timer = tokio::time::interval(Duration::from_secs(1));
+    timer.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Delay);
+    loop {
+        timer.tick().await;
+        if state.conv_db.hay_pendientes() {
+            let db = state.conv_db.clone();
+            let _ = tokio::task::spawn_blocking(move || db.vaciar_pendientes()).await;
+        }
+    }
 }
 
 /// Guarda el estado del antiban cada minuto, si cambio. Un reinicio pierde

@@ -23,6 +23,21 @@ function parseCookies(header: string): Record<string, string> {
 
 const clients = new Set<WebSocket>()
 
+// El "algo cambió, refrescá stats" cada 15 s existe SOLO mientras haya alguien
+// mirando el panel. Antes era un setInterval permanente: broadcast() ya no
+// mandaba nada sin clientes, pero el temporizador seguía despertando al
+// proceso 4 veces por minuto, todo el día, para nada.
+let tick: ReturnType<typeof setInterval> | null = null
+function ajustarTick(): void {
+  if (clients.size > 0 && !tick) {
+    tick = setInterval(() => broadcast('stats_tick', {}), 15_000)
+    tick.unref()
+  } else if (clients.size === 0 && tick) {
+    clearInterval(tick)
+    tick = null
+  }
+}
+
 export function attachWebSocket(server: Server): void {
   const wss = new WebSocketServer({ noServer: true })
 
@@ -42,7 +57,11 @@ export function attachWebSocket(server: Server): void {
 
     wss.handleUpgrade(req, socket, head, (ws) => {
       clients.add(ws)
-      ws.on('close', () => clients.delete(ws))
+      ajustarTick()
+      ws.on('close', () => {
+        clients.delete(ws)
+        ajustarTick()
+      })
     })
   })
 }

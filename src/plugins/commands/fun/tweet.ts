@@ -1,27 +1,10 @@
 import type { Command } from '../../../types/index.js'
-import { downloadContentFromMessage } from '@whiskeysockets/baileys'
 import { downloadBuffer } from '@lib/downloader.js'
 import { safeSend } from '@lib/media_sender.js'
+import { imagenDelMensaje } from '@lib/mensajes.js'
 
 const DEFAULT_AVATAR = 'https://i.imgur.com/8fK4h6J.png'
 const MAX_PHOTO_HEIGHT = 700 // evita tweets absurdamente largos con fotos muy verticales
-
-async function getImageFromMsg(
-  msg: import('@whiskeysockets/baileys').WAMessage
-): Promise<Buffer | null> {
-  try {
-    const imgMsg =
-      msg.message?.imageMessage ??
-      msg.message?.extendedTextMessage?.contextInfo?.quotedMessage?.imageMessage
-    if (!imgMsg) return null
-    const stream = await downloadContentFromMessage(imgMsg, 'image')
-    const chunks: Buffer[] = []
-    for await (const chunk of stream) chunks.push(chunk)
-    return Buffer.concat(chunks)
-  } catch {
-    return null
-  }
-}
 
 // Pega la foto adjunta debajo de la tarjeta del tweet, como un tweet real con
 // imagen. `sharp` es optionalDependency — si no está disponible (o falla),
@@ -101,7 +84,7 @@ const command: Command = {
       return
     }
 
-    const photo = await getImageFromMsg(msg)
+    const photo = await imagenDelMensaje(msg)
     if (photo) {
       try {
         buffer = await attachPhoto(buffer, photo)

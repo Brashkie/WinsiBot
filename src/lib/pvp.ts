@@ -1,3 +1,4 @@
+import { idCorto } from './utils.js'
 // ─── PvP Arena System ─────────────────────────────────────────────────────────
 
 export type Division =
@@ -38,7 +39,16 @@ export interface BattleState {
   lastAction:    number
   ultimateUsed1: boolean
   ultimateUsed2: boolean
+  cpu?:          NivelCpu   // si p2 es la CPU
 }
+
+/** Un entero en [min, max]. Inyectable para que la IA (arenaIA.ts) simule con
+ *  las MISMAS reglas que la pelea real, y no con una copia que se desincronice. */
+export type Tirada = (min: number, max: number) => number
+
+/** El rival de `#arena cpu`: no es un jid real, nunca recibe ELO ni dinero. */
+export const CPU = 'cpu@arena'
+export type NivelCpu = 'facil' | 'normal' | 'dificil'
 
 export interface ActionResult {
   log:    string
@@ -85,9 +95,7 @@ const userInBattle      = new Map<string, string>()            // userJid → ba
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
-function rand(min: number, max: number) { return Math.floor(Math.random() * (max - min + 1)) + min }
-function uid()                           { return Math.random().toString(36).slice(2, 10) }
-
+function tirar(min: number, max: number) { return Math.floor(Math.random() * (max - min + 1)) + min }
 // ─── Arena ───────────────────────────────────────────────────────────────────
 
 export class Arena {
@@ -144,7 +152,7 @@ export class Arena {
     pendingChallenges.delete(opponent)
 
     const state: BattleState = {
-      id:            uid(),
+      id:            idCorto(),
       p1:            req.challenger,
       p2:            req.opponent,
       hp1:           MAX_HP,
@@ -165,13 +173,51 @@ export class Arena {
     userInBattle.set(req.opponent,   state.id)
 
     setTimeout(() => {
-      if (activeBattles.has(state.id)) Arena.endBattle(state)
+      if (!activeBattles.has(state.id)) return
+      Arena.endBattle(state)
+      Arena.alExpirar?.(state)
     }, ACTION_TIMEOUT * 10)
 
     return state
   }
 
+  /** Lo llama el temporizador cuando una pelea se abandona sin terminar: la
+   *  arena devuelve ahí las apuestas retenidas (ver arena.ts). */
+  static alExpirar: ((state: BattleState) => void) | null = null
+
+  /** Las peleas en curso: para anotar las apuestas retenidas. */
+  static batallas(): BattleState[] { return [...activeBattles.values()] }
+
   static declineChallenge(opponent: string): boolean { return pendingChallenges.delete(opponent) }
+
+  /** Pelea de práctica contra la CPU: sin reto que aceptar, sin ELO, sin apuesta. */
+  static startVsCpu(player: string, nivel: NivelCpu): BattleState | null {
+    if (userInBattle.has(player) || pendingChallenges.has(player)) return null
+    const state: BattleState = {
+      id:            idCorto(),
+      p1:            player,
+      p2:            CPU,
+      hp1:           MAX_HP,
+      hp2:           MAX_HP,
+      shield1:       0,
+      shield2:       0,
+      turn:          player,
+      round:         1,
+      log:           [],
+      bet:           0,
+      startTime:     Date.now(),
+      lastAction:    Date.now(),
+      ultimateUsed1: false,
+      ultimateUsed2: false,
+      cpu:           nivel,
+    }
+    activeBattles.set(state.id, state)
+    userInBattle.set(player, state.id)
+    setTimeout(() => {
+      if (activeBattles.has(state.id)) Arena.endBattle(state)
+    }, ACTION_TIMEOUT * 10)
+    return state
+  }
 
   // ─── Battle ────────────────────────────────────────────────────────────────
 
@@ -182,7 +228,7 @@ export class Arena {
 
   static isInBattle(jid: string): boolean { return userInBattle.has(jid) }
 
-  static processAction(state: BattleState, actor: string, action: BattleAction): ActionResult {
+  static processAction(state: BattleState, actor: string, action: BattleAction, rand: Tirada = tirar): ActionResult {
     const isP1      = actor === state.p1
     const myHp      = isP1 ? 'hp1'      : 'hp2'      as const
     const oppHp     = isP1 ? 'hp2'      : 'hp1'      as const

@@ -1,8 +1,8 @@
 import type { Command } from '../../../types/index.js'
 import { execSync }   from 'child_process'
 import os            from 'os'
-import { readFileSync, existsSync } from 'fs'
 import { join }      from 'path'
+import { versionDelBot } from '@lib/version.js'
 
 // ─────────────────────────────────────────────────────────────────────────────
 //  !sysinfo — panel de estado del sistema y servicios
@@ -24,15 +24,6 @@ function fmtUptime(ms: number): string {
 
 function fmtMB(bytes: number): string {
   return `${(bytes / 1_048_576).toFixed(0)} MB`
-}
-
-function getBotVersion(): string {
-  try {
-    const pkg = JSON.parse(readFileSync(join(process.cwd(), 'package.json'), 'utf8'))
-    return pkg.version ?? '?'
-  } catch {
-    return '?'
-  }
 }
 
 function getGitCommit(): string {
@@ -74,7 +65,7 @@ const command: Command = {
     const cpuLoad  = os.loadavg()[0]?.toFixed(2) ?? '?'
     const platform = `${os.type()} ${os.release()}`
     const nodeVer  = process.version
-    const botVer   = getBotVersion()
+    const botVer   = versionDelBot()
     const commit   = getGitCommit()
     const uptime   = fmtUptime(process.uptime() * 1000)
     const osUptime = fmtUptime(os.uptime() * 1000)

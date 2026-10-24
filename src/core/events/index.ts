@@ -1,3 +1,4 @@
+import { MapConTocados } from '@lib/mapConTocados.js'
 // ─────────────────────────────────────────────────────────────────────────────
 // TIPOS
 // ─────────────────────────────────────────────────────────────────────────────
@@ -80,6 +81,7 @@ export interface Cooldowns {
   lastGift: number
   lastReward: number
   lastCode: number
+  lastBreed: number // cría de dragones (#pet criar)
 }
 
 // ─── Perfil del usuario ───────────────────────────────────────────────────────
@@ -140,6 +142,11 @@ export interface UserData {
   levelingMeta?: import('@lib/leveling.js').LevelingMeta
   // ── Stickers guardados ──────────────────────────────────────────────────────
   savedStickers?: SavedSticker[]
+  // ── Forja (#forjar): el arma, de +0 a +10 — da daño en #raid ────────────────
+  arma?: { nivel: number }
+  // ── Compañero (#pet companero): su `hatchedAt`, y su exp por actividad ──────
+  companero?: number
+  petActividad?: { dia: string; exp: number; ultimo: number }
 }
 
 // ─── Configuración de grupo ───────────────────────────────────────────────────
@@ -213,7 +220,7 @@ export interface ClanData {
 // ─────────────────────────────────────────────────────────────────────────────
 
 export const groupConfigs = new Map<string, GroupConfig>()
-export const userData = new Map<string, UserData>()
+export const userData = new MapConTocados<string, UserData>()
 export const clanData = new Map<string, ClanData>() // clanTag → ClanData
 export const userClan = new Map<string, string>() // userJid → clanTag
 
@@ -256,6 +263,7 @@ function defaultCooldowns(): Cooldowns {
     lastGift: 0,
     lastReward: 0,
     lastCode: 0,
+    lastBreed: 0,
   }
 }
 

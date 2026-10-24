@@ -7,6 +7,7 @@ import {
   deleteUserActiveChar,
   findActiveCharByMsgId,
 } from './rollwaifu.js'
+import { fmtCooldown } from '@core/events.js'
 
 export const C_COOLDOWN = 10 * 60 * 1000
 const STEAL_TIME = 16 * 1000
@@ -20,12 +21,6 @@ setInterval(() => {
     if (now - t > C_COOLDOWN) cCooldowns.delete(k)
   }
 }, 10 * 60_000).unref()
-
-function formatTime(ms: number): string {
-  const m = Math.floor(ms / 60_000)
-  const s = Math.floor((ms % 60_000) / 1000)
-  return m > 0 ? `${m}m ${s}s` : `${s}s`
-}
 
 function num(jid: string): string {
   return jid.replace(/@s\.whatsapp\.net|@lid/g, '').replace(/[^0-9]/g, '')
@@ -93,7 +88,7 @@ const command: Command = {
     const elapsed   = Date.now() - lastClaim
     if (elapsed < C_COOLDOWN) {
       await sock.sendMessage(jid, {
-        text: `✗ Debes esperar *${formatTime(C_COOLDOWN - elapsed)}* para reclamar de nuevo.`,
+        text: `✗ Debes esperar *${fmtCooldown(C_COOLDOWN - elapsed)}* para reclamar de nuevo.`,
       }, { quoted: msg })
       return
     }

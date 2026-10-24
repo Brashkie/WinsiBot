@@ -1,3 +1,4 @@
+import { randomChoice } from './utils.js'
 // ─── Draw & Guess ─────────────────────────────────────────────────────────────
 
 export type DrawCategory = 'animales' | 'tecnología' | 'comida' | 'naturaleza' | 'objetos' | 'profesiones' | 'deportes' | 'países'
@@ -102,8 +103,6 @@ const WORDS: readonly DrawWord[] = [
 
 const activeGames = new Map<string, DrawGame>()   // groupJid → DrawGame
 
-function pick<T>(arr: readonly T[]): T { return arr[Math.floor(Math.random() * arr.length)]! }
-
 // ─── Draw & Guess Manager ─────────────────────────────────────────────────────
 
 export class DrawGuessManager {
@@ -119,7 +118,7 @@ export class DrawGuessManager {
     category?: DrawCategory,
   ): DrawGame {
     const pool = category ? WORDS.filter(w => w.category === category) : WORDS
-    const word = pick(pool.length ? pool : WORDS)
+    const word = randomChoice(pool.length ? pool : WORDS)
     const players = new Map<string, DrawPlayer>()
     players.set(drawerJid, { jid: drawerJid, name: drawerName, score: 0, guessed: 0, drew: 0 })
 
@@ -182,7 +181,7 @@ export class DrawGuessManager {
     if (drawerPlayer) drawerPlayer.drew++
 
     const pool = WORDS.filter(w => w.category === game.word.category)
-    game.word  = pick(pool.length ? pool : WORDS)
+    game.word  = randomChoice(pool.length ? pool : WORDS)
     return game.word
   }
 

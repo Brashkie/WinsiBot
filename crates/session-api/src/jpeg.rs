@@ -35,6 +35,8 @@ mod ffi {
             qc: *const u8,
             out: *mut i16,
             scratch: *mut f32,
+            my0: u32,
+            my1: u32,
         );
         pub fn winsi_jpeg_write(
             coefs: *const i16,
@@ -60,22 +62,44 @@ pub fn codificar_nativo(img: &RgbImage, calidad: u8) -> Vec<u8> {
     let mut qc = [0u8; 64];
     let mcus = w.div_ceil(16) as usize * h.div_ceil(16) as usize;
     let mut coefs = vec![0i16; mcus * 6 * 64];
-    // SAFETY: las tablas miden 64; `coefs` mide 6·64 por MCU, que es lo que
-    // escribe winsi_jpeg_coefs; `scratch` mide lo que pide el propio kernel;
-    // `img` mide w·h·3 bytes por ser un RgbImage.
-    unsafe {
-        ffi::winsi_jpeg_tables(i32::from(calidad), qy.as_mut_ptr(), qc.as_mut_ptr());
-        let mut scratch = vec![0f32; ffi::winsi_jpeg_scratch_len(w)];
-        ffi::winsi_jpeg_coefs(
-            img.as_ptr(),
-            w,
-            h,
-            qy.as_ptr(),
-            qc.as_ptr(),
-            coefs.as_mut_ptr(),
-            scratch.as_mut_ptr(),
-        );
-    }
+    // SAFETY: las tablas miden 64.
+    unsafe { ffi::winsi_jpeg_tables(i32::from(calidad), qy.as_mut_ptr(), qc.as_mut_ptr()) };
+
+    // Color y DCT en franjas de filas de MCU sobre todos los núcleos: cada
+    // MCU es independiente. El Huffman de abajo no se puede repartir —cada
+    // bloque codifica su DC como diferencia con el anterior— y queda en serie.
+    let filas_mcu = h.div_ceil(16);
+    let n = (crate::anime4k::hilos() as u32).min(filas_mcu);
+    let paso = filas_mcu.div_ceil(n);
+    let (src, dst) = (img.as_ptr() as usize, coefs.as_mut_ptr() as usize);
+    let (qyp, qcp) = (qy.as_ptr() as usize, qc.as_ptr() as usize);
+    std::thread::scope(|s| {
+        for t in 0..n {
+            let (my0, my1) = (t * paso, ((t + 1) * paso).min(filas_mcu));
+            if my0 >= my1 {
+                continue;
+            }
+            s.spawn(move || {
+                // SAFETY: `img` mide w·h·3; `coefs` mide 6·64 por MCU y cada
+                // hilo escribe solo los de sus filas de MCU; el `scratch` es de
+                // este hilo y mide lo que pide el propio kernel.
+                unsafe {
+                    let mut scratch = vec![0f32; ffi::winsi_jpeg_scratch_len(w)];
+                    ffi::winsi_jpeg_coefs(
+                        src as *const u8,
+                        w,
+                        h,
+                        qyp as *const u8,
+                        qcp as *const u8,
+                        dst as *mut i16,
+                        scratch.as_mut_ptr(),
+                        my0,
+                        my1,
+                    );
+                }
+            });
+        }
+    });
     // Un JPEG casi nunca pasa del tamaño en crudo; si pasa —ruido puro a
     // calidad 100—, se reintenta con el doble.
     let mut cap = (w as usize * h as usize * 3) / 2 + 4096;
@@ -187,6 +211,7 @@ mod tests {
     /// no submuestrea el color (4:4:4 —su doc dice 4:2:2, el código pone 1x1
     /// en los tres componentes—) mientras que este usa 4:2:0, como libjpeg por
     /// defecto y como WhatsApp al recomprimir.
+    #[cfg(feature = "native")]
     fn psnr_luma(a: &RgbImage, b: &RgbImage) -> f64 {
         // Con los pesos BT.601, los de JPEG. `to_luma8()` usa BT.709, y con
         // pesos distintos el error del color submuestreado se cuela en la luma

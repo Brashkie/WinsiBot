@@ -106,15 +106,29 @@ fn json_a<T: for<'de> Deserialize<'de> + Default>(s: &str) -> T {
     serde_json::from_str(s).unwrap_or_default()
 }
 
+/// El perfil de `jid`: del caché si está, y si no de la base.
 fn leer(db: &ConvDb, jid: &str) -> Result<Perfil, String> {
+    if let Some(p) = db
+        .perfiles
+        .lock()
+        .unwrap_or_else(|e| e.into_inner())
+        .get(jid)
+    {
+        return Ok(p.clone());
+    }
     let conn = db.lock().map_err(|e| e.to_string())?;
-    let r = conn.query_row(
-        "SELECT uses_slang, insult_count, spam_count, nsfw_count, command_count,
+    leer_de(&conn, jid).map_err(|e| e.to_string())
+}
+
+fn leer_de(conn: &rusqlite::Connection, jid: &str) -> rusqlite::Result<Perfil> {
+    let r = conn
+        .prepare_cached(
+            "SELECT uses_slang, insult_count, spam_count, nsfw_count, command_count,
                 msg_count, top_intents, first_seen, last_seen, active_hours,
                 reputation, reputation_score, response_style, recent_intents
            FROM user_memory WHERE jid = ?1",
-        params![jid],
-        |r| {
+        )?
+        .query_row(params![jid], |r| {
             Ok(Perfil {
                 jid: jid.to_string(),
                 uses_slang: r.get::<_, i64>(0)? != 0,
@@ -132,8 +146,7 @@ fn leer(db: &ConvDb, jid: &str) -> Result<Perfil, String> {
                 response_style: r.get(12)?,
                 recent_intents: json_a(&r.get::<_, String>(13)?),
             })
-        },
-    );
+        });
 
     match r {
         Ok(p) => Ok(p),
@@ -145,13 +158,14 @@ fn leer(db: &ConvDb, jid: &str) -> Result<Perfil, String> {
             response_style: "neutral".into(),
             ..Default::default()
         }),
-        Err(e) => Err(e.to_string()),
+        Err(e) => Err(e),
     }
 }
 
-fn escribir(db: &ConvDb, p: &Perfil) -> Result<(), String> {
-    let conn = db.lock().map_err(|e| e.to_string())?;
-    conn.execute(
+/// UPSERT de un perfil. Lo llama el vaciado de la escritura diferida, dentro
+/// de su transacción (ver `BaseConv` en conversations.rs).
+pub(crate) fn escribir_en(conn: &rusqlite::Connection, p: &Perfil) -> rusqlite::Result<()> {
+    conn.prepare_cached(
         "INSERT INTO user_memory
             (jid, uses_slang, insult_count, spam_count, nsfw_count, command_count,
              msg_count, top_intents, first_seen, last_seen, active_hours,
@@ -166,25 +180,24 @@ fn escribir(db: &ConvDb, p: &Perfil) -> Result<(), String> {
             reputation_score = excluded.reputation_score,
             response_style = excluded.response_style,
             recent_intents = excluded.recent_intents",
-        params![
-            p.jid,
-            i64::from(p.uses_slang),
-            p.insult_count,
-            p.spam_count,
-            p.nsfw_count,
-            p.command_count,
-            p.msg_count,
-            serde_json::to_string(&p.top_intents).unwrap_or_else(|_| "{}".into()),
-            p.first_seen,
-            p.last_seen,
-            serde_json::to_string(&p.active_hours).unwrap_or_else(|_| "[]".into()),
-            p.reputation,
-            p.reputation_score,
-            p.response_style,
-            serde_json::to_string(&p.recent_intents).unwrap_or_else(|_| "[]".into()),
-        ],
-    )
-    .map_err(|e| e.to_string())?;
+    )?
+    .execute(params![
+        p.jid,
+        i64::from(p.uses_slang),
+        p.insult_count,
+        p.spam_count,
+        p.nsfw_count,
+        p.command_count,
+        p.msg_count,
+        serde_json::to_string(&p.top_intents).unwrap_or_else(|_| "{}".into()),
+        p.first_seen,
+        p.last_seen,
+        serde_json::to_string(&p.active_hours).unwrap_or_else(|_| "[]".into()),
+        p.reputation,
+        p.reputation_score,
+        p.response_style,
+        serde_json::to_string(&p.recent_intents).unwrap_or_else(|_| "[]".into()),
+    ])?;
     Ok(())
 }
 
@@ -272,7 +285,11 @@ pub struct UpdateRequest {
     pub is_cmd: bool,
 }
 
-/// Registra un mensaje y devuelve el perfil ya actualizado.
+/// Registra un mensaje en la memoria de `jid` y devuelve el perfil actualizado.
+///
+/// Corre por CADA mensaje de grupo. Lee y modifica el perfil en el caché de
+/// `BaseConv` y lo marca para el próximo vaciado: sin SELECT ni UPSERT por
+/// mensaje, que eran 124 µs (ver `benches/mensaje.rs`).
 pub fn actualizar(db: &ConvDb, jid: &str, req: &UpdateRequest) -> Result<Perfil, String> {
     let mut p = leer(db, jid)?;
     let ahora = Utc::now();
@@ -324,10 +341,13 @@ pub fn actualizar(db: &ConvDb, jid: &str, req: &UpdateRequest) -> Result<Perfil,
     p.reputation = etiqueta.to_string();
     p.response_style = estilo_respuesta(&p).to_string();
 
-    // Se escribe en CADA mensaje, no cada diez como hacía Python. Es un UPSERT
-    // sobre una conexión ya abierta; lo que Python ahorraba con el volcado
-    // diferido era reescribir un archivo JSON entero, que acá no existe.
-    escribir(db, &p)?;
+    // Al caché y marcado: lo escribe el próximo vaciado, en la misma
+    // transacción que los mensajes observados.
+    db.perfiles
+        .lock()
+        .unwrap_or_else(|e| e.into_inner())
+        .insert(jid.to_string(), p.clone());
+    db.marcar_sucio(jid);
     Ok(p)
 }
 
@@ -406,11 +426,10 @@ pub async fn toxic(State(state): State<AppState>) -> Json<serde_json::Value> {
 mod tests {
     use super::*;
     use rusqlite::Connection;
-    use std::sync::{Arc, Mutex};
 
     fn db() -> ConvDb {
         let conn = Connection::open_in_memory().unwrap();
-        let db: ConvDb = Arc::new(Mutex::new(conn));
+        let db: ConvDb = crate::conversations::BaseConv::nueva(conn);
         init_schema(&db);
         db
     }

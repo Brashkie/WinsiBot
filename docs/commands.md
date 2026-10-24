@@ -38,14 +38,14 @@
 
 | # | Categoría | Comandos |
 |---|-----------|:--------:|
-| 1 | [🛠️ General](#%EF%B8%8F-general) | 7 |
+| 1 | [🛠️ General](#%EF%B8%8F-general) | 11 |
 | 2 | [🤖 IA / ChatGPT](#-ia--chatgpt) | 4 |
-| 3 | [🎮 RPG / Economía](#-rpg--economía) | 20 |
+| 3 | [🎮 RPG / Economía](#-rpg--economía) | 22 |
 | 4 | [🎴 Gacha / Personajes](#-gacha--personajes) | 6 |
 | 5 | [💑 Parejas](#-parejas) | 5 |
 | 6 | [🎭 Roleplay](#-roleplay) | 9 |
-| 7 | [🎉 Diversión](#-diversión) | 12 |
-| 8 | [🕹️ Juegos](#%EF%B8%8F-juegos) | 3 |
+| 7 | [🎉 Diversión](#-diversión) | 14 |
+| 8 | [🕹️ Juegos](#%EF%B8%8F-juegos) | 7 |
 | 9 | [🎁 Regalos](#-regalos) | 1 |
 | 10 | [🖼️ Media & Stickers](#%EF%B8%8F-media--stickers) | 6 |
 | 11 | [🔽 Descargas](#-descargas) | 7 |
@@ -68,12 +68,24 @@
 | `categoria` | `cat`, `category` | — | 👤 | Muestra los comandos de una categoría específica |
 | `afk` | `ausente` | 10s | 👤 | Activa modo AFK con una razón personalizada |
 | `creator` | `info`, `about`, `botinfo`, `creador` | — | 👤 | Información del bot y su creador |
+| `resumen` | `quemeperdi`, `qmp`, `perdi`, `summary` | 60s | 👥 | "¿Qué me perdí?": resume lo que se habló en el grupo (12 h por defecto, hasta 72). Con IA si hay; si no, quién habló, de qué y las preguntas pendientes |
+| `encuesta` | `poll`, `votacion` | 10s | 👤 | Encuesta nativa de WhatsApp, de 2 a 12 opciones separadas con `\|`; `-m` para voto múltiple |
+| `tts` | `voz`, `decir`, `habla`, `say` | 10s | 👤 | Texto a nota de voz **sin internet** (máx 400 caracteres), o responde a un mensaje con `tts`. Usa Piper, espeak, la voz de Windows o la de macOS, la que haya |
+| `recordar` | `recordatorio`, `remind`, `rec` | 3s | 👤 | Recordatorio en este chat: `10m`, `2h30m`, `en 3 días`, `a las 18:30`, `mañana 9:00`, `7pm`. `lista` y `borrar <n>`. Máximo 10 por persona; sobreviven a un reinicio |
 
 ```
 !ping
 !menu
 !categoria rpg
 !afk estudiando para el examen
+!resumen
+!resumen 24
+!encuesta ¿Dónde comemos? | Pizza | Sushi | Tacos
+!encuesta -m ¿Qué días puedes? | Lun | Mié | Vie
+!recordar 10m sacar la ropa
+!recordar mañana 9:00 reunión
+!recordar lista
+!tts hola a todos
 ```
 
 ---
@@ -145,7 +157,9 @@
 | `leveltop` | `toplevel`, `topnivel`, `niveltop`, `levelrank` | 10s | 👤 | Top de usuarios con más nivel |
 | `depositar` | `dep`, `deposit`, `retirar`, `withdraw`, `banco` | 3s | 👤 | Deposita o retira monedas del banco |
 | `prestige` | `prestigio`, `ascender` | — | 👤 | Reinicia progreso a cambio de recompensas exclusivas |
-| `pet` | `mascota`, `mipet`, `dragon`, `dragones` | 3s | 👤 | Dragon City: incubá huevos, alimentá con Oro y evolucioná tus dragones (579 disponibles) |
+| `pet` | `mascota`, `mipet`, `dragon`, `dragones` | 3s | 👤 | Dragon City: incubá huevos, alimentá con Oro, evolucioná y criá tus dragones (579 disponibles). `criar <#> <#>`: dos de nivel 10+, 5.000 oro + ¥3.000, cada 8 h. `companero <#>`: el que gana exp con tus mensajes y pelea en `raid` |
+| `forjar` | `forja`, `forge`, `herreria` | 3s | 👤 | Mejora tu arma de +0 a +10 con ⚔️ ✨ 🏆 y ¥: +8% de daño en `raid` por nivel. Desde +4, fallar baja un nivel salvo con 🛡️ (`forjar proteccion`) |
+| `subasta` | `subastas`, `auction`, `pujar`, `puja`, `bid` | 2s | 👥 | Subasta un dragón o ítems en el grupo; las pujas quedan retenidas y se devuelven al superado. 5% de comisión |
 | `harem` | `waifus`, `claims`, `coleccion` | 5s | 👤 | Ver los personajes reclamados con `!rw`, ordenados por valor |
 | `regalo` | `gift`, `dar`, `regalar` | 10s | 👤 | Regala monedas, XP o ítems a otro usuario |
 
@@ -166,6 +180,12 @@
 !pet hatch
 !pet feed 1
 !pet collect
+!pet criar 1 2
+!forjar
+!forjar mejorar
+!subasta vender dragon 3 5000 30
+!subasta vender espada 5 2000
+!pujar 5500
 !harem
 !harem @usuario 2
 !regalo @usuario 500 coins
@@ -179,14 +199,32 @@
 
 | Comando | Aliases | Cooldown | Permiso | Descripción |
 |---------|---------|:--------:|:-------:|-------------|
-| `arena` | `pvp`, `batalla`, `fight` | 30s | 👤 | Reta a otro usuario a un duelo PvP con apuesta de diamantes |
+| `arena` | `pvp`, `batalla`, `fight` | 30s | 👤 | Reta a otro usuario a un duelo PvP con apuesta de diamantes, o practica contra la CPU con `arena cpu [facil\|normal\|dificil]` (sin ELO; la CPU piensa con expectiminimax) |
 | `quiz` | `qz`, `pregunta`, `coding` | 15s | 👤 | Pregunta de programación por categoría (JS, Python, SQL…) |
 | `adivinar` | `drawguess`, `dibujar`, `guess` | 20s | 👤 | Mini-juego de dibujar y adivinar en grupo |
+| `raid` | `jefe`, `boss`, `worldboss`, `atacar` | 1min por golpe | 👥 | Jefe de mundo: el mismo para todos los grupos. Aparece cada 6 h y escapa en 60 min. Dos jugadores seguidos con compañeros de elementos que combinan disparan una reacción. `atacar`, `on`/`off` (admins: avisos en el grupo), `invocar` (owner) |
+| `mazmorra` | `dungeon`, `mazmorras`, `calabozo` | 10s por puerta | 👥 | La mazmorra del día, la misma para todos los grupos: `entrar`, `<número de puerta>`, `salir` (cobrar) y `ranking`. Una expedición por persona por día |
+| `poker` | `póker`, `holdem`, `casinoholdem` | 2s | 👤 | Casino Hold'em contra la casa: `poker <ante>`, después `poker ir` (paga el doble) o `poker retirarse`. El crupier juega con par de 4 o más |
+| `blackjack` | `bj`, `21`, `pedir`, `plantarse`, `doblar` | 2s | 👤 | Blackjack contra el crupier: ganar paga ×2, blackjack 3:2, el crupier se planta en 17. Apuesta de ¥10 a ¥500.000 |
 
 ```
 !arena @usuario 10
 !quiz javascript
 !adivinar iniciar
+!raid
+!atacar
+!raid on
+!arena cpu dificil
+!mazmorra entrar
+!mazmorra 2
+!mazmorra salir
+!mazmorra ranking
+!poker 500
+!poker ir
+!bj 1000
+!pedir
+!plantarse
+!doblar
 ```
 
 ---
@@ -275,6 +313,8 @@
 
 | Comando | Aliases | Cooldown | Permiso | Descripción |
 |---------|---------|:--------:|:-------:|-------------|
+| `asesino` | `mafia`, `asesinos`, `votar`, `investigar`, `salvar`, `asesinar` | 2s | 👤 | Asesino en el chat (estilo Mafia), de 4 a 10 jugadores: `crear`, `unirme`, `empezar`; de día `votar <n>` en el grupo; de noche `matar`, `investigar` o `salvar <n>` por privado, según tu rol |
+| `historia` | `telefono`, `teléfono`, `cuento` | 2s | 👤 | Teléfono descompuesto con IA, de 3 a 10 jugadores: `nueva <primera frase>`, `unirme`, `empezar`. Cada uno sigue la historia por privado viendo solo el último pedazo; al final se revela entera |
 | `meme` | `memes`, `randommeme` | 5s | 👤 | Meme aleatorio de Reddit |
 | `memepe` | `mecausa`, `memeperu` | 5s | 👤 | Meme peruano aleatorio |
 | `giphy` | `gif` | 5s | 👤 | Busca un GIF en GIPHY |

@@ -18,7 +18,6 @@ import makeWASocket, {
   fetchLatestBaileysVersion,
   makeCacheableSignalKeyStore,
   proto,
-  S_WHATSAPP_NET,
   type WASocket,
 } from '@whiskeysockets/baileys'
 import { useMultiFileAuthStateCBOR } from '@lib/authStateCbor.js'
@@ -82,13 +81,11 @@ export class WinsiSocket extends EventEmitter3<WinsiEvents> {
   // Baileys detecta sockets muertos por su propio ping/pong, pero a veces
   // WhatsApp deja la conexión "abierta" a nivel de transporte sin entregar
   // mensajes nuevos a este dispositivo — ni 'close' ni error, solo silencio,
-  // y puede pasar a los pocos minutos de conectar. Por eso el sondeo corre
-  // en un intervalo fijo (no espera un período de silencio) y usa sock.query
-  // (un IQ real que SÍ espera respuesta del servidor) — sendPresenceUpdate
-  // no sirve para esto: solo escribe al socket local, nunca falla.
+  // y puede pasar a los pocos minutos de conectar. El transporte muerto lo
+  // detecta el keep-alive de Baileys; lo que mira este sondeo es el silencio
+  // de mensajes, sin tocar la red (ver _startZombieWatchdog).
   private zombieCheckTimer: ReturnType<typeof setInterval> | null = null
   private readonly ZOMBIE_CHECK_INTERVAL_MS = 90_000
-  private readonly ZOMBIE_PROBE_TIMEOUT_MS = 10_000
 
   // ─── Pulso de presencia ────────────────────────────────────────────────────
   // markOnlineOnConnect=false (abajo) mantiene al bot sin mostrarse "en línea"
@@ -642,19 +639,18 @@ export class WinsiSocket extends EventEmitter3<WinsiEvents> {
   }
 
   // ─── Watchdog de conexión zombie ────────────────────────────────────────
-  // Cada ZOMBIE_CHECK_INTERVAL_MS manda un IQ de ping real (el mismo que usa
-  // Baileys internamente) y espera la respuesta del servidor — no asume que
-  // "sin error al escribir" signifique "WhatsApp está escuchando". Si no hay
-  // respuesta a tiempo, fuerza una reconexión completa. Corre siempre, sin
-  // esperar un período de silencio primero, porque la conexión puede quedar
-  // zombie a los pocos minutos de conectar.
+  // Hay un modo de falla donde el transporte sigue vivo y responde IQs, pero
+  // WhatsApp dejó de empujar 'messages.upsert' a este dispositivo (visto tras
+  // ~7-8h apagado — reconecta "ok" pero nunca más loguea un mensaje
+  // entrante). Con cientos de grupos activos, tanto silencio no es tráfico
+  // bajo, es la conexión colgada, y se fuerza una reconexión.
   //
-  // El ping por sí solo NO alcanza: hay un modo de falla donde el transporte
-  // sigue vivo y responde IQs, pero WhatsApp dejó de empujar 'messages.upsert'
-  // a este dispositivo (visto tras ~7-8h apagado — reconecta "ok" pero nunca
-  // más loguea un mensaje entrante). Por eso, si el ping responde bien, se
-  // revisa también hace cuánto no llega un evento de mensaje; con 433 grupos
-  // activos, tanto silencio no es tráfico bajo, es la conexión colgada.
+  // Hasta la 8.15.0 este watchdog mandaba además su propio ping al servidor
+  // cada 90 s. Era un duplicado: el keep-alive de Baileys manda EXACTAMENTE
+  // el mismo IQ (`w:p`) cada keepAliveIntervalMs (25 s) y cierra la conexión
+  // si en ese tiempo más 5 s no llegó nada, que es lo que el ping de acá
+  // detectaba. Un despertar de la radio más, en un teléfono, sin detectar
+  // nada nuevo. Lo que queda es la comprobación de silencio, que es local.
   private _startZombieWatchdog(): void {
     if (this.zombieCheckTimer) clearInterval(this.zombieCheckTimer)
 
@@ -678,26 +674,10 @@ export class WinsiSocket extends EventEmitter3<WinsiEvents> {
         this.requestReconnect()
       }
 
-      try {
-        await this.sock.query(
-          {
-            tag: 'iq',
-            attrs: { to: S_WHATSAPP_NET, type: 'get', xmlns: 'w:p' },
-            content: [{ tag: 'ping', attrs: {} }],
-          },
-          this.ZOMBIE_PROBE_TIMEOUT_MS,
-        )
-      } catch (err) {
-        forceReconnect('Conexión zombie detectada (sin respuesta al ping) — forzando reconexión', {
-          err,
-        })
-        return
-      }
-
       const idleMs = Date.now() - this.lastMessageEventAt
       if (idleMs > this.MESSAGE_STALENESS_LIMIT_MS) {
         forceReconnect(
-          'Conexión zombie detectada (ping OK pero sin mensajes entrantes) — forzando reconexión',
+          'Conexión zombie detectada (conectado pero sin mensajes entrantes) — forzando reconexión',
           { idleMinutes: Math.round(idleMs / 60_000) },
         )
       }

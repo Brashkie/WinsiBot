@@ -2,17 +2,12 @@ import type { Command } from '../../../types/index.js'
 import { SOURCES, getCharacters, inventory, RW_COOLDOWN, rwCooldowns } from './rollwaifu.js'
 import { C_COOLDOWN, cCooldowns } from './claim.js'
 import { safeSend } from '@lib/media_sender.js'
-
-function formatTime(ms: number): string {
-  const m = Math.floor(ms / 60_000)
-  const s = Math.floor((ms % 60_000) / 1000)
-  return m > 0 ? `${m}m ${s}s` : `${s}s`
-}
+import { fmtCooldown } from '@core/events.js'
 
 function cooldownLine(label: string, cooldowns: Map<string, number>, duration: number, sender: string): string {
   const elapsed = Date.now() - (cooldowns.get(sender) ?? 0)
   const left    = duration - elapsed
-  return `${label} » ${left > 0 ? `*${formatTime(left)}*` : '*Ahora*'}`
+  return `${label} » ${left > 0 ? `*${fmtCooldown(left)}*` : '*Ahora*'}`
 }
 
 const command: Command = {

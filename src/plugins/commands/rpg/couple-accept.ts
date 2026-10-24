@@ -1,12 +1,8 @@
 import type { Command } from '../../../types/index.js'
 import { getUserData, patchUserData } from '@core/events.js'
+import { objetivoDe } from '@lib/mensajes.js'
 
 const n = (jid: string) => jid.split('@')[0]!
-
-function getTarget(msg: any): string | undefined {
-  return (msg.message?.extendedTextMessage?.contextInfo?.mentionedJid ?? [])[0]
-      ?? msg.message?.extendedTextMessage?.contextInfo?.participant
-}
 
 const command: Command = {
   name: 'aceptar',
@@ -16,7 +12,7 @@ const command: Command = {
   groupOnly: true,
 
   async execute({ sock, jid, msg, sender, pushName, prefix }) {
-    const target = getTarget(msg)
+    const target = objetivoDe(msg)
     if (!target) {
       await sock.sendMessage(jid, {
         text: `> Etiqueta a quien quieres aceptar.\n> Ej: \`${prefix}aceptar @usuario\``,

@@ -41,7 +41,9 @@ Todos escalan si sos premium (ver [sección Premium](#-premium)).
 | `!rt <red\|black\|0-36> <monto>` (roulette) | 15s | Color: paga ×2. Número exacto: paga ×35 |
 | `!invertir <activo> <¥> <sube\|baja> [tiempo]` | 10s, 1 apuesta activa a la vez | Apuesta binaria sobre BTC/ETH/GOLD/SOL/WINSI/BRSCO. Si acertás la dirección: +80% de tu apuesta. Si fallás: perdés todo lo apostado |
 | `!comprar <activo> <¥>` / `!vender <activo> <¥\|todo>` | 3s | Comprar y mantener de verdad — tu ganancia o pérdida depende de cuánto se mueva el precio real del activo. Ver posiciones con `!portafolio` |
-| `!arena retar @usuario <apuesta>` | — | Duelo PvP por turnos — quien gana se lleva ×2 la apuesta (ver sección [Copas](#-copas--arena-pvp)) |
+| `!arena retar @usuario <apuesta>` | — | Duelo PvP por turnos — la apuesta se retiene a los dos al aceptar y quien gana se lleva el pozo (ver sección [Copas](#-copas--arena-pvp)) |
+| `!poker <ante>` (Casino Hold'em) | 1 mano abierta a la vez | Ves tus 2 cartas y 3 de la mesa; `!poker ir` paga el doble del ante, `!poker retirarse` pierde el ante. El crupier juega con par de 4+; si no, el ante paga por tabla (escalera real 100:1 … color 2:1, resto 1:1) y la ida se devuelve. Si le ganás, la ida paga 1:1 |
+| `!bj <monto>` (blackjack) | 1 mano abierta a la vez | Contra el crupier, que se planta en 17: ganar paga ×2, blackjack 3:2, empate devuelve. `!pedir`, `!plantarse`, `!doblar`. Si el bot se reinicia a mitad de una mano, la apuesta se devuelve |
 
 Precios en vivo con `!mercado` (aliases: `market`, `precios`, `bolsa`), gráfico con `!cotizacion <activo>`.
 
@@ -114,13 +116,19 @@ Sistema completo en `!pet` (alias `!mascota`, `!dragon`, `!dragones`) — catál
 !pet feed <#|nombre>          — alimentar con Oro (gana EXP, puede evolucionar)
 !pet collect                  — cobrar el Oro pasivo acumulado de todos tus dragones
 !pet info <#|nombre>          — ficha del dragón (rareza, elementos, habilidades, descripción)
+!pet criar <#> <#>            — cruzar dos dragones propios (nivel 10+, 5.000 oro + ¥3.000, cada 8 h)
+!pet companero <#|nombre>     — el que gana exp con tus mensajes y pelea en el raid
 !pet rename <#> <nombre>      — renombrar
 !pet release <#|nombre>       — liberar
 ```
 
 **Oro** es una moneda nueva, separada de BrasCoins — cada dragón la genera pasivamente según su nivel (misma lógica de acumulación con tope de 24h que los negocios) y se gasta alimentándolo. El huevo se paga en BrasCoins (para no depender de tener ya un dragón).
 
-Los dragones evolucionan dos veces según su nivel: huevo (0–9) → joven (10–24, con animación de evolución) → adulto (25+, evolución final). La descripción de cada dragón se traduce al español al vuelo.
+Los dragones nacen ya en su forma joven —el huevo es solo la animación previa— y evolucionan a su forma final, adulto, en el nivel 25, con su video de evolución. La descripción de cada dragón se traduce al español al vuelo.
+
+**Cría:** la especie que nace comparte al menos un elemento con cada padre, y cuantos más comparta, más probable. Las rarezas escasas (Mítico, Heroico) salen menos, y a veces sale la especie de uno de los padres. Nace en nivel 1.
+
+**Compañero** (`!pet companero <#>`, ⭐ en la lista): el dragón que te acompaña. Si no elegís, es el de nivel más alto. Gana experiencia con tus mensajes —2 por mensaje, con 30 s entre uno y otro, hasta 120 por día; no lo hace evolucionar, eso es alimentándolo— y es el que pelea a tu lado en el raid: +4 de daño base por nivel, y sus elementos pueden dar una reacción (ver [Raid](#️-raid--jefe-de-mundo)).
 
 ---
 
@@ -150,9 +158,10 @@ WinsiBot no tiene una "copa" coleccionable como tal — lo más parecido es el s
 !arena aceptar / rechazar          — responder a un reto
 !arena atacar / poderoso / defender / curar / ultimate   — acciones en batalla
 !arena ranking                     — top 10 ELO del bot
+!arena cpu [facil|normal|dificil]  — práctica contra la CPU (sin ELO ni apuesta)
 ```
 
-Ganar duelos sube tu ELO y tu división; perder los baja. Si hubo apuesta, quien gana se lleva el doble.
+Ganar duelos sube tu ELO y tu división; perder los baja. Si hay apuesta, al aceptar se le retiene a los dos y quien gana se lleva el pozo (las dos apuestas), también si el otro se rinde. Si la pelea se abandona o el bot se reinicia, se devuelve.
 
 Aparte, existe un ítem de regalo literal llamado **Trofeo** 🏆 (rareza *rara*, valor ¥600) — se puede comprar y regalar con `!regalo` (ver abajo).
 
@@ -169,7 +178,80 @@ El catálogo va de común (¥50) a legendario (hasta ¥9,000) — flores, chocol
 
 ### Otros objetos que acumulás jugando
 
-`!work`, `!minar`, `!daily`, `!weekly`, `!monthly` y `!cofre` también sueltan ítems de inventario — ⚔️ espadas, 🧪 pociones, ✨ puntos de magia, 🏆 legendarios. Se ven en tu `!xp`. Por ahora son coleccionables de progreso (no tienen un "gasto" definido todavía).
+`!work`, `!minar`, `!daily`, `!weekly`, `!monthly` y `!cofre` también sueltan ítems de inventario — ⚔️ espadas, 🧪 pociones, ✨ puntos de magia, 🏆 legendarios. Se ven en tu `!xp`, se gastan en la [forja](#-forja) y se pueden vender en [subasta](#-subastas).
+
+---
+
+## 🔨 Forja
+
+```
+!forjar               — tu arma, lo que cuesta el próximo +1 y la probabilidad
+!forjar mejorar       — intentar el +1
+!forjar proteccion    — forjar una 🛡️ piedra de protección (4 ⚔️ + 1 🏆 + ¥5,000)
+```
+
+| Mejora | Éxito | Cuesta |
+|--------|:-----:|--------|
+| +0 → +1 | 100% | 1 ⚔️ + 2 ✨ + ¥1,000 |
+| +1 → +2 | 95% | 1 ⚔️ + 3 ✨ + ¥4,000 |
+| +2 → +3 | 90% | 2 ⚔️ + 4 ✨ + ¥9,000 |
+| +3 → +4 | 80% | 2 ⚔️ + 5 ✨ + ¥16,000 |
+| +4 → +5 | 70% | 3 ⚔️ + 6 ✨ + ¥25,000 |
+| +5 → +6 | 60% | 3 ⚔️ + 7 ✨ + ¥36,000 |
+| +6 → +7 | 50% | 4 ⚔️ + 8 ✨ + 1 🏆 + ¥49,000 |
+| +7 → +8 | 40% | 4 ⚔️ + 9 ✨ + 1 🏆 + ¥64,000 |
+| +8 → +9 | 30% | 5 ⚔️ + 10 ✨ + 1 🏆 + ¥81,000 |
+| +9 → +10 | 20% | 5 ⚔️ + 11 ✨ + 1 🏆 + ¥100,000 |
+
+Si falla hasta +3, solo se pierden los materiales. Desde +4, además el arma baja un nivel, salvo que tengas una 🛡️: se rompe ella en su lugar. El arma nunca se destruye. Cada nivel da **+8% de daño** contra el jefe de mundo.
+
+---
+
+## ⚔️ Raid — jefe de mundo
+
+```
+!raid             — el jefe actual: vida, tiempo, quién pegó más
+!atacar           — un golpe (uno por minuto)
+!raid on / off    — admins: avisos de raid en el grupo
+```
+
+Un solo jefe para **todos los grupos**: aparece cada ~6 h y se escapa a los 60 min. El daño sube con tu nivel, tu compañero y tu arma.
+
+**Sinergia elemental:** si otro jugador golpeó hace menos de 90 s y los elementos de su compañero combinan con los del tuyo, tu golpe dispara una reacción y pega más — Eclipse (Luz + Oscuridad) ×1,8, Paradoja (Tiempo + Caos) ×1,7, Despertar ancestral (Primigenio + Leyenda) ×1,7, Tormenta de fuego (Fuego + Viento) ×1,6, Electrocución (Mar + Eléctrico) ×1,6, y diez más de ×1,3 a ×1,5. Un golpe que ya formó una reacción no sirve para otra: hay que turnarse.
+
+Si el jefe cae, el botín (BrasCoins y XP) se reparte por daño, con +20% para el que más pegó y +10% para el que lo remató; si se escapa, se reparte un cuarto. La vida del siguiente crece con la cantidad de gente que peleó el anterior.
+
+---
+
+## 🏰 Mazmorra del día
+
+```
+!mazmorra entrar        — empezar la expedición del grupo
+!mazmorra <puerta>      — abrir una puerta (cualquiera del grupo, y se suma)
+!mazmorra salir         — retirarse y cobrar el botín
+!mazmorra ranking       — los grupos que llegaron más hondo hoy
+```
+
+Una mazmorra nueva cada día, **la misma para todos los grupos**: 10 niveles de 2 o 3 puertas y un jefe al final. De cada puerta solo se ve una pista, y las pistas engañan: "huele a azufre" puede ser un monstruo o una trampa. El grupo comparte 100 de vida y un botín.
+
+- Los monstruos siempre caen, pero cuestan vida: menos cuanto más poder tiene el grupo. El poder es la suma del **nivel**, el **compañero** y el **arma** de cada uno.
+- Las trampas quitan vida, las fuentes curan, los tesoros dan BrasCoins y a veces ⚔️ ✨ 🏆 (para el que abrió la puerta).
+- Retirarse cobra todo; caer rescata el 25%; tumbar al jefe lo multiplica por 1,5. Cada aventurero extra suma +25% al botín (hasta 8), que se reparte en partes iguales.
+- Una expedición por persona por día. Al jefe no se le gana solo: uno típico lo logra ~7% de las veces, cuatro juntos ~48%.
+
+---
+
+## 🔨 Subastas
+
+```
+!subasta                                         — la subasta abierta en el grupo
+!subasta vender dragon <#> <base> [minutos]      — subastar un dragón
+!subasta vender <ítem> <cantidad> <base> [min]   — espada, proteccion, pocion, sp, legendario
+!pujar <monto>  /  !pujar min                    — pujar
+!subasta cancelar                                — retirarla, si nadie pujó
+```
+
+Una por grupo, de 5 a 120 minutos (30 por defecto). El objeto queda retenido desde que se publica, y tu puja desde que pujás: si te superan, se te devuelve en el acto. Pujar en el último minuto la alarga un minuto. Cada puja tiene que superar a la anterior en 5% (mínimo ¥50). La casa se queda el 5% de la venta. Si nadie puja, el objeto vuelve al vendedor.
 
 ---
 
@@ -217,7 +299,11 @@ Sistema social completo con guerras, territorios y alianzas entre clanes. Ver `!
 | BrasCoins rápido y seguro | `!work`, `!minar` |
 | BrasCoins en grande (con riesgo) | `!crime`, `!slut` |
 | Diamantes | `!crime`, `!minar`, `!weekly`, `!monthly` |
-| Un dragón | `!pet hatch` (¥800) |
+| Un dragón | `!pet hatch` (¥800) o `!pet criar <#> <#>` |
+| Darle uso a mis ⚔️ ✨ 🏆 | `!forjar mejorar` |
+| Vender un dragón o ítems | `!subasta vender …` |
+| Pelear con todos los grupos | `!raid` → `!atacar` |
+| Una aventura en grupo cada día | `!mazmorra entrar` |
 | Personajes/harem | `!rw` → `!c` (respondiendo su mensaje) |
 | Subir de ranking competitivo | `!arena retar @usuario` |
 | Un trofeo/regalo para alguien | `!regalo enviar @usuario trophy` |

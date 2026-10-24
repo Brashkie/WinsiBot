@@ -1,3 +1,4 @@
+import { mezclar } from './utils.js'
 // ─── Coding Quiz System ───────────────────────────────────────────────────────
 
 export type QuizDifficulty = 'fácil' | 'medio' | 'difícil' | 'experto' | 'extremo'
@@ -427,14 +428,6 @@ const activeSessions = new Map<string, QuizSession>()
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
-function shuffle<T>(arr: T[]): T[] {
-  for (let i = arr.length - 1; i > 0; i--) {
-    const j = Math.floor(Math.random() * (i + 1));
-    [arr[i], arr[j]] = [arr[j]!, arr[i]!]
-  }
-  return arr
-}
-
 const DIFF_SCORE: Record<QuizDifficulty, number> = {
   'fácil':  10,
   'medio':  20,
@@ -461,7 +454,7 @@ export class QuizManager {
     if (difficulty) pool = pool.filter(q => q.difficulty === difficulty)
     if (!pool.length) pool = [...QUESTIONS]
 
-    const questions = shuffle(pool).slice(0, Math.min(size, pool.length))
+    const questions = mezclar(pool).slice(0, Math.min(size, pool.length))
     const session: QuizSession = {
       userId,
       questions,

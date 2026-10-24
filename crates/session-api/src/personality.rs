@@ -575,11 +575,10 @@ pub async fn mode_reset(
 mod tests {
     use super::*;
     use rusqlite::Connection;
-    use std::sync::{Arc, Mutex};
 
     fn db() -> ConvDb {
         let conn = Connection::open_in_memory().unwrap();
-        let db: ConvDb = Arc::new(Mutex::new(conn));
+        let db: ConvDb = crate::conversations::BaseConv::nueva(conn);
         init_schema(&db);
         db
     }

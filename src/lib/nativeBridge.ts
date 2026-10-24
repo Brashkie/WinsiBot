@@ -206,6 +206,53 @@ export async function getGroupStyle(gjid: string, days = 30): Promise<GroupStyle
   }
 }
 
+// ─── "¿Qué me perdí?" ─────────────────────────────────────────────────────────
+// Los mensajes salen del mismo corpus que alimenta el estilo del grupo (cada
+// mensaje ya pasa por observeMessage): resumir no guarda nada nuevo.
+
+export interface GroupRecent {
+  messages:     Array<{ sender: string; text: string; ts: number }>
+  keywords:     string[]
+  participants: Array<{ sender: string; count: number }>
+}
+
+export async function getGroupRecent(gjid: string, limit = 150, hours = 24): Promise<GroupRecent | null> {
+  try {
+    const res = await rustClient.get<GroupRecent & { ok: boolean }>(
+      `/ai/group/recent/${encodeURIComponent(gjid)}`,
+      { params: { limit: String(limit), hours: String(hours) } },
+    )
+    return res.data?.ok ? res.data : null
+  } catch {
+    return null
+  }
+}
+
+/** El resumen de la IA, o `null` si ninguna contestó: quien llama arma uno sin IA. */
+export async function summarizeTranscript(transcript: string, gjid: string): Promise<string | null> {
+  try {
+    const res = await rustClient.post<{ ok: boolean; text: string | null }>(
+      '/ai/summarize', { transcript, group_jid: gjid }, { timeout: 60_000 },
+    )
+    return res.data?.text?.trim() || null
+  } catch {
+    return null
+  }
+}
+
+/** #historia: un giro desde UN fragmento ("seguir") o un título ("titulo").
+ *  `null` si ninguna IA contestó: el juego sigue sin ella. */
+export async function historiaIA(modo: 'seguir' | 'titulo', texto: string, gjid: string): Promise<string | null> {
+  try {
+    const res = await rustClient.post<{ ok: boolean; text: string | null }>(
+      '/ai/story', { modo, texto, group_jid: gjid }, { timeout: 45_000 },
+    )
+    return res.data?.text?.trim() || null
+  } catch {
+    return null
+  }
+}
+
 export async function deleteUserStyle(jid: string): Promise<number> {
   try {
     const res = await rustClient.delete<{ deleted_rows: number }>(

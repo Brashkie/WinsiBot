@@ -23,11 +23,173 @@ use axum::{
 use chrono::Utc;
 use rusqlite::{params, Connection};
 use serde::{Deserialize, Serialize};
-use std::sync::{Arc, Mutex};
+use std::collections::{HashMap, HashSet};
+use std::sync::{Arc, LockResult, Mutex, MutexGuard};
 
 use crate::routes::AppState;
+use crate::user_memory::Perfil;
 
-pub type ConvDb = Arc<Mutex<Connection>>;
+pub type ConvDb = Arc<BaseConv>;
+
+/// Un mensaje de grupo observado, esperando a escribirse.
+pub struct Observado {
+    pub sender: String,
+    pub gjid: String,
+    pub text: String,
+    pub ts: i64,
+}
+
+/// Cuántos perfiles de memoria se guardan en el caché como mucho. Pasado eso,
+/// se descartan los que no tienen cambios pendientes; vuelven a leerse de la
+/// base si alguien los pide.
+const PERFILES_MAX: usize = 20_000;
+
+/// La base de conversaciones, con escritura diferida.
+///
+/// ## Por qué
+///
+/// Por CADA mensaje de grupo, la API escribía dos veces: el mensaje observado
+/// (`/ai/observe`) y la memoria del remitente (`/ai/memory/:jid/update`), cada
+/// una su propia transacción. Medido aislado con el esquema real, 10.000 filas:
+/// en autocommit, **131,5 µs por fila**; en una transacción, **3,7 µs**, 35
+/// veces menos. El costo no era el INSERT sino el commit de cada uno: escribir
+/// en el WAL las páginas de la tabla y de sus dos índices.
+///
+/// ## Cómo
+///
+/// Los mensajes observados van a una cola, y los perfiles de memoria se leen y
+/// modifican en un caché que anota cuáles cambiaron. Una tarea de fondo
+/// (`tasks.rs`) los escribe cada segundo **en una sola transacción**.
+///
+/// La garantía de que nadie lee algo viejo está en [`BaseConv::lock`]: TODO
+/// acceso a la conexión pasa por ahí, y ahí se vacía la cola antes de entregar
+/// la conexión. Las consultas que leen estas tablas no cambiaron una línea.
+///
+/// Lo que se puede perder si el proceso muere de golpe: hasta un segundo de
+/// mensajes observados y de contadores de memoria. Es el corpus de estilo y la
+/// reputación, no datos críticos; el apagado ordenado vacía la cola antes de
+/// salir.
+pub struct BaseConv {
+    conn: Mutex<Connection>,
+    observados: Mutex<Vec<Observado>>,
+    pub(crate) perfiles: Mutex<HashMap<String, Perfil>>,
+    sucios: Mutex<HashSet<String>>,
+}
+
+impl BaseConv {
+    pub fn nueva(conn: Connection) -> ConvDb {
+        // Las sentencias del camino caliente se compilan una vez: con el
+        // caché de 16 por defecto, las de una sesión larga se pisaban entre sí.
+        conn.set_prepared_statement_cache_capacity(64);
+        Arc::new(Self {
+            conn: Mutex::new(conn),
+            observados: Mutex::new(Vec::new()),
+            perfiles: Mutex::new(HashMap::new()),
+            sucios: Mutex::new(HashSet::new()),
+        })
+    }
+
+    /// La conexión, con todo lo pendiente ya escrito. Misma forma que
+    /// `Mutex::lock`, para que los llamadores no cambien.
+    pub fn lock(&self) -> LockResult<MutexGuard<'_, Connection>> {
+        match self.conn.lock() {
+            Ok(mut g) => {
+                self.vaciar(&mut g);
+                Ok(g)
+            }
+            Err(e) => Err(e),
+        }
+    }
+
+    /// Escribe ya lo pendiente. Lo usan la tarea de fondo, el apagado y la
+    /// cola cuando crece mucho.
+    pub fn vaciar_pendientes(&self) {
+        if let Ok(g) = self.lock() {
+            drop(g);
+        }
+    }
+
+    /// Si hay algo esperando a escribirse. Barato: lo usa la tarea de fondo
+    /// para no tomar la conexión cada segundo si no hay nada que hacer.
+    pub fn hay_pendientes(&self) -> bool {
+        self.observados
+            .lock()
+            .map(|v| !v.is_empty())
+            .unwrap_or(false)
+            || self.sucios.lock().map(|s| !s.is_empty()).unwrap_or(false)
+    }
+
+    /// Encola un mensaje observado. No toca la base. Devuelve cuántos hay.
+    pub fn encolar(&self, o: Observado) -> usize {
+        let mut v = self.observados.lock().unwrap_or_else(|e| e.into_inner());
+        v.push(o);
+        v.len()
+    }
+
+    /// Marca un perfil como modificado en el caché.
+    pub(crate) fn marcar_sucio(&self, jid: &str) {
+        self.sucios
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .insert(jid.to_string());
+    }
+
+    /// Escribe todo lo pendiente en una transacción. Si falla, lo pendiente
+    /// vuelve a la cola para el próximo intento, en vez de perderse.
+    fn vaciar(&self, conn: &mut Connection) {
+        let obs = std::mem::take(&mut *self.observados.lock().unwrap_or_else(|e| e.into_inner()));
+        let jids = std::mem::take(&mut *self.sucios.lock().unwrap_or_else(|e| e.into_inner()));
+        if obs.is_empty() && jids.is_empty() {
+            return;
+        }
+        let perfiles: Vec<Perfil> = {
+            let mut cache = self.perfiles.lock().unwrap_or_else(|e| e.into_inner());
+            let v = jids.iter().filter_map(|j| cache.get(j).cloned()).collect();
+            if cache.len() > PERFILES_MAX {
+                // Los que no tienen cambios pendientes se pueden volver a leer.
+                cache.retain(|j, _| jids.contains(j));
+            }
+            v
+        };
+        let r = (|| -> rusqlite::Result<()> {
+            let tx = conn.transaction()?;
+            {
+                let mut st = tx.prepare_cached(
+                    "INSERT INTO conversations
+                     (sender, gjid, text, intent, reply, mode, ts, len, has_emoji)
+                     VALUES (?1, ?2, ?3, 'observed', '', 'observed', ?4, ?5, ?6)",
+                )?;
+                for o in &obs {
+                    let has_emoji = o.text.chars().any(|c| (c as u32) > 0x2500);
+                    st.execute(params![
+                        o.sender,
+                        o.gjid,
+                        o.text,
+                        o.ts,
+                        o.text.len() as i32,
+                        has_emoji
+                    ])?;
+                }
+            }
+            for p in &perfiles {
+                crate::user_memory::escribir_en(&tx, p)?;
+            }
+            tx.commit()
+        })();
+        if let Err(e) = r {
+            tracing::warn!(error = %e, observados = obs.len(), perfiles = perfiles.len(),
+                "no se pudo vaciar la escritura diferida; se reintenta");
+            self.observados
+                .lock()
+                .unwrap_or_else(|e| e.into_inner())
+                .extend(obs);
+            self.sucios
+                .lock()
+                .unwrap_or_else(|e| e.into_inner())
+                .extend(jids);
+        }
+    }
+}
 
 // ── Structs ───────────────────────────────────────────────────────────────────
 
@@ -74,6 +236,13 @@ pub fn init(path: &str) -> Result<ConvDb, rusqlite::Error> {
     // WAL admite lectores concurrentes mientras hay un escritor.
     let _ = conn.pragma_update(None, "journal_mode", "WAL");
     let _ = conn.pragma_update(None, "synchronous", "NORMAL");
+    // Checkpoint del WAL cada 4000 páginas en vez de las 1000 de SQLite. En
+    // WAL con NORMAL, el checkpoint es el único momento con fsync, y esta base
+    // recibe todos los mensajes de todos los grupos: medido con 300.000 filas
+    // (`examples/perfil_mensaje.rs`), el costo por mensaje baja de ~115 a
+    // ~66 µs, y son 4 veces menos vaciados a la flash del teléfono. A cambio el
+    // WAL puede llegar a ~16 MB en disco antes de consolidarse.
+    let _ = conn.pragma_update(None, "wal_autocheckpoint", 4000);
     let r = conn.execute_batch(
         "
         CREATE TABLE IF NOT EXISTS conversations (
@@ -108,7 +277,7 @@ pub fn init(path: &str) -> Result<ConvDb, rusqlite::Error> {
     if let Err(e) = r {
         tracing::warn!("SQLite schema init error (conversations): {}", e);
     }
-    Ok(Arc::new(Mutex::new(conn)))
+    Ok(BaseConv::nueva(conn))
 }
 
 // ── POST /ai/learn ────────────────────────────────────────────────────────────
@@ -526,6 +695,18 @@ pub struct ObserveRequest {
     pub text: String,
 }
 
+/// Guarda un mensaje de grupo observado: lo ENCOLA, y se escribe con el
+/// próximo vaciado (ver [`BaseConv`]). Es lo que corre por CADA mensaje de cada
+/// grupo, así que es lo que mide `benches/mensaje.rs`.
+pub fn observar(db: &BaseConv, req: ObserveRequest) -> usize {
+    db.encolar(Observado {
+        sender: req.sender,
+        gjid: req.gjid,
+        text: req.text,
+        ts: Utc::now().timestamp_millis(),
+    })
+}
+
 /// POST /ai/observe — un mensaje de grupo cualquiera, sin intercambio con la IA.
 ///
 /// Es el reemplazo de `/hepein/record`, que escribia el mismo mensaje en
@@ -539,31 +720,102 @@ pub async fn ai_observe(
     State(state): State<AppState>,
     Json(req): Json<ObserveRequest>,
 ) -> Json<serde_json::Value> {
-    let conv_db = state.conv_db.clone();
+    // Sin hilo bloqueante ni base: encolar es empujar a un Vec. Si la cola
+    // crece mucho entre vaciados —una ráfaga de cientos de grupos—, se vacía
+    // ya, sin esperar al segundo.
+    if observar(&state.conv_db, req) >= 512 {
+        let db = state.conv_db.clone();
+        tokio::task::spawn_blocking(move || db.vaciar_pendientes());
+    }
+    Json(serde_json::json!({ "ok": true }))
+}
 
-    let res = tokio::task::spawn_blocking(move || -> Result<(), String> {
-        let conn = conv_db.lock().map_err(|e| e.to_string())?;
-        let has_emoji = req.text.chars().any(|c| (c as u32) > 0x2500);
-        conn.execute(
-            "INSERT INTO conversations
-             (sender, gjid, text, intent, reply, mode, ts, len, has_emoji)
-             VALUES (?1, ?2, ?3, 'observed', '', 'observed', ?4, ?5, ?6)",
-            params![
-                req.sender,
-                req.gjid,
-                req.text,
-                Utc::now().timestamp_millis(),
-                req.text.len() as i32,
-                has_emoji
-            ],
+// ── Lo que se dijo en un grupo (para "¿qué me perdí?") ───────────────────────
+
+/// Un mensaje del corpus, para resumir.
+#[derive(Serialize)]
+pub struct MensajeReciente {
+    pub sender: String,
+    pub text: String,
+    pub ts: i64,
+}
+
+/// Los últimos `limite` mensajes del grupo desde `desde_ts`, del más viejo al
+/// más nuevo. Salen del mismo corpus que ya se guarda para el estilo del
+/// grupo: no hace falta guardar nada nuevo para poder resumir.
+pub fn mensajes_recientes(
+    db: &ConvDb,
+    gjid: &str,
+    limite: usize,
+    desde_ts: i64,
+) -> Result<Vec<MensajeReciente>, String> {
+    let conn = db.lock().map_err(|e| e.to_string())?;
+    let mut st = conn
+        .prepare_cached(
+            "SELECT sender, text, ts FROM conversations
+              WHERE gjid = ?1 AND ts > ?2 AND text <> ''
+              ORDER BY ts DESC LIMIT ?3",
         )
         .map_err(|e| e.to_string())?;
-        Ok(())
-    })
-    .await;
+    let mut v: Vec<MensajeReciente> = st
+        .query_map(params![gjid, desde_ts, limite as i64], |r| {
+            Ok(MensajeReciente {
+                sender: r.get(0)?,
+                text: r.get(1)?,
+                ts: r.get(2)?,
+            })
+        })
+        .map_err(|e| e.to_string())?
+        .filter_map(|r| r.ok())
+        .collect();
+    v.reverse();
+    Ok(v)
+}
 
-    match res {
-        Ok(Ok(())) => Json(serde_json::json!({ "ok": true })),
+#[derive(Deserialize)]
+pub struct RecientesQuery {
+    #[serde(default = "cien")]
+    pub limit: usize,
+    #[serde(default = "veinticuatro")]
+    pub hours: i64,
+}
+fn cien() -> usize {
+    100
+}
+fn veinticuatro() -> i64 {
+    24
+}
+
+/// GET /ai/group/recent/{gjid}?limit=100&hours=24 — los mensajes recientes del
+/// grupo, quién habló cuánto, y de qué se habló (las palabras más usadas).
+pub async fn ai_group_recent(
+    State(state): State<AppState>,
+    Path(gjid): Path<String>,
+    Query(q): Query<RecientesQuery>,
+) -> Json<serde_json::Value> {
+    let db = state.conv_db.clone();
+    let limite = q.limit.clamp(1, 500);
+    let desde = Utc::now().timestamp_millis() - q.hours.clamp(1, 24 * 7) * 3_600_000;
+    let r = tokio::task::spawn_blocking(move || mensajes_recientes(&db, &gjid, limite, desde)).await;
+    match r {
+        Ok(Ok(msgs)) => {
+            let textos: Vec<String> = msgs.iter().map(|m| m.text.clone()).collect();
+            let mut por_sender: HashMap<&str, u32> = HashMap::new();
+            for m in &msgs {
+                *por_sender.entry(m.sender.as_str()).or_insert(0) += 1;
+            }
+            let mut participantes: Vec<(&str, u32)> = por_sender.into_iter().collect();
+            participantes.sort_by(|a, b| b.1.cmp(&a.1).then(a.0.cmp(b.0)));
+            Json(serde_json::json!({
+                "ok": true,
+                "messages": msgs,
+                "keywords": top_words(&textos, 8),
+                "participants": participantes
+                    .iter()
+                    .map(|(s, n)| serde_json::json!({ "sender": s, "count": n }))
+                    .collect::<Vec<_>>(),
+            }))
+        }
         Ok(Err(e)) => Json(serde_json::json!({ "ok": false, "error": e })),
         Err(e) => Json(serde_json::json!({ "ok": false, "error": e.to_string() })),
     }
@@ -694,7 +946,7 @@ mod tests {
         ",
         )
         .expect("schema");
-        Arc::new(Mutex::new(conn))
+        BaseConv::nueva(conn)
     }
 
     fn insertar(db: &ConvDb, sender: &str, gjid: &str, text: &str, reply: &str, ts: i64) {
@@ -888,5 +1140,56 @@ mod tests {
             .query_row("SELECT COUNT(*) FROM user_style", [], |r| r.get(0))
             .unwrap();
         assert_eq!(quedan, 1);
+    }
+
+    #[test]
+    fn recientes_del_grupo_en_orden_y_dentro_de_la_ventana() {
+        let db = db_memoria();
+        let t = ahora();
+        insertar(&db, "a@s", "g1@g", "viejisimo", "", t - 48 * 3_600_000);
+        insertar(&db, "a@s", "g1@g", "primero", "", t - 3_000);
+        insertar(&db, "b@s", "g1@g", "segundo", "", t - 2_000);
+        insertar(&db, "a@s", "g1@g", "", "", t - 1_500); // sin texto: fuera
+        insertar(&db, "c@s", "g2@g", "otro grupo", "", t - 1_000);
+        insertar(&db, "b@s", "g1@g", "tercero", "", t);
+
+        let v = mensajes_recientes(&db, "g1@g", 100, t - 24 * 3_600_000).unwrap();
+        let textos: Vec<&str> = v.iter().map(|m| m.text.as_str()).collect();
+        assert_eq!(
+            textos,
+            vec!["primero", "segundo", "tercero"],
+            "del mas viejo al mas nuevo, sin otros grupos ni fuera de la ventana"
+        );
+    }
+
+    #[test]
+    fn recientes_con_tope_se_queda_con_los_ultimos() {
+        let db = db_memoria();
+        let t = ahora();
+        for i in 0..10 {
+            insertar(&db, "a@s", "g@g", &format!("m{i}"), "", t - (10 - i) * 1_000);
+        }
+        let v = mensajes_recientes(&db, "g@g", 3, 0).unwrap();
+        let textos: Vec<&str> = v.iter().map(|m| m.text.as_str()).collect();
+        assert_eq!(textos, vec!["m7", "m8", "m9"]);
+    }
+
+    #[test]
+    fn recientes_ve_lo_que_aun_esta_en_la_cola() {
+        // Lo observado va a la cola de escritura diferida; el resumen tiene que
+        // verlo igual, porque lock() vacia la cola antes de leer.
+        let db = db_memoria();
+        let n = observar(
+            &db,
+            ObserveRequest {
+                sender: "a@s".into(),
+                gjid: "g@g".into(),
+                text: "recien llegado".into(),
+            },
+        );
+        assert!(n >= 1);
+        let v = mensajes_recientes(&db, "g@g", 10, 0).unwrap();
+        assert_eq!(v.len(), 1);
+        assert_eq!(v[0].text, "recien llegado");
     }
 }

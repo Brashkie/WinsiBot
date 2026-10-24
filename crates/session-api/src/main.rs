@@ -64,6 +64,12 @@ async fn shutdown_signal(state: AppState) {
     }
 
     tracing::warn!("señal de apagado recibida — tomando snapshot final de todas las sesiones");
+    // Lo que la escritura diferida tenga en cola (mensajes observados y
+    // perfiles de memoria, ver conversations.rs) se escribe antes de salir.
+    {
+        let db = state.conv_db.clone();
+        let _ = tokio::task::spawn_blocking(move || db.vaciar_pendientes()).await;
+    }
 
     let sessions_dir = state.sessions_dir.clone();
     let (ok, total) = tokio::task::spawn_blocking(move || {
@@ -252,6 +258,12 @@ async fn principal() {
             get(conversations::ai_profile).delete(conversations::ai_delete_profile),
         )
         .route("/ai/group-style/:gjid", get(conversations::ai_group_style))
+        // "¿Qué me perdí?": lo que se dijo en el grupo, y un resumen sin
+        // personalidad (ver conversations.rs y ai_chat.rs).
+        .route("/ai/group/recent/:gjid", get(conversations::ai_group_recent))
+        .route("/ai/summarize", post(ai_chat::summarize))
+        // El teléfono descompuesto: un giro desde UN fragmento, o un título.
+        .route("/ai/story", post(ai_chat::story))
         .route("/ai/corpus/stats", get(conversations::ai_corpus_stats))
         // Portados de Python en la 8.11.0 (ver imagefx.rs e imagesearch.rs).
         .route("/imagefx/lego", post(imagefx::lego))

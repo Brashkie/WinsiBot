@@ -788,6 +788,84 @@ pub async fn respond(
 }
 
 #[derive(Deserialize)]
+pub struct ResumenRequest {
+    /// La conversación ya armada, "Nombre: mensaje" por línea.
+    pub transcript: String,
+    #[serde(default)]
+    pub group_jid: String,
+}
+
+/// El prompt de sistema para resumir. Sin personalidad, sin imitar a nadie y
+/// sin plantillas: lo que se pide es un resumen fiel, no una respuesta del bot.
+const SISTEMA_RESUMEN: &str = "Resumes conversaciones de grupos de WhatsApp en español. \
+Escribe entre 3 y 6 viñetas cortas con los temas principales, quién propuso qué, y las \
+preguntas o decisiones que quedaron pendientes. Usa los nombres tal como aparecen. \
+No inventes nada que no esté en la conversación. No saludes, no opines, no agregues nada \
+antes ni después de las viñetas.";
+
+/// POST /ai/summarize — `{ transcript, group_jid }` → `{ text, source }`.
+///
+/// `text` es `null` si ninguna IA contestó: a diferencia de `/ai/chat/respond`,
+/// acá NO se cae al motor de plantillas, porque una frase al azar no es un
+/// resumen. Quien llama arma uno sin IA con los datos del grupo.
+pub async fn summarize(Json(req): Json<ResumenRequest>) -> Json<serde_json::Value> {
+    // Una sesión propia para la caché de atención del motor local (la sesión
+    // no es historial: ver generar_ia), separada de la del chat del grupo.
+    let sesion = format!("resumen:{}", req.group_jid);
+    let prompt = format!("Conversación:\n{}\n\nResumen:", req.transcript);
+    let texto = generar_ia(&prompt, SISTEMA_RESUMEN, true, None, &sesion).await;
+    Json(serde_json::json!({
+        "ok": true,
+        "text": texto,
+        "source": if texto.is_some() { "ia" } else { "ninguna" },
+    }))
+}
+
+// ─── El teléfono descompuesto (#historia) ─────────────────────────────────────
+
+#[derive(Deserialize)]
+pub struct HistoriaRequest {
+    /// "seguir": un giro a partir de UN fragmento. "titulo": título para la historia entera.
+    pub modo: String,
+    pub texto: String,
+    #[serde(default)]
+    pub group_jid: String,
+}
+
+const SISTEMA_SEGUIR: &str = "Juegas al teléfono descompuesto con una historia en español. \
+Solo conoces el último fragmento. Continúa con UNA frase corta (máximo 30 palabras) que le dé \
+un giro inesperado o gracioso, sin cerrar la historia. Nada de violencia explícita ni contenido \
+sexual. Responde solo con la frase, sin comillas.";
+
+const SISTEMA_TITULO: &str = "Te doy una historia que escribieron varias personas por turnos, \
+sin ver lo que escribieron los demás. Ponle un título corto y gracioso en español (máximo 8 \
+palabras). Responde solo con el título, sin comillas.";
+
+/// El sistema y el prompt de cada modo, o None si el modo no existe.
+fn prompt_historia(modo: &str, texto: &str) -> Option<(&'static str, String)> {
+    match modo {
+        "seguir" => Some((SISTEMA_SEGUIR, format!("Último fragmento: {texto}\n\nSigue:"))),
+        "titulo" => Some((SISTEMA_TITULO, format!("Historia:\n{texto}\n\nTítulo:"))),
+        _ => None,
+    }
+}
+
+/// POST /ai/story — `{ modo, texto, group_jid }` → `{ text }`, `null` si ninguna
+/// IA contestó: el juego sigue igual sin ella. Igual que /ai/summarize, sin
+/// personalidad ni plantillas.
+pub async fn story(Json(req): Json<HistoriaRequest>) -> Json<serde_json::Value> {
+    let Some((sistema, prompt)) = prompt_historia(&req.modo, &req.texto) else {
+        return Json(serde_json::json!({ "ok": false, "error": "modo desconocido" }));
+    };
+    let sesion = format!("historia:{}", req.group_jid);
+    let texto = generar_ia(&prompt, sistema, true, None, &sesion)
+        .await
+        .map(|t| t.trim().trim_matches('"').trim().to_string())
+        .filter(|t| !t.is_empty());
+    Json(serde_json::json!({ "ok": true, "text": texto }))
+}
+
+#[derive(Deserialize)]
 pub struct ImitateRequest {
     pub prompt: String,
     pub target_jid: String,
@@ -851,6 +929,16 @@ pub async fn imitate(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn historia_solo_le_pasa_a_la_ia_lo_que_recibe() {
+        // El teléfono descompuesto depende de que la IA vea SOLO el fragmento.
+        let (s, p) = prompt_historia("seguir", "el gato abrió la puerta").unwrap();
+        assert_eq!(s, SISTEMA_SEGUIR);
+        assert_eq!(p, "Último fragmento: el gato abrió la puerta\n\nSigue:");
+        assert!(prompt_historia("titulo", "x").is_some());
+        assert!(prompt_historia("otro", "x").is_none());
+    }
 
     fn perfil(msgs: i64) -> PerfilUsuario {
         PerfilUsuario {

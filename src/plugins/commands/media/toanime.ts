@@ -1,25 +1,8 @@
 import type { Command } from '../../../types/index.js'
 import { vision } from '@lib/nativeBridge.js'
-import { downloadContentFromMessage } from '@whiskeysockets/baileys'
 
 import { sleep } from '@lib/utils.js'
-
-async function getImageFromMsg(
-  msg: import('@whiskeysockets/baileys').WAMessage
-): Promise<Buffer | null> {
-  try {
-    const imgMsg =
-      msg.message?.imageMessage ??
-      msg.message?.extendedTextMessage?.contextInfo?.quotedMessage?.imageMessage
-    if (!imgMsg) return null
-    const stream = await downloadContentFromMessage(imgMsg, 'image')
-    const chunks: Buffer[] = []
-    for await (const chunk of stream) chunks.push(chunk)
-    return Buffer.concat(chunks)
-  } catch {
-    return null
-  }
-}
+import { imagenDelMensaje } from '@lib/mensajes.js'
 
 const command: Command = {
   name:        'toanime',
@@ -29,7 +12,7 @@ const command: Command = {
   cooldown:    30,
 
   async execute({ sock, jid, msg }) {
-    const imageBuffer = await getImageFromMsg(msg)
+    const imageBuffer = await imagenDelMensaje(msg)
     if (!imageBuffer) {
       await sock.sendMessage(jid, {
         text: [

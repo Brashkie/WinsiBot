@@ -306,7 +306,9 @@ async function saveUsers(): Promise<void> {
     const store = userStore()
 
     store.batch(() => {
-      for (const [jid, data] of userData) {
+      // Solo los que pudieron cambiar desde el último guardado (ver
+      // MapConTocados en events/index.ts). Antes eran todos, cada 30 s.
+      for (const [jid, data] of userData.tomarTocadas()) {
         const json = JSON.stringify(data)
         const hash = sha1(json)
         if (_userHash.get(jid) === hash) continue

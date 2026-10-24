@@ -2,7 +2,7 @@
 
 import { exec } from 'child_process'
 import { promisify } from 'util'
-import { readFile, unlink, mkdir } from 'fs/promises'
+import { readFile, unlink } from 'fs/promises'
 import { existsSync } from 'fs'
 import { join } from 'path'
 import { randomUUID } from 'crypto'
@@ -12,6 +12,7 @@ import { Queue } from './queue.js'
 import { createCache, registerCache } from './cacheManager.js'
 import { binPath, exeName } from './platform.js'
 import { USER_AGENT } from '@config'
+import { carpetaTmp } from './utils.js'
 
 const execAsync = promisify(exec)
 
@@ -96,12 +97,6 @@ function getFfmpegDir(): string {
 }
 
 // ─── Carpeta temporal ─────────────────────────────────────────────────────────
-async function getTmpDir(): Promise<string> {
-  const dir = join(process.cwd(), 'data', 'tmp')
-  await mkdir(dir, { recursive: true })
-  return dir
-}
-
 // ─── Resultado de descarga ────────────────────────────────────────────────────
 export interface DownloadResult {
   buffer:   Buffer
@@ -124,7 +119,7 @@ export async function downloadYoutubeAudio(query: string): Promise<DownloadResul
   const promise = (async (): Promise<DownloadResult> => {
     const ytdlp   = getYtdlp()
     const ffmpeg  = getFfmpegDir()
-    const tmpDir  = await getTmpDir()
+    const tmpDir  = await carpetaTmp()
     const outFile = join(tmpDir, `${randomUUID()}.mp3`)
 
     const isUrl  = query.startsWith('http')
@@ -165,7 +160,7 @@ export async function downloadYoutubeVideo(query: string, quality = '360'): Prom
   return withVideoDedup(key, async () => {
     const ytdlp   = getYtdlp()
     const ffmpeg  = getFfmpegDir()
-    const tmpDir  = await getTmpDir()
+    const tmpDir  = await carpetaTmp()
     const outFile = join(tmpDir, `${randomUUID()}.mp4`)
 
     const isUrl  = query.startsWith('http')
@@ -191,7 +186,7 @@ export async function downloadTikTok(url: string): Promise<DownloadResult> {
   return withVideoDedup(key, async () => {
     const ytdlp   = getYtdlp()
     const ffmpeg  = getFfmpegDir()
-    const tmpDir  = await getTmpDir()
+    const tmpDir  = await carpetaTmp()
     const outFile = join(tmpDir, `${randomUUID()}.mp4`)
     const ffmpegFlag = ffmpeg ? `--ffmpeg-location "${ffmpeg}"` : ''
 

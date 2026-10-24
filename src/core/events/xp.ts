@@ -1,4 +1,5 @@
 import { getUserData, userData } from './index.js'
+import { porMensaje } from '@lib/companero.js'
 
 const XP_PER_MSG = () => Math.ceil(Math.random() * 10) + 5
 
@@ -19,5 +20,7 @@ export function addXP(sender: string, pushName: string): void {
   const user  = getUserData(sender, pushName)
   user.exp   += XP_PER_MSG()
   user.name   = pushName || user.name
+  // El compañero también gana con la actividad, con freno (ver companero.ts).
+  porMensaje(user, Date.now())
   userData.set(sender, user)
 }

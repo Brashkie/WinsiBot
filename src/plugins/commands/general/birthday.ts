@@ -1,13 +1,11 @@
 import type { Command } from '../../../types/index.js'
-import { getUserData, patchUserData, userData } from '@core/events/index.js'
+import { getUserData, patchUserData } from '@core/events/index.js'
 import { safeSend } from '@lib/media_sender.js'
-import { readFileSync, writeFileSync, mkdirSync } from 'fs'
-import { join } from 'path'
+import { enData, leerJson, guardarJson, esObjeto } from '@lib/archivoJson.js'
 
 // ─── Persistencia ─────────────────────────────────────────────────────────────
 
-const DATA_DIR  = join(process.cwd(), 'data')
-const BDAY_FILE = join(DATA_DIR, 'birthday.json')
+const BDAY_FILE = enData('birthday.json')
 
 interface BirthdayStore {
   groups:  Record<string, { enabled: boolean; message?: string }>  // groupJid → config
@@ -15,16 +13,11 @@ interface BirthdayStore {
 }
 
 function loadStore(): BirthdayStore {
-  try {
-    mkdirSync(DATA_DIR, { recursive: true })
-    return JSON.parse(readFileSync(BDAY_FILE, 'utf-8'))
-  } catch {
-    return { groups: {}, optOut: [] }
-  }
+  return leerJson(BDAY_FILE, { groups: {}, optOut: [] }, esObjeto)
 }
 
 function saveStore(s: BirthdayStore): void {
-  writeFileSync(BDAY_FILE, JSON.stringify(s, null, 2))
+  guardarJson(BDAY_FILE, s)
 }
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
@@ -67,8 +60,17 @@ function birthdaysToday(jids: string[]): Array<{ jid: string; name: string }> {
 
 // ─── Auto-celebración (llamar desde index.ts) ─────────────────────────────────
 
+// 'ready' llega en cada reconexión: sin esto, cada una sumaba otro
+// setInterval y el saludo salía repetido tantas veces como reconexiones hubo.
+let sockVivo: any = null
+let intervalo: NodeJS.Timeout | null = null
+
 export function setupBirthdayChecker(sock: any): void {
+  sockVivo = sock
+  if (intervalo) return
+
   const check = async () => {
+    const sock = sockVivo
     const now  = new Date()
     // Solo ejecutar cerca de medianoche (00:00 – 00:05)
     if (now.getHours() !== 0 || now.getMinutes() > 5) return
@@ -102,7 +104,7 @@ export function setupBirthdayChecker(sock: any): void {
   }
 
   // Verificar cada 5 minutos
-  setInterval(check, 5 * 60_000)
+  intervalo = setInterval(check, 5 * 60_000)
 }
 
 // ─── Comando ──────────────────────────────────────────────────────────────────

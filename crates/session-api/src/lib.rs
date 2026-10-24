@@ -24,6 +24,7 @@ pub mod nlp;
 pub mod personality;
 pub mod platform;
 pub mod rate_limiter;
+pub mod resize;
 pub mod rng;
 pub mod routes;
 pub mod session_id;

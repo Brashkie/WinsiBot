@@ -41,7 +41,9 @@ All of these scale up if you're premium (see [Premium](#-premium)).
 | `!rt <red\|black\|0-36> <amount>` (roulette) | 15s | Color: pays ×2. Exact number: pays ×35 |
 | `!invertir <asset> <¥> <up\|down> [time]` (invest) | 10s, 1 active bet at a time | Binary bet on BTC/ETH/GOLD/SOL/WINSI/BRSCO. Right direction: +80% of your stake. Wrong: you lose the entire stake |
 | `!comprar <asset> <¥>` / `!vender <asset> <¥\|todo>` (buy/sell) | 3s | Real buy-and-hold — your profit or loss depends on how much the asset's real price moves. Check positions with `!portafolio` |
-| `!arena retar @user <bet>` (challenge) | — | Turn-based PvP duel — winner takes ×2 the bet (see [Trophies](#-trophies--pvp-arena)) |
+| `!arena retar @user <bet>` (challenge) | — | Turn-based PvP duel — the bet is held from both on accept and the winner takes the pot (see [Trophies](#-trophies--pvp-arena)) |
+| `!poker <ante>` (Casino Hold'em) | 1 open hand at a time | You see your 2 cards and 3 on the board; `!poker ir` pays double the ante, `!poker retirarse` loses the ante. Dealer qualifies with a pair of 4s+; if not, the ante pays by the table (royal flush 100:1 … flush 2:1, rest 1:1) and the call is returned. If you beat it, the call pays 1:1 |
+| `!bj <amount>` (blackjack) | 1 open hand at a time | Against the dealer, who stands on 17: a win pays ×2, blackjack 3:2, a push returns the bet. `!pedir` (hit), `!plantarse` (stand), `!doblar` (double). If the bot restarts mid-hand, the bet is refunded |
 
 Live prices via `!mercado` (aliases: `market`, `precios`, `bolsa`), chart with `!cotizacion <asset>`.
 
@@ -114,13 +116,19 @@ Full system under `!pet` (alias `!mascota`, `!dragon`, `!dragones`) — a real 5
 !pet feed <#|name>            — feed with Gold (grants EXP, may evolve)
 !pet collect                  — collect the passive Gold accumulated by all your dragons
 !pet info <#|name>            — dragon sheet (rarity, elements, skills, description)
+!pet criar <#> <#>            — breed two of your dragons (level 10+, 5,000 gold + ¥3,000, every 8 h)
+!pet companero <#|name>       — the one that gains exp from your messages and fights in the raid
 !pet rename <#> <name>        — rename
 !pet release <#|name>         — release
 ```
 
 **Gold** is a new currency, separate from BrasCoins — each dragon generates it passively based on its level (same 24h accumulation cap logic as businesses) and it's spent feeding it. The egg itself is paid in BrasCoins (so you're not stuck needing a dragon to afford your first one).
 
-Dragons evolve twice based on level: egg (0–9) → young (10–24, with an evolution animation) → adult (25+, final evolution). Each dragon's description is translated to Spanish on the fly for the in-chat text.
+Dragons are born already in their young form —the egg is only the hatching animation— and evolve to their final adult form at level 25, with their evolution video. Each dragon's description is translated to Spanish on the fly for the in-chat text.
+
+**Breeding:** the species that hatches shares at least one element with each parent, and the more it shares, the likelier it is. Scarce rarities (Mythical, Heroic) come out less often, and sometimes the offspring is one of the parents' species. It hatches at level 1.
+
+**Companion** (`!pet companero <#>`, ⭐ in the list): the dragon that goes with you. If you don't pick one, it's your highest-level one. It gains experience from your messages —2 per message, 30 s apart, up to 120 a day; it won't evolve from this, that's by feeding it— and it's the one fighting beside you in the raid: +4 base damage per level, and its elements can trigger a reaction (see [Raid](#️-raid--world-boss)).
 
 ---
 
@@ -150,9 +158,10 @@ WinsiBot doesn't have a literal collectible "trophy" system — the closest thin
 !arena aceptar / rechazar   — accept/decline a challenge
 !arena atacar / poderoso / defender / curar / ultimate   — battle actions
 !arena ranking               — top 10 ELO on the bot
+!arena cpu [facil|normal|dificil]  — practice against the CPU (no ELO or bet)
 ```
 
-Winning duels raises your ELO and division; losing lowers it. If there was a bet, the winner takes double.
+Winning duels raises your ELO and division; losing lowers them. If there's a bet, it's held from both players on accept and the winner takes the pot (both bets), also if the other one surrenders. If the battle is abandoned or the bot restarts, it's refunded.
 
 Separately, there's a literal gift item called **Trofeo** (Trophy) 🏆 (*rare* rarity, worth ¥600) — buyable and giftable through `!regalo` (see below).
 
@@ -169,7 +178,80 @@ The catalog ranges from common (¥50) to legendary (up to ¥9,000) — flowers, 
 
 ### Other items you collect along the way
 
-`!work`, `!minar`, `!daily`, `!weekly`, `!monthly` and `!cofre` also drop inventory items — ⚔️ swords, 🧪 potions, ✨ magic points, 🏆 legendaries. You can see them in your `!xp`. For now they're progress collectibles without a defined spending use yet.
+`!work`, `!minar`, `!daily`, `!weekly`, `!monthly` and `!cofre` also drop inventory items — ⚔️ swords, 🧪 potions, ✨ magic points, 🏆 legendaries. You can see them in your `!xp`, spend them at the [forge](#-forge) and sell them at [auction](#-auctions).
+
+---
+
+## 🔨 Forge
+
+```
+!forjar               — your weapon, what the next +1 costs and its odds
+!forjar mejorar       — attempt the +1
+!forjar proteccion    — forge a 🛡️ protection stone (4 ⚔️ + 1 🏆 + ¥5,000)
+```
+
+| Upgrade | Success | Cost |
+|---------|:-------:|------|
+| +0 → +1 | 100% | 1 ⚔️ + 2 ✨ + ¥1,000 |
+| +1 → +2 | 95% | 1 ⚔️ + 3 ✨ + ¥4,000 |
+| +2 → +3 | 90% | 2 ⚔️ + 4 ✨ + ¥9,000 |
+| +3 → +4 | 80% | 2 ⚔️ + 5 ✨ + ¥16,000 |
+| +4 → +5 | 70% | 3 ⚔️ + 6 ✨ + ¥25,000 |
+| +5 → +6 | 60% | 3 ⚔️ + 7 ✨ + ¥36,000 |
+| +6 → +7 | 50% | 4 ⚔️ + 8 ✨ + 1 🏆 + ¥49,000 |
+| +7 → +8 | 40% | 4 ⚔️ + 9 ✨ + 1 🏆 + ¥64,000 |
+| +8 → +9 | 30% | 5 ⚔️ + 10 ✨ + 1 🏆 + ¥81,000 |
+| +9 → +10 | 20% | 5 ⚔️ + 11 ✨ + 1 🏆 + ¥100,000 |
+
+Failing up to +3 only costs the materials. From +4, the weapon also drops a level, unless you have a 🛡️: it breaks instead. The weapon is never destroyed. Each level gives **+8% damage** against the world boss.
+
+---
+
+## ⚔️ Raid — world boss
+
+```
+!raid             — the current boss: health, time left, top damage
+!atacar           — one hit (one per minute)
+!raid on / off    — admins: raid announcements in the group
+```
+
+A single boss for **every group**: it spawns every ~6 h and escapes after 60 min. Damage grows with your level, your companion and your weapon.
+
+**Elemental synergy:** if another player hit less than 90 s ago and their companion's elements combine with yours, your hit triggers a reaction and deals more — Eclipse (Light + Dark) ×1.8, Paradox (Time + Chaos) ×1.7, Ancestral Awakening (Primal + Legend) ×1.7, Firestorm (Flame + Wind) ×1.6, Electrocution (Sea + Electric) ×1.6, and ten more from ×1.3 to ×1.5. A hit that already formed a reaction can't start another: you have to take turns.
+
+If the boss falls, the loot (BrasCoins and XP) is split by damage, +20% for the top damage dealer and +10% for the finishing blow; if it escapes, a quarter is split. The next boss's health grows with how many people fought the last one.
+
+---
+
+## 🏰 Daily dungeon
+
+```
+!mazmorra entrar        — start the group's expedition
+!mazmorra <door>        — open a door (anyone in the group, and they join)
+!mazmorra salir         — retreat and cash out the loot
+!mazmorra ranking       — the groups that got deepest today
+```
+
+A new dungeon every day, **the same for every group**: 10 levels of 2 or 3 doors and a boss at the end. You only see a hint for each door, and the hints mislead: "smells of sulfur" can be a monster or a trap. The group shares 100 health and the loot.
+
+- Monsters always fall, but cost health: less the more power the group has. Power is the sum of each member's **level**, **companion** and **weapon**.
+- Traps take health, fountains heal, treasures give BrasCoins and sometimes ⚔️ ✨ 🏆 (for whoever opened the door).
+- Retreating cashes out everything; falling rescues 25%; beating the boss multiplies it by 1.5. Each extra adventurer adds +25% to the loot (up to 8), split evenly.
+- One expedition per person per day. The boss can't be beaten alone: a typical player manages ~7% of the time, four together ~48%.
+
+---
+
+## 🔨 Auctions
+
+```
+!subasta                                          — the open auction in the group
+!subasta vender dragon <#> <base> [minutes]       — auction a dragon
+!subasta vender <item> <amount> <base> [min]      — espada, proteccion, pocion, sp, legendario
+!pujar <amount>  /  !pujar min                    — bid
+!subasta cancelar                                 — withdraw it, if nobody has bid
+```
+
+One per group, 5 to 120 minutes (30 by default). The item is held from the moment it's listed, and your bid from the moment you place it: if you're outbid, it's refunded right away. A bid in the last minute extends it by one minute. Each bid has to beat the previous one by 5% (at least ¥50). The house keeps 5% of the sale. If nobody bids, the item goes back to the seller.
 
 ---
 
@@ -217,7 +299,11 @@ A full social system with wars, territories and alliances between clans. Run `!c
 | Fast, safe BrasCoins | `!work`, `!minar` |
 | Big BrasCoins (with risk) | `!crime`, `!slut` |
 | Diamonds | `!crime`, `!minar`, `!weekly`, `!monthly` |
-| A dragon | `!pet hatch` (¥800) |
+| A dragon | `!pet hatch` (¥800) or `!pet criar <#> <#>` |
+| A use for my ⚔️ ✨ 🏆 | `!forjar mejorar` |
+| To sell a dragon or items | `!subasta vender …` |
+| To fight alongside every group | `!raid` → `!atacar` |
+| A group adventure every day | `!mazmorra entrar` |
 | Characters/harem | `!rw` → `!c` (replying to its message) |
 | To climb the competitive ranking | `!arena retar @user` |
 | A trophy/gift for someone | `!regalo enviar @user trophy` |

@@ -291,69 +291,182 @@ pub fn push_gradient_rust(img: &image::RgbaImage, fuerza: f32) -> image::RgbaIma
 #[cfg(feature = "native")]
 mod ffi {
     unsafe extern "C" {
-        pub fn winsi_a4k_push_color_c(src: *const u8, dst: *mut u8, w: u32, h: u32, f: f32);
-        pub fn winsi_a4k_gradient_c(src: *const u8, dst: *mut u8, w: u32, h: u32);
-        pub fn winsi_a4k_push_gradient_c(src: *const u8, dst: *mut u8, w: u32, h: u32, f: f32);
-        pub fn winsi_a4k_gradient_zig(src: *const u8, dst: *mut u8, w: u32, h: u32);
+        pub fn winsi_a4k_push_color_c(
+            src: *const u8,
+            dst: *mut u8,
+            w: u32,
+            h: u32,
+            f: f32,
+            y0: u32,
+            y1: u32,
+        );
+        pub fn winsi_a4k_gradient_c(src: *const u8, dst: *mut u8, w: u32, h: u32, y0: u32, y1: u32);
+        pub fn winsi_a4k_push_gradient_c(
+            src: *const u8,
+            dst: *mut u8,
+            w: u32,
+            h: u32,
+            f: f32,
+            y0: u32,
+            y1: u32,
+        );
+        pub fn winsi_a4k_gradient_zig(
+            src: *const u8,
+            dst: *mut u8,
+            w: u32,
+            h: u32,
+            y0: u32,
+            y1: u32,
+        );
     }
 }
 
-/// `push_color` en C (native/anime4k.c).
+/// Cuántos hilos usan los kernels nativos: todos los núcleos, hasta 8.
+///
+/// Los tres kernels calculan cada fila de salida mirando solo las vecinas de
+/// la entrada, así que una imagen se reparte en franjas sin coordinar nada.
+/// Hasta la 8.16.0 corrían en un solo núcleo. Más de 8 no rinde para las
+/// imágenes de un chat, y `WINSI_HILOS` lo cambia —1 para medir un núcleo—.
+pub fn hilos() -> usize {
+    use std::sync::OnceLock;
+    static H: OnceLock<usize> = OnceLock::new();
+    *H.get_or_init(|| {
+        std::env::var("WINSI_HILOS")
+            .ok()
+            .and_then(|v| v.parse().ok())
+            .unwrap_or_else(|| std::thread::available_parallelism().map_or(1, |n| n.get().min(8)))
+            .max(1)
+    })
+}
+
+/// Corre `k(y0, y1)` sobre franjas de filas de `0..h` en `hilos()` hilos.
+///
+/// Un puntero crudo no es `Send`; se pasa como `usize` porque cada hilo
+/// escribe filas DISJUNTAS de la salida y nadie escribe la entrada, que es lo
+/// que hace seguro compartirlos.
+#[cfg(feature = "native")]
+fn en_franjas(h: u32, k: impl Fn(u32, u32) + Sync) {
+    let n = (hilos() as u32).min(h.max(1));
+    if n <= 1 {
+        k(0, h);
+        return;
+    }
+    let paso = h.div_ceil(n);
+    std::thread::scope(|s| {
+        for i in 0..n {
+            let (y0, y1) = (i * paso, ((i + 1) * paso).min(h));
+            if y0 >= y1 {
+                continue;
+            }
+            let k = &k;
+            s.spawn(move || k(y0, y1));
+        }
+    });
+}
+
+/// `push_color` en C (native/anime4k.c), en franjas sobre todos los núcleos.
 #[cfg(feature = "native")]
 pub fn push_color_c(img: &RgbaImage, fuerza: f32) -> RgbaImage {
-    let mut salida = RgbaImage::new(img.width(), img.height());
+    let (w, h) = (img.width(), img.height());
+    let mut salida = RgbaImage::new(w, h);
+    let (src, dst) = (img.as_ptr() as usize, salida.as_mut_ptr() as usize);
     // SAFETY: los dos búferes miden w*h*4 —`RgbaImage` lo garantiza— y no se
-    // solapan; el kernel no lee ni escribe fuera de eso.
-    unsafe {
-        ffi::winsi_a4k_push_color_c(
-            img.as_ptr(),
-            salida.as_mut_ptr(),
-            img.width(),
-            img.height(),
-            fuerza,
-        )
-    };
+    // solapan; cada franja escribe solo sus filas de `dst`.
+    en_franjas(h, |y0, y1| unsafe {
+        ffi::winsi_a4k_push_color_c(src as *const u8, dst as *mut u8, w, h, fuerza, y0, y1)
+    });
     salida
 }
 
-/// `gradiente` en C (native/anime4k.c).
+/// `gradiente` en C (native/anime4k.c), en franjas.
 #[cfg(feature = "native")]
 pub fn gradiente_c(img: &RgbaImage) -> RgbaImage {
-    // El kernel solo escribe el interior: el borde llega de la copia.
-    let mut salida = img.clone();
+    // Sin clonar: el kernel copia cada fila de su franja (ver anime4k.c).
+    let (w, h) = (img.width(), img.height());
+    let mut salida = RgbaImage::new(w, h);
+    let (src, dst) = (img.as_ptr() as usize, salida.as_mut_ptr() as usize);
     // SAFETY: como arriba.
-    unsafe {
-        ffi::winsi_a4k_gradient_c(img.as_ptr(), salida.as_mut_ptr(), img.width(), img.height())
-    };
+    en_franjas(h, |y0, y1| unsafe {
+        ffi::winsi_a4k_gradient_c(src as *const u8, dst as *mut u8, w, h, y0, y1)
+    });
     salida
 }
 
-/// `gradiente` en Zig, de a 8 píxeles con `@Vector` (native/anime4k.zig).
+/// `gradiente` en Zig, de a 8 píxeles con `@Vector` (native/anime4k.zig), en
+/// franjas.
 #[cfg(feature = "native")]
 pub fn gradiente_zig(img: &RgbaImage) -> RgbaImage {
-    let mut salida = img.clone();
+    // Sin clonar: el kernel copia cada fila de su franja (ver anime4k.zig).
+    let (w, h) = (img.width(), img.height());
+    let mut salida = RgbaImage::new(w, h);
+    let (src, dst) = (img.as_ptr() as usize, salida.as_mut_ptr() as usize);
     // SAFETY: como arriba.
-    unsafe {
-        ffi::winsi_a4k_gradient_zig(img.as_ptr(), salida.as_mut_ptr(), img.width(), img.height())
-    };
+    en_franjas(h, |y0, y1| unsafe {
+        ffi::winsi_a4k_gradient_zig(src as *const u8, dst as *mut u8, w, h, y0, y1)
+    });
     salida
 }
 
-/// `push_gradient` en C (native/anime4k.c).
+/// `push_gradient` en C (native/anime4k.c), en franjas.
 #[cfg(feature = "native")]
 pub fn push_gradient_c(img: &RgbaImage, fuerza: f32) -> RgbaImage {
-    let mut salida = RgbaImage::new(img.width(), img.height());
+    let (w, h) = (img.width(), img.height());
+    let mut salida = RgbaImage::new(w, h);
+    let (src, dst) = (img.as_ptr() as usize, salida.as_mut_ptr() as usize);
     // SAFETY: como arriba.
-    unsafe {
-        ffi::winsi_a4k_push_gradient_c(
-            img.as_ptr(),
-            salida.as_mut_ptr(),
-            img.width(),
-            img.height(),
-            fuerza,
-        )
-    };
+    en_franjas(h, |y0, y1| unsafe {
+        ffi::winsi_a4k_push_gradient_c(src as *const u8, dst as *mut u8, w, h, fuerza, y0, y1)
+    });
     salida
+}
+
+/// Corre `f` sobre trozos de `datos` de filas enteras (`ancho_fila` bytes),
+/// repartidos en `hilos()` hilos. Rust seguro: cada hilo recibe su propio
+/// `&mut`, y `chunks_mut` garantiza que no se solapan.
+fn por_filas(datos: &mut [u8], ancho_fila: usize, f: impl Fn(&mut [u8]) + Sync) {
+    let filas = datos.len() / ancho_fila.max(1);
+    let n = hilos().min(filas.max(1));
+    if n <= 1 {
+        f(datos);
+        return;
+    }
+    let trozo = filas.div_ceil(n) * ancho_fila;
+    std::thread::scope(|s| {
+        for parte in datos.chunks_mut(trozo) {
+            let f = &f;
+            s.spawn(move || f(parte));
+        }
+    });
+}
+
+/// La luminancia de cada píxel, al canal alfa, en franjas sobre todos los
+/// núcleos. Es el paso 2 de cada pasada de Anime4K, y era de un solo hilo:
+/// con los kernels repartidos, era de lo poco que quedaba en serie.
+pub fn luminancia_en_alfa(img: &mut RgbaImage) {
+    let ancho = img.width() as usize * 4;
+    por_filas(&mut *img, ancho, |trozo| {
+        for p in trozo.chunks_exact_mut(4) {
+            p[3] = luminancia(&image::Rgba([p[0], p[1], p[2], p[3]]));
+        }
+    });
+}
+
+/// La imagen sin el canal alfa, que Anime4K usó de borrador, en franjas.
+pub fn sin_alfa(img: &RgbaImage) -> image::RgbImage {
+    let (w, h) = img.dimensions();
+    let mut rgb = image::RgbImage::new(w, h);
+    let src = img.as_raw();
+    let ancho = w as usize * 3;
+    // Cada trozo de la salida sabe en qué fila empieza por su posición.
+    let base = rgb.as_ptr() as usize;
+    por_filas(&mut rgb, ancho, |trozo| {
+        let fila0 = (trozo.as_ptr() as usize - base) / ancho.max(1);
+        for (i, p) in trozo.chunks_exact_mut(3).enumerate() {
+            let o = (fila0 * w as usize + i) * 4;
+            p.copy_from_slice(&src[o..o + 3]);
+        }
+    });
+    rgb
 }
 
 // ── Despacho ─────────────────────────────────────────────────────────────────

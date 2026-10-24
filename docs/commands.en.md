@@ -38,14 +38,14 @@
 
 | # | Category | Commands |
 |---|----------|:--------:|
-| 1 | [🛠️ General](#%EF%B8%8F-general) | 7 |
+| 1 | [🛠️ General](#%EF%B8%8F-general) | 11 |
 | 2 | [🤖 AI / ChatGPT](#-ai--chatgpt) | 4 |
-| 3 | [🎮 RPG / Economy](#-rpg--economy) | 20 |
+| 3 | [🎮 RPG / Economy](#-rpg--economy) | 22 |
 | 4 | [🎴 Gacha / Characters](#-gacha--characters) | 6 |
 | 5 | [💑 Couples](#-couples) | 5 |
 | 6 | [🎭 Roleplay](#-roleplay) | 9 |
-| 7 | [🎉 Fun](#-fun) | 12 |
-| 8 | [🕹️ Games](#%EF%B8%8F-games) | 3 |
+| 7 | [🎉 Fun](#-fun) | 14 |
+| 8 | [🕹️ Games](#%EF%B8%8F-games) | 7 |
 | 9 | [🎁 Gifts](#-gifts) | 1 |
 | 10 | [🖼️ Media & Stickers](#%EF%B8%8F-media--stickers) | 6 |
 | 11 | [🔽 Downloads](#-downloads) | 7 |
@@ -68,12 +68,24 @@
 | `categoria` | `cat`, `category` | — | 👤 | Show commands for a specific category |
 | `afk` | `ausente` | 10s | 👤 | Activate AFK mode with a custom reason |
 | `creator` | `info`, `about`, `botinfo`, `creador` | — | 👤 | Bot and creator information |
+| `resumen` | `quemeperdi`, `qmp`, `perdi`, `summary` | 60s | 👥 | "What did I miss?": summarizes what was said in the group (12 h by default, up to 72). Uses AI if available; otherwise who spoke, about what, and the open questions |
+| `encuesta` | `poll`, `votacion` | 10s | 👤 | Native WhatsApp poll, 2 to 12 options separated by `\|`; `-m` for multiple choice |
+| `tts` | `voz`, `decir`, `habla`, `say` | 10s | 👤 | Text to voice note **offline** (max 400 characters), or reply to a message with `tts`. Uses Piper, espeak, the Windows voice or the macOS one, whichever is available |
+| `recordar` | `recordatorio`, `remind`, `rec` | 3s | 👤 | Reminder in this chat: `10m`, `2h30m`, `en 3 días`, `a las 18:30`, `mañana 9:00`, `7pm`. `lista` and `borrar <n>`. Up to 10 per person; they survive a restart |
 
 ```
 !ping
 !menu
 !categoria rpg
 !afk studying for exams
+!resumen
+!resumen 24
+!encuesta Where do we eat? | Pizza | Sushi | Tacos
+!encuesta -m Which days work? | Mon | Wed | Fri
+!recordar 10m take out the laundry
+!recordar mañana 9:00 meeting
+!recordar lista
+!tts hello everyone
 ```
 
 ---
@@ -145,7 +157,9 @@
 | `leveltop` | `toplevel`, `topnivel`, `niveltop`, `levelrank` | 10s | 👤 | Top users by level |
 | `depositar` | `dep`, `deposit`, `retirar`, `withdraw`, `banco` | 3s | 👤 | Deposit or withdraw coins from the bank |
 | `prestige` | `prestigio`, `ascender` | — | 👤 | Reset progress in exchange for exclusive prestige rewards |
-| `pet` | `mascota`, `mipet`, `dragon`, `dragones` | 3s | 👤 | Dragon City: hatch eggs, feed with Gold and evolve your dragons (579 available) |
+| `pet` | `mascota`, `mipet`, `dragon`, `dragones` | 3s | 👤 | Dragon City: hatch eggs, feed with Gold, evolve and breed your dragons (579 available). `criar <#> <#>`: two at level 10+, 5,000 gold + ¥3,000, every 8 h. `companero <#>`: the one that gains exp from your messages and fights in `raid` |
+| `forjar` | `forja`, `forge`, `herreria` | 3s | 👤 | Upgrade your weapon from +0 to +10 with ⚔️ ✨ 🏆 and ¥: +8% `raid` damage per level. From +4, failing drops a level unless you have 🛡️ (`forjar proteccion`) |
+| `subasta` | `subastas`, `auction`, `pujar`, `puja`, `bid` | 2s | 👥 | Auction a dragon or items in the group; bids are held and refunded to whoever is outbid. 5% fee |
 | `harem` | `waifus`, `claims`, `coleccion` | 5s | 👤 | View characters claimed with `!rw`, sorted by value |
 | `regalo` | `gift`, `dar`, `regalar` | 10s | 👤 | Gift coins, XP or items to another user |
 
@@ -166,6 +180,12 @@
 !pet hatch
 !pet feed 1
 !pet collect
+!pet criar 1 2
+!forjar
+!forjar mejorar
+!subasta vender dragon 3 5000 30
+!subasta vender espada 5 2000
+!pujar 5500
 !harem
 !harem @user 2
 !regalo @user 500 coins
@@ -179,14 +199,32 @@
 
 | Command | Aliases | Cooldown | Permission | Description |
 |---------|---------|:--------:|:----------:|-------------|
-| `arena` | `pvp`, `batalla`, `fight` | 30s | 👤 | Challenge another user to a 1v1 PvP duel with a diamond wager |
+| `arena` | `pvp`, `batalla`, `fight` | 30s | 👤 | Challenge another user to a 1v1 PvP duel with a diamond wager, or practice against the CPU with `arena cpu [facil\|normal\|dificil]` (no ELO; the CPU thinks with expectiminimax) |
 | `quiz` | `qz`, `pregunta`, `coding` | 15s | 👤 | Programming question by category (JS, Python, SQL…) |
 | `adivinar` | `drawguess`, `dibujar`, `guess` | 20s | 👤 | Group draw-and-guess mini-game |
+| `raid` | `jefe`, `boss`, `worldboss`, `atacar` | 1min per hit | 👥 | World boss: the same one for every group. Spawns every 6 h and escapes after 60 min. Two players in a row with companions whose elements combine trigger a reaction. `atacar`, `on`/`off` (admins: announcements in the group), `invocar` (owner) |
+| `mazmorra` | `dungeon`, `mazmorras`, `calabozo` | 10s per door | 👥 | The daily dungeon, the same for every group: `entrar` (enter), `<door number>`, `salir` (cash out) and `ranking`. One expedition per person per day |
+| `poker` | `póker`, `holdem`, `casinoholdem` | 2s | 👤 | Casino Hold'em against the house: `poker <ante>`, then `poker ir` (pays double) or `poker retirarse` (fold). Dealer qualifies with a pair of 4s or better |
+| `blackjack` | `bj`, `21`, `pedir`, `plantarse`, `doblar` | 2s | 👤 | Blackjack against the dealer: a win pays ×2, blackjack 3:2, dealer stands on 17. Bets from ¥10 to ¥500,000 |
 
 ```
 !arena @user 10
 !quiz javascript
 !adivinar start
+!raid
+!atacar
+!raid on
+!arena cpu dificil
+!mazmorra entrar
+!mazmorra 2
+!mazmorra salir
+!mazmorra ranking
+!poker 500
+!poker ir
+!bj 1000
+!pedir
+!plantarse
+!doblar
 ```
 
 ---
@@ -275,6 +313,8 @@
 
 | Command | Aliases | Cooldown | Permission | Description |
 |---------|---------|:--------:|:----------:|-------------|
+| `asesino` | `mafia`, `asesinos`, `votar`, `investigar`, `salvar`, `asesinar` | 2s | 👤 | Killer in the chat (Mafia-style), 4 to 10 players: `crear` (create), `unirme` (join), `empezar` (start); by day `votar <n>` (vote) in the group; by night `matar` (kill), `investigar` (investigate) or `salvar <n>` (save) in private, depending on your role |
+| `historia` | `telefono`, `teléfono`, `cuento` | 2s | 👤 | AI broken telephone, 3 to 10 players: `nueva <first sentence>` (new), `unirme` (join), `empezar` (start). Each one continues the story in private seeing only the last piece; at the end it's revealed in full |
 | `meme` | `memes`, `randommeme` | 5s | 👤 | Random meme from Reddit |
 | `memepe` | `mecausa`, `memeperu` | 5s | 👤 | Random Peruvian meme |
 | `giphy` | `gif` | 5s | 👤 | Search a GIF on GIPHY |

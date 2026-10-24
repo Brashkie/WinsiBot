@@ -4,7 +4,14 @@ import axios from 'axios'
 import { tmpdir } from 'os'
 import { join } from 'path'
 import { randomUUID } from 'crypto'
-import { unlink } from 'fs/promises'
+import { mkdir, unlink } from 'fs/promises'
+
+/** data/tmp, creada si hace falta: los archivos de paso de ffmpeg y del TTS. */
+export async function carpetaTmp(): Promise<string> {
+  const dir = join(process.cwd(), 'data', 'tmp')
+  await mkdir(dir, { recursive: true })
+  return dir
+}
 
 export function getTempPath(ext: string): string {
   return join(tmpdir(), `winsi_${randomUUID()}.${ext}`)
@@ -70,6 +77,31 @@ export function randomNumber(min: number, max: number): number {
 
 // ─── Arrays ───────────────────────────────────────────────────────────────────
 
-export function randomChoice<T>(arr: T[]): T {
+export function randomChoice<T>(arr: readonly T[]): T {
   return arr[Math.floor(Math.random() * arr.length)] as T
 }
+
+/** Mezcla `arr` en el lugar (Fisher–Yates) y lo devuelve. */
+export function mezclar<T>(arr: T[]): T[] {
+  for (let i = arr.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1))
+    ;[arr[i], arr[j]] = [arr[j]!, arr[i]!]
+  }
+  return arr
+}
+
+/** Un id corto para cosas en memoria (retos, capchas, batallas): no es único
+ *  en el mundo, solo entre los pocos que hay vivos a la vez. */
+export function idCorto(largo = 8): string {
+  return Math.random().toString(36).slice(2, 2 + largo)
+}
+
+// ─── Fechas ───────────────────────────────────────────────────────────────────
+
+const dos = (n: number) => String(n).padStart(2, '0')
+
+/** "18:05", hora local. */
+export const horaLocal = (ms: number) => { const d = new Date(ms); return `${dos(d.getHours())}:${dos(d.getMinutes())}` }
+
+/** "24/10 18:05", hora local. */
+export const fechaHoraLocal = (ms: number) => { const d = new Date(ms); return `${dos(d.getDate())}/${dos(d.getMonth() + 1)} ${horaLocal(ms)}` }

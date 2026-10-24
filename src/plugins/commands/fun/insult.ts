@@ -1,4 +1,5 @@
 import type { Command } from '../../../types/index.js'
+import { randomChoice } from '@lib/utils.js'
 
 const INSULTOS = [
   // clasicos
@@ -51,10 +52,6 @@ const INSULTOS = [
   'ser que necesita GPS para encontrar su propia nariz',
 ]
 
-function pickRandom<T>(arr: T[]): T {
-  return arr[Math.floor(Math.random() * arr.length)]!
-}
-
 const command: Command = {
   name: 'insultar',
   aliases: ['insult', 'abuse', 'ofender'],
@@ -83,7 +80,7 @@ const command: Command = {
       }
     } catch {}
 
-    const insulto  = pickRandom(INSULTOS)
+    const insulto  = randomChoice(INSULTOS)
     const senderNum = (sender.split('@')[0] ?? '').replace(/[^0-9]/g, '')
     const isSelf    = rawTarget === sender
 

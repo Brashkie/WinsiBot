@@ -5,4 +5,5 @@
 comptime {
     _ = @import("anime4k.zig");
     _ = @import("jpeg.zig");
+    _ = @import("resize.zig");
 }

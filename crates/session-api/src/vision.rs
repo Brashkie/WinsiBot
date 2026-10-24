@@ -342,12 +342,12 @@ pub fn upscale(
 
     // CatmullRom es la bicúbica del crate `image`, que es lo que pide el
     // algoritmo (cv2.INTER_CUBIC en la referencia).
-    let mut buf = image::imageops::resize(&img.to_rgba8(), w, h, FilterType::CatmullRom);
+    // Con la feature `native`, en Zig: pasadas fusionadas, SIMD y todos los
+    // núcleos, idéntico bit a bit al crate (ver resize.rs).
+    let mut buf = crate::resize::catmullrom_rgba(&img.to_rgba8(), w, h);
 
     for _ in 0..A4K_PASADAS {
-        for p in buf.pixels_mut() {
-            p[3] = anime4k::luminancia(p);
-        }
+        anime4k::luminancia_en_alfa(&mut buf);
         buf = anime4k::push_color(&buf, A4K_FUERZA_COLOR);
         buf = anime4k::gradiente(&buf);
         buf = anime4k::push_gradient(&buf, A4K_FUERZA_GRADIENTE);
@@ -355,11 +355,7 @@ pub fn upscale(
 
     // El alfa se usó de borrador todo el tiempo; sin esto la imagen saldría con
     // transparencias donde quedaron los bordes.
-    let mut rgb = RgbImage::new(w, h);
-    for (x, y, p) in rgb.enumerate_pixels_mut() {
-        let s = buf.get_pixel(x, y).0;
-        *p = image::Rgb([s[0], s[1], s[2]]);
-    }
+    let rgb = anime4k::sin_alfa(&buf);
 
     Ok((rgb, (w0, h0), (w, h)))
 }

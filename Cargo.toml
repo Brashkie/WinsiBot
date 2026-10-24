@@ -6,6 +6,7 @@
 # nada.
 #
 #   crates/session-api   la Session API: sesión, IA, imágenes, antiban...
+#   crates/cluster       el motor de almacenamiento propio (LSM), sin dependencias
 #
 # Se compila desde la raíz y deja todo en target/:
 #

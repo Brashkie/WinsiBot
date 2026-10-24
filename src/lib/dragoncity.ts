@@ -10,18 +10,18 @@
 
 import { exec } from 'child_process'
 import { promisify } from 'util'
-import { readFile, writeFile, unlink, mkdir } from 'fs/promises'
+import { readFile, writeFile, unlink } from 'fs/promises'
 import { existsSync } from 'fs'
 import { join } from 'path'
 import { randomUUID } from 'crypto'
 import axios from 'axios'
-import ffmpegStatic from 'ffmpeg-static'
 import { decode } from '@msgpack/msgpack'
 import { translate } from '@vitalets/google-translate-api'
-import { exeName } from './platform.js'
+import { ffmpegPath } from './ffmpeg.js'
 import { createCache, registerCache } from './cacheManager.js'
 import { USER_AGENT } from '@config'
 import type { DragonCatalog, DragonDef } from '../types/index.js'
+import { carpetaTmp } from './utils.js'
 
 const execAsync = promisify(exec)
 
@@ -57,24 +57,10 @@ export function pickRandomDragon(dragons: DragonDef[]): DragonDef {
   return dragons[Math.floor(Math.random() * dragons.length)]!
 }
 
-// ─── Nivel / experiencia ───────────────────────────────────────────────────────
-// Curva lineal, no exponencial (a diferencia del sistema de mascotas viejo):
-// con evolución final en nivel 25, una curva 1.4^nivel pediría decenas de
-// miles de alimentadas para llegar — esta pide ~440, alcanzable en unos
-// días de juego normal dado el ritmo de acumulación de Oro.
-export function expForLevel(level: number): number {
-  return 50 + level * 40
-}
-
-// ─── Etapas de evolución ──────────────────────────────────────────────────────
-// La etapa 0 (huevo) NUNCA es el estado de un dragón ya obtenido — es solo el
-// visual previo a nacer (ver generateEggShakeVideo). Un dragón recién nacido
-// ya arranca en etapa 1; evoluciona a la etapa 3 (final) en STAGE3_LEVEL.
-export const STAGE3_LEVEL = 25
-
-export function stageForLevel(level: number): 1 | 3 {
-  return level >= STAGE3_LEVEL ? 3 : 1
-}
+// ─── Nivel, experiencia y etapas ──────────────────────────────────────────────
+// Viven en dragonNivel.ts, lógica pura sin red ni ffmpeg: la usan también la
+// experiencia por actividad (companero.ts) y sus tests.
+export { expForLevel, STAGE3_LEVEL, stageForLevel } from './dragonNivel.js'
 
 export function imageForStage(dragon: DragonDef, stage: 0 | 1 | 3): string | undefined {
   return dragon.image.find(i => i.stage === stage)?.url
@@ -145,21 +131,11 @@ export async function translatedDesc(dragon: DragonDef): Promise<string> {
 // transparencia del WebP sobre fondo blanco — sin ese paso, las esquinas que
 // deja libres la rotación salen negras en vez de blancas al perder el canal
 // alfa en la codificación final (h264 no soporta alfa).
-async function getTmpDir(): Promise<string> {
-  const dir = join(process.cwd(), 'data', 'tmp')
-  await mkdir(dir, { recursive: true })
-  return dir
-}
-
-function getFfmpegPath(): string {
-  const binDir = join(process.cwd(), 'bin', exeName('ffmpeg'))
-  if (existsSync(binDir)) return binDir
-  return ffmpegStatic ?? 'ffmpeg'
-}
+const getFfmpegPath = ffmpegPath
 
 export async function generateEggShakeVideo(imageBuffer: Buffer): Promise<Buffer> {
   const ffmpeg  = getFfmpegPath()
-  const tmpDir  = await getTmpDir()
+  const tmpDir  = await carpetaTmp()
   const inFile  = join(tmpDir, `${randomUUID()}.webp`)
   const outFile = join(tmpDir, `${randomUUID()}.mp4`)
 
@@ -193,7 +169,7 @@ export async function generateEggShakeVideo(imageBuffer: Buffer): Promise<Buffer
 // del bot (#sticker, generateEggShakeVideo).
 export async function transcodeToMp4(webmBuffer: Buffer): Promise<Buffer> {
   const ffmpeg  = getFfmpegPath()
-  const tmpDir  = await getTmpDir()
+  const tmpDir  = await carpetaTmp()
   const inFile  = join(tmpDir, `${randomUUID()}.webm`)
   const outFile = join(tmpDir, `${randomUUID()}.mp4`)
 

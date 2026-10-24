@@ -17,6 +17,11 @@
  *
  * Formato: RGBA de 8 bits, filas contiguas, `w * h * 4` bytes. `src` y `dst`
  * no se solapan. Los bordes se replican, como en la referencia.
+ *
+ * Cada kernel procesa SOLO las filas [y0, y1) de la salida, leyendo de `src`
+ * las vecinas que necesite. Así Rust reparte una imagen en franjas entre
+ * todos los núcleos: cada hilo escribe filas distintas de `dst` y nadie
+ * escribe `src`, así que no hace falta coordinarlos.
  */
 
 #include <stdint.h>
@@ -83,8 +88,9 @@ static inline void escribir(uint8_t *d, const float mc[4]) {
 /* pushColor: los cuatro bloques se evalúan EN CADENA sobre el mismo `mc`, y
  * cada uno ve el alfa que dejó el anterior, como en la referencia. */
 void winsi_a4k_push_color_c(const uint8_t *src, uint8_t *dst, uint32_t w,
-                            uint32_t h, float f) {
-    for (uint32_t y = 0; y < h; y++) {
+                            uint32_t h, float f, uint32_t y0, uint32_t y1) {
+    if (y1 > h) y1 = h;
+    for (uint32_t y = y0; y < y1; y++) {
         for (uint32_t x = 0; x < w; x++) {
             vecindad v = vecinos(src, w, h, x, y);
             const uint8_t *p = src + ((uint64_t)y * w + x) * 4;
@@ -116,12 +122,22 @@ void winsi_a4k_push_color_c(const uint8_t *src, uint8_t *dst, uint32_t w,
     }
 }
 
-/* Sobel sobre el alfa, invertido. Solo el interior: el borde queda como está,
- * así que `dst` tiene que llegar con una copia de `src`. */
+/* Sobel sobre el alfa, invertido, de las filas [y0, y1).
+ *
+ * Cada fila se COPIA de `src` a `dst` y después se le reescribe el alfa del
+ * interior; el borde queda copiado tal cual. Antes Rust clonaba la imagen
+ * entera antes de llamar —3 MB en un solo hilo, que con el cálculo repartido
+ * en 8 pesaban más que el cálculo—; así la copia también va en franjas. */
 void winsi_a4k_gradient_c(const uint8_t *src, uint8_t *dst, uint32_t w,
-                          uint32_t h) {
+                          uint32_t h, uint32_t y0, uint32_t y1) {
+    if (y1 > h) y1 = h;
+    for (uint32_t y = y0; y < y1; y++)
+        __builtin_memcpy(dst + (uint64_t)y * w * 4, src + (uint64_t)y * w * 4, (uint64_t)w * 4);
     if (w < 3 || h < 3) return;
-    for (uint32_t y = 1; y < h - 1; y++) {
+    /* El borde no se calcula: se recorta el rango al interior. */
+    if (y0 < 1) y0 = 1;
+    if (y1 > h - 1) y1 = h - 1;
+    for (uint32_t y = y0; y < y1; y++) {
         const uint8_t *arriba = src + (uint64_t)(y - 1) * w * 4;
         const uint8_t *medio = src + (uint64_t)y * w * 4;
         const uint8_t *abajo = src + (uint64_t)(y + 1) * w * 4;
@@ -141,8 +157,9 @@ void winsi_a4k_gradient_c(const uint8_t *src, uint8_t *dst, uint32_t w,
 /* pushGradient: a diferencia de pushColor, sale en cuanto una dirección
  * coincide. Sin dirección, el píxel queda igual con el alfa a 255. */
 void winsi_a4k_push_gradient_c(const uint8_t *src, uint8_t *dst, uint32_t w,
-                               uint32_t h, float f) {
-    for (uint32_t y = 0; y < h; y++) {
+                               uint32_t h, float f, uint32_t y0, uint32_t y1) {
+    if (y1 > h) y1 = h;
+    for (uint32_t y = y0; y < y1; y++) {
         for (uint32_t x = 0; x < w; x++) {
             vecindad v = vecinos(src, w, h, x, y);
             const uint8_t *p = src + ((uint64_t)y * w + x) * 4;

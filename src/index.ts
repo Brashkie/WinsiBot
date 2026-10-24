@@ -2,7 +2,7 @@ import 'dotenv/config'
 import readline from 'readline'
 import { spawn, type ChildProcess } from 'child_process'
 import { join, resolve } from 'path'
-import { existsSync, readFileSync } from 'fs'
+import { existsSync } from 'fs'
 import ffmpegStatic from 'ffmpeg-static'
 import { winsiSocket } from '@core/socket.js'
 import { handleMessage, getActiveHandlerCount } from '@core/handler.js'
@@ -12,10 +12,10 @@ import { config } from '@config'
 import { loadAll, saveAll, startAutoSave, stopAutoSave } from '@core/persistence.js'
 import { sessionClient } from '@lib/session.js'
 import { flush as flushBotStats } from '@core/botStats.js'
-import { exeName } from '@lib/platform.js'
 import { rustRequest } from '@lib/rustHttp.js'
 import { SESSION_API, sessionApiBinary, sessionApiHome } from '@lib/sessionApiPaths.js'
 import { color, gradient, loader, ascii, themes, configure, components, BG, animate } from 'ansimax'
+import { versionDelBot } from '@lib/version.js'
 
 // ffmpeg-static ya era una dependencia del proyecto, pero nada la usaba —
 // fluent-ffmpeg (usado por wa-sticker-formatter para stickers animados desde
@@ -313,15 +313,6 @@ async function ensureRust(): Promise<void> {
 }
 
 // ─── Banner ───────────────────────────────────────────────────────────────────
-function getBotVersion(): string {
-  try {
-    const pkg = JSON.parse(readFileSync(join(process.cwd(), 'package.json'), 'utf8'))
-    return pkg.version ?? '?'
-  } catch {
-    return '?'
-  }
-}
-
 function platformLabel(): string {
   return process.platform === 'win32'  ? 'Windows'
        : process.platform === 'linux'  ? 'Linux'
@@ -358,14 +349,14 @@ async function printBanner() {
       perCharColor: true,
     })
   } catch {
-    title = `  ${gradient(config.botName + ' v' + getBotVersion(), MATRIX_GREENS)}`
+    title = `  ${gradient(config.botName + ' v' + versionDelBot(), MATRIX_GREENS)}`
   }
   console.log(title)
   console.log(`  ${color.dim('by Hepein Oficial')}  ${color.dim('·')}  ${themes.success('sistema en línea')}`)
   console.log()
 
   const badges = [
-    components.badge('version',  getBotVersion(),  { labelBg: BG.black, valueBg: BG.green }),
+    components.badge('version',  versionDelBot(),  { labelBg: BG.black, valueBg: BG.green }),
     components.badge('node',     process.version,  { labelBg: BG.black, valueBg: BG.brightGreen }),
     components.badge('platform', platformLabel(),  { labelBg: BG.black, valueBg: BG.green }),
     components.badge('github',   'Brashkie',        { labelBg: BG.black, valueBg: BG.brightGreen }),
@@ -475,6 +466,48 @@ async function main() {
       const { setupBirthdayChecker } = await import('@plugins/commands/general/birthday.js')
       setupBirthdayChecker(sock)
     } catch {}
+
+    try {
+      const { setupReminders } = await import('@lib/reminders.js')
+      setupReminders(sock)
+    } catch (err) {
+      logger.warn({ err }, 'Recordatorios no pudieron iniciar')
+    }
+
+    try {
+      const { setupRaids } = await import('@lib/raidWorld.js')
+      setupRaids(sock)
+    } catch (err) {
+      logger.warn({ err }, 'Raids no pudieron iniciar')
+    }
+
+    try {
+      const { setupSubastas } = await import('@lib/subastas.js')
+      setupSubastas(sock)
+    } catch (err) {
+      logger.warn({ err }, 'Subastas no pudieron iniciar')
+    }
+
+    try {
+      const { devolverManosInterrumpidas } = await import('@plugins/commands/rpg/blackjack.js')
+      devolverManosInterrumpidas()
+    } catch (err) {
+      logger.warn({ err }, 'Blackjack: no se pudieron devolver las manos interrumpidas')
+    }
+
+    try {
+      const { devolverManosInterrumpidas } = await import('@plugins/commands/rpg/poker.js')
+      devolverManosInterrumpidas()
+    } catch (err) {
+      logger.warn({ err }, 'Póker: no se pudieron devolver las manos interrumpidas')
+    }
+
+    try {
+      const { devolverManosInterrumpidas } = await import('@plugins/commands/rpg/arena.js')
+      devolverManosInterrumpidas()
+    } catch (err) {
+      logger.warn({ err }, 'Arena: no se pudieron devolver las apuestas interrumpidas')
+    }
   })
 
   winsi.on('closed', () => {

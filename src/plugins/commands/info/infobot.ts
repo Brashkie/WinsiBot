@@ -2,17 +2,8 @@ import type { Command } from '../../../types/index.js'
 import { config } from '@config'
 import { sendWithMedia } from '@lib/media_sender.js'
 import { commandRegistry } from '../index.js'
-import { readFileSync } from 'fs'
 import { join } from 'path'
-
-function getBotVersion(): string {
-  try {
-    const pkg = JSON.parse(readFileSync(join(process.cwd(), 'package.json'), 'utf8'))
-    return pkg.version ?? '?'
-  } catch {
-    return '?'
-  }
-}
+import { versionDelBot } from '@lib/version.js'
 
 function formatUptime(seconds: number): string {
   const d = Math.floor(seconds / 86400)
@@ -45,7 +36,7 @@ const command: Command = {
       `🧠 Intelligent  — IA conversacional integrada`,
       `🌐 Enterprise   — multi-bot, multi-sesión`,
       ``,
-      `◆ Versión   » v${getBotVersion()}`,
+      `◆ Versión   » v${versionDelBot()}`,
       `◆ Comandos  » ${totalCommands}`,
       `◆ Uptime    » ${formatUptime(process.uptime())}`,
       `◆ Prefix    » ${config.prefix.join('  ')}`,

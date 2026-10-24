@@ -1,7 +1,6 @@
 import type { Command, RollCharacter } from '../../../types/index.js'
-import { SOURCES, getCharacters, inventory } from './rollwaifu.js'
+import { SOURCES, getCharacters, inventory, ownerName } from './rollwaifu.js'
 import { translate } from '@vitalets/google-translate-api'
-import { userData } from '@core/events/index.js'
 
 const norm = (s: string) =>
   s.toLowerCase()
@@ -55,10 +54,6 @@ function findOwner(charName: string): OwnerInfo | null {
     if (char) return { jid, char }
   }
   return null
-}
-
-function ownerName(jid: string): string {
-  return userData.get(jid)?.name || jid.replace(/@s\.whatsapp\.net|@lid/g, '').replace(/[^0-9]/g, '')
 }
 
 function dateES(ts: number): string {
