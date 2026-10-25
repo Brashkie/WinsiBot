@@ -3,14 +3,14 @@ import type { Command } from '../../../types/index.js'
 import { getUserData, patchUserData } from '@core/events.js'
 import { logger } from '@core/logger.js'
 import { safeSend, sendCritical } from '@lib/media_sender.js'
-import { ApuestasAbiertas } from '@lib/apuestasAbiertas.js'
+import { ApuestasAbiertas } from '@lib/openBets.js'
 import {
   type Carta, mazo, mostrar, mejorMano, nombreMano, resolver,
 } from '@lib/poker.js'
 
 // Casino Hold'em contra la casa (ver poker.ts). Igual que #bj: lo apostado se
 // descuenta al apostar y se anota en data/poker.json, para devolverlo si un
-// reinicio corta la mano (ver apuestasAbiertas.ts).
+// reinicio corta la mano (ver openBets.ts).
 
 const MIN_ANTE = 10
 const MAX_ANTE = 200_000    // la ida es el doble: hasta ¥600.000 en la mesa
@@ -31,7 +31,7 @@ const mesas = new Map<string, Mano>()   // sender → mano
 
 const anotar = () => abiertas.anotar([...mesas].map(([s, h]) => [s, h.ante]))
 
-/** Ver apuestasAbiertas.ts. La llama el 'ready' de index.ts. */
+/** Ver openBets.ts. La llama el 'ready' de index.ts. */
 export const devolverManosInterrumpidas = () => abiertas.devolver()
 
 function pantalla(h: Mano): string {

@@ -289,7 +289,7 @@ pub struct UpdateRequest {
 ///
 /// Corre por CADA mensaje de grupo. Lee y modifica el perfil en el caché de
 /// `BaseConv` y lo marca para el próximo vaciado: sin SELECT ni UPSERT por
-/// mensaje, que eran 124 µs (ver `benches/mensaje.rs`).
+/// mensaje, que eran 124 µs (ver `benches/message.rs`).
 pub fn actualizar(db: &ConvDb, jid: &str, req: &UpdateRequest) -> Result<Perfil, String> {
     let mut p = leer(db, jid)?;
     let ahora = Utc::now();

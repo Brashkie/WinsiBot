@@ -41,6 +41,10 @@ fn kernels(c: &mut Criterion) {
     g.bench_function("c", |b| {
         b.iter(|| anime4k::push_color_c(black_box(&img), A4K_FUERZA_COLOR))
     });
+    #[cfg(feature = "native")]
+    g.bench_function("zig", |b| {
+        b.iter(|| anime4k::push_color_zig(black_box(&img), A4K_FUERZA_COLOR))
+    });
     g.finish();
 
     let mut g = c.benchmark_group("gradiente");
@@ -62,6 +66,10 @@ fn kernels(c: &mut Criterion) {
     #[cfg(feature = "native")]
     g.bench_function("c", |b| {
         b.iter(|| anime4k::push_gradient_c(black_box(&img), A4K_FUERZA_GRADIENTE))
+    });
+    #[cfg(feature = "native")]
+    g.bench_function("zig", |b| {
+        b.iter(|| anime4k::push_gradient_zig(black_box(&img), A4K_FUERZA_GRADIENTE))
     });
     g.finish();
 }

@@ -5,6 +5,7 @@ import {
   checkLevelUp, levelUpLine,
 } from '@core/events.js'
 import { randomNumber as rand, randomChoice as pick } from '@lib/utils.js'
+import { tx, type Idioma } from '@lib/i18n.js'
 
 const CD = 10 * 60_000
 
@@ -67,6 +68,62 @@ const JOBS: Array<(m: number) => string> = [
   m => `Le diste like y comentario a 200 publicaciones para "subir el engagement" de un emprendimiento nuevo. Pagaron *¥${m}*`,
 ]
 
+// En inglés y portugués no son traducciones de las de arriba: son chistes
+// propios, que no dependen de algo de Perú o de la escuela de acá.
+const JOBS_EN: Array<(m: number) => string> = [
+  m => `Your boss asked you to stay until midnight to finish Monday's report, and paid overtime. You earned *¥${m}*`,
+  m => `You opened an OnlyFans for your cat and the grandmas of the block went wild. Donations: *¥${m}*`,
+  m => `Your badly synced lip-sync video landed on half the country's For You page. Brands called: *¥${m}*`,
+  m => `You sold the Pokémon cards you kept since 2002. A collector paid triple for one you thought was fake: *¥${m}*`,
+  m => `You moderated a WhatsApp group of 500 ladies swapping recipes. You survived a week and got *¥${m}*`,
+  m => `You delivered food by bike in the rain and a customer tipped extra because you reminded him of his son: *¥${m}*`,
+  m => `You designed a bakery logo in 20 minutes on Canva and the owner called it "art". He sent you *¥${m}*`,
+  m => `You taught your neighbor to use WhatsApp Web and spent 4 hours explaining the QR code. You earned *¥${m}*`,
+  m => `You mined crypto on your old laptop and the fan almost took off. After the power bill you kept *¥${m}*`,
+  m => `You cooked all night in a restaurant while the chef yelled in three languages. You got *¥${m}* and free soup`,
+  m => `You were an extra in a mattress commercial. You actually fell asleep on camera and earned *¥${m}*`,
+  m => `You fixed the accountant's printer. For 3 years he blamed the cable. Grateful, he gave you *¥${m}*`,
+  m => `You built an app that reminds people to drink water. 3 downloads, one of them premium: *¥${m}*`,
+  m => `You taught English over Zoom and a kid asked if you were a robot. They paid you *¥${m}*`,
+  m => `You said on Fiverr you could do "anything" and someone hired you to write a wedding speech: *¥${m}*`,
+  m => `You found a bug on a company's website and reported it. They had a bug bounty: *¥${m}*`,
+  m => `You fixed the office wifi by turning the router off and on. They called you "the IT guy" all day: *¥${m}*`,
+  m => `You assembled an IKEA wardrobe for a neighbor after his 3 failed weekends. 4 screws left over, nobody asked: *¥${m}*`,
+  m => `You queued at the bank for someone who hates queues. Three hours later you cashed *¥${m}*`,
+  m => `You liked and commented on 200 posts to "boost engagement" for a new small business. They paid *¥${m}*`,
+]
+
+const JOBS_PT: Array<(m: number) => string> = [
+  m => `Seu chefe pediu pra ficar até meia-noite terminando o relatório de segunda e pagou hora extra. Você ganhou *¥${m}*`,
+  m => `Você abriu um OnlyFans do seu gato e as vovós do bairro piraram. Doações: *¥${m}*`,
+  m => `Seu vídeo de dublagem fora de sincronia caiu no Para Você de meio país. As marcas ligaram: *¥${m}*`,
+  m => `Você vendeu as cartas de Pokémon guardadas desde 2002. Um colecionador pagou o triplo por uma que você achava falsa: *¥${m}*`,
+  m => `Você moderou um grupo de WhatsApp com 500 tias trocando receitas. Sobreviveu uma semana e levou *¥${m}*`,
+  m => `Você fez entrega de bike na chuva e o cliente deu gorjeta extra porque você lembrou o filho dele: *¥${m}*`,
+  m => `Você fez a logo de uma padaria em 20 minutos no Canva e o dono chamou de "obra de arte". Mandou *¥${m}*`,
+  m => `Você ensinou o vizinho a usar o WhatsApp Web e passou 4 horas explicando o QR code. Ganhou *¥${m}*`,
+  m => `Você minerou cripto no notebook velho e a ventoinha quase decolou. Depois da conta de luz sobraram *¥${m}*`,
+  m => `Você cozinhou a noite toda num restaurante com o chef gritando em três idiomas. Levou *¥${m}* e uma sopa grátis`,
+  m => `Você foi figurante num comercial de colchão. Dormiu de verdade na gravação e ganhou *¥${m}*`,
+  m => `Você consertou a impressora do contador. Fazia 3 anos que ele culpava o cabo. Agradecido, deu *¥${m}*`,
+  m => `Você criou um app que lembra as pessoas de beber água. 3 downloads, um deles premium: *¥${m}*`,
+  m => `Você deu aula de inglês pelo Zoom e uma criança perguntou se você era um robô. Pagaram *¥${m}*`,
+  m => `Você disse no Fiverr que fazia "qualquer coisa" e te contrataram pra escrever um discurso de casamento: *¥${m}*`,
+  m => `Você achou um bug no site de uma empresa e avisou. Tinham bug bounty: *¥${m}*`,
+  m => `Você arrumou o wifi do escritório desligando e ligando o roteador. Te chamaram de "o da TI" o dia todo: *¥${m}*`,
+  m => `Você montou um guarda-roupa pro vizinho depois de 3 fins de semana de fracasso dele. Sobraram 4 parafusos: *¥${m}*`,
+  m => `Você ficou na fila do banco por alguém que odeia fila. Três horas depois, recebeu *¥${m}*`,
+  m => `Você curtiu e comentou 200 posts pra "subir o engajamento" de um negócio novo. Pagaram *¥${m}*`,
+]
+
+const TRABAJOS: Record<Idioma, Array<(m: number) => string>> = { es: JOBS, en: JOBS_EN, pt: JOBS_PT }
+
+const T = {
+  espera:  { es: '> ⏳ Espera *{t}* para volver a trabajar.', en: '> ⏳ Wait *{t}* to work again.', pt: '> ⏳ Espere *{t}* para trabalhar de novo.' },
+  brasas:  { es: '\n> +{n} BrasEmbers (¡raro!)', en: '\n> +{n} BrasEmbers (rare!)', pt: '\n> +{n} BrasEmbers (raro!)' },
+  proximo: { es: '_Próximo trabajo en 10 min_', en: '_Next job in 10 min_', pt: '_Próximo trabalho em 10 min_' },
+}
+
 const command: Command = {
   name: 'work',
   aliases: ['trabajar', 'trabajo', 'w'],
@@ -74,11 +131,11 @@ const command: Command = {
   category: 'rpg',
   cooldown: 0,
 
-  async execute({ sock, jid, msg, sender, pushName }) {
+  async execute({ sock, jid, msg, sender, pushName, lang }) {
     if (isOnCooldown(sender, 'lastWork', CD)) {
       const left = getCooldownLeft(sender, 'lastWork', CD)
       await sock.sendMessage(jid, {
-        text: `> ⏳ Espera *${fmtCooldown(left)}* para volver a trabajar.`,
+        text: tx(lang, T.espera, { t: fmtCooldown(left) }),
       }, { quoted: msg })
       return
     }
@@ -87,7 +144,7 @@ const command: Command = {
     const isPrem  = user.premium
     const earned  = isPrem ? rand(1000, 4000) : rand(300, 1500)
     const expGain = rand(50, 200)
-    const jobFn   = pick(JOBS)
+    const jobFn   = pick(TRABAJOS[lang])
     // BrasEmbers — moneda rara para comandos NSFW, chance chica
     const embers  = Math.random() < 0.04 ? 1 : 0
 
@@ -99,11 +156,11 @@ const command: Command = {
     setCooldown(sender, 'lastWork')
 
     const leveled   = checkLevelUp(sender)
-    const lvlLine   = levelUpLine(leveled, jid)
-    const emberLine = embers > 0 ? `\n> +${embers} BrasEmbers (¡raro!)` : ''
+    const lvlLine   = levelUpLine(leveled, jid, lang)
+    const emberLine = embers > 0 ? tx(lang, T.brasas, { n: embers }) : ''
 
     await sock.sendMessage(jid, {
-      text: `> ${jobFn(earned)}${lvlLine}${emberLine}\n\n_Próximo trabajo en 10 min_`,
+      text: `> ${jobFn(earned)}${lvlLine}${emberLine}\n\n${tx(lang, T.proximo)}`,
     }, { quoted: msg })
   },
 }

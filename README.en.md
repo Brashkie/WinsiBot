@@ -9,7 +9,7 @@
 [![Rust](https://img.shields.io/badge/Rust-1.75%2B-CE422B?style=for-the-badge&logo=rust&logoColor=white)](https://rust-lang.org)
 
 [![License](https://img.shields.io/badge/License-GPL--3.0-blue?style=flat-square)](LICENSE)
-[![Version](https://img.shields.io/badge/Version-8.16.0-6C63FF?style=flat-square)](CHANGELOG.md)
+[![Version](https://img.shields.io/badge/Version-8.17.0-6C63FF?style=flat-square)](CHANGELOG.md)
 [![Platform](https://img.shields.io/badge/Platform-Windows%20%7C%20Linux%20%7C%20macOS%20%7C%20Android-lightgrey?style=flat-square)](https://github.com/Brashkie/WinsiBot)
 [![PRs Welcome](https://img.shields.io/badge/PRs-welcome-brightgreen?style=flat-square)](https://github.com/Brashkie/WinsiBot/pulls)
 
@@ -17,7 +17,7 @@
 
 > High-performance WhatsApp bot with a three-layer multi-language architecture.<br/>
 > No artificial group limit, built for thousands of messages per hour and multiple instances.<br/>
-> v8.16.0 — **More to play, less to run, all of it measured.** The Session API writes in batches and a group message goes from **~297 to ~66 µs**; the native kernels use every core and `#upscale` drops from **2376 to ~280 ms**, with resizing rewritten in Zig (**~850 → 19 ms**); what the bot does while nobody writes, nearly free. And **12 new commands**: a world boss shared by every group with elemental synergy, a daily dungeon, blackjack, poker, an expectiminimax CPU in the arena, forge, breeding and auctions, `#resumen`, polls, reminders, offline text-to-speech, "Killer in the chat" and an AI broken telephone. Plus an in-house storage engine measured against SQLite, and a major fix: **arena bets were creating money**.<br/>
+> v8.17.0 — **Speaks your language, 35 new commands, and lighter.** Spanish, English and Portuguese depending on each number's country; `#take`, sticker packs, each group's own welcome, health and companion care, `#actividad`, `#fantasmas`, `#sorteo` and more; from 31 dependencies to 14 and the core from 16 to 9 MB.<br/>
 
 <br/>
 
@@ -65,22 +65,22 @@
 | ⚙️ **Session + AI** | Rust / Axum | Atomic creds and snapshots, Bad MAC tracker, rate limiter, intent classification, personality and humour, reputation, style profiles, Ollama and cloud APIs, images |
 | 🧮 **Native kernels** | C + Zig | Anime4K and the JPEG codec, compiled with Zig into the Session API binary. The fastest one is used, measured |
 
-### What's new in v8.16.0
+### What's new in v8.17.0
 
-**More to play, less to run, all of it measured.** The full detail, with every measurement, is in the [CHANGELOG](CHANGELOG.md).
+**Speaks your language, 35 new commands, and lighter.** The full detail, with every measurement, is in the [CHANGELOG](CHANGELOG.md).
 
 | Area | Change |
 |------|--------|
-| **The Session API writes in batches** | Each group message was two SQLite transactions; now they're queued and written together once a second. On a 300,000-message database, **~297 to ~66 µs** per message; `/ai/observe` from 568 to **156 µs** of CPU |
-| **`#upscale` 8.5x faster** | The Anime4K kernels on every core (the Zig Sobel, **10.7 → 1.3 ms**), and resizing rewritten in Zig, **~850 → 19 ms** and bit-exact with the crate. End to end, **2376 → ~280 ms** |
-| **What the bot does while nobody writes** | Saving only serializes the users that were touched (16 ms of CPU every 30 s → almost nothing); 18,000 empty contacts out of memory (**7.3 → 1.0 MB**); the dashboard doesn't wake the process if nobody is watching; no duplicate watchdog ping |
-| **World boss, dungeon and RPG** | `#raid`: one boss for every group, with **elemental synergy** between the dragons of whoever hits it. `#mazmorra`: the same dungeon for everyone each day, balanced by measuring 3,000 runs. `#forjar` (finally a use for ⚔️ ✨ 🏆), `#pet criar` (breeding), `#pet companero` (grows with your activity) and `#subasta` (auctions) |
-| **Casino and arena** | `#bj` blackjack and `#poker` Casino Hold'em, with the bet refunded if the bot restarts mid-hand. `#arena cpu`: an opponent that thinks with **expectiminimax** |
-| **For the group** | `#resumen` ("what did I miss?"), native `#encuesta` polls, `#recordar` reminders (survive a restart), `#tts` text-to-speech **offline**, `#asesino` (Mafia-style, roles in private) and `#historia` (the AI broken telephone) |
-| **In-house storage engine** | `crates/cluster`: a dependency-free LSM tree, with 22 tests that cut writes midway. Against SQLite with the same RAM it wins writes (9–34x) and lookups of missing keys (19–24x) and loses ranges. **It doesn't replace anything yet**: there's nowhere in the bot it would show |
-| **Major fix: arena bets were creating money** | The winner got double and the loser lost one; the payment could also be dodged. Bets are now held on accept and refunded if the battle is cut short |
-| **Fix: data a crash could lose** | The `#comprar` portfolio and birthdays were written unprotected: a crash midway left the file broken and everything was lost. And the birthday greeting went out repeated after every reconnection |
-| **Cleanup** | Found with a script: 42 names repeated across files, compared one by one; what was identical, moved to a single module. 13 dead imports removed |
+| **Speaks your language** | Spanish, English and Portuguese: pick it with `#idioma` (`#language`), or the bot works it out from your number's country (+55 → Portuguese) or uses the group's. Notices, the menu, help, the descriptions of all 242 commands and the most used ones, with aliases like `#ajuda` or `#trabalhar`. A message that isn't a command pays nothing for this |
+| **For the group** | `#actividad` (who writes the most), `#fantasmas` (who doesn't, and removing them), `#paises`, `#nota` and `#reglas`, `#sorteo` (giveaways), `#cerrar`/`#abrir`, `#promote`, and each group's own welcome with `#setwelcome` and `#testwelcome` |
+| **To play** | `#ship`, `#parejas`, team match lineups (`#lista`, `#mapa`), `#slap`. Real health: the raid boss hits back and you heal with `#curar` or `#hospital`; and your companion fights better if you care for it (`#pet comida`, `agua`, `pasear`) |
+| **Stickers** | `#qc` (a message as a sticker), `#texto`, `#take` (your pack and author on someone else's sticker, without re-encoding it), `#setmeta`, `#toimg`, and named packs (`#newpack`, `#stickeradd`, `#getpack`) |
+| **Profile** | `#setdesc`, `#setgenre`, `#cumples` (the group's upcoming birthdays), `#getpic` |
+| **Lighter** | From **31 dependencies to 14**: what `openai`, `zod`, `moment-timezone`, `dotenv` and 13 others did is now done by Node 24 or a few lines of our own. The core starts in **~92 ms instead of 201** and takes **9 MB instead of 16**. Groups go to a binary log that only writes the one that changed |
+| **Kernels** | Anime4K's push kernels in vectorized Zig, the Sobel fused, and the JPEG Huffman stage on every core (**27 → 11 ms**). `#upscale` from ~275 to ~130 ms not counting the JPEG, bit-for-bit identical, also tested on ARM |
+| **Fixes** | Two copies of `sharp` crashed the process when `#tweet` and `#sticker` were used in the same session; command cooldowns could be dodged by switching aliases; the birthday greeting could go out twice |
+
+**To update:** `npm install`. On the first start, `groups.json` migrates itself to `data/groups.aof`.
 
 ---
 
@@ -98,7 +98,7 @@
 | Session Store | Rust + Axum + SQLite | Atomic creds, delivery tracking, outbox with dead-letter |
 | Heavy compute | C + Zig (`native` feature) | Anime4K kernels with SIMD and an in-house JPEG codec: Zig for what vectorizes, C for what decides bit by bit |
 | Crypto | `@brashkie/signalis-core` | Curve25519 / Ed25519 / HKDF / AES-GCM (Rust NAPI) |
-| Persistence — users | `strenor` (Rust NAPI) | `data/users.aof`, a delta log: only the user that changed gets written |
+| Persistence — users and groups | `strenor` (Rust NAPI) | `data/users.aof` and `data/groups.aof`, delta logs: only the user or group that changed gets written |
 | Persistence — rest | JSON under `data/` (`core/persistence.ts`) | groupConfigs, clans, inventory — rewritten only when they change |
 | Embedded KV | `strenor` (Rust NAPI) | Web panel sessions, with real TTL |
 | Web Panel | React + Vite + Tailwind + TanStack | Real-time dashboard — admin and self-service for sub-bots/groups |
@@ -201,7 +201,7 @@
 
 ```
 ╔════════════════════════════════════════════════╗
-║                WinsiBot v8.16.0                ║
+║                WinsiBot v8.17.0                ║
 ╠═════════════════════╦══════════════════════════╣
 ║      TypeScript     ║           Rust           ║
 ║    Node.js :4001    ║                          ║
@@ -452,6 +452,7 @@ npm run dev             # Node.js only, no build step — fast iteration / QR sc
 | `users:export` | Export the user table to a readable JSON |
 | `users:import` | Restore the user table from a JSON (with the bot stopped) |
 | `users:stats` | How many users there are and how big the log is |
+| `groups:export` / `groups:import` / `groups:stats` | The same for the group settings (`data/groups.aof`) |
 | `typecheck` | Type-check without compiling |
 | `lint` / `lint:fix` | Biome — lints `src/`/`scripts/` (check-only / auto-fix what's safe) |
 | `format` / `format:fix` | Biome — formats `src/`/`scripts/` (show diff only / write) |
@@ -461,7 +462,7 @@ npm run dev             # Node.js only, no build step — fast iteration / QR sc
 | `native:test` | Tests comparing the C and Zig kernels with the Rust ones, bit for bit |
 | `native:bench` | The Anime4K kernels in Rust, C and Zig, and PNG against both JPEGs, measured with Criterion |
 | `cluster:test` | Tests for the in-house storage engine, including the ones that cut writes midway |
-| `cluster:comparar` | The in-house engine against SQLite with the bot's workloads (see `CLUSTER_CACHE_MB` and `SQLITE_PRAGMAS` in `crates/cluster/examples/comparar.rs`) |
+| `cluster:compare` | The in-house engine against SQLite with the bot's workloads (see `CLUSTER_CACHE_MB` and `SQLITE_PRAGMAS` in `crates/cluster/examples/compare.rs`) |
 | `bench:api` | Starts the Session API in a temporary folder and measures the CPU Rust spends on each per-message endpoint |
 | `bench:hops` | What a trip from Node to the Session API costs —latency and Node CPU—, with the API running |
 | `mem:profile` | How much RAM each piece adds at startup —Baileys, the core, the commands— and what lazy loading saves. `-- --deps` measures each dependency on its own |
@@ -487,19 +488,19 @@ The bot has **200+ commands** across **16 categories**.
 | Category | Notable commands | Description |
 |----------|-----------------|-------------|
 | 🤖 AI | `!gpt` `!claude` `!imagine` `!translate` | Multi-model chat, images, translations |
-| 💰 RPG | `!work` `!daily` `!perfil` `!rw` `!clan` `!prestige` `!harem` `!forjar` `!subasta` `!leveltop` | Economy, gacha, levels (daily streak), clans, prestige, forge, auctions |
+| 💰 RPG | `!work` `!daily` `!perfil` `!setdesc` `!setgenre` `!salud` `!hospital` `!rw` `!clan` `!prestige` `!harem` `!forjar` `!subasta` `!leveltop` | Economy, health, gacha, levels (daily streak), clans, prestige, forge, auctions |
 | 🎮 Games | `!arena` `!raid` `!mazmorra` `!bj` `!poker` `!quiz` `!adivinar` `!pet` | PvP Arena (and vs the CPU), world boss, daily dungeon, blackjack, Casino Hold'em, Coding Quiz, Draw & Guess, dragons |
 | 🎁 Social | `!regalo` | Gift system, mailbox, wishlist, trades |
-| 🛡️ Admin | `!ban` `!kick` `!antilink` `!warn` | Group moderation |
+| 🛡️ Admin | `!ban` `!kick` `!promote` `!cerrar` `!fantasmas` `!antilink` `!warn` `!setwelcome` `!testwelcome` | Group moderation, promote, close the group, inactive members, custom welcome |
 | 👑 Owner | `!exec` `!broadcast` `!premium` `!boost` | Full bot control |
 | ⬇️ Downloads | `!yt` `!ytmp4` `!tiktok` `!ttsearch` `!ig` `!spotify` `!apk` | Media downloaders + carousel search |
-| 🎨 Stickers | `!sticker` `!toimg` `!emojimix` `!stickerpack` | Create, convert, and pack stickers |
-| 🎮 Fun | `!asesino` `!historia` `!meme` `!sega` `!giphy` `!top` | Killer in the chat (Mafia-style), AI broken telephone, entertainment |
-| 💞 Roleplay | `!hug` `!kiss` `!pat` `!kill` `!punch` `!laugh` `!sad` `!sleep` | Interactive anime GIFs |
+| 🎨 Stickers | `!sticker` `!take` `!setmeta` `!qc` `!texto` `!toimg` `!newpack` `!getpack` `!stickerpack` | Create stickers, your pack and author, messages and text as stickers, back to image, your packs |
+| 🎮 Fun | `!asesino` `!historia` `!ship` `!parejas` `!lista` `!meme` `!sega` `!giphy` `!top` | Killer in the chat (Mafia-style), AI broken telephone, compatibility, match lineups, entertainment |
+| 💞 Roleplay | `!hug` `!kiss` `!pat` `!slap` `!kill` `!punch` `!laugh` `!sad` `!sleep` | Interactive anime GIFs |
 | 🎵 Music | `!play` `!lyrics` `!spotify` | Audio and lyrics |
 | 🌐 Media | `!anime` `!removebg` `!wimage` | Anime images, background removal, characters |
-| 🔧 Util | `!resumen` `!encuesta` `!recordar` `!tts` `!clima` `!imagen` | What did I miss?, polls, reminders, offline text-to-speech, weather, images |
-| ℹ️ Info | `!ping` `!creator` `!infobot` `!menu` | Bot information |
+| 🔧 Util | `!getpic` `!suggest` `!resumen` `!encuesta` `!recordar` `!sorteo` `!nota` `!actividad` `!paises` `!tts` `!clima` `!imagen` | What did I miss?, polls, reminders, giveaways, group notes, activity, countries, offline text-to-speech, weather, images |
+| ℹ️ Info | `!ping` `!creator` `!infobot` `!menu` `!idioma` | Bot information, language (es/en/pt) |
 | 🤝 Jadibot | `!jadibot` `!stopbot` | Linked sub-bots |
 | 🔞 NSFW | `!porngif` `!rule34` `!sexyimg` `!stickerporn` | Groups with NSFW enabled only |
 
@@ -673,6 +674,7 @@ curl -H "x-api-key: YOUR_KEY" http://127.0.0.1:3001/messages/pending
 | `GET` | `/ai/context/:sender` | Recent history for building the prompt |
 | `GET` · `DELETE` | `/ai/profile/:jid` | A user's style profile (GET) · wipe everything (DELETE) |
 | `GET` | `/ai/group-style/:gjid` | A group's style profile |
+| `GET` | `/ai/group/activity/:gjid` | How many messages each member sent in `days` days, and since when there's a record: used by `#actividad` and `#fantasmas` |
 | `GET` | `/ai/group/recent/:gjid` | A group's latest messages (`limit`, `hours`), who spoke and about what: used by `#resumen` |
 | `POST` | `/ai/story` | Broken telephone: a twist from ONE fragment (`modo: seguir`) or a title (`modo: titulo`); `text: null` if no AI answered |
 | `POST` | `/ai/summarize` | Summarize a conversation with AI, without personality; `text: null` if no AI answered |
@@ -744,7 +746,7 @@ Bot starts → verifyAndReport(authDir)
 ```
 WinsiBot/
 ├── src/                              # TypeScript — main bot
-│   ├── config.ts                     # Environment variables + Zod validation
+│   ├── config.ts                     # Environment variables, validated by hand
 │   ├── index.ts                      # Entry point
 │   ├── supervisor.ts                 # Restarts the bot if it crashes or hangs (external watchdog)
 │   ├── types/
@@ -795,13 +797,13 @@ WinsiBot/
 │   ├── plugins/
 │   │   ├── commands/                 # 200+ commands organized by category
 │   │   ├── middlewares/              # Auth, anti-spam, cooldown, rate limit
-│   │   ├── scheduler/                # Scheduled jobs (node-cron)
+│   │   ├── scheduler/                # Scheduled jobs (own cron parser)
 │   │   └── webhooks/                 # HTTP receiver
 │   └── dashboard/                    # Web panel backend (Hono + WebSocket)
 │       ├── server.ts                 # API + WS + web/dist static files
 │       ├── auth.ts                   # WhatsApp-linked login (#login <code>)
 │       └── routes/                   # /api/subbots, /api/groups, /api/admin
-├── crates/session-api/               # Session API v5.9.0 (Rust) — workspace in the root Cargo.toml
+├── crates/session-api/               # Session API v5.10.0 (Rust) — workspace in the root Cargo.toml
 │   ├── native/                       # C and Zig kernels, compiled with Zig into the binary
 │   │   ├── lib.zig                   # Root: pulls in the other .zig files
 │   │   ├── anime4k.c                 # push_color and push_gradient (1.35x over Rust)
@@ -954,7 +956,7 @@ Yes. Delivery tracking also works with Business. However, features like catalogs
 <details>
 <summary><b>Is user data lost on restart?</b></summary>
 
-No. `core/persistence.ts` stores everything under `data/`: users in `users.aof` (a `strenor` append-only log where only the user that changed gets written) and `groupConfigs`/clans/inventory as JSON. It loads automatically at startup. To view or back up the user table in readable form: `npm run users:export`.
+No. `core/persistence.ts` stores everything under `data/`: users in `users.aof` and groups in `groups.aof` (`strenor` append-only logs where only what changed gets written), and clans/inventory as JSON. It loads automatically at startup. To view or back up the user table in readable form: `npm run users:export`.
 
 </details>
 

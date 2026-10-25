@@ -16,8 +16,8 @@ import { join } from 'path'
 import { randomUUID } from 'crypto'
 import axios from 'axios'
 import { decode } from '@msgpack/msgpack'
-import { translate } from '@vitalets/google-translate-api'
-import { ffmpegPath } from './ffmpeg.js'
+import { translate } from '@lib/translate.js'
+import { ffmpegPath, aMp4 } from './ffmpeg.js'
 import { createCache, registerCache } from './cacheManager.js'
 import { USER_AGENT } from '@config'
 import type { DragonCatalog, DragonDef } from '../types/index.js'
@@ -58,9 +58,9 @@ export function pickRandomDragon(dragons: DragonDef[]): DragonDef {
 }
 
 // ─── Nivel, experiencia y etapas ──────────────────────────────────────────────
-// Viven en dragonNivel.ts, lógica pura sin red ni ffmpeg: la usan también la
-// experiencia por actividad (companero.ts) y sus tests.
-export { expForLevel, STAGE3_LEVEL, stageForLevel } from './dragonNivel.js'
+// Viven en dragonLevel.ts, lógica pura sin red ni ffmpeg: la usan también la
+// experiencia por actividad (companion.ts) y sus tests.
+export { expForLevel, STAGE3_LEVEL, stageForLevel } from './dragonLevel.js'
 
 export function imageForStage(dragon: DragonDef, stage: 0 | 1 | 3): string | undefined {
   return dragon.image.find(i => i.stage === stage)?.url
@@ -109,12 +109,15 @@ export function feedCostOro(level: number): number {
 // Google cada vez que alguien mira el mismo dragón.
 const descCache = registerCache('dragonDesc', createCache<string>({ ttl: 24 * 60 * 60_000 }))
 
-export async function translatedDesc(dragon: DragonDef): Promise<string> {
-  const key = String(dragon.id)
+export async function translatedDesc(dragon: DragonDef, lang: 'es' | 'en' | 'pt' = 'es'): Promise<string> {
+  // El catálogo de Dragon City viene en inglés: en inglés no hay nada que
+  // traducir, ni viaje de red que pagar.
+  if (lang === 'en') return dragon.desp
+  const key = lang === 'es' ? String(dragon.id) : `${dragon.id}:${lang}`
   const cached = descCache.get(key)
   if (cached) return cached
   try {
-    const { text } = await translate(dragon.desp, { to: 'es' })
+    const { text } = await translate(dragon.desp, { to: lang })
     descCache.set(key, text)
     return text
   } catch {
@@ -168,20 +171,5 @@ export async function generateEggShakeVideo(imageBuffer: Buffer): Promise<Buffer
 // H.264/MP4 antes de mandarlos, mismo binario de ffmpeg que ya usa el resto
 // del bot (#sticker, generateEggShakeVideo).
 export async function transcodeToMp4(webmBuffer: Buffer): Promise<Buffer> {
-  const ffmpeg  = getFfmpegPath()
-  const tmpDir  = await carpetaTmp()
-  const inFile  = join(tmpDir, `${randomUUID()}.webm`)
-  const outFile = join(tmpDir, `${randomUUID()}.mp4`)
-
-  try {
-    await writeFile(inFile, webmBuffer)
-    await execAsync(
-      `"${ffmpeg}" -y -i "${inFile}" -c:v libx264 -pix_fmt yuv420p -movflags +faststart -an "${outFile}"`,
-      { timeout: 20_000 },
-    )
-    return await readFile(outFile)
-  } finally {
-    if (existsSync(inFile))  await unlink(inFile).catch(() => {})
-    if (existsSync(outFile)) await unlink(outFile).catch(() => {})
-  }
+  return aMp4(webmBuffer, 'webm')
 }

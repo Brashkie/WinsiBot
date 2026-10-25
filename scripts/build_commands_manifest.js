@@ -12,13 +12,14 @@
 // menús, la ayuda y los middlewares leen campos del comando, y una lista fija
 // se quedaría corta el día que un comando agregue uno nuevo.
 
-import fg from 'fast-glob'
-import { writeFileSync } from 'fs'
+import { writeFileSync, readdirSync } from 'fs'
 import { join, relative } from 'path'
 import { pathToFileURL } from 'url'
 
 const BASE = join(process.cwd(), 'dist', 'plugins', 'commands')
-const files = await fg('**/*.js', { cwd: BASE, ignore: ['index.js', 'manifest.json'], absolute: true })
+const files = readdirSync(BASE, { recursive: true })
+  .filter(f => f.endsWith('.js') && f !== 'index.js')
+  .map(f => join(BASE, f))
 
 const datos = (cmd) => {
   const out = {}

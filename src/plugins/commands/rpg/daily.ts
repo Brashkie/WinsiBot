@@ -7,6 +7,16 @@ import {
 import { randomNumber as rand } from '@lib/utils.js'
 import { sendCritical } from '@lib/media_sender.js'
 import { LevelingManager } from '@lib/leveling.js'
+import { tx } from '@lib/i18n.js'
+
+const T = {
+  ya:      { es: '> ⏳ Ya reclamaste hoy. Se reinicia en *{t}* (medianoche).', en: '> ⏳ You already claimed today. It resets in *{t}* (midnight).', pt: '> ⏳ Você já pegou hoje. Reinicia em *{t}* (meia-noite).' },
+  racha:   { es: '\n> 💔 Perdiste tu racha anterior — empezando de nuevo', en: '\n> 💔 You lost your previous streak — starting over', pt: '\n> 💔 Você perdeu sua sequência — começando de novo' },
+  brasas:  { es: '\n> +{n} BrasEmbers (¡raro!)', en: '\n> +{n} BrasEmbers (rare!)', pt: '\n> +{n} BrasEmbers (raro!)' },
+  titulo:  { es: '「🎴」Reclamaste tu recompensa diaria — *Día {d}* 🔥', en: '「🎴」You claimed your daily reward — *Day {d}* 🔥', pt: '「🎴」Você pegou sua recompensa diária — *Dia {d}* 🔥' },
+  bono:    { es: '> Bono de racha: ×{x}', en: '> Streak bonus: ×{x}', pt: '> Bônus de sequência: ×{x}' },
+  manana:  { es: '_Día {d} → ×{x} · se reinicia a medianoche_', en: '_Day {d} → ×{x} · resets at midnight_', pt: '_Dia {d} → ×{x} · reinicia à meia-noite_' },
+}
 
 const command: Command = {
   name: 'daily',
@@ -15,11 +25,11 @@ const command: Command = {
   category: 'rpg',
   cooldown: 0,
 
-  async execute({ sock, jid, msg, sender, pushName }) {
+  async execute({ sock, jid, msg, sender, pushName, lang }) {
     if (isOnCooldownDaily(sender, 'lastClaim')) {
       const left = getDailyCooldownLeft()
       await sock.sendMessage(jid, {
-        text: `> ⏳ Ya reclamaste hoy. Se reinicia en *${fmtCooldown(left)}* (medianoche).`,
+        text: tx(lang, T.ya, { t: fmtCooldown(left) }),
       }, { quoted: msg })
       return
     }
@@ -54,9 +64,9 @@ const command: Command = {
     setCooldown(sender, 'lastClaim')
 
     const leveled  = checkLevelUp(sender)
-    const lvlLine  = levelUpLine(leveled, jid)
-    const brokeLine = broken ? '\n> 💔 Perdiste tu racha anterior — empezando de nuevo' : ''
-    const emberLine = embers > 0 ? `\n> +${embers} BrasEmbers (¡raro!)` : ''
+    const lvlLine  = levelUpLine(leveled, jid, lang)
+    const brokeLine = broken ? tx(lang, T.racha) : ''
+    const emberLine = embers > 0 ? tx(lang, T.brasas, { n: embers }) : ''
 
     // Vista previa del bono de mañana — incentiva volver al día siguiente
     const nextMult = LevelingManager.getXpMultiplier(
@@ -69,13 +79,13 @@ const command: Command = {
     // no puede volver a hacerlo hasta mañana — el outbox lo reenvía.
     await sendCritical(sock, jid, {
       text: [
-        `「🎴」Reclamaste tu recompensa diaria — *Día ${meta.streak.days}* 🔥${brokeLine}`,
+        `${tx(lang, T.titulo, { d: meta.streak.days })}${brokeLine}`,
         ``,
         `> +¥${money.toLocaleString()} BrasCoins  ·  +${exp} XP`,
         `> +${diamonds} 💎  ·  +${pc} 🧪${lvlLine}${emberLine}`,
-        `> Bono de racha: ×${mult.toFixed(2)}`,
+        tx(lang, T.bono, { x: mult.toFixed(2) }),
         ``,
-        `_Día ${meta.streak.days + 1} → ×${nextMult.toFixed(2)} · se reinicia a medianoche_`,
+        tx(lang, T.manana, { d: meta.streak.days + 1, x: nextMult.toFixed(2) }),
       ].join('\n'),
     }, { quoted: msg })
   },

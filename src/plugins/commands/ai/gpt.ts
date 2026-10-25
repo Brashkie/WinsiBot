@@ -1,5 +1,5 @@
 import type { Command } from '../../../types/index.js'
-import OpenAI from 'openai'
+import { chat, type Mensaje } from '@lib/openai.js'
 import { config } from '@config'
 import { createCache, registerCache } from '@lib/cacheManager.js'
 
@@ -10,11 +10,6 @@ const historyCache = registerCache('gptHistory', createCache<Message[]>({ ttl: 3
 const MAX_REPLY    = 4000   // límite práctico para WhatsApp
 const MAX_PROMPT   = 2000   // evitar tokens innecesarios
 
-let openai: OpenAI | null = null
-function getOpenAI(): OpenAI {
-  if (!openai) openai = new OpenAI({ apiKey: config.openaiKey })
-  return openai
-}
 
 type Message = { role: 'user' | 'assistant' | 'system'; content: string }
 
@@ -65,14 +60,13 @@ const command: Command = {
     await sock.sendPresenceUpdate('composing', jid)
 
     try {
-      const completion = await getOpenAI().chat.completions.create({
+      const respuesta = await chat(history as Mensaje[], {
         model:       'gpt-4o-mini',
-        messages:    history,
         max_tokens:  1024,
         temperature: 0.8,
       })
 
-      let reply = completion.choices[0]?.message?.content?.trim() ?? '❌ Sin respuesta.'
+      let reply = respuesta?.trim() || '❌ Sin respuesta.'
       if (reply.length > MAX_REPLY) reply = reply.slice(0, MAX_REPLY) + '…'
 
       history.push({ role: 'assistant', content: reply })

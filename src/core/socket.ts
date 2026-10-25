@@ -11,7 +11,9 @@ import { alreadyProcessed } from '@core/dedup.js'
 import { wrapEgress } from '@core/egress.js'
 import { getGroupMetadata } from '@core/groupCache.js'
 import { winsiStore } from '@core/store.js'
-import type { Boom } from '@hapi/boom'
+// El error de desconexión de Baileys es un Boom; solo se lee esto de él, así
+// que alcanza con la forma y no hace falta depender de @hapi/boom.
+type Boom = Error & { output?: { statusCode?: number }; data?: unknown }
 import { verifyAndReport } from '@lib/authVerifier.js'
 import makeWASocket, {
   DisconnectReason,
@@ -22,7 +24,7 @@ import makeWASocket, {
 } from '@whiskeysockets/baileys'
 import { useMultiFileAuthStateCBOR } from '@lib/authStateCbor.js'
 import { color, components, themes } from 'ansimax'
-import EventEmitter3 from 'eventemitter3'
+import { EventEmitter } from 'node:events'
 import pino from 'pino'
 import { logger } from './logger.js'
 
@@ -56,7 +58,7 @@ const GLOBAL_BAD_MAC_THRESHOLD = 8
 const GLOBAL_BAD_MAC_WINDOW_MS = 60_000
 const GLOBAL_BAD_MAC_COOLDOWN = 30_000 // un clear global es más disruptivo que uno por grupo
 
-export class WinsiSocket extends EventEmitter3<WinsiEvents> {
+export class WinsiSocket extends EventEmitter<WinsiEvents> {
   constructor() {
     super()
     this._startMemoryTrim()
@@ -443,8 +445,10 @@ export class WinsiSocket extends EventEmitter3<WinsiEvents> {
 
     this.sock.ev.on('connection.update', async ({ connection, lastDisconnect, qr, isNewLogin, receivedPendingNotifications }) => {
       if (qr) {
-        const qrcode = await import('qrcode-terminal')
-        qrcode.default.generate(qr, { small: true })
+        // `qrcode` ya está por los subbots y sabe dibujar en la terminal: no
+        // hace falta qrcode-terminal solo para esto.
+        const qrcode = (await import('qrcode')).default
+        console.log(await qrcode.toString(qr, { type: 'terminal', small: true }))
         // Por qué pide QR, que es lo primero que hay que saber cuando pasa
         // sin que nadie haya cerrado la sesión. Con `registered` en true las
         // credenciales existían y algo las invalidó; sin `me`, se crearon

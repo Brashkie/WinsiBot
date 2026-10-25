@@ -10,7 +10,7 @@ name = "cluster"
 
 # Sin dependencias a propósito: el motor es WAL + memtable + SSTables + Bloom +
 # CRC32, todo en std. SQLite está solo en dev-dependencies, para el benchmark
-# que decide si el motor sirve para algo (examples/comparar.rs) — la misma
+# que decide si el motor sirve para algo (examples/compare.rs) — la misma
 # versión que ya usa la Session API, así que no baja nada nuevo.
 [dependencies]
 

@@ -1,8 +1,8 @@
 //! anime4k.rs — los kernels de Anime4K, en tres lenguajes.
 //!
 //! El algoritmo lo explica el comentario de abajo. Lo que este módulo agrega es
-//! que cada uno de sus tres kernels por píxel existe en **Rust**, en **C** y,
-//! el Sobel, en **Zig** con vectores SIMD, y que se usa el que gane midiendo.
+//! que cada uno de sus tres kernels por píxel existe en **Rust**, en **C** y en
+//! **Zig** con vectores SIMD, y que se usa el que gane midiendo.
 //!
 //! - La versión en Rust es la **especificación**: siempre está, y los tests
 //!   exigen que C y Zig den lo mismo **bit a bit**.
@@ -318,6 +318,35 @@ mod ffi {
             y0: u32,
             y1: u32,
         );
+        pub fn winsi_a4k_push_color_zig(
+            src: *const u8,
+            dst: *mut u8,
+            w: u32,
+            h: u32,
+            f: f32,
+            y0: u32,
+            y1: u32,
+        );
+        pub fn winsi_a4k_push_gradient_zig(
+            src: *const u8,
+            dst: *mut u8,
+            w: u32,
+            h: u32,
+            f: f32,
+            y0: u32,
+            y1: u32,
+        );
+        pub fn winsi_a4k_gradient_push_zig(
+            src: *const u8,
+            dst: *mut u8,
+            w: u32,
+            h: u32,
+            f: f32,
+            y0: u32,
+            y1: u32,
+            anillo: *mut u8,
+            luma: u32,
+        );
     }
 }
 
@@ -420,6 +449,69 @@ pub fn push_gradient_c(img: &RgbaImage, fuerza: f32) -> RgbaImage {
     salida
 }
 
+/// `push_color` en Zig, de a 8 píxeles y sin saltos (native/anime4k_push.zig), en franjas.
+#[cfg(feature = "native")]
+pub fn push_color_zig(img: &RgbaImage, fuerza: f32) -> RgbaImage {
+    let (w, h) = (img.width(), img.height());
+    let mut salida = RgbaImage::new(w, h);
+    let (src, dst) = (img.as_ptr() as usize, salida.as_mut_ptr() as usize);
+    // SAFETY: como en push_color_c.
+    en_franjas(h, |y0, y1| unsafe {
+        ffi::winsi_a4k_push_color_zig(src as *const u8, dst as *mut u8, w, h, fuerza, y0, y1)
+    });
+    salida
+}
+
+/// `push_gradient` en Zig, de a 8 píxeles y sin saltos, en franjas.
+#[cfg(feature = "native")]
+pub fn push_gradient_zig(img: &RgbaImage, fuerza: f32) -> RgbaImage {
+    let (w, h) = (img.width(), img.height());
+    let mut salida = RgbaImage::new(w, h);
+    let (src, dst) = (img.as_ptr() as usize, salida.as_mut_ptr() as usize);
+    // SAFETY: como en push_color_c.
+    en_franjas(h, |y0, y1| unsafe {
+        ffi::winsi_a4k_push_gradient_zig(src as *const u8, dst as *mut u8, w, h, fuerza, y0, y1)
+    });
+    salida
+}
+
+/// El Sobel y `push_gradient` juntos, en Zig: lo mismo que
+/// `push_gradient_zig(&gradiente_zig(img))` bit a bit, sin la imagen del
+/// gradiente en el medio. Cada hilo calcula el gradiente en un anillo de tres
+/// filas (ver winsi_a4k_gradient_push_zig).
+#[cfg(feature = "native")]
+pub fn gradiente_y_push_zig(img: &RgbaImage, fuerza: f32) -> RgbaImage {
+    gradiente_y_push_zig_con(img, fuerza, false)
+}
+
+/// Como [`gradiente_y_push_zig`]; con `luma`, el alfa de la salida es su
+/// luminancia, lo que pide la pasada siguiente (ver [`gradiente_y_push_y_luma`]).
+#[cfg(feature = "native")]
+pub fn gradiente_y_push_zig_con(img: &RgbaImage, fuerza: f32, luma: bool) -> RgbaImage {
+    let (w, h) = (img.width(), img.height());
+    let mut salida = RgbaImage::new(w, h);
+    let (src, dst) = (img.as_ptr() as usize, salida.as_mut_ptr() as usize);
+    en_franjas(h, |y0, y1| {
+        let mut anillo = vec![0u8; w as usize * 4 * 3];
+        // SAFETY: como en push_color_c; el anillo es de este hilo y mide las
+        // tres filas que pide el kernel.
+        unsafe {
+            ffi::winsi_a4k_gradient_push_zig(
+                src as *const u8,
+                dst as *mut u8,
+                w,
+                h,
+                fuerza,
+                y0,
+                y1,
+                anillo.as_mut_ptr(),
+                u32::from(luma),
+            )
+        }
+    });
+    salida
+}
+
 /// Corre `f` sobre trozos de `datos` de filas enteras (`ancho_fila` bytes),
 /// repartidos en `hilos()` hilos. Rust seguro: cada hilo recibe su propio
 /// `&mut`, y `chunks_mut` garantiza que no se solapan.
@@ -483,8 +575,7 @@ pub enum Backend {
 ///
 /// Sin la feature `native` es Rust en los tres. Con ella, lo que ganó en
 /// `benches/anime4k.rs` (ver el comentario de [`MEDIDO`]). `WINSI_A4K` fuerza
-/// uno para los tres, para medir de punta a punta; si el forzado no tiene ese
-/// kernel —Zig solo tiene el gradiente— ese kernel cae a Rust.
+/// uno para los tres, para medir de punta a punta: `rust`, `c` o `zig`.
 pub fn elegido() -> (Backend, Backend, Backend) {
     use std::sync::OnceLock;
     static E: OnceLock<(Backend, Backend, Backend)> = OnceLock::new();
@@ -495,26 +586,30 @@ pub fn elegido() -> (Backend, Backend, Backend) {
         match std::env::var("WINSI_A4K").ok().as_deref() {
             Some("rust") => (Backend::Rust, Backend::Rust, Backend::Rust),
             Some("c") => (Backend::C, Backend::C, Backend::C),
-            Some("zig") => (Backend::Rust, Backend::Zig, Backend::Rust),
+            Some("zig") => (Backend::Zig, Backend::Zig, Backend::Zig),
             _ => MEDIDO,
         }
     })
 }
 
 /// Lo que ganó midiendo, con `benches/anime4k.rs` sobre 1024x768 (mediana de
-/// Criterion, x86-64 básico, sin AVX):
+/// Criterion, x86-64 básico, sin AVX), en UN hilo —para comparar el kernel y
+/// no el reparto—; entre paréntesis, con 8:
 ///
-/// | kernel          | Rust     | C        | Zig      |
-/// |-----------------|---------:|---------:|---------:|
-/// | `push_color`    | 26,7 ms  | 19,9 ms  | —        |
-/// | `gradiente`     | 10,7 ms  |  9,5 ms  |  2,9 ms  |
-/// | `push_gradient` | 19,0 ms  | 13,9 ms  | —        |
+/// | kernel          | Rust     | C                 | Zig                |
+/// |-----------------|---------:|------------------:|-------------------:|
+/// | `push_color`    | 27,2 ms  | 20,0 ms (5,1)     |  9,8 ms (2,7)      |
+/// | `gradiente`     | 11,2 ms  | 10,0 ms (2,8)     |  3,6 ms (1,7)      |
+/// | `push_gradient` | 19,8 ms  | 14,1 ms (3,8)     |  9,5 ms (2,7)      |
 ///
-/// Zig gana el Sobel por 3,7x: es el único kernel sin decisiones por píxel, y
-/// hace 8 píxeles por instrucción. C gana los otros dos por ~1,35x recorriendo
-/// el búfer crudo. Se actualiza con cada medición, no a ojo.
+/// Hasta la 8.16.0, C ganaba los dos `push`: Zig solo tenía el Sobel, el único
+/// kernel sin decisiones por píxel. En la 8.17.0 los `push` también se hacen
+/// de a 8 píxeles en Zig, con las ocho direcciones como máscaras en lugar de
+/// una cadena de `if` (native/anime4k_push.zig): 2,05x y 1,49x sobre C. Las
+/// versiones en C se quedan: son la otra implementación medida, y se eligen con
+/// `WINSI_A4K=c`. Se actualiza con cada medición, no a ojo.
 const MEDIDO: (Backend, Backend, Backend) = if cfg!(feature = "native") {
-    (Backend::C, Backend::Zig, Backend::C)
+    (Backend::Zig, Backend::Zig, Backend::Zig)
 } else {
     (Backend::Rust, Backend::Rust, Backend::Rust)
 };
@@ -523,6 +618,8 @@ pub fn push_color(img: &RgbaImage, fuerza: f32) -> RgbaImage {
     match elegido().0 {
         #[cfg(feature = "native")]
         Backend::C => push_color_c(img, fuerza),
+        #[cfg(feature = "native")]
+        Backend::Zig => push_color_zig(img, fuerza),
         _ => push_color_rust(img, fuerza),
     }
 }
@@ -537,10 +634,42 @@ pub fn gradiente(img: &RgbaImage) -> RgbaImage {
     }
 }
 
+/// `push_gradient(&gradiente(img), fuerza)`, que es como se usan siempre. Con
+/// los dos en Zig van fusionados: una imagen intermedia de menos y la mitad
+/// del tráfico de memoria de esos dos pasos.
+pub fn gradiente_y_push(img: &RgbaImage, fuerza: f32) -> RgbaImage {
+    #[cfg(feature = "native")]
+    {
+        let (_, g, p) = elegido();
+        if g == Backend::Zig && p == Backend::Zig {
+            return gradiente_y_push_zig(img, fuerza);
+        }
+    }
+    push_gradient(&gradiente(img), fuerza)
+}
+
+/// [`gradiente_y_push`] y después [`luminancia_en_alfa`]: el final de una pasada
+/// de Anime4K y el comienzo de la siguiente. Con los kernels en Zig, la
+/// luminancia sale del mismo kernel, sin otro recorrido de la imagen.
+pub fn gradiente_y_push_y_luma(img: &RgbaImage, fuerza: f32) -> RgbaImage {
+    #[cfg(feature = "native")]
+    {
+        let (_, g, p) = elegido();
+        if g == Backend::Zig && p == Backend::Zig {
+            return gradiente_y_push_zig_con(img, fuerza, true);
+        }
+    }
+    let mut salida = push_gradient(&gradiente(img), fuerza);
+    luminancia_en_alfa(&mut salida);
+    salida
+}
+
 pub fn push_gradient(img: &RgbaImage, fuerza: f32) -> RgbaImage {
     match elegido().2 {
         #[cfg(feature = "native")]
         Backend::C => push_gradient_c(img, fuerza),
+        #[cfg(feature = "native")]
+        Backend::Zig => push_gradient_zig(img, fuerza),
         _ => push_gradient_rust(img, fuerza),
     }
 }
@@ -620,6 +749,46 @@ mod tests {
                 gradiente_rust(&img),
                 "gradiente {w}x{h}"
             );
+        }
+    }
+
+    #[cfg(feature = "native")]
+    #[test]
+    fn los_push_en_zig_dan_lo_mismo_que_rust_bit_a_bit() {
+        // Anchos alrededor de los múltiplos de 8 (tanda vectorial, cola y
+        // borde), alturas chicas (filas de borde) y varias fuerzas. Y cada
+        // imagen también pasada por el Sobel, que es lo que push_gradient
+        // recibe de verdad: un alfa con otra distribución.
+        let mut casos = TAMANOS.to_vec();
+        casos.extend([(9, 4), (10, 4), (11, 5), (16, 3), (17, 4), (18, 5), (25, 6), (33, 33), (130, 70)]);
+        for (i, &(w, h)) in casos.iter().enumerate() {
+            for (j, &f) in [A4K_FUERZA_COLOR, A4K_FUERZA_GRADIENTE, 0.0, 1.0, 0.37].iter().enumerate() {
+                let img = imagen(w, h, 1000 + (i * 10 + j) as u64);
+                assert_eq!(push_color_zig(&img, f), push_color_rust(&img, f), "push_color {w}x{h} f={f}");
+                let sobel = gradiente_rust(&img);
+                assert_eq!(
+                    push_gradient_zig(&sobel, f),
+                    push_gradient_rust(&sobel, f),
+                    "push_gradient {w}x{h} f={f}"
+                );
+                // Y la cadena entera de una pasada, con la salida de un kernel como entrada del siguiente.
+                let pc = push_color_rust(&img, f);
+                assert_eq!(push_color_zig(&pc, f), push_color_rust(&pc, f), "push_color encadenado {w}x{h}");
+                // El Sobel fusionado con push_gradient, contra los dos de referencia por separado.
+                assert_eq!(
+                    gradiente_y_push_zig(&pc, f),
+                    push_gradient_rust(&gradiente_rust(&pc), f),
+                    "gradiente+push_gradient fusionados {w}x{h} f={f}"
+                );
+                // Y con la luminancia de la pasada siguiente escrita en el alfa.
+                let mut referencia = push_gradient_rust(&gradiente_rust(&pc), f);
+                luminancia_en_alfa(&mut referencia);
+                assert_eq!(
+                    gradiente_y_push_zig_con(&pc, f, true),
+                    referencia,
+                    "gradiente+push_gradient+luminancia fusionados {w}x{h} f={f}"
+                );
+            }
         }
     }
 

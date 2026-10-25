@@ -1,21 +1,41 @@
 import type { Command } from '../../../types/index.js'
+import { saludDe } from '@lib/health.js'
 import { getUserData, getUserClan, expForLevel, userData } from '@core/events.js'
 import { getUserInventory } from './rollwaifu.js'
 import { safeSend } from '@lib/media_sender.js'
+import { tx, type Idioma } from '@lib/i18n.js'
 
 const bar = (cur: number, max: number, len = 10) => {
   const filled = Math.min(len, Math.floor((cur / max) * len))
   return `${'▰'.repeat(filled)}${'▱'.repeat(len - filled)}`
 }
 
-const DAYS = ['domingo', 'lunes', 'martes', 'miércoles', 'jueves', 'viernes', 'sábado']
-const MONTHS = [
-  'enero', 'febrero', 'marzo', 'abril', 'mayo', 'junio',
-  'julio', 'agosto', 'septiembre', 'octubre', 'noviembre', 'diciembre',
-]
+const LOCALE: Record<Idioma, string> = { es: 'es-PE', en: 'en-US', pt: 'pt-BR' }
 
-// "DD/MM" guardado por !birthday → "sábado, 10 de enero" (próxima ocurrencia)
-function formatBirthday(birth: string): string | null {
+const T = {
+  titulo:   { es: '「✦」*Perfil* ↗ *{n}* ↙', en: '「✦」*Profile* ↗ *{n}* ↙', pt: '「✦」*Perfil* ↗ *{n}* ↙' },
+  cumple:   { es: '🎂 Cumpleaños » *{v}*', en: '🎂 Birthday » *{v}*', pt: '🎂 Aniversário » *{v}*' },
+  genero:   { es: '⚧ Género » *{v}*', en: '⚧ Gender » *{v}*', pt: '⚧ Gênero » *{v}*' },
+  hombre:   { es: 'Hombre', en: 'Man', pt: 'Homem' },
+  mujer:    { es: 'Mujer', en: 'Woman', pt: 'Mulher' },
+  otro:     { es: 'Otro', en: 'Other', pt: 'Outro' },
+  casado:   { es: '♡ Casado con » @{v}', en: '♡ Married to » @{v}', pt: '♡ Casado com » @{v}' },
+  exp:      { es: '☆ Experiencia » *{v}*', en: '☆ Experience » *{v}*', pt: '☆ Experiência » *{v}*' },
+  nivel:    { es: '◈ Nivel » *{v}*  ({rol})', en: '◈ Level » *{v}*  ({rol})', pt: '◈ Nível » *{v}*  ({rol})' },
+  progreso: { es: '➔ Progreso » {a} ⇒ {b}  ({pct}%)', en: '➔ Progress » {a} ⇒ {b}  ({pct}%)', pt: '➔ Progresso » {a} ⇒ {b}  ({pct}%)' },
+  puesto:   { es: '# Puesto » *#{v}*', en: '# Rank » *#{v}*', pt: '# Posição » *#{v}*' },
+  valor:    { es: '◈ Valor total » *{v}*', en: '◈ Total value » *{v}*', pt: '◈ Valor total » *{v}*' },
+  coins:    { es: '¥ Coins totales » *¥{v}*', en: '¥ Total coins » *¥{v}*', pt: '¥ Moedas no total » *¥{v}*' },
+  oro:      { es: '◇ Oro » *{v}*', en: '◇ Gold » *{v}*', pt: '◇ Ouro » *{v}*' },
+  dragones: { es: '🐉 Dragones » *{v}*', en: '🐉 Dragons » *{v}*', pt: '🐉 Dragões » *{v}*' },
+  comandos: { es: '□ Comandos usados » *{v}*', en: '□ Commands used » *{v}*', pt: '□ Comandos usados » *{v}*' },
+  salud:    { es: '❤ Salud » {v}/100', en: '❤ Health » {v}/100', pt: '❤ Saúde » {v}/100' },
+  crimen:   { es: '🔥 Crimen » {v}', en: '🔥 Crime » {v}', pt: '🔥 Crime » {v}' },
+}
+
+// "DD/MM" guardado por !birthday → "sábado, 10 de enero" / "Saturday, January 10"
+// (la próxima vez que cae). Intl ya trae los nombres de días y meses.
+function formatBirthday(birth: string, lang: Idioma): string | null {
   const m = birth.match(/^(\d{2})\/(\d{2})$/)
   if (!m) return null
   const day   = parseInt(m[1]!, 10)
@@ -27,16 +47,24 @@ function formatBirthday(birth: string): string | null {
   let date    = new Date(now.getFullYear(), month, day)
   if (date < today) date = new Date(now.getFullYear() + 1, month, day)
 
-  return `${DAYS[date.getDay()]}, ${day} de ${MONTHS[month]}`
+  return date.toLocaleDateString(LOCALE[lang], { weekday: 'long', day: 'numeric', month: 'long' })
 }
 
-// Puesto en el ranking global — mismo criterio que !leveltop (nivel, luego exp)
+// Puesto en el ranking global — mismo criterio que !leveltop (nivel, luego exp).
+// Contar a los que van adelante en una pasada, en vez de copiar y ordenar a
+// todos los usuarios (2557) para buscar a uno solo.
 function getRankPosition(jid: string): number {
-  const sorted = [...userData.entries()]
-    .filter(([, u]) => u.level > 0 || u.exp > 0)
-    .sort((a, b) => b[1].level - a[1].level || b[1].exp - a[1].exp)
-  const idx = sorted.findIndex(([j]) => j === jid)
-  return idx === -1 ? sorted.length + 1 : idx + 1
+  const yo = userData.get(jid)
+  if (!yo || (yo.level <= 0 && yo.exp <= 0)) {
+    let activos = 0
+    for (const u of userData.values()) if (u.level > 0 || u.exp > 0) activos++
+    return activos + 1
+  }
+  let adelante = 0
+  for (const u of userData.values()) {
+    if (u.level > yo.level || (u.level === yo.level && u.exp > yo.exp)) adelante++
+  }
+  return adelante + 1
 }
 
 const command: Command = {
@@ -46,7 +74,7 @@ const command: Command = {
   category:    'rpg',
   cooldown:    5,
 
-  async execute({ sock, jid, msg, sender, pushName }) {
+  async execute({ sock, jid, msg, sender, pushName, lang }) {
     // Objetivo: @mención tiene prioridad, si no hay se usa a quién se le
     // respondió (contextInfo.participant = remitente del mensaje citado),
     // si no hay ninguno de los dos es el propio remitente.
@@ -70,35 +98,36 @@ const command: Command = {
     const rankPos    = getRankPosition(target)
     const pct        = need > 0 ? Math.min(100, Math.floor((user.exp / need) * 100)) : 100
 
-    const lines: string[] = [`「✦」*Perfil* ↗ *${name}* ↙`, '']
+    const lines: string[] = [tx(lang, T.titulo, { n: name }), '']
 
-    const bday       = formatBirthday(user.profile.birth)
-    const genreLabel = user.profile.genre === 'm' ? 'Hombre'
-                      : user.profile.genre === 'f' ? 'Mujer'
+    const bday       = formatBirthday(user.profile.birth, lang)
+    const genreLabel = user.profile.genre === 'm' ? tx(lang, T.hombre)
+                      : user.profile.genre === 'f' ? tx(lang, T.mujer)
+                      : user.profile.genre === 'o' ? tx(lang, T.otro)
                       : user.profile.genre
 
-    if (bday)              lines.push(`🎂 Cumpleaños » *${bday}*`)
-    if (genreLabel)        lines.push(`⚧ Género » *${genreLabel}*`)
-    if (user.profile.marry) lines.push(`♡ Casado con » @${user.profile.marry.split('@')[0]}`)
+    if (bday)              lines.push(tx(lang, T.cumple, { v: bday }))
+    if (genreLabel)        lines.push(tx(lang, T.genero, { v: genreLabel }))
+    if (user.profile.marry) lines.push(tx(lang, T.casado, { v: user.profile.marry.split('@')[0] }))
     if (bday || genreLabel || user.profile.marry) lines.push('')
 
     lines.push(
-      `☆ Experiencia » *${user.exp.toLocaleString()}*`,
-      `◈ Nivel » *${user.level}*  (${user.profile.role})`,
-      `➔ Progreso » ${user.exp.toLocaleString()} ⇒ ${need.toLocaleString()}  (${pct}%)`,
+      tx(lang, T.exp, { v: user.exp.toLocaleString() }),
+      tx(lang, T.nivel, { v: user.level, rol: user.profile.role }),
+      tx(lang, T.progreso, { a: user.exp.toLocaleString(), b: need.toLocaleString(), pct }),
       `   ${bar(user.exp, need)}`,
-      `# Puesto » *#${rankPos}*`,
+      tx(lang, T.puesto, { v: rankPos }),
       '',
       `🎀 Harem » *${harem.length.toLocaleString()}*`,
-      `◈ Valor total » *${haremValue.toLocaleString()}*`,
-      `¥ Coins totales » *¥${(user.money + user.bank).toLocaleString()}*`,
+      tx(lang, T.valor, { v: haremValue.toLocaleString() }),
+      tx(lang, T.coins, { v: (user.money + user.bank).toLocaleString() }),
       `◆ BrasEmbers » *${user.embers.toLocaleString()}*`,
-      `◇ Oro » *${user.oro.toLocaleString()}*`,
-      `🐉 Dragones » *${user.dragons.length.toLocaleString()}*`,
-      `□ Comandos usados » *${user.commandsUsed.toLocaleString()}*`,
+      tx(lang, T.oro, { v: user.oro.toLocaleString() }),
+      tx(lang, T.dragones, { v: user.dragons.length.toLocaleString() }),
+      tx(lang, T.comandos, { v: user.commandsUsed.toLocaleString() }),
       '',
-      `❤ Salud » ${user.health}/100`,
-      `🔥 Crimen » ${user.crime}`,
+      tx(lang, T.salud, { v: saludDe(user) }),
+      tx(lang, T.crimen, { v: user.crime }),
     )
 
     if (user.profile.description) lines.push(`_"${user.profile.description}"_`)

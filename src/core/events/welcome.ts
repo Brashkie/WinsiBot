@@ -5,6 +5,7 @@ import { getGroupMetadata } from '@core/groupCache.js'
 import { sendWithMedia } from '@lib/media_sender.js'
 import { config as botConfig } from '@config'
 import { getNumber } from '@lib/jid_utils.js'
+import { rellenar } from '@lib/welcomeTemplate.js'
 
 const GITHUB_URL           = 'https://github.com/Brashkie/WinsiBot'
 const DEFAULT_WELCOME_BODY = 'Respeta las reglas, sé amable y diviértete'
@@ -17,6 +18,49 @@ function footerLines(): string[] {
     `│ § Usa ${prefix}help para ver los comandos`,
     `│ § ${GITHUB_URL}`,
   ]
+}
+
+
+/** El texto de bienvenida o de despedida de `participant` en el grupo `id`: el
+ *  propio del grupo si lo tiene, o el de siempre. Lo usa también #testwelcome. */
+export async function textoDe(
+  sock: WASocket,
+  id: string,
+  participant: string,
+  tipo: 'welcome' | 'bye',
+): Promise<string> {
+  const config = getGroupConfig(id)
+  const num = getNumber(participant)
+  const propio = tipo === 'welcome' ? config.sWelcome : config.sBye
+  const metadata = await getGroupMetadata(sock, id)
+  const groupName = metadata?.subject ?? 'el grupo'
+  const desc = metadata?.desc?.trim() ?? ''
+  if (propio) return rellenar(propio, { num, grupo: groupName, desc, cuantos: metadata?.participants?.length ?? 0 })
+
+  if (tipo === 'bye') {
+    return [
+      `╭─「 ◈ Hasta luego 」`,
+      `│ ◆ *${groupName}*`,
+      `│ § @${num}`,
+      `│`,
+      `> ${DEFAULT_BYE_BODY}`,
+      ...footerLines(),
+      `╰─ ${botConfig.botName}`,
+    ].join('\n')
+  }
+  const body = desc || DEFAULT_WELCOME_BODY
+  return [
+    `╭─「 ◈ Bienvenid@ 」`,
+    `│ ◆ *${groupName}*`,
+    `│ § @${num}`,
+    `│`,
+    // body puede ser la descripción del grupo (multilínea) — cada
+    // línea necesita su propio `>` al principio, WhatsApp no
+    // continúa el bloque de cita si alguna línea no lo tiene.
+    ...body.split('\n').map(line => `> ${line}`),
+    ...footerLines(),
+    `╰─ ${botConfig.botName}`,
+  ].join('\n')
 }
 
 export async function handleParticipantsUpdate(
@@ -36,56 +80,20 @@ export async function handleParticipantsUpdate(
           break
         }
         if (!config.welcome) break
-
-        let caption: string
-        if (config.sWelcome) {
-          caption = config.sWelcome.replace('@user', `@${num}`)
-        } else {
-          const metadata  = await getGroupMetadata(sock, id)
-          const groupName = metadata?.subject ?? 'el grupo'
-          const body      = metadata?.desc?.trim() || DEFAULT_WELCOME_BODY
-          caption = [
-            `╭─「 ◈ Bienvenid@ 」`,
-            `│ ◆ *${groupName}*`,
-            `│ § @${num}`,
-            `│`,
-            // body puede ser la descripción del grupo (multilínea) — cada
-            // línea necesita su propio `>` al principio, WhatsApp no
-            // continúa el bloque de cita si alguna línea no lo tiene.
-            ...body.split('\n').map(line => `> ${line}`),
-            ...footerLines(),
-            `╰─ ${botConfig.botName}`,
-          ].join('\n')
-        }
+        const caption = await textoDe(sock, id, participant, 'welcome')
         await sendWithMedia(sock, id, caption, 'WinsiBot', undefined, false, [participant]).catch(() => {})
         break
       }
       case 'remove': {
         if (!config.welcome) break
-
-        let caption: string
-        if (config.sBye) {
-          caption = config.sBye.replace('@user', `@${num}`)
-        } else {
-          const metadata  = await getGroupMetadata(sock, id)
-          const groupName = metadata?.subject ?? 'el grupo'
-          caption = [
-            `╭─「 ◈ Hasta luego 」`,
-            `│ ◆ *${groupName}*`,
-            `│ § @${num}`,
-            `│`,
-            `> ${DEFAULT_BYE_BODY}`,
-            ...footerLines(),
-            `╰─ ${botConfig.botName}`,
-          ].join('\n')
-        }
+        const caption = await textoDe(sock, id, participant, 'bye')
         await sendWithMedia(sock, id, caption, 'WinsiBot', undefined, false, [participant]).catch(() => {})
         break
       }
       case 'promote': {
         if (!config.detect) break
         const text = config.sPromote
-          ? config.sPromote.replace('@user', `@${num}`)
+          ? config.sPromote.replaceAll('@user', `@${num}`)
           : `@${num} ahora es administrador`
         await sock.sendMessage(id, { text, mentions: [participant] }).catch(() => {})
         break
@@ -93,7 +101,7 @@ export async function handleParticipantsUpdate(
       case 'demote': {
         if (!config.detect) break
         const text = config.sDemote
-          ? config.sDemote.replace('@user', `@${num}`)
+          ? config.sDemote.replaceAll('@user', `@${num}`)
           : `@${num} ya no es administrador`
         await sock.sendMessage(id, { text, mentions: [participant] }).catch(() => {})
         break

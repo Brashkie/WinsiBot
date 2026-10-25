@@ -1,7 +1,7 @@
 import type { Command } from '../../../types/index.js'
 import { getUserData, patchUserData, getNumber } from '@core/events.js'
 import { randomChoice as pick } from '@lib/utils.js'
-import { objetivoDe } from '@lib/mensajes.js'
+import { objetivoDe } from '@lib/messages.js'
 
 const n = (jid: string) => jid.split('@')[0]!
 

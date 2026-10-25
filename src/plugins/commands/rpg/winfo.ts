@@ -1,6 +1,6 @@
 import type { Command, RollCharacter } from '../../../types/index.js'
 import { SOURCES, getCharacters, inventory, ownerName } from './rollwaifu.js'
-import { translate } from '@vitalets/google-translate-api'
+import { translate } from '@lib/translate.js'
 
 const norm = (s: string) =>
   s.toLowerCase()

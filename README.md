@@ -9,7 +9,7 @@
 [![Rust](https://img.shields.io/badge/Rust-1.75%2B-CE422B?style=for-the-badge&logo=rust&logoColor=white)](https://rust-lang.org)
 
 [![License](https://img.shields.io/badge/License-GPL--3.0-blue?style=flat-square)](LICENSE)
-[![Version](https://img.shields.io/badge/Version-8.16.0-6C63FF?style=flat-square)](CHANGELOG.md)
+[![Version](https://img.shields.io/badge/Version-8.17.0-6C63FF?style=flat-square)](CHANGELOG.md)
 [![Platform](https://img.shields.io/badge/Platform-Windows%20%7C%20Linux%20%7C%20macOS%20%7C%20Android-lightgrey?style=flat-square)](https://github.com/Brashkie/WinsiBot)
 [![PRs Welcome](https://img.shields.io/badge/PRs-welcome-brightgreen?style=flat-square)](https://github.com/Brashkie/WinsiBot/pulls)
 
@@ -17,7 +17,7 @@
 
 > Bot de WhatsApp de alto rendimiento con arquitectura multi-lenguaje de tres capas.<br/>
 > Sin límite artificial de grupos, pensado para miles de mensajes por hora y múltiples instancias.<br/>
-> v8.16.0 — **Más juego, menos costo, todo medido.** La Session API escribe por lotes y un mensaje de grupo pasa de **~297 a ~66 µs**; los kernels nativos usan todos los núcleos y `#upscale` baja de **2376 a ~280 ms**, con el redimensionado en Zig (**~850 → 19 ms**); lo que el bot hace aunque nadie escriba, casi gratis. Y llegan **12 comandos nuevos**: un jefe de mundo para todos los grupos con sinergia elemental, la mazmorra del día, blackjack, póker, una CPU con expectiminimax en la arena, forja, cría y subastas, `#resumen`, encuestas, recordatorios, texto a voz sin internet, "Asesino en el chat" y el teléfono descompuesto con IA. Además, un motor de almacenamiento propio medido contra SQLite, y un fix grave: **las apuestas de la arena creaban dinero**.<br/>
+> v8.17.0 — **Habla tu idioma, 35 comandos nuevos y más liviano.** Español, inglés y portugués según el país de cada número; `#take`, paquetes de stickers, bienvenida propia, salud y cuidados del compañero, `#actividad`, `#fantasmas`, `#sorteo` y más; de 31 dependencias a 14 y el núcleo de 16 a 9 MB.<br/>
 
 <br/>
 
@@ -65,22 +65,22 @@
 | ⚙️ **Session + IA** | Rust / Axum | Creds atómicas y snapshots, tracker Bad MAC, rate limiter, antiban, clasificación de intenciones, personalidad y humor, reputación, perfiles de estilo, Ollama y APIs cloud, imágenes |
 | 🧮 **Kernels nativos** | C + Zig | Anime4K y el códec JPEG, compilados con Zig dentro del binario de la Session API. Se usa el que gana midiendo |
 
-### Novedades en v8.16.0
+### Novedades en v8.17.0
 
-**Más juego, menos costo, todo medido.** El detalle completo, con cada medición, está en el [CHANGELOG](CHANGELOG.md).
+**Habla tu idioma, 35 comandos nuevos y más liviano.** El detalle completo, con cada medición, está en el [CHANGELOG](CHANGELOG.md).
 
 | Área | Cambio |
 |------|--------|
-| **La Session API escribe por lotes** | Cada mensaje de grupo eran dos transacciones de SQLite; ahora se encolan y se escriben juntas una vez por segundo. Sobre una base de 300.000 mensajes, de **~297 a ~66 µs** por mensaje; `/ai/observe` de 568 a **156 µs** de CPU |
-| **`#upscale` 8,5x más rápido** | Los kernels de Anime4K en todos los núcleos (el Sobel en Zig, **10,7 → 1,3 ms**), y el redimensionado reescrito en Zig, **~850 → 19 ms** y bit a bit igual que el crate. De punta a punta, **2376 → ~280 ms** |
-| **Lo que el bot hace sin que nadie escriba** | El guardado solo serializa a los usuarios que se tocaron (16 ms de CPU cada 30 s → casi nada); 18.000 contactos vacíos fuera de memoria (**7,3 → 1,0 MB**); el panel no despierta al proceso si nadie mira; sin el ping duplicado del watchdog |
-| **Jefe de mundo, mazmorra y RPG** | `#raid`: un jefe para todos los grupos, con **sinergia elemental** entre los dragones de quienes golpean. `#mazmorra`: la misma cada día para todos, equilibrada midiendo 3.000 bajadas. `#forjar` (por fin un uso para ⚔️ ✨ 🏆), `#pet criar`, `#pet companero` (crece con tu actividad) y `#subasta` |
-| **Casino y arena** | `#bj` blackjack y `#poker` Casino Hold'em, con la apuesta devuelta si el bot se reinicia a la mitad. `#arena cpu`: un rival que piensa con **expectiminimax** |
-| **Para el grupo** | `#resumen` ("¿qué me perdí?"), `#encuesta` nativa, `#recordar` (sobrevive a un reinicio), `#tts` texto a voz **sin internet**, `#asesino` (estilo Mafia, roles por privado) y `#historia` (el teléfono descompuesto con IA) |
-| **Motor de almacenamiento propio** | `crates/cluster`: un árbol LSM sin dependencias, con 22 tests de cortes a mitad de escritura. Contra SQLite con la misma RAM gana escrituras (9–34x) y búsquedas de lo que no está (19–24x) y pierde rangos. **No reemplaza nada todavía**: en el bot no hay dónde se note |
-| **Fix grave: las apuestas de la arena creaban dinero** | El ganador cobraba el doble y al perdedor se le quitaba una; además se podía esquivar el pago. Ahora se retienen al aceptar y se devuelven si la pelea se corta |
-| **Fix: datos que un corte podía perder** | El portafolio de `#comprar` y los cumpleaños se escribían sin protección: un corte a mitad dejaba el archivo roto y se perdía todo. Y el saludo de cumpleaños salía repetido tras cada reconexión |
-| **Limpieza** | Buscada con un script: 42 nombres repetidos entre archivos, comparados uno por uno; lo que era igual, a un solo módulo. 13 imports muertos fuera |
+| **Habla tu idioma** | Español, inglés y portugués: lo elegís con `#idioma`, o el bot lo deduce del país de tu número (+55 → portugués) o usa el del grupo. Avisos, menú, ayuda, las descripciones de los 242 comandos y los más usados, con alias como `#ajuda` o `#trabalhar`. Un mensaje que no es un comando no paga nada por esto |
+| **Para el grupo** | `#actividad` (quién escribe más), `#fantasmas` (los que no escriben, y sacarlos), `#paises`, `#nota` y `#reglas`, `#sorteo`, `#cerrar`/`#abrir`, `#promote`, y la bienvenida propia de cada grupo con `#setwelcome` y `#testwelcome` |
+| **Para jugar** | `#ship`, `#parejas`, listas de partidas por equipos (`#lista`, `#mapa`), `#slap`. Salud de verdad: el jefe del raid contraataca y te curás con `#curar` o `#hospital`; y el compañero pelea mejor si lo cuidás (`#pet comida`, `agua`, `pasear`) |
+| **Stickers** | `#qc` (un mensaje como sticker), `#texto`, `#take` (tu pack y autor en un sticker ajeno, sin recodificarlo), `#setmeta`, `#toimg`, y paquetes con nombre (`#newpack`, `#stickeradd`, `#getpack`) |
+| **Perfil** | `#setdesc`, `#setgenre`, `#cumples` (los próximos del grupo), `#getpic` |
+| **Más liviano** | De **31 dependencias a 14**: lo que hacían `openai`, `zod`, `moment-timezone`, `dotenv` y otras 13 lo hace Node 24 o unas líneas propias. El núcleo arranca en **~92 ms en vez de 201** y ocupa **9 MB en vez de 16**. Los grupos, en un log binario que escribe solo el que cambió |
+| **Kernels** | Los empujes de Anime4K en Zig vectorial, el Sobel fusionado, y el Huffman del JPEG en todos los núcleos (**27 → 11 ms**). `#upscale` de ~275 a ~130 ms sin contar el JPEG, igual bit a bit, probado también en ARM |
+| **Fixes** | Dos copias de `sharp` tumbaban el proceso al usar `#tweet` y `#sticker` en la misma sesión; la espera entre comandos se esquivaba cambiando de alias; el saludo de cumpleaños podía salir dos veces |
+
+**Para actualizar:** `npm install`. Al primer arranque, `groups.json` se migra solo a `data/groups.aof`.
 
 ---
 
@@ -98,7 +98,7 @@
 | Session Store | Rust + Axum + SQLite | Creds atómicas, delivery tracking, outbox con dead-letter |
 | Cálculo pesado | C + Zig (feature `native`) | Kernels de Anime4K con SIMD y códec JPEG propio: Zig para lo vectorizable, C para lo que decide bit a bit |
 | Criptografía | `@brashkie/signalis-core` | Curve25519 / Ed25519 / HKDF / AES-GCM (Rust NAPI) |
-| Persistencia — usuarios | `strenor` (Rust NAPI) | `data/users.aof`, log de deltas: solo se escribe el usuario que cambió |
+| Persistencia — usuarios y grupos | `strenor` (Rust NAPI) | `data/users.aof` y `data/groups.aof`, logs de deltas: solo se escribe el usuario o el grupo que cambió |
 | Persistencia — resto | JSON en `data/` (`core/persistence.ts`) | groupConfigs, clanes, inventario — se reescriben solo si cambian |
 | KV embebido | `strenor` (Rust NAPI) | Sesiones del panel web, con TTL real |
 | Panel web | React + Vite + Tailwind + TanStack | Dashboard en tiempo real — admin y self-service de sub-bots/grupos |
@@ -201,7 +201,7 @@
 
 ```
 ╔════════════════════════════════════════════════╗
-║                WinsiBot v8.16.0                ║
+║                WinsiBot v8.17.0                ║
 ╠═════════════════════╦══════════════════════════╣
 ║      TypeScript     ║           Rust           ║
 ║    Node.js :4001    ║                          ║
@@ -451,6 +451,7 @@ npm run dev             # Solo Node.js sin compilar — desarrollo rápido / esc
 | `users:export` | Exportar el padrón de usuarios a un JSON legible |
 | `users:import` | Restaurar el padrón desde un JSON (con el bot parado) |
 | `users:stats` | Cuántos usuarios hay y cuánto ocupa el log |
+| `groups:export` / `groups:import` / `groups:stats` | Lo mismo para la configuración de los grupos (`data/groups.aof`) |
 | `typecheck` | Verificar tipos sin compilar |
 | `lint` / `lint:fix` | Biome — linter de `src/`/`scripts/` (revisa / revisa y corrige lo seguro) |
 | `format` / `format:fix` | Biome — formateo de `src/`/`scripts/` (solo mostrar diff / escribir) |
@@ -461,7 +462,7 @@ npm run dev             # Solo Node.js sin compilar — desarrollo rápido / esc
 | `native:test` | Tests que comparan los kernels de C y Zig con los de Rust, bit a bit |
 | `native:bench` | Los kernels de Anime4K en Rust, C y Zig, y PNG contra los dos JPEG, medidos con Criterion |
 | `cluster:test` | Los tests del motor de almacenamiento propio, incluidos los de cortes a mitad de escritura |
-| `cluster:comparar` | El motor propio contra SQLite con las cargas del bot (ver `CLUSTER_CACHE_MB` y `SQLITE_PRAGMAS` en `crates/cluster/examples/comparar.rs`) |
+| `cluster:compare` | El motor propio contra SQLite con las cargas del bot (ver `CLUSTER_CACHE_MB` y `SQLITE_PRAGMAS` en `crates/cluster/examples/compare.rs`) |
 | `bench:api` | Arranca la Session API en una carpeta temporal y mide la CPU que gasta Rust en cada endpoint del camino por mensaje |
 | `bench:hops` | Cuánto cuesta un viaje de Node a la Session API —latencia y CPU de Node—, con la API corriendo |
 | `mem:profile` | Cuánta RAM agrega cada pieza al arrancar —Baileys, el núcleo, los comandos— y lo que se ahorra cargando algo al usarlo. `-- --deps` mide cada dependencia sola |
@@ -486,19 +487,19 @@ El bot tiene **200+ comandos** en **16 categorías**.
 | Categoría | Comandos destacados | Descripción |
 |-----------|--------------------|----|
 | 🤖 IA | `!gpt` `!claude` `!imagine` `!translate` | Chat multi-modelo, imágenes, traducciones |
-| 💰 RPG | `!work` `!daily` `!perfil` `!rw` `!clan` `!prestige` `!harem` `!forjar` `!subasta` `!leveltop` | Economía, gacha, niveles (racha en daily), clanes, prestige, forja, subastas |
+| 💰 RPG | `!work` `!daily` `!perfil` `!setdesc` `!setgenre` `!salud` `!hospital` `!rw` `!clan` `!prestige` `!harem` `!forjar` `!subasta` `!leveltop` | Economía, salud, gacha, niveles (racha en daily), clanes, prestige, forja, subastas |
 | 🎮 Juegos | `!arena` `!raid` `!mazmorra` `!bj` `!poker` `!quiz` `!adivinar` `!pet` | PvP Arena (y contra la CPU), jefe de mundo, mazmorra del día, blackjack, Casino Hold'em, Quiz coding, Draw & Guess, dragones |
 | 🎁 Social | `!regalo` | Sistema de regalos, buzón, wishlist, trueques |
-| 🛡️ Admin | `!ban` `!kick` `!antilink` `!warn` | Moderación de grupos |
+| 🛡️ Admin | `!ban` `!kick` `!promote` `!cerrar` `!fantasmas` `!antilink` `!warn` `!setwelcome` `!testwelcome` | Moderación de grupos, dar admin, cerrar el grupo, inactivos, bienvenida propia |
 | 👑 Owner | `!exec` `!broadcast` `!premium` `!boost` | Control total del bot |
 | ⬇️ Descargas | `!yt` `!ytmp4` `!tiktok` `!ttsearch` `!ig` `!spotify` `!apk` | Descargadores multimedia + búsqueda con carrusel |
-| 🎨 Stickers | `!sticker` `!toimg` `!emojimix` `!stickerpack` | Creación, conversión y packs completos |
-| 🎮 Fun | `!asesino` `!historia` `!meme` `!sega` `!giphy` `!top` | Asesino en el chat (estilo Mafia), teléfono descompuesto con IA, entretenimiento |
-| 💞 Roleplay | `!hug` `!kiss` `!pat` `!kill` `!punch` `!laugh` `!sad` `!sleep` | GIFs de anime interactivos |
+| 🎨 Stickers | `!sticker` `!take` `!setmeta` `!qc` `!texto` `!toimg` `!newpack` `!getpack` `!stickerpack` | Creación, tu pack y autor, mensajes y textos como sticker, de vuelta a imagen, tus paquetes |
+| 🎮 Fun | `!asesino` `!historia` `!ship` `!parejas` `!lista` `!meme` `!sega` `!giphy` `!top` | Asesino en el chat (estilo Mafia), teléfono descompuesto con IA, compatibilidad, listas de partidas, entretenimiento |
+| 💞 Roleplay | `!hug` `!kiss` `!pat` `!slap` `!kill` `!punch` `!laugh` `!sad` `!sleep` | GIFs de anime interactivos |
 | 🎵 Música | `!play` `!lyrics` `!spotify` | Audio y letras |
 | 🌐 Media | `!anime` `!removebg` `!wimage` | Imágenes de anime, fondo, personajes |
-| 🔧 Util | `!resumen` `!encuesta` `!recordar` `!tts` `!clima` `!imagen` | ¿Qué me perdí?, encuestas, recordatorios, texto a voz sin internet, clima, imágenes |
-| ℹ️ Info | `!ping` `!creator` `!infobot` `!menu` | Información del bot |
+| 🔧 Util | `!getpic` `!suggest` `!resumen` `!encuesta` `!recordar` `!sorteo` `!nota` `!actividad` `!paises` `!tts` `!clima` `!imagen` | ¿Qué me perdí?, encuestas, recordatorios, sorteos, notas del grupo, actividad, países, texto a voz sin internet, clima, imágenes |
+| ℹ️ Info | `!ping` `!creator` `!infobot` `!menu` `!idioma` | Información del bot, idioma (es/en/pt) |
 | 🤝 Jadibot | `!jadibot` `!stopbot` | Sub-bots vinculados |
 | 🔞 NSFW | `!porngif` `!rule34` `!sexyimg` `!stickerporn` | Solo grupos con NSFW activo |
 
@@ -672,6 +673,7 @@ curl -H "x-api-key: TU_CLAVE" http://127.0.0.1:3001/messages/pending
 | `GET` | `/ai/context/:sender` | Historial reciente para armar el prompt |
 | `GET` · `DELETE` | `/ai/profile/:jid` | Perfil de estilo de un usuario (GET) · borrarlo todo (DELETE) |
 | `GET` | `/ai/group-style/:gjid` | Perfil de estilo de un grupo |
+| `GET` | `/ai/group/activity/:gjid` | Cuántos mensajes mandó cada uno en `days` días, y desde cuándo hay registro: lo usan `#actividad` y `#fantasmas` |
 | `GET` | `/ai/group/recent/:gjid` | Los últimos mensajes de un grupo (`limit`, `hours`), quién habló y de qué: lo usa `#resumen` |
 | `POST` | `/ai/story` | El teléfono descompuesto: un giro desde UN fragmento (`modo: seguir`) o un título (`modo: titulo`); `text: null` si ninguna IA contestó |
 | `POST` | `/ai/summarize` | Resumir una conversación con IA, sin personalidad; `text: null` si ninguna IA contestó |
@@ -743,7 +745,7 @@ Bot arranca → verifyAndReport(authDir)
 ```
 WinsiBot/
 ├── src/                              # TypeScript — bot principal
-│   ├── config.ts                     # Variables de entorno + validación Zod
+│   ├── config.ts                     # Variables de entorno, validadas a mano
 │   ├── index.ts                      # Entry point
 │   ├── supervisor.ts                 # Reinicia el bot si crashea o se cuelga (watchdog externo)
 │   ├── types/
@@ -796,13 +798,13 @@ WinsiBot/
 │   ├── plugins/
 │   │   ├── commands/                 # 200+ comandos organizados por categoría
 │   │   ├── middlewares/              # Auth, anti-spam, cooldown, rate limit
-│   │   ├── scheduler/                # Jobs programados (node-cron)
+│   │   ├── scheduler/                # Jobs programados (parser de cron propio)
 │   │   └── webhooks/                 # Receiver HTTP
 │   └── dashboard/                    # Backend del panel web (Hono + WebSocket)
 │       ├── server.ts                 # API + WS + estático de web/dist
 │       ├── auth.ts                   # Login vinculando WhatsApp (#login <código>)
 │       └── routes/                   # /api/subbots, /api/groups, /api/admin
-├── crates/session-api/               # Session API v5.9.0 (Rust) — workspace en Cargo.toml de la raíz
+├── crates/session-api/               # Session API v5.10.0 (Rust) — workspace en Cargo.toml de la raíz
 │   ├── native/                       # Kernels en C y Zig, compilados con Zig dentro del binario
 │   │   ├── lib.zig                   # Raíz: trae los demás .zig
 │   │   ├── anime4k.c                 # push_color y push_gradient (1,35x sobre Rust)
@@ -955,7 +957,7 @@ Sí. El tracking de delivery también funciona con Business. Sin embargo, funcio
 <details>
 <summary><b>¿Los datos de usuarios se pierden al reiniciar?</b></summary>
 
-No. `core/persistence.ts` guarda todo en `data/`: los usuarios en `users.aof` (log append-only de `strenor`, donde solo se escribe el usuario que cambió) y `groupConfigs`/clanes/inventario en JSON. Se carga automáticamente al iniciar. Para ver o respaldar el padrón de usuarios en formato legible: `npm run users:export`.
+No. `core/persistence.ts` guarda todo en `data/`: los usuarios en `users.aof` y los grupos en `groups.aof` (logs append-only de `strenor`, donde solo se escribe lo que cambió), y clanes/inventario en JSON. Se carga automáticamente al iniciar. Para ver o respaldar el padrón de usuarios en formato legible: `npm run users:export`.
 
 </details>
 

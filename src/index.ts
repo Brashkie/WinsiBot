@@ -1,4 +1,4 @@
-import 'dotenv/config'
+import './lib/env.js'
 import readline from 'readline'
 import { spawn, type ChildProcess } from 'child_process'
 import { join, resolve } from 'path'
@@ -482,7 +482,14 @@ async function main() {
     }
 
     try {
-      const { setupSubastas } = await import('@lib/subastas.js')
+      const { setupGiveaways } = await import('@lib/giveaways.js')
+      setupGiveaways(sock)
+    } catch (err) {
+      logger.warn({ err }, 'Sorteos no pudieron iniciar')
+    }
+
+    try {
+      const { setupSubastas } = await import('@lib/auctions.js')
       setupSubastas(sock)
     } catch (err) {
       logger.warn({ err }, 'Subastas no pudieron iniciar')

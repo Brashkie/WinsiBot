@@ -1,4 +1,5 @@
 import type { Command } from '../../../types/index.js'
+import { saludDe } from '@lib/health.js'
 import { getUserData, expForLevel } from '@core/events.js'
 
 const bar = (cur: number, max: number, len = 8) => {
@@ -28,7 +29,7 @@ const command: Command = {
 
 > XP     ${user.exp}/${need}  ${bar(user.exp, need)}
 > Coins  ¥${user.money}   Banco ¥${user.bank}
-> Diam.  ${user.diamonds}   Salud ${user.health}/100
+> Diam.  ${user.diamonds}   Salud ${saludDe(user)}/100
 
 > ⚔  ${user.items.sword}   🧪 ${user.items.pc}   ✨ ${user.items.sp}   🏆 ${user.items.legendary}
 > 🐉 ${petLine}${user.premium ? '\n> ★ _Premium_' : ''}`,

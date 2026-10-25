@@ -36,7 +36,7 @@ export function vidaJefe(def: DefJefe, participantesAnterior: number): number {
 
 /**
  * Lo que pega un ataque. Sube con el nivel y con el mejor dragón (#pet), se
- * multiplica por el arma (#forjar, ver bonoArma en forja.ts), con un ±25% de
+ * multiplica por el arma (#forjar, ver bonoArma en forge.ts), con un ±25% de
  * azar y un 10% de crítico x2. `azar()` da un número en [0, 1).
  */
 export function danio(
@@ -49,6 +49,19 @@ export function danio(
   const variacion = 0.75 + azar() * 0.5
   const critico = azar() < 0.1
   return { danio: Math.max(1, Math.round(base * variacion * (critico ? 2 : 1))), critico }
+}
+
+/** Probabilidad de que el jefe devuelva el golpe. */
+export const PROB_CONTRA = 0.35
+
+/**
+ * El contraataque del jefe: 8 a 20 de salud, un 35% de las veces. `defensa`
+ * lo achica (los cuidados del compañero, ver bonoCuidado en companion.ts).
+ * Devuelve 0 si no contraatacó.
+ */
+export function contraataque(azar: () => number = Math.random, defensa = 1): number {
+  if (azar() >= PROB_CONTRA) return 0
+  return Math.max(1, Math.round((8 + azar() * 12) * Math.min(Math.max(defensa, 0), 1)))
 }
 
 export interface Premio { jid: string; dinero: number; exp: number; mvp: boolean; remate: boolean }

@@ -38,21 +38,21 @@
 
 | # | Categoría | Comandos |
 |---|-----------|:--------:|
-| 1 | [🛠️ General](#%EF%B8%8F-general) | 11 |
+| 1 | [🛠️ General](#%EF%B8%8F-general) | 19 |
 | 2 | [🤖 IA / ChatGPT](#-ia--chatgpt) | 4 |
-| 3 | [🎮 RPG / Economía](#-rpg--economía) | 22 |
+| 3 | [🎮 RPG / Economía](#-rpg--economía) | 27 |
 | 4 | [🎴 Gacha / Personajes](#-gacha--personajes) | 6 |
 | 5 | [💑 Parejas](#-parejas) | 5 |
-| 6 | [🎭 Roleplay](#-roleplay) | 9 |
-| 7 | [🎉 Diversión](#-diversión) | 14 |
+| 6 | [🎭 Roleplay](#-roleplay) | 10 |
+| 7 | [🎉 Diversión](#-diversión) | 17 |
 | 8 | [🕹️ Juegos](#%EF%B8%8F-juegos) | 7 |
 | 9 | [🎁 Regalos](#-regalos) | 1 |
-| 10 | [🖼️ Media & Stickers](#%EF%B8%8F-media--stickers) | 6 |
+| 10 | [🖼️ Media & Stickers](#%EF%B8%8F-media--stickers) | 18 |
 | 11 | [🔽 Descargas](#-descargas) | 7 |
 | 12 | [🔍 Scrapers / Búsqueda](#-scrapers--búsqueda) | 4 |
 | 13 | [🎵 Música](#-música) | 1 |
 | 14 | [🔞 NSFW](#-nsfw) | 5 |
-| 15 | [🔑 Admin del grupo](#-admin-del-grupo) | 41 |
+| 15 | [🔑 Admin del grupo](#-admin-del-grupo) | 48 |
 | 16 | [🤖 JadiBot](#-jadibot) | 3 |
 | 17 | [ℹ️ Info](#%EF%B8%8F-info) | 2 |
 | 18 | [👑 Owner / Sistema](#-owner--sistema) | 24 |
@@ -64,13 +64,21 @@
 | Comando | Aliases | Cooldown | Permiso | Descripción |
 |---------|---------|:--------:|:-------:|-------------|
 | `ping` | `p` | 3s | 👤 | Verifica que el bot esté activo, muestra latencia |
-| `menu` | `help`, `ayuda` | — | 👤 | Lista todas las categorías de comandos |
+| `menu` | `help`, `ayuda`, `ajuda` | — | 👤 | Lista todas las categorías de comandos, en tu idioma |
+| `idioma` | `language`, `lang`, `lingua` | 3s | 👤 | En qué idioma te habla el bot: `idioma es\|en\|pt`, `idioma auto` (por el país de tu número), `idioma grupo <es\|en\|pt\|off>` (admins: el de quien no eligió) |
 | `categoria` | `cat`, `category` | — | 👤 | Muestra los comandos de una categoría específica |
 | `afk` | `ausente` | 10s | 👤 | Activa modo AFK con una razón personalizada |
 | `creator` | `info`, `about`, `botinfo`, `creador` | — | 👤 | Información del bot y su creador |
 | `resumen` | `quemeperdi`, `qmp`, `perdi`, `summary` | 60s | 👥 | "¿Qué me perdí?": resume lo que se habló en el grupo (12 h por defecto, hasta 72). Con IA si hay; si no, quién habló, de qué y las preguntas pendientes |
 | `encuesta` | `poll`, `votacion` | 10s | 👤 | Encuesta nativa de WhatsApp, de 2 a 12 opciones separadas con `\|`; `-m` para voto múltiple |
 | `tts` | `voz`, `decir`, `habla`, `say` | 10s | 👤 | Texto a nota de voz **sin internet** (máx 400 caracteres), o responde a un mensaje con `tts`. Usa Piper, espeak, la voz de Windows o la de macOS, la que haya |
+| `sorteo` | `giveaway`, `rifa`, `sortear` | 3s | 👥 | Sorteos: `crear 30m <premio> [x2]` (admins), `unirme`, `ya`, `cancelar`, o `rapido <premio>` entre todos los miembros |
+| `nota` | `notas`, `note`, `notes`, `reglas`, `rules` | 3s | 👥 | Notas del grupo: `nota <nombre>` para leer, `nota set <nombre> <texto>` y `nota borrar <nombre>` (admins). `reglas` es el atajo de la nota "reglas" |
+| `actividad` | `activity`, `topmensajes`, `totalmensajes` | 15s | 👥 | Quién escribe más en el grupo, en `[días]` (7 por defecto) |
+| `getpic` | `pfp`, `fotoperfil`, `verfoto` | 5s | 👤 | La foto de perfil de alguien, en grande (`@mención`, citando, o la tuya) |
+| `suggest` | `report`, `reportar`, `sugerir`, `sugerencia` | 2min | 👤 | Una sugerencia o un error, al privado del dueño del bot |
+| `birthday` | `cumpleaños`, `bday`, `cumples`, `delbirth`, `setbirth` | 3s | 👤 | `birthday set DD/MM`, `list` (hoy), `cumples` (los próximos del grupo), `borrar`, `allow`/`deny`, `setup on/off` (admins) |
+| `paises` | `países`, `countries`, `pais` | 15s | 👥 | De qué países son los miembros del grupo |
 | `recordar` | `recordatorio`, `remind`, `rec` | 3s | 👤 | Recordatorio en este chat: `10m`, `2h30m`, `en 3 días`, `a las 18:30`, `mañana 9:00`, `7pm`. `lista` y `borrar <n>`. Máximo 10 por persona; sobreviven a un reinicio |
 
 ```
@@ -138,6 +146,8 @@
 | Comando | Aliases | Cooldown | Permiso | Descripción |
 |---------|---------|:--------:|:-------:|-------------|
 | `perfil` | `profile`, `miperfil`, `yo` | 5s | 👤 | Ver tu perfil o el de otro usuario (`@mención`) |
+| `setdesc` / `deldesc` | `setdescription`, `descripcion` | 5s | 👤 | Tu descripción en el perfil (hasta 140 caracteres) |
+| `setgenre` / `delgenre` | `setgenero`, `genero` | 5s | 👤 | Tu género en el perfil: `hombre`, `mujer` u `otro` |
 | `xp` | `exp`, `experiencia`, `stats`, `nivel` | 5s | 👤 | Estadísticas RPG detalladas |
 | `rangos` | `roles`, `rango`, `rol`, `ranks` | 10s | 👤 | Tabla de rangos del servidor |
 | `work` | `trabajar`, `trabajo`, `w` | 10min | 👤 | Trabaja para ganar BrasCoins (cada 10 min) |
@@ -157,7 +167,8 @@
 | `leveltop` | `toplevel`, `topnivel`, `niveltop`, `levelrank` | 10s | 👤 | Top de usuarios con más nivel |
 | `depositar` | `dep`, `deposit`, `retirar`, `withdraw`, `banco` | 3s | 👤 | Deposita o retira monedas del banco |
 | `prestige` | `prestigio`, `ascender` | — | 👤 | Reinicia progreso a cambio de recompensas exclusivas |
-| `pet` | `mascota`, `mipet`, `dragon`, `dragones` | 3s | 👤 | Dragon City: incubá huevos, alimentá con Oro, evolucioná y criá tus dragones (579 disponibles). `criar <#> <#>`: dos de nivel 10+, 5.000 oro + ¥3.000, cada 8 h. `companero <#>`: el que gana exp con tus mensajes y pelea en `raid` |
+| `pet` | `mascota`, `mipet`, `dragon`, `dragones` | 3s | 👤 | Dragon City: incubá huevos, alimentá con Oro, evolucioná y criá tus dragones (579 disponibles). `criar <#> <#>`: dos de nivel 10+, 5.000 oro + ¥3.000, cada 8 h. `companero <#>`: el que gana exp con tus mensajes y pelea en `raid`. `comida`, `agua`, `pasear`: con los cuidados al día pega hasta +15% en `raid` y recibe hasta 45% menos del contraataque; `cuidar` muestra cuánto le queda a cada uno |
+| `salud` | `vida`, `hp`, `curar`, `pocion`, `hospital` | 3s | 👤 | Tu salud (0-100): baja con el contraataque del jefe del `raid` y se recupera sola (de 0 a 100 en 5 h). `curar` toma una poción 🧪 (+40, salen en `daily`); `hospital` la llena pagando, más caro con el nivel. Con menos de 20 no se pelea |
 | `forjar` | `forja`, `forge`, `herreria` | 3s | 👤 | Mejora tu arma de +0 a +10 con ⚔️ ✨ 🏆 y ¥: +8% de daño en `raid` por nivel. Desde +4, fallar baja un nivel salvo con 🛡️ (`forjar proteccion`) |
 | `subasta` | `subastas`, `auction`, `pujar`, `puja`, `bid` | 2s | 👥 | Subasta un dragón o ítems en el grupo; las pujas quedan retenidas y se devuelven al superado. 5% de comisión |
 | `harem` | `waifus`, `claims`, `coleccion` | 5s | 👤 | Ver los personajes reclamados con `!rw`, ordenados por valor |
@@ -202,7 +213,7 @@
 | `arena` | `pvp`, `batalla`, `fight` | 30s | 👤 | Reta a otro usuario a un duelo PvP con apuesta de diamantes, o practica contra la CPU con `arena cpu [facil\|normal\|dificil]` (sin ELO; la CPU piensa con expectiminimax) |
 | `quiz` | `qz`, `pregunta`, `coding` | 15s | 👤 | Pregunta de programación por categoría (JS, Python, SQL…) |
 | `adivinar` | `drawguess`, `dibujar`, `guess` | 20s | 👤 | Mini-juego de dibujar y adivinar en grupo |
-| `raid` | `jefe`, `boss`, `worldboss`, `atacar` | 1min por golpe | 👥 | Jefe de mundo: el mismo para todos los grupos. Aparece cada 6 h y escapa en 60 min. Dos jugadores seguidos con compañeros de elementos que combinan disparan una reacción. `atacar`, `on`/`off` (admins: avisos en el grupo), `invocar` (owner) |
+| `raid` | `jefe`, `boss`, `worldboss`, `atacar` | 1min por golpe | 👥 | Jefe de mundo: el mismo para todos los grupos. Aparece cada 6 h y escapa en 60 min. Dos jugadores seguidos con compañeros de elementos que combinan disparan una reacción. El jefe contraataca (ver `salud`). `atacar`, `on`/`off` (admins: avisos en el grupo), `invocar` (owner) |
 | `mazmorra` | `dungeon`, `mazmorras`, `calabozo` | 10s por puerta | 👥 | La mazmorra del día, la misma para todos los grupos: `entrar`, `<número de puerta>`, `salir` (cobrar) y `ranking`. Una expedición por persona por día |
 | `poker` | `póker`, `holdem`, `casinoholdem` | 2s | 👤 | Casino Hold'em contra la casa: `poker <ante>`, después `poker ir` (paga el doble) o `poker retirarse`. El crupier juega con par de 4 o más |
 | `blackjack` | `bj`, `21`, `pedir`, `plantarse`, `doblar` | 2s | 👤 | Blackjack contra el crupier: ganar paga ×2, blackjack 3:2, el crupier se planta en 17. Apuesta de ¥10 a ¥500.000 |
@@ -286,6 +297,7 @@
 | Comando | Aliases | Cooldown | Permiso | Descripción |
 |---------|---------|:--------:|:-------:|-------------|
 | `hug` | `abrazar`, `abrazo`, `hug1` | 5s | 👤 | Abraza a alguien (`@mención`) |
+| `slap` | `cachetada`, `bofetada`, `abofetear` | 5s | 👤 | Le das una cachetada a alguien (`@mención`) |
 | `kiss` | `beso`, `kiss1` | 5s | 👤 | Besa a alguien (`@mención`) |
 | `kisscheeks` | `besomejilla`, `mejilla`, `kisscheek` | 5s | 👤 | Besa la mejilla de alguien (`@mención`) |
 | `pat` | `acariciar`, `pat1` | 5s | 👤 | Acaricia a alguien (`@mención`) |
@@ -313,6 +325,9 @@
 
 | Comando | Aliases | Cooldown | Permiso | Descripción |
 |---------|---------|:--------:|:-------:|-------------|
+| `ship` | `compatibilidad`, `amor`, `love` | 5s | 👤 | La compatibilidad entre dos personas (`@uno @otro`, o `@alguien` contigo): la misma pareja da siempre lo mismo |
+| `parejas` | `couples`, `shipear`, `emparejar` | 30s | 👥 | Parejas al azar del grupo, hasta 5 |
+| `lista` | `lineup`, `scrim`, `versus`, `mapa`, `mapas` | 2s | 👥 | Listas de partidas por equipos: `lista 4vs4 [título]` (4, 6, 12, 16, 20 o 24 por equipo), `unirme [A\|B\|S]`, `salir`, `borrar`. `mapa` sortea un mapa de Free Fire |
 | `asesino` | `mafia`, `asesinos`, `votar`, `investigar`, `salvar`, `asesinar` | 2s | 👤 | Asesino en el chat (estilo Mafia), de 4 a 10 jugadores: `crear`, `unirme`, `empezar`; de día `votar <n>` en el grupo; de noche `matar`, `investigar` o `salvar <n>` por privado, según tu rol |
 | `historia` | `telefono`, `teléfono`, `cuento` | 2s | 👤 | Teléfono descompuesto con IA, de 3 a 10 jugadores: `nueva <primera frase>`, `unirme`, `empezar`. Cada uno sigue la historia por privado viendo solo el último pedazo; al final se revela entera |
 | `meme` | `memes`, `randommeme` | 5s | 👤 | Meme aleatorio de Reddit |
@@ -346,7 +361,18 @@
 
 | Comando | Aliases | Cooldown | Permiso | Descripción |
 |---------|---------|:--------:|:-------:|-------------|
-| `sticker` | `s`, `stiker` | — | 👤 | Convierte imagen/video a sticker |
+| `sticker` | `s`, `stiker` | 3s | 👤 | Convierte imagen/video a sticker: `sticker [pack \| autor]`; citando un sticker, le cambia pack y autor |
+| `take` | `wm`, `tomar` | 3s | 👤 | Citando un sticker, le pone tu pack y autor (`take [pack \| autor]`), sin recodificarlo |
+| `setmeta` / `delmeta` | `setstickermeta`, `delstickermeta` | 3s | 👤 | El pack y autor de tus stickers: `setmeta Mi pack \| Yo` |
+| `toimg` | `toimage`, `aimagen` | 5s | 👤 | Un sticker de vuelta a imagen, o a video si es animado |
+| `newpack` | `nuevopack`, `newstickerpack` | 3s | 👤 | Crea un paquete de stickers con nombre |
+| `stickeradd` | `addsticker` | 3s | 👤 | Citando un sticker, lo agrega a un paquete (hasta 30 por paquete) |
+| `stickerdel` | `quitarsticker` | 3s | 👤 | `stickerdel <paquete> <número>` |
+| `stickerpacks` | `packs`, `packlist`, `mispacks` | 3s | 👤 | Tus paquetes y cuántos tiene cada uno |
+| `getpack` | `pack`, `verpack` | 30s | 👤 | Manda los stickers de uno de tus paquetes |
+| `delpack` | `borrarpack` | 3s | 👤 | Borra un paquete y sus stickers |
+| `qc` | `quotesticker`, `citar` | 8s | 👤 | Convierte un mensaje en sticker, con el nombre y la foto de quien lo escribió (responde al mensaje, o `qc <texto>`) |
+| `texto` | `ttp`, `textsticker`, `stickertexto` | 5s | 👤 | Un sticker con tu texto en grande |
 | `stickerpack` | `packsticker`, `spack` | 30s | 👤 | Descarga un paquete de stickers desde getstickerpack.com |
 | `savesticker` | `guardarsticker`, `gs` | 3s | 👤 | Guarda un sticker en tu colección personal — respondé a un sticker con este comando |
 | `stickers` | `misstickers`, `buscarsticker` | 3s | 👤 | Lista o busca tus stickers guardados por nombre — reenvía el que coincida |
@@ -475,6 +501,9 @@
 | `kick` | `expulsar` | — | 🔑 | Expulsa a un usuario del grupo |
 | `warn` | `advertir` | — | 🔑 | Advierte a un usuario (auto-kick al límite) |
 | `demote` | `quitaradmin`, `desadmin` | — | 🔑 | Quita el rol de administrador a un miembro |
+| `promote` | `daradmin`, `promover`, `haceradmin` | — | 🔑 | Da el rol de administrador a un miembro |
+| `grupo` | `cerrar`, `abrir`, `group` | — | 🔑 | `cerrar`: solo escriben los admins; `abrir`: escriben todos |
+| `fantasmas` | `ghosts`, `inactivos` | 10s | 🔑 | Los que no escribieron en `[días]` (30 por defecto); `sacar [días]` y después `confirmar`. No saca si el registro es más corto que la ventana, ni a admins |
 | `tag` | `tagall`, `todos`, `all` | — | 🔑 | Menciona a todos los miembros del grupo |
 | `tagone` | `tago`, `mention` | — | 🔑 | Menciona a una persona específica |
 | `delete` | `del`, `borrar`, `eliminar` | — | 🔑 | Elimina el mensaje citado |
@@ -484,6 +513,9 @@
 | `groupinfo` | `grupoinfo`, `gcfg` | — | 🔑 | Información del grupo + tu perfil en él |
 | `stats` | `estadisticas` | — | 🔑 | Estadísticas del bot en el grupo |
 | `on` / `off` | `enable`, `disable` | — | 🔑 | Panel con las 30 configuraciones + estado de cada una |
+| `setwelcome` / `setbye` | `setbienvenida`, `setdespedida` | 3s | 🔑 | El texto de bienvenida o despedida del grupo, con `@user`, `@group`, `@desc` y `@count` |
+| `delwelcome` | `resetwelcome` | 3s | 🔑 | Vuelve a las de siempre |
+| `testwelcome` | `testbye` | 10s | 🔑 | Muestra la bienvenida (o la despedida) como si entraras vos |
 
 **Cada configuración es también su propio comando** — `!<comando> enable`/`!<comando> disable` (o `activar`/`desactivar`), y sin argumento muestra una tarjeta con instrucciones y el estado actual. `!on`/`!off <clave>` sigue funcionando igual que antes como alternativa.
 

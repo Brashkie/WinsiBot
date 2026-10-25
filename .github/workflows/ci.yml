@@ -57,13 +57,35 @@ jobs:
       - name: Tests con los kernels nativos
         run: cargo test --release -p winsibot-session-api --features native
 
+  # ─── Kernels nativos en ARM ──────────────────────────────────────────────────
+  # Los mismos tests bit a bit, EJECUTADOS en ARM64, que es donde corre Termux.
+  # Los kernels de Zig son vectores (@Vector), y en ARM esos vectores son NEON
+  # y no SSE: compilar cruzado (lo que hace release.yml) dice que el código es
+  # válido, no que dé lo mismo que Rust. Hasta la 8.17.0 nadie lo comprobaba.
+  arm:
+    name: Kernels nativos en ARM64
+    runs-on: ubuntu-24.04-arm
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Cache Rust
+        uses: Swatinem/rust-cache@v2
+
+      - uses: ./.github/actions/instalar-zig
+
+      - name: Tests con los kernels nativos
+        run: cargo test --release -p winsibot-session-api --features native
+
   # ─── Release ─────────────────────────────────────────────────────────────────
   # Solo corre al pushear un tag "vX.Y.Z" — crea el Release en GitHub con notas
-  # autogeneradas, y solo después de que los 2 checks de arriba pasen en verde.
+  # autogeneradas, y solo después de que los 3 checks de arriba pasen en verde.
   release:
     name: Create GitHub Release
     if: startsWith(github.ref, 'refs/tags/v')
-    needs: [typescript, rust]
+    needs: [typescript, rust, arm]
     runs-on: ubuntu-latest
     permissions:
       contents: write

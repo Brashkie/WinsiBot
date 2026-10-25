@@ -1,6 +1,6 @@
 import type { Command } from '../../../types/index.js'
 import { getUserData, patchUserData } from '@core/events.js'
-import { objetivoDe } from '@lib/mensajes.js'
+import { objetivoDe } from '@lib/messages.js'
 
 const n = (jid: string) => jid.split('@')[0]!
 

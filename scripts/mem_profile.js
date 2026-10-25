@@ -51,9 +51,8 @@ if (deps) {
   // --deps: cada dependencia de terceros sola, en el orden del arranque. Sirve
   // para saber qué pesa; NO es lo que carga el bot, que puede no tocar alguna.
   for (const dep of [
-    '@whiskeysockets/baileys', 'pino', 'ansimax', 'axios', 'cbor-x', 'zod', 'hono', 'ws',
-    'cheerio', 'openai', 'moment-timezone', '@spotify/web-api-ts-sdk', '@vitalets/google-translate-api',
-    'wa-sticker-formatter', 'fluent-ffmpeg', 'file-type', 'node-cron', 'qrcode', '@brashkie/signalis-core',
+    '@whiskeysockets/baileys', 'pino', 'ansimax', 'axios', 'cbor-x', 'hono', 'ws',
+    'cheerio', 'wa-sticker-formatter', 'qrcode', '@brashkie/signalis-core',
   ]) {
     try {
       await step(dep, () => import(dep))

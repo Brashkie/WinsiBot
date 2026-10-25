@@ -29,7 +29,7 @@
 //! y se renombra ANTES de anotarla, y el WAL viejo se borra DESPUÉS: si el
 //! corte cae entre medio, al abrir hay una tabla que el MANIFEST no nombra
 //! —se borra, porque sus datos siguen en el WAL— o un WAL que ya no hace falta
-//! —se borra también—. Los tests de `tests/caidas.rs` cortan en cada uno de
+//! —se borra también—. Los tests de `tests/crashes.rs` cortan en cada uno de
 //! esos puntos.
 //!
 //! Fase 1: un solo escritor (`&mut self`); para compartirlo, un `Mutex`. Sin
@@ -287,26 +287,36 @@ impl Motor {
     /// Las claves en `[desde, hasta)` con su valor, en orden. `hasta = None`:
     /// hasta el final. Para buscar por prefijo, ver [`Motor::prefijo`].
     pub fn rango(&self, desde: &[u8], hasta: Option<&[u8]>) -> io::Result<Vec<(Vec<u8>, Vec<u8>)>> {
-        // De la más vieja a la más nueva: la más nueva pisa. Cada tabla se lee
-        // desde el bloque donde empieza el rango y hasta donde termina. Fase 1:
-        // el rango se junta en memoria en vez de mezclar iteradores.
-        let mut vista: BTreeMap<Vec<u8>, Option<Vec<u8>>> = BTreeMap::new();
-        for t in &self.tablas {
-            for e in t.iterar_desde(desde) {
-                let (k, v) = e?;
-                if hasta.is_some_and(|h| k.as_slice() >= h) {
-                    break;
-                }
-                if k.as_slice() >= desde {
-                    vista.insert(k, v);
-                }
+        // Las tablas (de la más vieja a la más nueva) y la memtable al final, la
+        // más nueva de todas, mezcladas al vuelo: con claves iguales gana la
+        // más nueva (ver `Mezcla`). Cada tabla arranca en el bloque donde
+        // empieza el rango, y todo se corta en cuanto la clave pasa de `hasta`.
+        //
+        // Hasta la fase 1 el rango se juntaba entero en un BTreeMap antes de
+        // devolverlo: perdía contra SQLite por 2–4x (ver examples/compare.rs).
+        type Fuente<'a> = Box<dyn Iterator<Item = io::Result<Entrada>> + 'a>;
+        let hasta_b = hasta.map_or(Bound::Unbounded, |h| Bound::Excluded(h.to_vec()));
+        let mut fuentes: Vec<Fuente<'_>> = self.tablas.iter().map(|t| Box::new(t.iterar_desde(desde)) as Fuente<'_>).collect();
+        fuentes.push(Box::new(
+            self.mem
+                .range((Bound::Included(desde.to_vec()), hasta_b))
+                .map(|(k, v)| Ok((k.clone(), v.clone()))),
+        ));
+        let mut out = Vec::new();
+        for e in Mezcla::new(fuentes) {
+            let (k, v) = e?;
+            if hasta.is_some_and(|h| k.as_slice() >= h) {
+                break;
+            }
+            // El primer bloque de cada tabla puede traer claves de antes.
+            if k.as_slice() < desde {
+                continue;
+            }
+            if let Some(v) = v {
+                out.push((k, v));
             }
         }
-        let hasta_b = hasta.map_or(Bound::Unbounded, |h| Bound::Excluded(h.to_vec()));
-        for (k, v) in self.mem.range((Bound::Included(desde.to_vec()), hasta_b)) {
-            vista.insert(k.clone(), v.clone());
-        }
-        Ok(vista.into_iter().filter_map(|(k, v)| v.map(|v| (k, v))).collect())
+        Ok(out)
     }
 
     pub fn prefijo(&self, p: &[u8]) -> io::Result<Vec<(Vec<u8>, Vec<u8>)>> {

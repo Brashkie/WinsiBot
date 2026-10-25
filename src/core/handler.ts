@@ -30,6 +30,8 @@ import { sessionClient } from '@lib/session.js'
 import { getGroupParticipants } from '@core/groupCache.js'
 import { winsiSocket } from '@core/socket.js'
 import { getNumber } from '@lib/jid_utils.js'
+import { numeroDe } from '@lib/members.js'
+import { idiomaDe, t } from '@lib/i18n.js'
 
 // handleAIResponse puede tardar 44s+ esperando a Ollama — tiempo de sobra
 // para que una reconexión (Bad MAC, watchdog zombie, corte de red) invalide
@@ -150,7 +152,7 @@ function getOwnerCandidateId(msg: WAMessage, isGroup: boolean): string {
 function buildBaseContext(
   msg:  WAMessage,
   sock: WASocket,
-): Omit<BotContext, 'isAdmin' | 'isBotAdmin'> {
+): Omit<BotContext, 'isAdmin' | 'isBotAdmin' | 'lang'> {
   const jid     = msg.key.remoteJid ?? ''
   const isGroup = jid.endsWith('@g.us')
   const sender  = isGroup
@@ -193,6 +195,31 @@ function buildBaseContext(
     command:  rawCmd.toLowerCase(),
     pushName: msg.pushName ?? '',
   }
+}
+
+/**
+ * `ctx.lang` se calcula la primera vez que alguien lo lee, y queda guardado.
+ * Casi ningún mensaje lo necesita —la mayoría no es un comando y no recibe
+ * respuesta—, y deducirlo (usuario, número, país, grupo) cuesta ~380 ns: en
+ * un grupo activo, millones de veces al día para nada.
+ *
+ * Se define sobre el ctx ya armado y no en buildBaseContext: un `...base`
+ * llama al getter al copiar y lo volvería a hacer de entrada.
+ */
+function conIdiomaPerezoso(ctx: Omit<BotContext, 'lang'>, msg: WAMessage): BotContext {
+  return Object.defineProperty(ctx, 'lang', {
+    configurable: true,
+    enumerable:   true,
+    get(this: BotContext) {
+      const lang = idiomaDe({
+        elegido: this.sender ? getUserData(this.sender).idioma : undefined,
+        numero:  numeroDe(this.sender, msg, this.isGroup),
+        grupo:   this.isGroup ? getGroupConfig(this.jid).idioma : undefined,
+      })
+      Object.defineProperty(this, 'lang', { value: lang, writable: true, enumerable: true, configurable: true })
+      return lang
+    },
+  }) as BotContext
 }
 
 // ─── Resolver roles del grupo con cache ───────────────────────────────────────
@@ -489,11 +516,11 @@ export async function handleMessage(msg: WAMessage, sock: WASocket): Promise<voi
     // A cambio costaba un round-trip HTTP a Python en CADA mensaje (no solo
     // comandos) con hasta 500ms de espera en el camino crítico, y ya había
     // causado un bug real pisando el isOwner correcto.
-    const ctx: BotContext = {
+    const ctx = conIdiomaPerezoso({
       ...base,
       isAdmin:    roles.isAdmin,
       isBotAdmin: roles.isBotAdmin,
-    }
+    }, msg)
 
     const passed = await applyMiddlewares(ctx)
     if (!passed) return
@@ -509,7 +536,7 @@ export async function handleMessage(msg: WAMessage, sock: WASocket): Promise<voi
     // ─── Usuario baneado ──────────────────────────────────────────────────────
     if (user.banned && !ctx.isOwner) {
       await safeSend(() => sock.sendMessage(ctx.jid, {
-        text: `✗ Estas baneado\n§ Motivo: ${user.banReason || 'Sin especificar'}`,
+        text: t(ctx.lang, 'err.baneado', { motivo: user.banReason || t(ctx.lang, 'err.sinMotivo') }),
       }, { quoted: msg }))
       return
     }
@@ -748,21 +775,21 @@ export async function handleMessage(msg: WAMessage, sock: WASocket): Promise<voi
 
     if (command.ownerOnly && !ctx.isOwner) {
       await safeSend(() => sock.sendMessage(ctx.jid, {
-        text: '✗ Solo el owner puede usar este comando.',
+        text: t(ctx.lang, 'err.owner'),
       }, { quoted: msg }))
       return
     }
 
     if (command.groupOnly && !ctx.isGroup) {
       await safeSend(() => sock.sendMessage(ctx.jid, {
-        text: '✗ Este comando solo funciona en grupos.',
+        text: t(ctx.lang, 'err.grupo'),
       }, { quoted: msg }))
       return
     }
 
     if (command.adminOnly && !ctx.isAdmin && !ctx.isOwner) {
       await safeSend(() => sock.sendMessage(ctx.jid, {
-        text: '✗ Solo los administradores pueden usar este comando.',
+        text: t(ctx.lang, 'err.admin'),
       }, { quoted: msg }))
       return
     }
@@ -772,7 +799,7 @@ export async function handleMessage(msg: WAMessage, sock: WASocket): Promise<voi
       if (groupCfg.modoadmin && !ctx.isAdmin && !ctx.isOwner) return
       if (command.category === 'rpg' && !groupCfg.rpg && !ctx.isOwner) {
         await safeSend(() => sock.sendMessage(ctx.jid, {
-          text: '✗ Los comandos RPG están desactivados en este grupo.',
+          text: t(ctx.lang, 'err.rpgOff'),
         }, { quoted: msg }))
         return
       }
@@ -780,28 +807,28 @@ export async function handleMessage(msg: WAMessage, sock: WASocket): Promise<voi
 
     if (command.premiumOnly && !user.premium && !ctx.isOwner) {
       await safeSend(() => sock.sendMessage(ctx.jid, {
-        text: '✗ Este comando es solo para usuarios *premium*.',
+        text: t(ctx.lang, 'err.premium'),
       }, { quoted: msg }))
       return
     }
 
     if (command.level && user.level < command.level) {
       await safeSend(() => sock.sendMessage(ctx.jid, {
-        text: `✗ Necesitas nivel *${command.level}*\n§ Tu nivel: ${user.level}`,
+        text: t(ctx.lang, 'err.nivel', { nivel: command.level, tuyo: user.level }),
       }, { quoted: msg }))
       return
     }
 
     if (command.limit && !user.premium && !ctx.isOwner && user.diamonds < command.limit) {
       await safeSend(() => sock.sendMessage(ctx.jid, {
-        text: `✗ No tienes suficientes diamantes.\n§ Costo: ${command.limit} ◆  Tienes: ${user.diamonds} ◆`,
+        text: t(ctx.lang, 'err.diamantes', { costo: command.limit, tienes: user.diamonds }),
       }, { quoted: msg }))
       return
     }
 
     if (command.money && !user.premium && !ctx.isOwner && user.money < command.money) {
       await safeSend(() => sock.sendMessage(ctx.jid, {
-        text: `✗ No tienes suficientes monedas.\n§ Costo: ${command.money}  Tienes: ${user.money}`,
+        text: t(ctx.lang, 'err.monedas', { costo: command.money, tienes: user.money }),
       }, { quoted: msg }))
       return
     }
@@ -834,7 +861,9 @@ export async function handleMessage(msg: WAMessage, sock: WASocket): Promise<voi
         const newLevel = getUserData(ctx.sender).level
         const name      = ctx.pushName || ctx.sender.split('@')[0]
         await safeSend(() => sock.sendMessage(ctx.jid, {
-          text: `🎉 ¡*${name}* subió ${leveledUp > 1 ? `${leveledUp} niveles` : 'de nivel'} y ahora es nivel *${newLevel}*!`,
+          text: leveledUp > 1
+            ? t(ctx.lang, 'subioNiveles', { nombre: name, n: leveledUp, nivel: newLevel })
+            : t(ctx.lang, 'subioNivel', { nombre: name, nivel: newLevel }),
           mentions: [ctx.sender],
         })).catch(() => {})
       }

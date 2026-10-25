@@ -1,6 +1,6 @@
 import { Hono } from 'hono'
 import { getCookie, setCookie, deleteCookie } from 'hono/cookie'
-import { z } from 'zod'
+import { textoEntre, objeto } from '@lib/validate.js'
 import { startLogin, checkConfirmed, getSession, destroySession } from '../auth.js'
 import { subBots } from '@plugins/commands/jadibot/serbot.js'
 import { getAdminGroups } from '../groupsInfo.js'
@@ -8,16 +8,15 @@ import type { MeResponse, SubBotSummary } from '../types.js'
 
 export const SESSION_COOKIE = 'winsi_session'
 
-const startSchema = z.object({ phone: z.string().min(5).max(20) })
 
 export const authRoutes = new Hono()
 
 authRoutes.post('/start', async (c) => {
   const body = await c.req.json().catch(() => null)
-  const parsed = startSchema.safeParse(body)
-  if (!parsed.success) return c.json({ error: 'Número inválido' }, 400)
+  const crudo = textoEntre(objeto(body).phone, 5, 20)
+  if (crudo === null) return c.json({ error: 'Número inválido' }, 400)
 
-  const phone = parsed.data.phone.replace(/\D/g, '')
+  const phone = crudo.replace(/\D/g, '')
   const code  = startLogin(phone)
   return c.json({ code })
 })

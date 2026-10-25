@@ -141,6 +141,32 @@ function userStore(): Strenor {
   return _userStore
 }
 
+// ─── Grupos (log de deltas) ──────────────────────────────────────────────────
+// Lo mismo que los usuarios, por la misma razón en chico: groups.json eran
+// 288 KB (449 grupos) serializados y hasheados enteros cada 30 s —1,4 ms de CPU
+// por ciclo, ~4 s al día— para descubrir casi siempre que no cambió nada, y
+// reescritos enteros cuando un admin tocaba un interruptor. Ahora cada grupo es
+// una clave del log y se miran solo los que se pidieron (groupConfigs es un
+// MapConTocados): ~640 bytes por grupo que cambió.
+const GROUPS_AOF   = `${DIR}/groups.aof`
+const GROUPS_JSON  = `${DIR}/groups.json`
+const GROUPS_BAK   = `${DIR}/groups.json.migrated`
+const GROUP_PREFIX = 'group:'
+
+const _groupHash = new Map<string, string>()
+let _groupStore: Strenor | null = null
+
+function groupStore(): Strenor {
+  if (!_groupStore) {
+    _groupStore = new Strenor({ aof: GROUPS_AOF })
+    const rec = _groupStore.recovery
+    if (rec?.truncated) {
+      logger.warn(`Persistence: cola del log de grupos truncada — ${rec.applied} registros aplicados`)
+    }
+  }
+  return _groupStore
+}
+
 function maybeCompactUsers(store: Strenor): void {
   const size = store.aofSize()
   if (size < COMPACT_MIN_BYTES) return
@@ -236,17 +262,55 @@ async function saveMigrations(migrations: Record<string, boolean>): Promise<void
 }
 
 async function loadGroups(): Promise<void> {
-  const path = `${DIR}/groups.json`
-  if (!existsSync(path)) return
+  try {
+    const store = groupStore()
+    const keys  = store.keys().filter(k => k.startsWith(GROUP_PREFIX))
+
+    // Primer arranque con el log: sembrarlo desde groups.json, que se renombra
+    // a groups.json.migrated (restaurar con: npm run groups:import -- data/groups.json.migrated).
+    if (keys.length === 0) {
+      if (existsSync(GROUPS_JSON)) { await migrateGroupsFromJson(store); return }
+      if (existsSync(GROUPS_BAK)) {
+        logger.warn(`Persistence: log de grupos vacío, pero existe ${GROUPS_BAK} — restaurar con: npm run groups:import -- ${GROUPS_BAK}`)
+      }
+      return
+    }
+
+    for (const key of keys) {
+      const json = store.getString(key)
+      if (!json) continue
+      const jid = key.slice(GROUP_PREFIX.length)
+      const merged = { ...defaultGroupConfig(), ...JSON.parse(json) }
+      groupConfigs.set(jid, merged)
+      // Del objeto ya mezclado, como con los usuarios: si no, el primer
+      // guardado reescribiría todos los grupos en cada arranque.
+      _groupHash.set(jid, sha1(JSON.stringify(merged)))
+    }
+    logger.info(`Persistence: ${groupConfigs.size} grupos cargados`)
+    if (store.aofSize() > Math.max(1024 * 1024, groupConfigs.size * 700 * COMPACT_FACTOR)) store.compact()
+  } catch (err) {
+    logger.error({ err }, 'Persistence: error cargando el log de grupos')
+  }
+}
+
+async function migrateGroupsFromJson(store: Strenor): Promise<void> {
+  const path = GROUPS_JSON
   try {
     const raw: Record<string, any> = JSON.parse(await readFile(path, 'utf-8'))
     const migrations = await loadMigrations()
     const needsAutolevelupMigration = !migrations.autolevelupOffByDefault
 
-    for (const [jid, cfg] of Object.entries(raw)) {
-      if (needsAutolevelupMigration) cfg.autolevelup = false
-      groupConfigs.set(jid, { ...defaultGroupConfig(), ...cfg })
-    }
+    store.batch(() => {
+      for (const [jid, cfg] of Object.entries(raw)) {
+        if (needsAutolevelupMigration) cfg.autolevelup = false
+        const merged = { ...defaultGroupConfig(), ...cfg }
+        groupConfigs.set(jid, merged)
+        const json = JSON.stringify(merged)
+        store.setString(`${GROUP_PREFIX}${jid}`, json)
+        _groupHash.set(jid, sha1(json))
+      }
+    })
+    await rename(GROUPS_JSON, GROUPS_BAK)
 
     if (needsAutolevelupMigration) {
       migrations.autolevelupOffByDefault = true
@@ -254,9 +318,9 @@ async function loadGroups(): Promise<void> {
       logger.info(`Persistence: migración aplicada — autolevelup desactivado en ${groupConfigs.size} grupos existentes`)
     }
 
-    logger.info(`Persistence: ${groupConfigs.size} grupos cargados`)
+    logger.info(`Persistence: ${groupConfigs.size} grupos migrados a ${GROUPS_AOF} (respaldo en ${GROUPS_BAK})`)
   } catch (err) {
-    logger.error({ err }, 'Persistence: error cargando groups.json')
+    logger.error({ err }, 'Persistence: error migrando groups.json')
   }
 }
 
@@ -333,12 +397,19 @@ async function saveUsers(): Promise<void> {
 
 async function saveGroups(): Promise<void> {
   try {
-    await writeIfChanged(
-      `${DIR}/groups.json`,
-      JSON.stringify(Object.fromEntries(groupConfigs)),
-    )
+    const store = groupStore()
+    store.batch(() => {
+      for (const [jid, cfg] of groupConfigs.tomarTocadas()) {
+        const json = JSON.stringify(cfg)
+        const hash = sha1(json)
+        if (_groupHash.get(jid) === hash) continue
+        store.setString(`${GROUP_PREFIX}${jid}`, json)
+        _groupHash.set(jid, hash)
+      }
+    })
+    if (store.aofSize() > Math.max(8 * 1024 * 1024, groupConfigs.size * 700 * COMPACT_FACTOR)) store.compact()
   } catch (err) {
-    logger.error({ err }, 'Persistence: error guardando groups.json')
+    logger.error({ err }, 'Persistence: error guardando el log de grupos')
   }
 }
 
@@ -389,4 +460,4 @@ export function stopAutoSave(): void {
 // completo, y 'exit' corre siempre al final sin importar cómo salió el proceso.
 // Con fsync desactivado los writes ya están en manos del SO al volver de set(),
 // así que un crash del proceso no pierde nada aunque no se llegue a cerrar.
-process.once('exit', () => _userStore?.close())
+process.once('exit', () => { _userStore?.close(); _groupStore?.close() })

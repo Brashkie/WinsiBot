@@ -1,6 +1,11 @@
 import type { BotContext } from '../../types/index.js'
 import { color, themes, ascii } from 'ansimax'
-import moment from 'moment-timezone'
+// La hora de Lima con Intl, que Node ya trae. Era moment-timezone, con su base
+// de zonas horarias entera en memoria, para formatear HH:mm:ss en cada mensaje.
+// El formateador se arma una vez: crearlo es lo caro, usarlo no.
+const HORA_LIMA = new Intl.DateTimeFormat('en-GB', {
+  timeZone: 'America/Lima', hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false,
+})
 import { countMessage } from '@core/botStats.js'
 import { config } from '@config'
 
@@ -33,7 +38,7 @@ function getTypeColor(type: string): string {
 }
 
 export async function loggerMiddleware(ctx: BotContext): Promise<boolean> {
-  const time  = moment().tz('America/Lima').format('HH:mm:ss')
+  const time  = HORA_LIMA.format(Date.now())
   const isCmd = config.prefix.some(p => ctx.text.startsWith(p))
   const type  = getMsgTypeLabel(ctx)
 

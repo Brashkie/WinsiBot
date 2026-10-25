@@ -5,7 +5,7 @@ import {
 } from '@whiskeysockets/baileys'
 import type { WASocket, WAMessage } from '@whiskeysockets/baileys'
 import axios              from 'axios'
-import { fileTypeFromBuffer } from 'file-type'
+import { mimeDe } from './mime.js'
 import { extractMentions } from './utils.js'
 import { config } from '@config'
 
@@ -84,9 +84,8 @@ async function _prepareMedia(
       buf  = Buffer.from(res.data as ArrayBuffer)
       mime = String(res.headers['content-type'] ?? 'application/octet-stream')
     } else {
-      const ft = await fileTypeFromBuffer(input)
       buf  = input
-      mime = ft?.mime ?? 'application/octet-stream'
+      mime = mimeDe(input)
     }
 
     if (mime.startsWith('image/')) {

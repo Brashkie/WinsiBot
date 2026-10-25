@@ -218,27 +218,31 @@ static void dht(escritor *e, uint8_t clase_id, const uint8_t b[16], const uint8_
     for (int i = 0; i < n; i++) byte(e, vals[i]);
 }
 
+/* Las tablas de Huffman. Las arma winsi_jpeg_init, que Rust llama UNA vez por
+ * proceso (std::sync::Once) antes de codificar nada: después las franjas, que
+ * corren en paralelo —y dos #upscale a la vez—, solo las leen. Armarlas "la
+ * primera vez que se usan", con una bandera, era una carrera entre hilos. */
+static tabla dcl, dcc, acl, acc;
+
+void winsi_jpeg_init(void) {
+    armar(&dcl, DC_L_BITS, DC_VALS);
+    armar(&dcc, DC_C_BITS, DC_VALS);
+    armar(&acl, AC_L_BITS, AC_L_VALS);
+    armar(&acc, AC_C_BITS, AC_C_VALS);
+}
+
 /*
- * Escribe el archivo JPEG entero a partir de los coeficientes ya cuantizados
- * que dejó jpeg.zig: por cada MCU de 16x16, cuatro bloques de luma y uno de
- * cada croma, 64 coeficientes cada uno EN ORDEN ZIGZAG.
+ * Todo lo que va antes de los datos: SOI, JFIF, DQT, SOF0, DHT, DRI (si
+ * `reinicio` > 0) y SOS. Devuelve los bytes escritos, o 0 si `cap` no alcanzó.
  *
- * Devuelve los bytes escritos, o 0 si `cap` no alcanzó: quien llama reintenta
- * con más espacio.
+ * `reinicio` es cada cuántas MCU hay un marcador RSTn. Con él, el DC de cada
+ * bloque deja de depender de lo anterior a cada marcador, y los tramos entre
+ * marcadores se codifican por separado —en paralelo— y se concatenan. Es JPEG
+ * baseline desde la norma original (1992): todo decodificador lo lee.
  */
-size_t winsi_jpeg_write(const int16_t *coefs, uint32_t w, uint32_t h,
-                        const uint8_t qy[64], const uint8_t qc[64],
-                        uint8_t *out, size_t cap) {
+size_t winsi_jpeg_cabecera(uint32_t w, uint32_t h, const uint8_t qy[64], const uint8_t qc[64],
+                           uint32_t reinicio, uint8_t *out, size_t cap) {
     escritor e = {out, out + cap, 0, 0, 0};
-    static tabla dcl, dcc, acl, acc;
-    static int listas = 0;
-    if (!listas) {
-        armar(&dcl, DC_L_BITS, DC_VALS);
-        armar(&dcc, DC_C_BITS, DC_VALS);
-        armar(&acl, AC_L_BITS, AC_L_VALS);
-        armar(&acc, AC_C_BITS, AC_C_VALS);
-        listas = 1;
-    }
 
     palabra(&e, 0xFFD8);                                   /* SOI */
     palabra(&e, 0xFFE0); palabra(&e, 16);                  /* APP0 JFIF */
@@ -265,6 +269,11 @@ size_t winsi_jpeg_write(const int16_t *coefs, uint32_t w, uint32_t h,
     dht(&e, 0x01, DC_C_BITS, DC_VALS, 12);
     dht(&e, 0x11, AC_C_BITS, AC_C_VALS, 162);
 
+    if (reinicio) {
+        palabra(&e, 0xFFDD); palabra(&e, 4);               /* DRI */
+        palabra(&e, (uint16_t)reinicio);
+    }
+
     palabra(&e, 0xFFDA); palabra(&e, 12);                  /* SOS */
     byte(&e, 3);
     byte(&e, 1); byte(&e, 0x00);
@@ -272,9 +281,23 @@ size_t winsi_jpeg_write(const int16_t *coefs, uint32_t w, uint32_t h,
     byte(&e, 3); byte(&e, 0x11);
     byte(&e, 0); byte(&e, 63); byte(&e, 0);
 
-    uint32_t mcus = ((w + 15) / 16) * ((h + 15) / 16);
+    return e.desborde ? 0 : (size_t)(e.p - out);
+}
+
+/*
+ * Los datos de las MCU [m0, m1), a partir de los coeficientes ya cuantizados
+ * que dejó jpeg.zig: por cada MCU de 16x16, cuatro bloques de luma y uno de
+ * cada croma, 64 coeficientes cada uno EN ORDEN ZIGZAG.
+ *
+ * Empieza con los predictores de DC en cero y termina en un byte completo:
+ * así es un tramo entre dos marcadores de reinicio. Sin marcadores, todas las
+ * MCU en un solo tramo. Necesita las tablas de winsi_jpeg_init.
+ * Devuelve los bytes escritos, o 0 si `cap` no alcanzó.
+ */
+size_t winsi_jpeg_franja(const int16_t *coefs, uint32_t m0, uint32_t m1, uint8_t *out, size_t cap) {
+    escritor e = {out, out + cap, 0, 0, 0};
     int py = 0, pcb = 0, pcr = 0;
-    for (uint32_t m = 0; m < mcus && !e.desborde; m++) {
+    for (uint32_t m = m0; m < m1 && !e.desborde; m++) {
         const int16_t *b = coefs + (size_t)m * 6 * 64;
         for (int i = 0; i < 4; i++) bloque(&e, b + i * 64, &py, &dcl, &acl);
         bloque(&e, b + 4 * 64, &pcb, &dcc, &acc);
@@ -282,7 +305,5 @@ size_t winsi_jpeg_write(const int16_t *coefs, uint32_t w, uint32_t h,
     }
     /* Completar el último byte con unos, como pide la norma. */
     cerrar(&e);
-    palabra(&e, 0xFFD9);                                   /* EOI */
-
     return e.desborde ? 0 : (size_t)(e.p - out);
 }

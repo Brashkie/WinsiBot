@@ -1,15 +1,29 @@
-import fg from 'fast-glob'
-import { existsSync, readFileSync } from 'fs'
+import { existsSync, readFileSync, readdirSync } from 'fs'
 import { pathToFileURL, fileURLToPath } from 'url'
 import { dirname, join } from 'path'
 import type { Command } from '../../types/index.js'
 import { logger } from '@core/logger.js'
+import { ALIAS_IDIOMA } from '@lib/i18n.js'
 
 export const commandRegistry = new Map<string, Command>()
+
+// Los alias por idioma (#ajuda, #trabalhar…, ver @lib/i18n.ts), agrupados por
+// el comando al que van.
+const aliasDeIdioma = new Map<string, string[]>()
+for (const tabla of Object.values(ALIAS_IDIOMA)) {
+  for (const [alias, nombre] of Object.entries(tabla)) {
+    aliasDeIdioma.set(nombre, [...(aliasDeIdioma.get(nombre) ?? []), alias])
+  }
+}
 
 function registrar(command: Command): void {
   commandRegistry.set(command.name, command)
   for (const alias of command.aliases ?? []) commandRegistry.set(alias, command)
+  // Uno por idioma no le quita el alias a otro comando: los propios ganan.
+  for (const alias of aliasDeIdioma.get(command.name) ?? []) {
+    const actual = commandRegistry.get(alias)
+    if (!actual || actual.name === command.name) commandRegistry.set(alias, command)
+  }
 }
 
 function comandosDe(mod: any): Command[] {
@@ -51,11 +65,10 @@ export async function loadCommands(): Promise<void> {
 
 async function importarTodos(base: string): Promise<void> {
   const ext = import.meta.url.endsWith('.ts') ? 'ts' : 'js'
-  const files = await fg(`**/*.${ext}`, {
-    cwd:      base,
-    ignore:   [`**/index.${ext}`, '**/*.d.ts'],
-    absolute: true,
-  })
+  // readdir recursivo de Node en vez de fast-glob: es un solo patrón fijo.
+  const files = (readdirSync(base, { recursive: true }) as string[])
+    .filter(f => f.endsWith(`.${ext}`) && !f.endsWith('.d.ts') && !/(^|[\\/])index\.\w+$/.test(f))
+    .map(f => join(base, f))
   for (const file of files) {
     try {
       for (const command of comandosDe(await import(pathToFileURL(file).href))) {

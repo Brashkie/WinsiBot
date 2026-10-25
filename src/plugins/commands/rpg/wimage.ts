@@ -1,7 +1,7 @@
 import type { Command, RollCharacter } from '../../../types/index.js'
 import { SOURCES, getCharacters, pickImage } from './rollwaifu.js'
 import { downloadBuffer } from '@lib/downloader.js'
-import { translate } from '@vitalets/google-translate-api'
+import { translate } from '@lib/translate.js'
 
 /** Normaliza: minúsculas, sin acentos, sin guiones/espacios extra. */
 const norm = (s: string) =>

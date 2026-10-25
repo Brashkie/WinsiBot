@@ -1,7 +1,7 @@
 //! resize.rs — redimensionado bicúbico (Catmull-Rom) para `#upscale`.
 //!
 //! Con los kernels de Anime4K repartidos en todos los núcleos, el redimensionado
-//! del crate `image` quedó siendo el 85% de `#upscale` (`perfil_upscale`): un
+//! del crate `image` quedó siendo el 85% de `#upscale` (`profile_upscale`): un
 //! solo hilo, flotantes genéricos, y una imagen intermedia de f32 del ancho
 //! original por el alto nuevo —50 MB para un x2 de 1536x1024—.
 //!

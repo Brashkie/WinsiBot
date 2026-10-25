@@ -1,6 +1,6 @@
 [package]
 name = "winsibot-session-api"
-version = "5.9.0"
+version = "5.10.0"
 edition = "2021"
 
 [lib]
@@ -69,5 +69,5 @@ name = "codec"
 harness = false
 
 [[bench]]
-name = "mensaje"
+name = "message"
 harness = false

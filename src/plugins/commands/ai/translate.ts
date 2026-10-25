@@ -1,5 +1,5 @@
 import type { Command } from '../../../types/index.js'
-import { translate } from '@vitalets/google-translate-api'
+import { translate } from '@lib/translate.js'
 
 const command: Command = {
   name: 'traducir',

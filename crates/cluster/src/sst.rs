@@ -277,6 +277,26 @@ impl Sst {
         Ok(b)
     }
 
+    /// Los bloques [i, j) en UNA lectura —están seguidos en el archivo—, cada
+    /// uno verificado. Es lo que usan los recorridos: un rango de 1,7 MB eran
+    /// ~430 lecturas al sistema operativo, una por bloque de 4 KB.
+    fn bloques(&self, i: usize, j: usize) -> io::Result<Vec<Vec<u8>>> {
+        let desde = self.indice[i].1;
+        let (_, ult, largo) = &self.indice[j - 1];
+        let mut todo = vec![0u8; (ult + u64::from(*largo) + 4 - desde) as usize];
+        leer_en(&self.archivo, desde, &mut todo)?;
+        let mut out = Vec::with_capacity(j - i);
+        for (_, d, l) in &self.indice[i..j] {
+            let o = (d - desde) as usize;
+            let (b, c) = todo[o..o + *l as usize + 4].split_at(*l as usize);
+            if crc32(b) != u32::from_le_bytes(c.try_into().unwrap()) {
+                return Err(corrupto("el CRC de un bloque no cuadra"));
+            }
+            out.push(b.to_vec());
+        }
+        Ok(out)
+    }
+
     /// `None`: no está en esta tabla. `Some(None)`: está borrada (lápida).
     pub fn leer(&self, clave: &[u8]) -> io::Result<Option<Option<Vec<u8>>>> {
         if !quizas_en_bloom(&self.bloom, self.k, hash64(clave)) {
@@ -303,21 +323,30 @@ impl Sst {
 
     /// Todas las entradas en orden, bloque por bloque (no carga la tabla entera).
     pub fn iterar(&self) -> Iterador<'_> {
-        Iterador { sst: self, bloque: 0, actuales: Vec::new().into_iter() }
+        self.iterar_desde_bloque(0)
+    }
+
+    fn iterar_desde_bloque(&self, bloque: usize) -> Iterador<'_> {
+        Iterador { sst: self, bloque, leidos: Vec::new().into_iter(), actuales: Vec::new().into_iter() }
     }
 
     /// Las entradas desde el bloque que podría tener `desde`: un rango no
     /// recorre la tabla desde el principio. El primer bloque puede traer claves
     /// menores; quien llama las salta.
     pub fn iterar_desde(&self, desde: &[u8]) -> Iterador<'_> {
-        let bloque = self.indice.partition_point(|(ultima, _, _)| ultima.as_slice() < desde);
-        Iterador { sst: self, bloque, actuales: Vec::new().into_iter() }
+        self.iterar_desde_bloque(self.indice.partition_point(|(ultima, _, _)| ultima.as_slice() < desde))
     }
 }
 
+/// Cuántos bloques lee de una vez un recorrido: 16 de 4 KB, 64 KB por lectura.
+const LECTURA: usize = 16;
+
 pub(crate) struct Iterador<'a> {
     sst: &'a Sst,
+    /// El próximo bloque a LEER del disco.
     bloque: usize,
+    /// Bloques ya leídos y verificados, todavía sin decodificar.
+    leidos: std::vec::IntoIter<Vec<u8>>,
     actuales: std::vec::IntoIter<Entrada>,
 }
 
@@ -329,18 +358,35 @@ impl Iterator for Iterador<'_> {
             if let Some(e) = self.actuales.next() {
                 return Some(Ok(e));
             }
-            if self.bloque >= self.sst.indice.len() {
-                return None;
-            }
-            let b = match self.sst.bloque(self.bloque).and_then(|b| entradas_de(&b)) {
-                Ok(v) => v,
-                Err(e) => {
-                    self.bloque = self.sst.indice.len();
-                    return Some(Err(e));
+            let crudo = match self.leidos.next() {
+                Some(b) => b,
+                None => {
+                    let total = self.sst.indice.len();
+                    if self.bloque >= total {
+                        return None;
+                    }
+                    let hasta = (self.bloque + LECTURA).min(total);
+                    match self.sst.bloques(self.bloque, hasta) {
+                        Ok(v) => {
+                            self.bloque = hasta;
+                            self.leidos = v.into_iter();
+                            continue;
+                        }
+                        Err(e) => {
+                            self.bloque = total;
+                            return Some(Err(e));
+                        }
+                    }
                 }
             };
-            self.bloque += 1;
-            self.actuales = b.into_iter();
+            match entradas_de(&crudo) {
+                Ok(v) => self.actuales = v.into_iter(),
+                Err(e) => {
+                    self.bloque = self.sst.indice.len();
+                    self.leidos = Vec::new().into_iter();
+                    return Some(Err(e));
+                }
+            }
         }
     }
 }

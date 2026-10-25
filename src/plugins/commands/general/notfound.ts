@@ -1,69 +1,23 @@
-/*import type { BotContext } from '../../../types/index.js'
-import { commandRegistry } from '../index.js'
-
-// ─── Distancia de Levenshtein para sugerencias más precisas ──────────────────
-function levenshtein(a: string, b: string): number {
-  const dp: number[][] = Array.from({ length: a.length + 1 }, (_, i) =>
-    Array.from({ length: b.length + 1 }, (_, j) => (i === 0 ? j : j === 0 ? i : 0))
-  )
-  for (let i = 1; i <= a.length; i++) {
-    for (let j = 1; j <= b.length; j++) {
-      dp[i]![j] = a[i - 1] === b[j - 1]
-        ? dp[i - 1]![j - 1]!
-        : 1 + Math.min(dp[i - 1]![j]!, dp[i]![j - 1]!, dp[i - 1]![j - 1]!)
-    }
-  }
-  return dp[a.length]![b.length]!
-}
-
-function findSimilar(input: string, prefix: string): string[] {
-  return [...commandRegistry.values()]
-    .map(cmd => ({
-      name: cmd.name,
-      dist: levenshtein(input, cmd.name),
-      alias: cmd.aliases?.some(a => levenshtein(input, a) <= 2),
-    }))
-    .filter(c => c.dist <= 3 || c.alias)
-    .sort((a, b) => a.dist - b.dist)
-    .slice(0, 3)
-    .map(c => `${prefix}${c.name}`)
-}
-
-export async function handleNotFound(ctx: BotContext): Promise<void> {
-  const { sock, jid, msg, command, prefix } = ctx
-  const similar = findSimilar(command, prefix)
-
-  const lines: string[] = []
-
-  lines.push(`┌─────────────────────────`)
-  lines.push(`│  Comando no encontrado`)
-  lines.push(`│  *${prefix}${command}*`)
-  lines.push(`└─────────────────────────`)
-
-  if (similar.length > 0) {
-    lines.push(``)
-    lines.push(`  ◈ Quisiste decir?`)
-    similar.forEach(s => lines.push(`    ╰ ${s}`))
-  }
-
-  lines.push(``)
-  lines.push(`  § Ver todos: *${prefix}menu*`)
-
-  await sock.sendMessage(jid, {
-    text: lines.join('\n'),
-  }, { quoted: msg })
-}*/
-
 import type { BotContext } from '../../../types/index.js'
+import { commandRegistry } from '../index.js'
+import { safeSend } from '@lib/media_sender.js'
+import { t } from '@lib/i18n.js'
+import { parecidos } from '@lib/similar.js'
+
+// Un comando que no existe: avisar en el idioma de quien escribió y, si se
+// parece a uno que sí existe (#trabajr, #menú), sugerirlo.
 
 export async function handleNotFound(ctx: BotContext): Promise<void> {
-  const { sock, jid, msg, command, prefix } = ctx
+  const { sock, jid, msg, command, prefix, lang } = ctx
+  const similares = parecidos(command, commandRegistry.entries())
 
-  await sock.sendMessage(jid, {
+  await safeSend(() => sock.sendMessage(jid, {
     text: [
-      `𒁈 El comando *${prefix}${command}* no existe.`,
-      `Para ver la lista de comandos usa:`,
-      `> *${prefix}help*`,
-    ].join('\n'),
-  }, { quoted: msg })
+      t(lang, 'noExiste', { cmd: `${prefix}${command}` }),
+      similares.length
+        ? t(lang, 'quisiste', { sugerencias: similares.map(s => `*${prefix}${s}*`).join(', ') })
+        : t(lang, 'verLista'),
+      similares.length ? '' : `> *${prefix}help*`,
+    ].filter(Boolean).join('\n'),
+  }, { quoted: msg }))
 }

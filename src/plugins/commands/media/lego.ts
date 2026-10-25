@@ -2,7 +2,7 @@ import type { Command } from '../../../types/index.js'
 import { legofyImage } from '@lib/nativeBridge.js'
 
 import { sleep } from '@lib/utils.js'
-import { imagenDelMensaje } from '@lib/mensajes.js'
+import { imagenDelMensaje } from '@lib/messages.js'
 
 const command: Command = {
   name:        'lego',

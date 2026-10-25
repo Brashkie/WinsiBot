@@ -38,21 +38,21 @@
 
 | # | Category | Commands |
 |---|----------|:--------:|
-| 1 | [🛠️ General](#%EF%B8%8F-general) | 11 |
+| 1 | [🛠️ General](#%EF%B8%8F-general) | 19 |
 | 2 | [🤖 AI / ChatGPT](#-ai--chatgpt) | 4 |
-| 3 | [🎮 RPG / Economy](#-rpg--economy) | 22 |
+| 3 | [🎮 RPG / Economy](#-rpg--economy) | 27 |
 | 4 | [🎴 Gacha / Characters](#-gacha--characters) | 6 |
 | 5 | [💑 Couples](#-couples) | 5 |
-| 6 | [🎭 Roleplay](#-roleplay) | 9 |
-| 7 | [🎉 Fun](#-fun) | 14 |
+| 6 | [🎭 Roleplay](#-roleplay) | 10 |
+| 7 | [🎉 Fun](#-fun) | 17 |
 | 8 | [🕹️ Games](#%EF%B8%8F-games) | 7 |
 | 9 | [🎁 Gifts](#-gifts) | 1 |
-| 10 | [🖼️ Media & Stickers](#%EF%B8%8F-media--stickers) | 6 |
+| 10 | [🖼️ Media & Stickers](#%EF%B8%8F-media--stickers) | 18 |
 | 11 | [🔽 Downloads](#-downloads) | 7 |
 | 12 | [🔍 Scrapers / Search](#-scrapers--search) | 4 |
 | 13 | [🎵 Music](#-music) | 1 |
 | 14 | [🔞 NSFW](#-nsfw) | 5 |
-| 15 | [🔑 Group Admin](#-group-admin) | 41 |
+| 15 | [🔑 Group Admin](#-group-admin) | 48 |
 | 16 | [🤖 JadiBot](#-jadibot) | 3 |
 | 17 | [ℹ️ Info](#%EF%B8%8F-info) | 2 |
 | 18 | [👑 Owner / System](#-owner--system) | 24 |
@@ -64,13 +64,21 @@
 | Command | Aliases | Cooldown | Permission | Description |
 |---------|---------|:--------:|:----------:|-------------|
 | `ping` | `p` | 3s | 👤 | Check bot status and show latency |
-| `menu` | `help`, `ayuda` | — | 👤 | List all command categories |
+| `menu` | `help`, `ayuda`, `ajuda` | — | 👤 | List all command categories, in your language |
+| `idioma` | `language`, `lang`, `lingua` | 3s | 👤 | The language the bot uses with you: `idioma es\|en\|pt`, `idioma auto` (from your number's country), `idioma grupo <es\|en\|pt\|off>` (admins: for whoever hasn't chosen) |
 | `categoria` | `cat`, `category` | — | 👤 | Show commands for a specific category |
 | `afk` | `ausente` | 10s | 👤 | Activate AFK mode with a custom reason |
 | `creator` | `info`, `about`, `botinfo`, `creador` | — | 👤 | Bot and creator information |
 | `resumen` | `quemeperdi`, `qmp`, `perdi`, `summary` | 60s | 👥 | "What did I miss?": summarizes what was said in the group (12 h by default, up to 72). Uses AI if available; otherwise who spoke, about what, and the open questions |
 | `encuesta` | `poll`, `votacion` | 10s | 👤 | Native WhatsApp poll, 2 to 12 options separated by `\|`; `-m` for multiple choice |
 | `tts` | `voz`, `decir`, `habla`, `say` | 10s | 👤 | Text to voice note **offline** (max 400 characters), or reply to a message with `tts`. Uses Piper, espeak, the Windows voice or the macOS one, whichever is available |
+| `sorteo` | `giveaway`, `rifa`, `sortear` | 3s | 👥 | Giveaways: `crear 30m <prize> [x2]` (admins), `unirme` (join), `ya` (close now), `cancelar`, or `rapido <prize>` among all members |
+| `nota` | `notas`, `note`, `notes`, `reglas`, `rules` | 3s | 👥 | Group notes: `nota <name>` to read, `nota set <name> <text>` and `nota borrar <name>` (admins). `reglas` is the shortcut for the "reglas" note |
+| `actividad` | `activity`, `topmensajes`, `totalmensajes` | 15s | 👥 | Who writes the most in the group, over `[days]` (7 by default) |
+| `getpic` | `pfp`, `fotoperfil`, `verfoto` | 5s | 👤 | Someone's profile picture, full size (`@mention`, quoting, or yours) |
+| `suggest` | `report`, `reportar`, `sugerir`, `sugerencia` | 2min | 👤 | A suggestion or a bug report, to the bot owner's DM |
+| `birthday` | `cumpleaños`, `bday`, `cumples`, `delbirth`, `setbirth` | 3s | 👤 | `birthday set DD/MM`, `list` (today), `cumples` (the group's upcoming ones), `borrar` (delete), `allow`/`deny`, `setup on/off` (admins) |
+| `paises` | `países`, `countries`, `pais` | 15s | 👥 | Which countries the group's members are from |
 | `recordar` | `recordatorio`, `remind`, `rec` | 3s | 👤 | Reminder in this chat: `10m`, `2h30m`, `en 3 días`, `a las 18:30`, `mañana 9:00`, `7pm`. `lista` and `borrar <n>`. Up to 10 per person; they survive a restart |
 
 ```
@@ -138,6 +146,8 @@
 | Command | Aliases | Cooldown | Permission | Description |
 |---------|---------|:--------:|:----------:|-------------|
 | `perfil` | `profile`, `miperfil`, `yo` | 5s | 👤 | View your profile or another user's (`@mention`) |
+| `setdesc` / `deldesc` | `setdescription`, `descripcion` | 5s | 👤 | Your profile description (up to 140 characters) |
+| `setgenre` / `delgenre` | `setgenero`, `genero` | 5s | 👤 | Your gender on the profile: `hombre`, `mujer` or `otro` |
 | `xp` | `exp`, `experiencia`, `stats`, `nivel` | 5s | 👤 | Detailed RPG statistics |
 | `rangos` | `roles`, `rango`, `rol`, `ranks` | 10s | 👤 | Server rank table |
 | `work` | `trabajar`, `trabajo`, `w` | 10min | 👤 | Work to earn BrasCoins (every 10 min) |
@@ -157,7 +167,8 @@
 | `leveltop` | `toplevel`, `topnivel`, `niveltop`, `levelrank` | 10s | 👤 | Top users by level |
 | `depositar` | `dep`, `deposit`, `retirar`, `withdraw`, `banco` | 3s | 👤 | Deposit or withdraw coins from the bank |
 | `prestige` | `prestigio`, `ascender` | — | 👤 | Reset progress in exchange for exclusive prestige rewards |
-| `pet` | `mascota`, `mipet`, `dragon`, `dragones` | 3s | 👤 | Dragon City: hatch eggs, feed with Gold, evolve and breed your dragons (579 available). `criar <#> <#>`: two at level 10+, 5,000 gold + ¥3,000, every 8 h. `companero <#>`: the one that gains exp from your messages and fights in `raid` |
+| `pet` | `mascota`, `mipet`, `dragon`, `dragones` | 3s | 👤 | Dragon City: hatch eggs, feed with Gold, evolve and breed your dragons (579 available). `criar <#> <#>`: two at level 10+, 5,000 gold + ¥3,000, every 8 h. `companero <#>`: the one that gains exp from your messages and fights in `raid`. `comida` (food), `agua` (water), `pasear` (walk): with its care up to date it hits up to +15% in `raid` and takes up to 45% less from the counterattack; `cuidar` shows how long each one lasts |
+| `salud` | `vida`, `hp`, `curar`, `pocion`, `hospital` | 3s | 👤 | Your health (0-100): it drops with the `raid` boss's counterattack and recovers on its own (0 to 100 in 5 h). `curar` drinks a potion 🧪 (+40, from `daily`); `hospital` fills it for a fee that grows with your level. Below 20 you can't fight |
 | `forjar` | `forja`, `forge`, `herreria` | 3s | 👤 | Upgrade your weapon from +0 to +10 with ⚔️ ✨ 🏆 and ¥: +8% `raid` damage per level. From +4, failing drops a level unless you have 🛡️ (`forjar proteccion`) |
 | `subasta` | `subastas`, `auction`, `pujar`, `puja`, `bid` | 2s | 👥 | Auction a dragon or items in the group; bids are held and refunded to whoever is outbid. 5% fee |
 | `harem` | `waifus`, `claims`, `coleccion` | 5s | 👤 | View characters claimed with `!rw`, sorted by value |
@@ -202,7 +213,7 @@
 | `arena` | `pvp`, `batalla`, `fight` | 30s | 👤 | Challenge another user to a 1v1 PvP duel with a diamond wager, or practice against the CPU with `arena cpu [facil\|normal\|dificil]` (no ELO; the CPU thinks with expectiminimax) |
 | `quiz` | `qz`, `pregunta`, `coding` | 15s | 👤 | Programming question by category (JS, Python, SQL…) |
 | `adivinar` | `drawguess`, `dibujar`, `guess` | 20s | 👤 | Group draw-and-guess mini-game |
-| `raid` | `jefe`, `boss`, `worldboss`, `atacar` | 1min per hit | 👥 | World boss: the same one for every group. Spawns every 6 h and escapes after 60 min. Two players in a row with companions whose elements combine trigger a reaction. `atacar`, `on`/`off` (admins: announcements in the group), `invocar` (owner) |
+| `raid` | `jefe`, `boss`, `worldboss`, `atacar` | 1min per hit | 👥 | World boss: the same one for every group. Spawns every 6 h and escapes after 60 min. Two players in a row with companions whose elements combine trigger a reaction. The boss hits back (see `salud`). `atacar`, `on`/`off` (admins: announcements in the group), `invocar` (owner) |
 | `mazmorra` | `dungeon`, `mazmorras`, `calabozo` | 10s per door | 👥 | The daily dungeon, the same for every group: `entrar` (enter), `<door number>`, `salir` (cash out) and `ranking`. One expedition per person per day |
 | `poker` | `póker`, `holdem`, `casinoholdem` | 2s | 👤 | Casino Hold'em against the house: `poker <ante>`, then `poker ir` (pays double) or `poker retirarse` (fold). Dealer qualifies with a pair of 4s or better |
 | `blackjack` | `bj`, `21`, `pedir`, `plantarse`, `doblar` | 2s | 👤 | Blackjack against the dealer: a win pays ×2, blackjack 3:2, dealer stands on 17. Bets from ¥10 to ¥500,000 |
@@ -286,6 +297,7 @@
 | Command | Aliases | Cooldown | Permission | Description |
 |---------|---------|:--------:|:----------:|-------------|
 | `hug` | `abrazar`, `abrazo`, `hug1` | 5s | 👤 | Hug someone (`@mention`) |
+| `slap` | `cachetada`, `bofetada`, `abofetear` | 5s | 👤 | Slap someone (`@mention`) |
 | `kiss` | `beso`, `kiss1` | 5s | 👤 | Kiss someone (`@mention`) |
 | `kisscheeks` | `besomejilla`, `mejilla`, `kisscheek` | 5s | 👤 | Kiss someone's cheek (`@mention`) |
 | `pat` | `acariciar`, `pat1` | 5s | 👤 | Pat someone (`@mention`) |
@@ -313,6 +325,9 @@
 
 | Command | Aliases | Cooldown | Permission | Description |
 |---------|---------|:--------:|:----------:|-------------|
+| `ship` | `compatibilidad`, `amor`, `love` | 5s | 👤 | Compatibility between two people (`@one @other`, or `@someone` with you): the same pair always gives the same result |
+| `parejas` | `couples`, `shipear`, `emparejar` | 30s | 👥 | Random couples from the group, up to 5 |
+| `lista` | `lineup`, `scrim`, `versus`, `mapa`, `mapas` | 2s | 👥 | Team match lineups: `lista 4vs4 [title]` (4, 6, 12, 16, 20 or 24 per team), `unirme [A\|B\|S]` (join), `salir` (leave), `borrar`. `mapa` draws a Free Fire map |
 | `asesino` | `mafia`, `asesinos`, `votar`, `investigar`, `salvar`, `asesinar` | 2s | 👤 | Killer in the chat (Mafia-style), 4 to 10 players: `crear` (create), `unirme` (join), `empezar` (start); by day `votar <n>` (vote) in the group; by night `matar` (kill), `investigar` (investigate) or `salvar <n>` (save) in private, depending on your role |
 | `historia` | `telefono`, `teléfono`, `cuento` | 2s | 👤 | AI broken telephone, 3 to 10 players: `nueva <first sentence>` (new), `unirme` (join), `empezar` (start). Each one continues the story in private seeing only the last piece; at the end it's revealed in full |
 | `meme` | `memes`, `randommeme` | 5s | 👤 | Random meme from Reddit |
@@ -346,7 +361,18 @@
 
 | Command | Aliases | Cooldown | Permission | Description |
 |---------|---------|:--------:|:----------:|-------------|
-| `sticker` | `s`, `stiker` | — | 👤 | Convert image/video to sticker |
+| `sticker` | `s`, `stiker` | 3s | 👤 | Convert image/video to sticker: `sticker [pack \| author]`; quoting a sticker, changes its pack and author |
+| `take` | `wm`, `tomar` | 3s | 👤 | Quoting a sticker, puts your pack and author on it (`take [pack \| author]`), without re-encoding |
+| `setmeta` / `delmeta` | `setstickermeta`, `delstickermeta` | 3s | 👤 | The pack and author of your stickers: `setmeta My pack \| Me` |
+| `toimg` | `toimage`, `aimagen` | 5s | 👤 | A sticker back to an image, or to a video if animated |
+| `newpack` | `nuevopack`, `newstickerpack` | 3s | 👤 | Create a named sticker pack |
+| `stickeradd` | `addsticker` | 3s | 👤 | Quoting a sticker, adds it to a pack (up to 30 per pack) |
+| `stickerdel` | `quitarsticker` | 3s | 👤 | `stickerdel <pack> <number>` |
+| `stickerpacks` | `packs`, `packlist`, `mispacks` | 3s | 👤 | Your packs and how many each one has |
+| `getpack` | `pack`, `verpack` | 30s | 👤 | Send the stickers of one of your packs |
+| `delpack` | `borrarpack` | 3s | 👤 | Delete a pack and its stickers |
+| `qc` | `quotesticker`, `citar` | 8s | 👤 | Turn a message into a sticker, with the author's name and photo (reply to the message, or `qc <text>`) |
+| `texto` | `ttp`, `textsticker`, `stickertexto` | 5s | 👤 | A sticker with your text in big letters |
 | `stickerpack` | `packsticker`, `spack` | 30s | 👤 | Download a sticker pack from getstickerpack.com |
 | `savesticker` | `guardarsticker`, `gs` | 3s | 👤 | Save a sticker to your personal collection — reply to a sticker with this command |
 | `stickers` | `misstickers`, `buscarsticker` | 3s | 👤 | List or search your saved stickers by name — resends the matching one |
@@ -475,6 +501,9 @@
 | `kick` | `expulsar` | — | 🔑 | Remove a user from the group |
 | `warn` | `advertir` | — | 🔑 | Warn a user (auto-kick at limit) |
 | `demote` | `quitaradmin`, `desadmin` | — | 🔑 | Remove admin role from a member |
+| `promote` | `daradmin`, `promover`, `haceradmin` | — | 🔑 | Give a member the admin role |
+| `grupo` | `cerrar`, `abrir`, `group` | — | 🔑 | `cerrar` (close): only admins can write; `abrir` (open): everyone can |
+| `fantasmas` | `ghosts`, `inactivos` | 10s | 🔑 | Members who didn't write in `[days]` (30 by default); `sacar [days]` (remove) then `confirmar`. Won't remove if the record is shorter than the window, nor admins |
 | `tag` | `tagall`, `todos`, `all` | — | 🔑 | Mention all group members |
 | `tagone` | `tago`, `mention` | — | 🔑 | Mention a specific person |
 | `delete` | `del`, `borrar`, `eliminar` | — | 🔑 | Delete a quoted message |
@@ -484,6 +513,9 @@
 | `groupinfo` | `grupoinfo`, `gcfg` | — | 🔑 | Group info + your profile in the group |
 | `stats` | `estadisticas` | — | 🔑 | Bot statistics in the group |
 | `on` / `off` | `enable`, `disable` | — | 🔑 | Panel with all 30 settings + each one's current status |
+| `setwelcome` / `setbye` | `setbienvenida`, `setdespedida` | 3s | 🔑 | The group's welcome or goodbye text, with `@user`, `@group`, `@desc` and `@count` |
+| `delwelcome` | `resetwelcome` | 3s | 🔑 | Back to the default ones |
+| `testwelcome` | `testbye` | 10s | 🔑 | Shows the welcome (or the goodbye) as if you had joined |
 
 **Every setting is also its own command** — `!<command> enable`/`!<command> disable` (or `activar`/`desactivar`), and with no argument shows a card with instructions and the current status. `!on`/`!off <key>` still works the same as before as an alternative.
 

@@ -1,18 +1,6 @@
 import type { Command } from '../../../types/index.js'
-import { SpotifyApi } from '@spotify/web-api-ts-sdk'
 import { config } from '@config'
-
-let spotify: SpotifyApi | null = null
-
-function getSpotify(): SpotifyApi {
-  if (!spotify) {
-    spotify = SpotifyApi.withClientCredentials(
-      config.spotifyClientId!,
-      config.spotifyClientSecret!
-    )
-  }
-  return spotify
-}
+import { buscarPista } from '@lib/spotify.js'
 
 const command: Command = {
   name: 'spotify',
@@ -32,9 +20,7 @@ const command: Command = {
       return
     }
 
-    const sp = getSpotify()
-    const results = await sp.search(query, ['track'], undefined, 1)
-    const track = results.tracks.items[0]
+    const track = await buscarPista(query)
 
     if (!track) {
       await sock.sendMessage(jid, { text: '❌ No se encontró la canción.' }, { quoted: msg })

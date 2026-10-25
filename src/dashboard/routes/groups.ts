@@ -1,5 +1,5 @@
 import { Hono } from 'hono'
-import { z } from 'zod'
+import { objeto } from '@lib/validate.js'
 import { getGroupConfig, setGroupConfig } from '@core/events.js'
 import { OPTIONS, type BoolKey } from '@lib/groupToggles.js'
 import { getSessionFrom } from '../middleware.js'
@@ -38,7 +38,6 @@ groupsRoutes.get('/:jid/config', async (c) => {
   })
 })
 
-const patchSchema = z.object({ key: z.string(), value: z.boolean() })
 
 groupsRoutes.patch('/:jid/config', async (c) => {
   const session  = getSessionFrom(c)
@@ -49,10 +48,9 @@ groupsRoutes.patch('/:jid/config', async (c) => {
   }
 
   const body   = await c.req.json().catch(() => null)
-  const parsed = patchSchema.safeParse(body)
-  if (!parsed.success) return c.json({ error: 'Body inválido' }, 400)
+  const { key, value } = objeto(body)
+  if (typeof key !== 'string' || typeof value !== 'boolean') return c.json({ error: 'Body inválido' }, 400)
 
-  const { key, value } = parsed.data
   const option = OPTIONS[key]
   if (!option) return c.json({ error: `Opción desconocida: ${key}` }, 400)
   if (option.ownerOnly && session.role !== 'owner') return c.json({ error: 'Solo el owner puede cambiar esto' }, 403)

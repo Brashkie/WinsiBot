@@ -15,6 +15,8 @@ export interface BotContext {
   isBotAdmin: boolean
   prefix:     string
   command:    string
+  /** El idioma en que se le contesta a quien escribió (ver @lib/i18n.ts). */
+  lang:       import('../lib/i18n.js').Idioma
 }
 
 // ─── Comandos ─────────────────────────────────────────────────────────────────

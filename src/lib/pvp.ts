@@ -42,7 +42,7 @@ export interface BattleState {
   cpu?:          NivelCpu   // si p2 es la CPU
 }
 
-/** Un entero en [min, max]. Inyectable para que la IA (arenaIA.ts) simule con
+/** Un entero en [min, max]. Inyectable para que la IA (arenaAI.ts) simule con
  *  las MISMAS reglas que la pelea real, y no con una copia que se desincronice. */
 export type Tirada = (min: number, max: number) => number
 

@@ -1,7 +1,7 @@
 import type { Command } from '../../../types/index.js'
 import { downloadBuffer } from '@lib/downloader.js'
 import { safeSend } from '@lib/media_sender.js'
-import { imagenDelMensaje } from '@lib/mensajes.js'
+import { imagenDelMensaje } from '@lib/messages.js'
 
 const DEFAULT_AVATAR = 'https://i.imgur.com/8fK4h6J.png'
 const MAX_PHOTO_HEIGHT = 700 // evita tweets absurdamente largos con fotos muy verticales

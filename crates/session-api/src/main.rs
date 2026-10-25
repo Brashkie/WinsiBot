@@ -261,6 +261,8 @@ async fn principal() {
         // "¿Qué me perdí?": lo que se dijo en el grupo, y un resumen sin
         // personalidad (ver conversations.rs y ai_chat.rs).
         .route("/ai/group/recent/:gjid", get(conversations::ai_group_recent))
+        // Quién escribe cuánto en el grupo (#actividad, #fantasmas).
+        .route("/ai/group/activity/:gjid", get(conversations::ai_group_activity))
         .route("/ai/summarize", post(ai_chat::summarize))
         // El teléfono descompuesto: un giro desde UN fragmento, o un título.
         .route("/ai/story", post(ai_chat::story))

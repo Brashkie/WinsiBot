@@ -322,12 +322,26 @@ pub fn a_estilo_anime(png_o_jpeg: &[u8]) -> Result<Vec<u8>, String> {
 //
 // Los kernels viven en `anime4k.rs`, con sus versiones en C y en Zig.
 
+/// La imagen, el tamaño de entrada y el de salida; o por qué no se pudo.
+pub type Upscale<I> = Result<(I, (u32, u32), (u32, u32)), String>;
+
 /// Anime4K. Devuelve la imagen en crudo, sin codificar: el handler la pasa a
 /// JPEG, y los tests miran píxeles exactos, que con JPEG no podrían.
 pub fn upscale(
     png_o_jpeg: &[u8],
     escala: u32,
-) -> Result<(RgbImage, (u32, u32), (u32, u32)), String> {
+) -> Upscale<RgbImage> {
+    // El alfa se usó de borrador todo el tiempo; sin esto la imagen saldría con
+    // transparencias donde quedaron los bordes.
+    upscale_rgba(png_o_jpeg, escala).map(|(img, o, r)| (anime4k::sin_alfa(&img), o, r))
+}
+
+/// El upscale, todavía en RGBA con el alfa de borrador. El handler la codifica
+/// así, directo (ver jpeg::codificar_rgba), sin la copia a RGB del final.
+pub fn upscale_rgba(
+    png_o_jpeg: &[u8],
+    escala: u32,
+) -> Upscale<image::RgbaImage> {
     let escala = escala.clamp(2, 4);
     let img =
         image::load_from_memory(png_o_jpeg).map_err(|e| format!("no se pudo decodificar: {e}"))?;
@@ -346,18 +360,21 @@ pub fn upscale(
     // núcleos, idéntico bit a bit al crate (ver resize.rs).
     let mut buf = crate::resize::catmullrom_rgba(&img.to_rgba8(), w, h);
 
-    for _ in 0..A4K_PASADAS {
-        anime4k::luminancia_en_alfa(&mut buf);
+    // Cada pasada empieza con la luminancia en el alfa. La de la primera se
+    // calcula acá; la de las siguientes la deja el final de la anterior (el
+    // kernel fusionado la escribe al guardar los píxeles: un recorrido menos).
+    anime4k::luminancia_en_alfa(&mut buf);
+    for i in 0..A4K_PASADAS {
         buf = anime4k::push_color(&buf, A4K_FUERZA_COLOR);
-        buf = anime4k::gradiente(&buf);
-        buf = anime4k::push_gradient(&buf, A4K_FUERZA_GRADIENTE);
+        // El Sobel y su empuje, fusionados cuando los dos están en Zig.
+        buf = if i + 1 < A4K_PASADAS {
+            anime4k::gradiente_y_push_y_luma(&buf, A4K_FUERZA_GRADIENTE)
+        } else {
+            anime4k::gradiente_y_push(&buf, A4K_FUERZA_GRADIENTE)
+        };
     }
 
-    // El alfa se usó de borrador todo el tiempo; sin esto la imagen saldría con
-    // transparencias donde quedaron los bordes.
-    let rgb = anime4k::sin_alfa(&buf);
-
-    Ok((rgb, (w0, h0), (w, h)))
+    Ok((buf, (w0, h0), (w, h)))
 }
 
 // ── Handlers ─────────────────────────────────────────────────────────────────
@@ -441,8 +458,8 @@ pub async fn upscale_handler(
     // JPEG y no PNG: WhatsApp recomprime a JPEG lo que se le manda, y el
     // códec propio en C y Zig es además más rápido que el PNG (ver jpeg.rs).
     let codificado = move || {
-        upscale(&bytes, escala)
-            .map(|(img, o, r)| (crate::jpeg::codificar(&img, crate::jpeg::CALIDAD), o, r))
+        upscale_rgba(&bytes, escala)
+            .map(|(img, o, r)| (crate::jpeg::codificar_rgba(&img, crate::jpeg::CALIDAD), o, r))
     };
     match tokio::task::spawn_blocking(codificado).await {
         Ok(Ok((jpeg, orig, res))) => Json(serde_json::json!({
@@ -485,6 +502,26 @@ mod tests {
 
     /// Una linea negra vertical sobre fondo claro: el caso que Anime4K esta
     /// hecho para mejorar.
+    #[test]
+    fn el_upscale_fusionado_da_lo_mismo_que_paso_por_paso() {
+        // La luminancia de la segunda pasada sale del kernel fusionado y el
+        // JPEG lee RGBA: tiene que dar lo mismo que hacerlo todo por separado.
+        let fuente = png_con_linea(97, 61);
+        let (img, _, _) = upscale(&fuente, 2).unwrap();
+
+        let dec = image::load_from_memory(&fuente).unwrap();
+        let mut buf = crate::resize::catmullrom_rgba(&dec.to_rgba8(), 194, 122);
+        for _ in 0..A4K_PASADAS {
+            anime4k::luminancia_en_alfa(&mut buf);
+            buf = anime4k::push_color(&buf, A4K_FUERZA_COLOR);
+            buf = anime4k::push_gradient(&anime4k::gradiente(&buf), A4K_FUERZA_GRADIENTE);
+        }
+        assert_eq!(img, anime4k::sin_alfa(&buf));
+
+        let (rgba, _, _) = upscale_rgba(&fuente, 2).unwrap();
+        assert_eq!(crate::jpeg::codificar_rgba(&rgba, crate::jpeg::CALIDAD), crate::jpeg::codificar(&img, crate::jpeg::CALIDAD));
+    }
+
     fn png_con_linea(w: u32, h: u32) -> Vec<u8> {
         let mut img = RgbImage::new(w, h);
         for (x, _y, p) in img.enumerate_pixels_mut() {

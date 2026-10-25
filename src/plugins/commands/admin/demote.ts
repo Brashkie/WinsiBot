@@ -1,6 +1,6 @@
 import type { Command } from '../../../types/index.js'
 import { safeSend } from '@lib/media_sender.js'
-import { getNumber } from '@lib/jid_utils.js'
+import { destinoDe, resultadoDe } from '@lib/targets.js'
 
 const command: Command = {
   name:        'demote',
@@ -10,27 +10,22 @@ const command: Command = {
   groupOnly:   true,
   adminOnly:   true,
 
-  async execute({ sock, jid, msg, args }) {
-    const ctx_info = msg.message?.extendedTextMessage?.contextInfo
-    const target   = ctx_info?.mentionedJid?.[0]
-      ?? ctx_info?.participant
-      ?? (args[0] ? args[0].replace(/[@+]/g, '') + '@s.whatsapp.net' : null)
-
-    if (!target) {
-      await safeSend(() => sock.sendMessage(jid, {
-        text: '§ Menciona o cita al admin que quieres degradar',
-      }, { quoted: msg }))
-      return
+  async execute({ sock, jid, msg, args, isBotAdmin }) {
+    const responder = (text: string, mentions: string[] = []) =>
+      safeSend(() => sock.sendMessage(jid, { text, mentions }, { quoted: msg }))
+    // Antes no lo miraba: sin ser admin, la llamada fallaba y el error no se
+    // atrapaba.
+    if (!isBotAdmin) { await responder('§ Necesito ser admin del grupo para quitar admin'); return }
+    const target = destinoDe(msg, args)
+    if (!target) { await responder('§ Menciona o cita al admin que quieres degradar'); return }
+    try {
+      const r = await sock.groupParticipantsUpdate(jid, [target], 'demote')
+      const status = resultadoDe(r)
+      if (status && status !== '200') { await responder(`§ WhatsApp no lo dejó (código ${status})`); return }
+      await responder(`§ @${target.split('@')[0]} ya no es administrador`, [target])
+    } catch {
+      await responder('§ No se pudo: ¿sigue en el grupo, o es el creador?')
     }
-
-    const number = getNumber(target)
-
-    await sock.groupParticipantsUpdate(jid, [target], 'demote')
-
-    await safeSend(() => sock.sendMessage(jid, {
-      text:     `§ @${number} ya no es administrador`,
-      mentions: [target],
-    }, { quoted: msg }))
   },
 }
 

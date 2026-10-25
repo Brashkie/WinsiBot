@@ -5,18 +5,24 @@ import { findMediaRandom, safeSend } from '@lib/media_sender.js'
 import { sendReply } from '@lib/interactive.js'
 import { generateWAMessageFromContent, prepareWAMessageMedia } from '@whiskeysockets/baileys'
 import { CATEGORY_SYMBOLS } from './categorySymbols.js'
+import { t, nombreCategoria, aliasesPara, IDIOMAS, type Idioma } from '@lib/i18n.js'
+import { descripcion } from '@lib/i18nDescriptions.js'
 
 // rpg y roleplay se listan completas siempre — son las categorías con más
 // interacción diaria (economía, mascotas, clanes, escenas). El resto se
 // resume por categoría a menos que se pida "menu todo".
 const PRIORITY_CATEGORIES = ['rpg', 'roleplay']
 
-function formatCmdLine(cmd: { name: string; aliases?: string[]; description: string }, prefix: string): string {
-  const aliases = cmd.aliases?.length
-    ? `  (${cmd.aliases.slice(0, 2).map(a => `${prefix}${a}`).join(', ')})`
+/** Los alias que se muestran van primero los del idioma de quien pidió el menú. */
+export function formatCmdLine(cmd: { name: string; aliases?: string[]; description: string }, prefix: string, lang: Idioma): string {
+  const lista = aliasesPara(cmd, lang)
+  const aliases = lista.length
+    ? `  (${lista.slice(0, 2).map(a => `${prefix}${a}`).join(', ')})`
     : ''
-  return `> *${prefix}${cmd.name}*${aliases} — ${cmd.description}`
+  return `> *${prefix}${cmd.name}*${aliases} — ${descripcion(cmd, lang)}`
 }
+
+const HORA: Record<Idioma, string> = { es: 'es-PE', en: 'en-US', pt: 'pt-BR' }
 
 const command: Command = {
   name: 'menu',
@@ -24,14 +30,14 @@ const command: Command = {
   description: 'Muestra todos los comandos disponibles',
   category: 'general',
 
-  async execute({ sock, jid, msg, args, prefix }) {
+  async execute({ sock, jid, msg, args, prefix, lang }) {
     // commandRegistry tiene una entrada por CADA alias además del nombre
     // real (así resuelve #s y #sticker al mismo comando) — iterar
     // .values() directo cuenta un comando con 3 alias como 4. Deduplicar
     // por objeto antes de contar, mismo patrón que category.ts/infobot.ts.
     const unique = [...new Map([...commandRegistry.values()].map(c => [c.name, c])).values()]
 
-    const showAll = ['todo', 'all', 'full'].includes((args[0] ?? '').toLowerCase())
+    const showAll = ['todo', 'all', 'full', 'tudo'].includes((args[0] ?? '').toLowerCase())
 
     const byCategory = new Map<string, typeof unique>()
     for (const cmd of unique) {
@@ -40,13 +46,13 @@ const command: Command = {
       byCategory.set(cmd.category, list)
     }
 
-    const now = new Date().toLocaleTimeString('es-PE', {
+    const now = new Date().toLocaleTimeString(HORA[lang], {
       hour: '2-digit', minute: '2-digit',
     })
 
     let text = `╭═══《𖣐 *${config.botName}* 𖣐》═══⊷❍\n`
     text    += `‖  ${CREDIT_LINE}\n`
-    text    += `‖  ${now}  ·  ${unique.length} comandos\n`
+    text    += `‖  ${now}  ·  ${unique.length} ${t(lang, 'menu.comandos')}\n`
     text    += `╰═════════════════⊷\n`
 
     // ── Categorías prioritarias, listado completo ──────────────────────────────
@@ -56,27 +62,28 @@ const command: Command = {
       byCategory.delete(cat)
 
       const symbol = CATEGORY_SYMBOLS[cat] ?? '·'
-      text += `\n${symbol} *${cat.toUpperCase()}* — ${cmds.length} comandos\n`
-      text += cmds.map(c => formatCmdLine(c, prefix)).join('\n') + '\n'
+      text += `\n${symbol} *${nombreCategoria(cat, lang)}* — ${cmds.length} ${t(lang, 'menu.comandos')}\n`
+      text += cmds.map(c => formatCmdLine(c, prefix, lang)).join('\n') + '\n'
     }
 
     // ── Resto de categorías ──────────────────────────────────────────────────
     if (showAll) {
       for (const [cat, cmds] of byCategory) {
         const symbol = CATEGORY_SYMBOLS[cat] ?? '·'
-        text += `\n${symbol} *${cat.toUpperCase()}* — ${cmds.length} comandos\n`
-        text += cmds.map(c => formatCmdLine(c, prefix)).join('\n') + '\n'
+        text += `\n${symbol} *${nombreCategoria(cat, lang)}* — ${cmds.length} ${t(lang, 'menu.comandos')}\n`
+        text += cmds.map(c => formatCmdLine(c, prefix, lang)).join('\n') + '\n'
       }
     } else {
-      text += `\n◆ *OTRAS CATEGORÍAS*\n`
+      text += `\n◆ *${t(lang, 'menu.otras')}*\n`
       for (const [cat, cmds] of byCategory) {
         const symbol = CATEGORY_SYMBOLS[cat] ?? '·'
-        text += `${symbol} *${cat.toUpperCase()}*  ·  ${cmds.length} cmds\n`
+        text += `${symbol} *${nombreCategoria(cat, lang)}*  ·  ${cmds.length} cmds\n`
       }
-      text += `\n> ${prefix}menu todo — listado completo de comandos`
+      text += `\n> ${t(lang, 'menu.todo', { p: prefix })}`
     }
 
-    text += `\n> ${prefix}categoria <nombre> — ver comandos de una categoría`
+    text += `\n> ${t(lang, 'menu.categoria', { p: prefix })}`
+    text += `\n> ${t(lang, 'menu.idioma', { p: prefix, ...IDIOMAS[lang] })}`
 
     // Intentar con media (video/gif/imagen) + newsletter context → "Ver canal"
     const media = await findMediaRandom('menu', sock)

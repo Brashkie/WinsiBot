@@ -1,5 +1,5 @@
 import type { Command } from '../../../types/index.js'
-import OpenAI from 'openai'
+import { imagen } from '@lib/openai.js'
 import { config } from '@config'
 
 const command: Command = {
@@ -22,17 +22,7 @@ const command: Command = {
 
     await sock.sendMessage(jid, { text: `🎨 Generando imagen: *${prompt}*...` }, { quoted: msg })
 
-    const ai = new OpenAI({ apiKey: config.openaiKey })
-
-    const result = await ai.images.generate({
-      model: 'dall-e-3',
-      prompt,
-      n: 1,
-      size: '1024x1024',
-      quality: 'standard',
-    }) as { data: Array<{ url: string }> }
-
-    const imageUrl = result.data[0]?.url
+    const imageUrl = await imagen(prompt)
     if (!imageUrl) {
       await sock.sendMessage(jid, { text: '❌ No se pudo generar la imagen.' }, { quoted: msg })
       return

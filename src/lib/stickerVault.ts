@@ -14,6 +14,9 @@ import { randomUUID } from 'crypto'
 
 const VAULT_DIR = join(process.cwd(), 'data', 'stickers')
 
+/** Cuántos stickers puede guardar alguien entre sueltos y paquetes. */
+export const MAX_GUARDADOS = 200
+
 // El jid puede traer @s.whatsapp.net/@lid — se sanitiza para que sirva como
 // nombre de carpeta válido en cualquier sistema de archivos.
 function userDir(sender: string): string {

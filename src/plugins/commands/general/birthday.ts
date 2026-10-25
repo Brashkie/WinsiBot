@@ -1,7 +1,9 @@
 import type { Command } from '../../../types/index.js'
 import { getUserData, patchUserData } from '@core/events/index.js'
 import { safeSend } from '@lib/media_sender.js'
-import { enData, leerJson, guardarJson, esObjeto } from '@lib/archivoJson.js'
+import { enData, leerJson, guardarJson, esObjeto } from '@lib/jsonFile.js'
+import { Despertador } from '@lib/wakeTimer.js'
+import { diasHasta } from '@lib/birthdays.js'
 
 // ─── Persistencia ─────────────────────────────────────────────────────────────
 
@@ -10,6 +12,7 @@ const BDAY_FILE = enData('birthday.json')
 interface BirthdayStore {
   groups:  Record<string, { enabled: boolean; message?: string }>  // groupJid → config
   optOut:  string[]   // JIDs que no quieren ser celebrados
+  ultimo?: string     // 'DD/MM' del último día que ya se saludó
 }
 
 function loadStore(): BirthdayStore {
@@ -40,6 +43,7 @@ function isBirthdayToday(birth: string): boolean {
   return birth === todayStr()
 }
 
+
 // Quiénes cumplen hoy en la lista de JIDs dada
 function birthdaysToday(jids: string[]): Array<{ jid: string; name: string }> {
   const store = loadStore()
@@ -60,64 +64,122 @@ function birthdaysToday(jids: string[]): Array<{ jid: string; name: string }> {
 
 // ─── Auto-celebración (llamar desde index.ts) ─────────────────────────────────
 
-// 'ready' llega en cada reconexión: sin esto, cada una sumaba otro
-// setInterval y el saludo salía repetido tantas veces como reconexiones hubo.
+// Un temporizador para la próxima medianoche, no una revisión cada 5 minutos
+// todo el día (288 despertares para trabajar en uno). Y el día que ya se
+// saludó queda guardado: la ventana de antes (00:00–00:05, revisando cada 5
+// min) podía caer dos veces y saludar dos veces, y un reinicio a las 00:02
+// volvía a saludar.
+//
+// 'ready' llega en cada reconexión: se actualiza el socket, el temporizador
+// es uno solo.
 let sockVivo: any = null
-let intervalo: NodeJS.Timeout | null = null
+let despertador: Despertador | null = null
+
+/** El próximo 00:00:30, hora del servidor (la misma que usa todayStr). */
+function proximaMedianoche(ahora = new Date()): number {
+  return new Date(ahora.getFullYear(), ahora.getMonth(), ahora.getDate() + 1, 0, 0, 30).getTime()
+}
+
+async function saludar(): Promise<void> {
+  const sock = sockVivo
+  const store = loadStore()
+  const today = todayStr()
+  if (!sock || store.ultimo === today) return
+  store.ultimo = today
+  saveStore(store)
+
+  for (const [groupJid, cfg] of Object.entries(store.groups)) {
+    if (!cfg.enabled) continue
+    try {
+      const meta  = await sock.groupMetadata(groupJid)
+      const jids  = meta.participants.map((p: any) => p.id)
+      const bdays = birthdaysToday(jids)
+      if (bdays.length === 0) continue
+
+      const mentions = bdays.map(b => b.jid)
+      const names    = bdays.map(b => `@${b.jid.split('@')[0]}`).join(', ')
+
+      await safeSend(() => sock.sendMessage(groupJid, {
+        text: [
+          `🎂 *¡Feliz cumpleaños!* 🎉`,
+          ``,
+          `Hoy cumplen años: ${names}`,
+          ``,
+          `✨ ¡Que la pases increíble y que todos tus deseos se cumplan!`,
+        ].join('\n'),
+        mentions,
+      }))
+    } catch {}
+  }
+}
 
 export function setupBirthdayChecker(sock: any): void {
   sockVivo = sock
-  if (intervalo) return
-
-  const check = async () => {
-    const sock = sockVivo
-    const now  = new Date()
-    // Solo ejecutar cerca de medianoche (00:00 – 00:05)
-    if (now.getHours() !== 0 || now.getMinutes() > 5) return
-
-    const store = loadStore()
-    const today = todayStr()
-
-    for (const [groupJid, cfg] of Object.entries(store.groups)) {
-      if (!cfg.enabled) continue
-      try {
-        const meta  = await sock.groupMetadata(groupJid)
-        const jids  = meta.participants.map((p: any) => p.id)
-        const bdays = birthdaysToday(jids)
-        if (bdays.length === 0) continue
-
-        const mentions = bdays.map(b => b.jid)
-        const names    = bdays.map(b => `@${b.jid.split('@')[0]}`).join(', ')
-
-        await safeSend(() => sock.sendMessage(groupJid, {
-          text: [
-            `🎂 *¡Feliz cumpleaños!* 🎉`,
-            ``,
-            `Hoy cumplen años: ${names}`,
-            ``,
-            `✨ ¡Que la pases increíble y que todos tus deseos se cumplan!`,
-          ].join('\n'),
-          mentions,
-        }))
-      } catch {}
-    }
-  }
-
-  // Verificar cada 5 minutos
-  intervalo = setInterval(check, 5 * 60_000)
+  if (despertador) return
+  despertador = new Despertador(async () => {
+    await saludar()
+    despertador!.armar(proximaMedianoche())
+  })
+  // Si el bot arrancó hoy después de medianoche y todavía no saludó, ahora.
+  void saludar()
+  despertador.armar(proximaMedianoche())
 }
 
 // ─── Comando ──────────────────────────────────────────────────────────────────
 
 const command: Command = {
   name:        'birthday',
-  aliases:     ['cumpleaños', 'bday', 'bd'],
-  description: 'Sistema de cumpleaños  |  !birthday set DD/MM  |  !birthday list',
+  aliases:     ['cumpleaños', 'bday', 'bd', 'cumples', 'birthdays', 'allbirthdays', 'delbirth', 'setbirth'],
+  description: 'Sistema de cumpleaños  |  !birthday set DD/MM  ·  !birthday list  ·  !cumples (los próximos)  ·  !birthday borrar',
   category:    'general',
   cooldown:    3,
 
-  async execute({ sock, jid, msg, sender, pushName, args, isGroup, isAdmin, prefix }) {
+  async execute({ sock, jid, msg, sender, pushName, args: argsCrudos, isGroup, isAdmin, prefix, command: usado }) {
+    // Los nombres de otros bots van a su subcomando: #cumples → próximos,
+    // #delbirth → borrar, #setbirth 25/12 → set.
+    const atajo: Record<string, string> = { cumples: 'proximos', birthdays: 'proximos', allbirthdays: 'proximos', delbirth: 'borrar', setbirth: 'set' }
+    const args = atajo[usado] ? [atajo[usado]!, ...argsCrudos] : argsCrudos
     const sub = (args[0] ?? '').toLowerCase()
+
+    // ─── !birthday borrar ──────────────────────────────────────────────────
+    if (['borrar', 'del', 'delete', 'quitar', 'eliminar'].includes(sub)) {
+      patchUserData(sender, { profile: { birth: '' } })
+      await safeSend(() => sock.sendMessage(jid, { text: `🗑️ Borraste tu cumpleaños.` }, { quoted: msg }))
+      return
+    }
+
+    // ─── !birthday proximos — los que vienen en el grupo ────────────────────
+    if (['proximos', 'próximos', 'next', 'cercanos', 'todos', 'all'].includes(sub)) {
+      if (!isGroup) {
+        await safeSend(() => sock.sendMessage(jid, { text: `> Eso es para grupos.` }, { quoted: msg }))
+        return
+      }
+      const meta = await sock.groupMetadata(jid).catch(() => null)
+      const store = loadStore()
+      const proximos = (meta?.participants ?? [])
+        .map((p: any) => p.id as string)
+        .filter(j => !store.optOut.includes(j))
+        .map(j => ({ jid: j, birth: getUserData(j).profile?.birth ?? '' }))
+        .filter(x => /^\d{2}\/\d{2}$/.test(x.birth))
+        .map(x => ({ ...x, dias: diasHasta(x.birth) }))
+        .sort((a, b) => a.dias - b.dias)
+        .slice(0, 15)
+      if (!proximos.length) {
+        await safeSend(() => sock.sendMessage(jid, {
+          text: `🎂 Nadie del grupo registró su cumpleaños todavía.\n> \`${prefix}birthday set DD/MM\``,
+        }, { quoted: msg }))
+        return
+      }
+      // Nombres y no menciones: mirar la lista no tiene que notificar a quince.
+      await safeSend(() => sock.sendMessage(jid, {
+        text: [
+          `🎂 *Próximos cumpleaños*`,
+          ``,
+          ...proximos.map(x => `  ${x.birth}  ${getUserData(x.jid).name || x.jid.split('@')[0]}  ${x.dias === 0 ? '🎉 *¡hoy!*' : x.dias === 1 ? '— mañana' : `— en ${x.dias} días`}`),
+        ].join('\n'),
+      }, { quoted: msg }))
+      return
+    }
 
     // ─── !birthday set DD/MM ───────────────────────────────────────────────
     if (sub === 'set' || sub === 'fijar' || sub === 'establecer') {
@@ -284,6 +346,8 @@ const command: Command = {
         ``,
         `§ \`${prefix}birthday set DD/MM\`   — registrar fecha`,
         `§ \`${prefix}birthday list\`          — ver hoy en el grupo`,
+        `§ \`${prefix}cumples\`                — los próximos del grupo`,
+        `§ \`${prefix}birthday borrar\`        — borrar tu fecha`,
         `§ \`${prefix}birthday allow\`          — permitir celebración`,
         `§ \`${prefix}birthday deny\`           — desactivar celebración`,
         isAdmin && isGroup

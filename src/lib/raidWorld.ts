@@ -3,13 +3,14 @@ import { logger } from '@core/logger.js'
 import { getUserData, patchUserData, checkLevelUp } from '@core/events.js'
 import { safeSend } from '@lib/media_sender.js'
 import {
-  JEFES, VENTANA_REACCION, vidaJefe, danio, repartir, barra, reaccion, type Premio, type Reaccion,
+  JEFES, VENTANA_REACCION, vidaJefe, danio, repartir, barra, reaccion, contraataque, type Premio, type Reaccion,
 } from '@lib/raid.js'
-import { bonoArma } from '@lib/forja.js'
-import { companeroDe } from '@lib/companero.js'
+import { bonoArma } from '@lib/forge.js'
+import { companeroDe, bonoCuidado } from '@lib/companion.js'
+import { herir, saludDe } from '@lib/health.js'
 import { findDragon } from '@lib/dragoncity.js'
-import { enData, leerJson, guardarJson, esObjeto } from '@lib/archivoJson.js'
-import { Despertador } from '@lib/despertador.js'
+import { enData, leerJson, guardarJson, esObjeto } from '@lib/jsonFile.js'
+import { Despertador } from '@lib/wakeTimer.js'
 
 /** Los elementos de una especie, del catálogo. Sin catálogo, ninguno: el
  *  golpe pega igual, solo que no puede dar reacción. */
@@ -174,6 +175,8 @@ export type Ataque =
   | {
       ok: true; danio: number; critico: boolean; frase: string; jefe: JefeVivo; premios: Premio[] | null; texto: string
       elementos: string[]; reaccion: (Reaccion & { con: string }) | null
+      /** Lo que devolvió el jefe (0 si no contraatacó) y la salud que te queda. */
+      contra: number; salud: number; cuidados: number
     }
 
 /** Un golpe de `sender` desde el grupo `gjid`. Si lo tumba, paga y avisa a los demás grupos. */
@@ -201,7 +204,8 @@ export async function atacar(sender: string, gjid: string): Promise<Ataque> {
   j.ultimo = { jid: sender, elementos, ts: ahora, usado: r !== null }
   const conReaccion = r && prev ? { ...r, con: prev.jid } : null
 
-  const total = Math.round(g.danio * (r?.mult ?? 1))
+  const bono = bonoCuidado(u, ahora)
+  const total = Math.round(g.danio * (r?.mult ?? 1) * bono.danio)
   const pegado = Math.min(total, j.vida)
 
   j.vida -= pegado
@@ -211,8 +215,14 @@ export async function atacar(sender: string, gjid: string): Promise<Ataque> {
   const frase = def.frases[Math.floor(Math.random() * def.frases.length)]!
 
   if (j.vida > 0) {
+    // Sigue en pie: puede devolver el golpe. El que lo remata no lo recibe.
+    const contra = contraataque(Math.random, bono.defensa)
+    const salud = contra ? herir(u, contra, ahora) : saludDe(u, ahora)
     guardar()
-    return { ok: true, danio: total, critico: g.critico, frase, jefe: j, premios: null, texto: '', elementos, reaccion: conReaccion }
+    return {
+      ok: true, danio: total, critico: g.critico, frase, jefe: j, premios: null, texto: '', elementos, reaccion: conReaccion,
+      contra, salud, cuidados: bono.atendidos,
+    }
   }
 
   // Cayó.
@@ -235,7 +245,10 @@ export async function atacar(sender: string, gjid: string): Promise<Ataque> {
   ].filter(Boolean).join('\n')
   // El grupo del remate lo recibe como respuesta del comando; los demás, acá.
   void avisar([...j.grupos, ...estado.grupos], texto, premios.slice(0, 5).map(p => p.jid), gjid)
-  return { ok: true, danio: total, critico: g.critico, frase, jefe: j, premios, texto, elementos, reaccion: conReaccion }
+  return {
+    ok: true, danio: total, critico: g.critico, frase, jefe: j, premios, texto, elementos, reaccion: conReaccion,
+    contra: 0, salud: saludDe(u, ahora), cuidados: bono.atendidos,
+  }
 }
 
 export function jefeActual(): JefeVivo | null {

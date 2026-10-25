@@ -1,10 +1,10 @@
 import type { Command } from '../../../types/index.js'
 import type { SavedSticker } from '@core/events.js'
 import { getUserData, patchUserData } from '@core/events.js'
-import { saveStickerFile } from '@lib/stickerVault.js'
+import { saveStickerFile, MAX_GUARDADOS } from '@lib/stickerVault.js'
 import { downloadMediaMessage } from '@whiskeysockets/baileys'
 
-const MAX_SAVED_STICKERS = 200
+const MAX_SAVED_STICKERS = MAX_GUARDADOS
 const MAX_NAME_LENGTH    = 32
 
 const command: Command = {

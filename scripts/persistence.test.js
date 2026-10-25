@@ -3,7 +3,7 @@
 import { describe, expect, it } from 'vitest'
 import { existsSync, readFileSync } from 'fs'
 import { createHash } from 'crypto'
-import { MapConTocados } from '../src/lib/mapConTocados.ts'
+import { MapConTocados } from '../src/lib/touchedMap.ts'
 
 describe('MapConTocados', () => {
   it('la primera vez devuelve todo, después solo lo que se pidió', () => {

@@ -2,6 +2,7 @@ import type { BotContext } from '../../types/index.js'
 import { sessionClient } from '@lib/session.js'
 import { safeSend } from '@lib/media_sender.js'
 import { createCache, registerCache } from '@lib/cacheManager.js'
+import { t } from '@lib/i18n.js'
 
 // ─── Cache local primer nivel ─────────────────────────────────────────────────
 // TTLs en ms (NodeCache los tomaba en segundos: 5 y 30).
@@ -107,7 +108,7 @@ export async function rateLimitMiddleware(ctx: BotContext): Promise<boolean> {
 
     if (spamCount % 3 === 1) {
       safeSend(() => sock.sendMessage(jid, {
-        text: '§ Espera unos segundos antes de enviar otro mensaje.',
+        text: t(ctx.lang, 'spam.espera'),
       })).catch(() => {})
     }
     return false
@@ -127,14 +128,14 @@ export async function rateLimitMiddleware(ctx: BotContext): Promise<boolean> {
       if (sgCount % 3 === 1) {
         const msgs: Record<string, string> = {
           rate_limit: guard.cooldown_ms > 0
-            ? `§ Demasiado rápido — espera *${formatCooldown(guard.cooldown_ms)}*`
-            : '§ Demasiado rápido — espera unos segundos',
+            ? t(ctx.lang, 'spam.rapido', { t: formatCooldown(guard.cooldown_ms) })
+            : t(ctx.lang, 'spam.rapidoSin'),
           blocked: guard.cooldown_ms > 0
-            ? `§ Bloqueado por spam — espera *${formatCooldown(guard.cooldown_ms)}*`
-            : '§ Bloqueado temporalmente por spam',
-          flood: '§ Deja de repetir el mismo mensaje',
+            ? t(ctx.lang, 'spam.bloqueado', { t: formatCooldown(guard.cooldown_ms) })
+            : t(ctx.lang, 'spam.bloqueadoSin'),
+          flood: t(ctx.lang, 'spam.flood'),
         }
-        const msg = msgs[guard.reason] ?? '§ Espera antes de continuar'
+        const msg = msgs[guard.reason] ?? t(ctx.lang, 'spam.otro')
         safeSend(() => sock.sendMessage(jid, { text: msg })).catch(() => {})
       }
       return false

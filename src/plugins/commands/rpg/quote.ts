@@ -2,7 +2,7 @@ import type { Command } from '../../../types/index.js'
 import { safeSend } from '@lib/media_sender.js'
 import { getUserData, patchUserData } from '@core/events.js'
 import { market, resolveSymbol, fmtPrice, fmtPct, trendArrow } from '@lib/market.js'
-import { enData, leerJson, guardarJson, esObjeto } from '@lib/archivoJson.js'
+import { enData, leerJson, guardarJson, esObjeto } from '@lib/jsonFile.js'
 
 // ─── Portafolio spot (comprar y mantener) ────────────────────────────────────
 

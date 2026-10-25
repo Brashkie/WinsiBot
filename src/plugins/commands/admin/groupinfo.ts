@@ -1,4 +1,5 @@
 import type { Command } from '../../../types/index.js'
+import { saludDe } from '@lib/health.js'
 import { getGroupConfig, getUserData, getUserClan, expForLevel } from '@core/events/index.js'
 
 const bar = (cur: number, max: number, len = 5) => {
@@ -40,7 +41,7 @@ const command: Command = {
       `│`,
       `│ 👤 *${user.name || pushName}*  Nv.${user.level}  _${user.profile.role}_`,
       `│ XP  ${user.exp}/${need}  ${bar(user.exp, need)}`,
-      `│ ¥${user.money}  💎 ${user.diamonds}  ❤ ${user.health}/100`,
+      `│ ¥${user.money}  💎 ${user.diamonds}  ❤ ${saludDe(user)}/100`,
     ]
 
     if (clan)

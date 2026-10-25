@@ -239,7 +239,7 @@ pub fn init(path: &str) -> Result<ConvDb, rusqlite::Error> {
     // Checkpoint del WAL cada 4000 páginas en vez de las 1000 de SQLite. En
     // WAL con NORMAL, el checkpoint es el único momento con fsync, y esta base
     // recibe todos los mensajes de todos los grupos: medido con 300.000 filas
-    // (`examples/perfil_mensaje.rs`), el costo por mensaje baja de ~115 a
+    // (`examples/profile_message.rs`), el costo por mensaje baja de ~115 a
     // ~66 µs, y son 4 veces menos vaciados a la flash del teléfono. A cambio el
     // WAL puede llegar a ~16 MB en disco antes de consolidarse.
     let _ = conn.pragma_update(None, "wal_autocheckpoint", 4000);
@@ -697,7 +697,7 @@ pub struct ObserveRequest {
 
 /// Guarda un mensaje de grupo observado: lo ENCOLA, y se escribe con el
 /// próximo vaciado (ver [`BaseConv`]). Es lo que corre por CADA mensaje de cada
-/// grupo, así que es lo que mide `benches/mensaje.rs`.
+/// grupo, así que es lo que mide `benches/message.rs`.
 pub fn observar(db: &BaseConv, req: ObserveRequest) -> usize {
     db.encolar(Observado {
         sender: req.sender,
@@ -816,6 +816,69 @@ pub async fn ai_group_recent(
                     .collect::<Vec<_>>(),
             }))
         }
+        Ok(Err(e)) => Json(serde_json::json!({ "ok": false, "error": e })),
+        Err(e) => Json(serde_json::json!({ "ok": false, "error": e.to_string() })),
+    }
+}
+
+// ── Actividad de un grupo (#actividad, #fantasmas) ───────────────────────────
+
+/// Cuántos mensajes mandó cada uno en el grupo desde `desde_ts`, y desde
+/// cuándo hay registro del grupo: sin eso, "no escribió en 30 días" no
+/// significa nada si el bot entró hace una semana.
+#[derive(Serialize)]
+pub struct Actividad {
+    /// El primer mensaje registrado del grupo (ms), o null si no hay ninguno.
+    pub registro_desde: Option<i64>,
+    pub total: i64,
+    /// Del que más escribió al que menos.
+    pub miembros: Vec<MiembroActivo>,
+}
+
+#[derive(Serialize)]
+pub struct MiembroActivo {
+    pub sender: String,
+    pub mensajes: i64,
+    pub ultimo: i64,
+}
+
+pub fn actividad(db: &ConvDb, gjid: &str, desde_ts: i64) -> Result<Actividad, String> {
+    let conn = db.lock().map_err(|e| e.to_string())?;
+    // Solo lo observado (reply = ''): las charlas con la IA también entran a
+    // esta tabla, y contarían dos veces el mismo mensaje.
+    let registro_desde: Option<i64> = conn
+        .prepare_cached("SELECT MIN(ts) FROM conversations WHERE gjid = ?1 AND reply = ''")
+        .and_then(|mut s| s.query_row(params![gjid], |r| r.get(0)))
+        .map_err(|e| e.to_string())?;
+    let mut st = conn
+        .prepare_cached(
+            "SELECT sender, COUNT(*), MAX(ts) FROM conversations
+              WHERE gjid = ?1 AND ts > ?2 AND reply = ''
+              GROUP BY sender ORDER BY COUNT(*) DESC, sender",
+        )
+        .map_err(|e| e.to_string())?;
+    let miembros: Vec<MiembroActivo> = st
+        .query_map(params![gjid, desde_ts], |r| {
+            Ok(MiembroActivo { sender: r.get(0)?, mensajes: r.get(1)?, ultimo: r.get(2)? })
+        })
+        .map_err(|e| e.to_string())?
+        .filter_map(|r| r.ok())
+        .collect();
+    let total = miembros.iter().map(|m| m.mensajes).sum();
+    Ok(Actividad { registro_desde, total, miembros })
+}
+
+/// GET /ai/group/activity/{gjid}?days=7
+pub async fn ai_group_activity(
+    State(state): State<AppState>,
+    Path(gjid): Path<String>,
+    Query(q): Query<DaysParams>,
+) -> Json<serde_json::Value> {
+    let db = state.conv_db.clone();
+    let dias = q.days.unwrap_or(7).clamp(1, 3650);
+    let desde = Utc::now().timestamp_millis() - dias * 86_400_000;
+    match tokio::task::spawn_blocking(move || actividad(&db, &gjid, desde)).await {
+        Ok(Ok(a)) => Json(serde_json::json!({ "ok": true, "days": dias, "activity": a })),
         Ok(Err(e)) => Json(serde_json::json!({ "ok": false, "error": e })),
         Err(e) => Json(serde_json::json!({ "ok": false, "error": e.to_string() })),
     }
@@ -1172,6 +1235,33 @@ mod tests {
         let v = mensajes_recientes(&db, "g@g", 3, 0).unwrap();
         let textos: Vec<&str> = v.iter().map(|m| m.text.as_str()).collect();
         assert_eq!(textos, vec!["m7", "m8", "m9"]);
+    }
+
+    #[test]
+    fn actividad_cuenta_lo_observado_por_persona_y_sabe_desde_cuando() {
+        let db = db_memoria();
+        let t = ahora();
+        insertar(&db, "a@s", "g@g", "uno", "", t - 10 * 86_400_000); // viejo: fuera de la ventana
+        insertar(&db, "a@s", "g@g", "dos", "", t - 1_000);
+        insertar(&db, "a@s", "g@g", "tres", "", t - 500);
+        insertar(&db, "b@s", "g@g", "hola", "", t - 2_000);
+        insertar(&db, "b@s", "g@g", "con la ia", "respuesta", t - 100); // charla con la IA: no cuenta
+        insertar(&db, "c@s", "otro@g", "otro grupo", "", t);
+
+        let a = actividad(&db, "g@g", t - 7 * 86_400_000).unwrap();
+        assert_eq!(a.registro_desde, Some(t - 10 * 86_400_000), "el registro arranca en el más viejo");
+        assert_eq!(a.total, 3);
+        let v: Vec<(&str, i64)> = a.miembros.iter().map(|m| (m.sender.as_str(), m.mensajes)).collect();
+        assert_eq!(v, [("a@s", 2), ("b@s", 1)], "del que más escribió al que menos, sin otros grupos");
+        assert_eq!(a.miembros[0].ultimo, t - 500);
+    }
+
+    #[test]
+    fn actividad_de_un_grupo_sin_registro() {
+        let a = actividad(&db_memoria(), "nadie@g", 0).unwrap();
+        assert_eq!(a.registro_desde, None);
+        assert_eq!(a.total, 0);
+        assert!(a.miembros.is_empty());
     }
 
     #[test]

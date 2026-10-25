@@ -1,8 +1,8 @@
 import type { WASocket } from '@whiskeysockets/baileys'
 import { logger } from '@core/logger.js'
 import { sendCritical } from '@lib/media_sender.js'
-import { enData, leerJson, guardarJson } from '@lib/archivoJson.js'
-import { Despertador } from '@lib/despertador.js'
+import { enData, leerJson, guardarJson } from '@lib/jsonFile.js'
+import { Despertador } from '@lib/wakeTimer.js'
 
 // Recordatorios: data/reminders.json, y UN solo temporizador armado para el
 // próximo que vence. Nada de revisar la lista cada minuto: con el bot parado

@@ -240,6 +240,27 @@ export async function summarizeTranscript(transcript: string, gjid: string): Pro
   }
 }
 
+export interface GroupActivity {
+  days:  number
+  activity: {
+    registro_desde: number | null   // el primer mensaje registrado del grupo
+    total:          number
+    miembros:       Array<{ sender: string; mensajes: number; ultimo: number }>
+  }
+}
+
+/** Quién escribió cuánto en el grupo en los últimos `days` días (#actividad, #fantasmas). */
+export async function getGroupActivity(gjid: string, days: number): Promise<GroupActivity | null> {
+  try {
+    const res = await rustClient.get<GroupActivity & { ok: boolean }>(
+      `/ai/group/activity/${encodeURIComponent(gjid)}`, { params: { days: String(days) } },
+    )
+    return res.data?.ok ? res.data : null
+  } catch {
+    return null
+  }
+}
+
 /** #historia: un giro desde UN fragmento ("seguir") o un título ("titulo").
  *  `null` si ninguna IA contestó: el juego sigue sin ella. */
 export async function historiaIA(modo: 'seguir' | 'titulo', texto: string, gjid: string): Promise<string | null> {

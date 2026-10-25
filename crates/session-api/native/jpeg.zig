@@ -128,9 +128,11 @@ export fn winsi_jpeg_scratch_len(w: u32) callconv(.C) usize {
 }
 
 /// Convierte la fila `sy` de la imagen a Y, Cb y Cr en flotante, `pw` muestras
-/// (las que pasan de `w` repiten el último píxel, como hace libjpeg).
-fn fila_ycc(rgb: [*]const u8, w: usize, sy: usize, pw: usize, y: [*]f32, cb: [*]f32, cr: [*]f32) void {
-    const fila = rgb + sy * w * 3;
+/// (las que pasan de `w` repiten el último píxel, como hace libjpeg). `C` es
+/// cuántos bytes ocupa un píxel: 3 (RGB) o 4 (RGBA, con el alfa ignorado), así
+/// el upscale no tiene que copiar la imagen entera a RGB para codificarla.
+fn fila_ycc(comptime C: usize, rgb: [*]const u8, w: usize, sy: usize, pw: usize, y: [*]f32, cb: [*]f32, cr: [*]f32) void {
+    const fila = rgb + sy * w * C;
     var x: usize = 0;
     // El interior, de a 8 píxeles por instrucción y sin recortar índices.
     while (x + 8 <= w) : (x += 8) {
@@ -138,9 +140,9 @@ fn fila_ycc(rgb: [*]const u8, w: usize, sy: usize, pw: usize, y: [*]f32, cb: [*]
         var g: [8]f32 = undefined;
         var b: [8]f32 = undefined;
         inline for (0..8) |i| {
-            r[i] = @floatFromInt(fila[(x + i) * 3]);
-            g[i] = @floatFromInt(fila[(x + i) * 3 + 1]);
-            b[i] = @floatFromInt(fila[(x + i) * 3 + 2]);
+            r[i] = @floatFromInt(fila[(x + i) * C]);
+            g[i] = @floatFromInt(fila[(x + i) * C + 1]);
+            b[i] = @floatFromInt(fila[(x + i) * C + 2]);
         }
         const rv: V = r;
         const gv: V = g;
@@ -151,7 +153,7 @@ fn fila_ycc(rgb: [*]const u8, w: usize, sy: usize, pw: usize, y: [*]f32, cb: [*]
     }
     // La cola y el relleno hasta `pw`, de a uno.
     while (x < pw) : (x += 1) {
-        const p = fila + @min(x, w - 1) * 3;
+        const p = fila + @min(x, w - 1) * C;
         const r: f32 = @floatFromInt(p[0]);
         const g: f32 = @floatFromInt(p[1]);
         const b: f32 = @floatFromInt(p[2]);
@@ -172,6 +174,8 @@ fn fila_ycc(rgb: [*]const u8, w: usize, sy: usize, pw: usize, y: [*]f32, cb: [*]
 ///
 /// `scratch` mide `winsi_jpeg_scratch_len(w)` flotantes: la franja, no la
 /// imagen, así que la memoria extra no crece con el alto.
+///
+/// `canales` es 3 para RGB o 4 para RGBA.
 export fn winsi_jpeg_coefs(
     rgb: [*]const u8,
     w: u32,
@@ -182,6 +186,7 @@ export fn winsi_jpeg_coefs(
     scratch: [*]f32,
     my0: u32,
     my1: u32,
+    canales: u32,
 ) callconv(.C) void {
     const div_y = divisores(qy);
     const div_c = divisores(qc);
@@ -205,7 +210,11 @@ export fn winsi_jpeg_coefs(
         // La franja: 16 filas a Y/Cb/Cr, repitiendo la última si no alcanzan.
         for (0..16) |fila| {
             const sy = @min(my * 16 + fila, h - 1);
-            fila_ycc(rgb, ancho, sy, pw, Y + fila * pw, CBf + fila * pw, CRf + fila * pw);
+            if (canales == 4) {
+                fila_ycc(4, rgb, ancho, sy, pw, Y + fila * pw, CBf + fila * pw, CRf + fila * pw);
+            } else {
+                fila_ycc(3, rgb, ancho, sy, pw, Y + fila * pw, CBf + fila * pw, CRf + fila * pw);
+            }
         }
         // El color, submuestreado: el promedio de cada 2x2.
         for (0..8) |cy| {

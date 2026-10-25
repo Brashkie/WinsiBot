@@ -1,4 +1,4 @@
-import 'dotenv/config'
+import './lib/env.js'
 import { config } from '@config'
 import { rustRequest } from '@lib/rustHttp.js'
 import { type ChildProcess, spawn } from 'child_process'

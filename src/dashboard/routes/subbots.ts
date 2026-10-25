@@ -1,5 +1,5 @@
 import { Hono } from 'hono'
-import { z } from 'zod'
+import { textoEntre, objeto } from '@lib/validate.js'
 import {
   subBots, startSubBot, stopSubBot,
   applySubBotName, applySubBotMedia,
@@ -51,7 +51,6 @@ subbotsRoutes.post('/:phone/disconnect', async (c) => {
   return ok ? c.json({ ok: true }) : c.json({ error: 'Sub-bot no encontrado' }, 404)
 })
 
-const setNameSchema = z.object({ name: z.string().min(1).max(48) })
 
 subbotsRoutes.post('/:phone/setname', async (c) => {
   const session = getSessionFrom(c)
@@ -59,10 +58,10 @@ subbotsRoutes.post('/:phone/setname', async (c) => {
   if (!ownsSubBot(phone, session.jid, session.role)) return c.json({ error: 'No autorizado' }, 403)
 
   const body = await c.req.json().catch(() => null)
-  const parsed = setNameSchema.safeParse(body)
-  if (!parsed.success) return c.json({ error: 'Nombre inválido' }, 400)
+  const name = textoEntre(objeto(body).name, 1, 48)
+  if (name === null) return c.json({ error: 'Nombre inválido' }, 400)
 
-  applySubBotName(phone, parsed.data.name.trim())
+  applySubBotName(phone, name.trim())
   return c.json({ ok: true })
 })
 

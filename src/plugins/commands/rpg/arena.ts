@@ -1,8 +1,8 @@
 import type { Command } from '../../../types/index.js'
 import { getUserData, patchUserData, userData } from '@core/events.js'
 import { Arena, CPU, type BattleAction, type BattleState, type NivelCpu, type PvpProfile } from '@lib/pvp.js'
-import { elegirAccion } from '@lib/arenaIA.js'
-import { ApuestasAbiertas } from '@lib/apuestasAbiertas.js'
+import { elegirAccion } from '@lib/arenaAI.js'
+import { ApuestasAbiertas } from '@lib/openBets.js'
 
 const ACTIONS = new Set<BattleAction>(['atacar', 'poderoso', 'defender', 'curar', 'ultimate'])
 
@@ -33,7 +33,7 @@ function getProfile(jid: string, name: string): PvpProfile {
 // le quitaba una, así que cada duelo con apuesta creaba dinero de la nada.
 //
 // Lo retenido se anota en data/arena.json y se devuelve si un reinicio corta
-// la pelea (ver apuestasAbiertas.ts), o si se abandona y expira.
+// la pelea (ver openBets.ts), o si se abandona y expira.
 
 const abiertas = new ApuestasAbiertas('arena')
 
@@ -45,7 +45,7 @@ function anotar(): void {
   abiertas.anotar(filas)
 }
 
-/** Ver apuestasAbiertas.ts. La llama el 'ready' de index.ts. */
+/** Ver openBets.ts. La llama el 'ready' de index.ts. */
 export const devolverManosInterrumpidas = () => abiertas.devolver()
 
 function pagarPozo(winner: string, battle: BattleState): void {

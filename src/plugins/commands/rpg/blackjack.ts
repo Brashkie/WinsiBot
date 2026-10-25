@@ -1,7 +1,7 @@
 import type { WASocket, WAMessage } from '@whiskeysockets/baileys'
 import type { Command } from '../../../types/index.js'
 import { getUserData, patchUserData } from '@core/events.js'
-import { ApuestasAbiertas } from '@lib/apuestasAbiertas.js'
+import { ApuestasAbiertas } from '@lib/openBets.js'
 import { logger } from '@core/logger.js'
 import { safeSend, sendCritical } from '@lib/media_sender.js'
 import {
@@ -15,7 +15,7 @@ import {
 // Eso obliga a cuidar el otro lado: una mano viva solo existe en memoria, y si
 // el bot se reinicia a la mitad, la apuesta ya descontada se perdería sin que
 // el jugador hiciera nada. Por eso las apuestas abiertas también se anotan
-// (ver apuestasAbiertas.ts) y al arrancar se DEVUELVEN las que quedaron.
+// (ver openBets.ts) y al arrancar se DEVUELVEN las que quedaron.
 
 const MIN_APUESTA = 10
 const MAX_APUESTA = 500_000
@@ -36,7 +36,7 @@ const mesas = new Map<string, Mano>()   // sender → mano
 
 const anotar = () => abiertas.anotar([...mesas].map(([s, h]) => [s, h.apuesta]))
 
-/** Ver apuestasAbiertas.ts. La llama el 'ready' de index.ts. */
+/** Ver openBets.ts. La llama el 'ready' de index.ts. */
 export const devolverManosInterrumpidas = () => abiertas.devolver()
 
 function pantalla(h: Mano, fin: boolean): string {

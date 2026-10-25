@@ -6,8 +6,8 @@
 //! De los tres kernels de Anime4K este es el único sin decisiones por píxel:
 //! hace la misma cuenta en todos, así que se puede hacer de a 8 píxeles por
 //! instrucción con `@Vector(8, f32)`. Los otros dos eligen una de ocho
-//! direcciones según los vecinos, y ahí los vectores no tienen dónde entrar;
-//! esos están en C (anime4k.c).
+//! direcciones según los vecinos; esos están en anime4k_push.zig, con las
+//! direcciones como máscaras (y en C, anime4k.c, como alternativa medida).
 //!
 //! Por qué da lo mismo que la versión escalar: las entradas son enteros de 0 a
 //! 255, así que las sumas de Sobel y sus cuadrados son enteros exactos en un
@@ -46,6 +46,46 @@ fn sobel(arriba: [*]const u8, medio: [*]const u8, abajo: [*]const u8, x: usize) 
     return 255 - redondear(@sqrt(gx * gx + gy * gy));
 }
 
+/// Una fila de la imagen del gradiente: la fila `medio` copiada a `salida`, con
+/// el alfa del interior reescrito por el Sobel de `arriba`, `medio` y `abajo`.
+/// `interior` es falso en la primera y la última fila de la imagen, que quedan
+/// copiadas tal cual, igual que las columnas de los costados.
+///
+/// La usan el Sobel solo (abajo) y el Sobel fusionado con pushGradient
+/// (anime4k_push.zig), que la calcula en un búfer de tres filas en lugar de
+/// escribir la imagen entera.
+pub fn filaSobel(arriba: [*]const u8, medio: [*]const u8, abajo: [*]const u8, salida: [*]u8, ancho: usize, interior: bool) void {
+    @memcpy(salida[0 .. ancho * 4], medio[0 .. ancho * 4]);
+    if (!interior or ancho < 3) return;
+    const dos: V = @splat(2.0);
+    const medio_: V = @splat(0.5);
+    const techo: V = @splat(255.0);
+
+    var x: usize = 1;
+    // De a 8 mientras quepan 8 píxeles interiores enteros.
+    while (x + N <= ancho - 1) : (x += N) {
+        const tl = alfas(arriba, x - 1);
+        const tc = alfas(arriba, x);
+        const tr = alfas(arriba, x + 1);
+        const ml = alfas(medio, x - 1);
+        const mr = alfas(medio, x + 1);
+        const bl = alfas(abajo, x - 1);
+        const bc = alfas(abajo, x);
+        const br = alfas(abajo, x + 1);
+
+        const gy = bl + dos * bc + br - tl - dos * tc - tr;
+        const gx = tl + dos * ml + bl - tr - dos * mr - br;
+        // g >= 0, así que n >= 0,5 y alcanza con el techo.
+        const n = @min(@sqrt(gx * gx + gy * gy) + medio_, techo);
+        const r: @Vector(N, u8) = @intFromFloat(n);
+        inline for (0..N) |i| salida[(x + i) * 4 + 3] = 255 - r[i];
+    }
+    // La cola, de a uno.
+    while (x < ancho - 1) : (x += 1) {
+        salida[x * 4 + 3] = sobel(arriba, medio, abajo, x);
+    }
+}
+
 /// Sobel sobre el alfa, invertido, de las filas [y0, y1) de la salida: Rust
 /// reparte la imagen en franjas entre los núcleos, cada hilo con las suyas.
 ///
@@ -54,45 +94,11 @@ fn sobel(arriba: [*]const u8, medio: [*]const u8, abajo: [*]const u8, x: usize) 
 /// de llamar, en un solo hilo, y eso pesaba más que el cálculo repartido.
 export fn winsi_a4k_gradient_zig(src: [*]const u8, dst: [*]u8, w: u32, h: u32, y0: u32, y1: u32) callconv(.C) void {
     const ancho: usize = w;
-    const tope: usize = @min(y1, h);
-    var fila: usize = y0;
-    while (fila < tope) : (fila += 1) {
-        @memcpy(dst[fila * ancho * 4 ..][0 .. ancho * 4], src[fila * ancho * 4 ..][0 .. ancho * 4]);
-    }
-    if (w < 3 or h < 3) return;
-    const dos: V = @splat(2.0);
-    const medio_: V = @splat(0.5);
-    const techo: V = @splat(255.0);
-
-    var y: usize = @max(y0, 1);
-    const fin: usize = @min(y1, h - 1);
-    while (y < fin) : (y += 1) {
-        const arriba = src + (y - 1) * ancho * 4;
-        const medio = src + y * ancho * 4;
-        const abajo = src + (y + 1) * ancho * 4;
-
-        var x: usize = 1;
-        // De a 8 mientras quepan 8 píxeles interiores enteros.
-        while (x + N <= ancho - 1) : (x += N) {
-            const tl = alfas(arriba, x - 1);
-            const tc = alfas(arriba, x);
-            const tr = alfas(arriba, x + 1);
-            const ml = alfas(medio, x - 1);
-            const mr = alfas(medio, x + 1);
-            const bl = alfas(abajo, x - 1);
-            const bc = alfas(abajo, x);
-            const br = alfas(abajo, x + 1);
-
-            const gy = bl + dos * bc + br - tl - dos * tc - tr;
-            const gx = tl + dos * ml + bl - tr - dos * mr - br;
-            // g >= 0, así que n >= 0,5 y alcanza con el techo.
-            const n = @min(@sqrt(gx * gx + gy * gy) + medio_, techo);
-            const r: @Vector(N, u8) = @intFromFloat(n);
-            inline for (0..N) |i| dst[(y * ancho + x + i) * 4 + 3] = 255 - r[i];
-        }
-        // La cola, de a uno.
-        while (x < ancho - 1) : (x += 1) {
-            dst[(y * ancho + x) * 4 + 3] = sobel(arriba, medio, abajo, x);
-        }
+    var y: usize = y0;
+    while (y < @min(y1, h)) : (y += 1) {
+        const interior = h >= 3 and y >= 1 and y + 1 < h;
+        const arriba = src + (if (interior) y - 1 else y) * ancho * 4;
+        const abajo = src + (if (interior) y + 1 else y) * ancho * 4;
+        filaSobel(arriba, src + y * ancho * 4, abajo, dst + y * ancho * 4, ancho, interior);
     }
 }

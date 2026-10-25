@@ -1,4 +1,5 @@
-import { MapConTocados } from '@lib/mapConTocados.js'
+import { MapConTocados } from '@lib/touchedMap.js'
+import { t, type Idioma } from '@lib/i18n.js'
 // ─────────────────────────────────────────────────────────────────────────────
 // TIPOS
 // ─────────────────────────────────────────────────────────────────────────────
@@ -55,6 +56,7 @@ export interface SavedSticker {
   name: string // nombre que le puso el usuario — se busca por esto
   path: string
   savedAt: number
+  pack?: string // el paquete al que pertenece (#stickeradd); sin él, suelto
 }
 
 // ─── Cooldowns de actividades RPG ────────────────────────────────────────────
@@ -109,7 +111,7 @@ export interface UserData {
   businesses: OwnedBusiness[] // negocios comprados — #business/#collect
   oro: number // Oro (Dragon City) — se gana con los dragones, se gasta alimentándolos
   dragons: OwnedDragon[] // colección de dragones — #pet
-  health: number // 0-100
+  health: number // 0-100 — la de ahora es saludDe(u), que suma lo regenerado (@lib/health.ts)
   crime: number // puntos de criminalidad
   commandsUsed: number // total de comandos ejecutados
   // ── Estado ─────────────────────────────────────────────────────────────────
@@ -147,6 +149,15 @@ export interface UserData {
   // ── Compañero (#pet companero): su `hatchedAt`, y su exp por actividad ──────
   companero?: number
   petActividad?: { dia: string; exp: number; ultimo: number }
+  /** Cuándo se hizo cada cuidado del compañero (#pet comida/agua/pasear). */
+  cuidado?: Partial<Record<import('@lib/companion.js').Cuidado, number>>
+  /** El momento al que corresponde `health`; desde ahí se regenera (ver health.ts). */
+  saludAt?: number
+  /** El idioma que eligió con #idioma; sin él, se deduce (ver @lib/i18n.ts). */
+  idioma?: import('@lib/i18n.js').Idioma
+  // ── Stickers: pack y autor por defecto (#setmeta), y sus paquetes (#newpack) ─
+  stickerMeta?: { pack: string; author: string }
+  stickerPacks?: string[]
 }
 
 // ─── Configuración de grupo ───────────────────────────────────────────────────
@@ -195,6 +206,8 @@ export interface GroupConfig {
   captcha: boolean // verificación captcha al unirse
   // ── Expiración ─────────────────────────────────────────────────────────────
   expired: number // timestamp (0 = sin expiración)
+  // ── Idioma (#idioma grupo): el de quien no eligió y no se deduce por su número
+  idioma?: import('@lib/i18n.js').Idioma
 }
 
 // ─── Clan ─────────────────────────────────────────────────────────────────────
@@ -219,7 +232,9 @@ export interface ClanData {
 // MAPS GLOBALES
 // ─────────────────────────────────────────────────────────────────────────────
 
-export const groupConfigs = new Map<string, GroupConfig>()
+// Igual que userData: anota qué grupos se pidieron, para que el guardado mire
+// solo esos (ver persistence.ts).
+export const groupConfigs = new MapConTocados<string, GroupConfig>()
 export const userData = new MapConTocados<string, UserData>()
 export const clanData = new Map<string, ClanData>() // clanTag → ClanData
 export const userClan = new Map<string, string>() // userJid → clanTag
@@ -580,8 +595,8 @@ function canAnnounceLevelUp(jid: string): boolean {
 
 /** Línea de "subiste de nivel" para anexar a la respuesta de un comando —
  *  '' si leveled es 0 o si el grupo tiene autolevelup desactivado. */
-export function levelUpLine(leveled: number, jid: string): string {
-  return leveled > 0 && canAnnounceLevelUp(jid) ? `\n> ◆ *¡Subiste ${leveled} nivel(es)!*` : ''
+export function levelUpLine(leveled: number, jid: string, lang: Idioma = 'es'): string {
+  return leveled > 0 && canAnnounceLevelUp(jid) ? t(lang, 'subiste', { n: leveled }) : ''
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
