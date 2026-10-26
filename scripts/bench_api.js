@@ -51,6 +51,8 @@ const casos = [
   ['/rate/check', (i) => ['POST', '/rate/check', { sender: `${i % 500}@s.whatsapp.net` }]],
   ['/ai/observe', (i) => ['POST', '/ai/observe', { sender: `${i % 500}@s.whatsapp.net`, gjid: `${i % 40}@g.us`, text: textos[i % 8] + ' ' + i }]],
   ['/ai/memory/:jid/update', (i) => ['POST', `/ai/memory/${encodeURIComponent(`${i % 500}@s.whatsapp.net`)}/update`, { text: textos[i % 8], intent: 'neutral', is_cmd: false }]],
+  // Lo que el bot hace por mensaje de grupo desde la 8.18.0: las tres de arriba en un viaje.
+  ['/msg/ingest', (i) => ['POST', '/msg/ingest', { sender: `${i % 500}@s.whatsapp.net`, gjid: `${i % 40}@g.us`, text: textos[i % 8] + ' ' + i, is_cmd: false, observar: true }]],
   ['/antiban/permit', (i) => ['POST', '/antiban/permit', { session: 'bench', jid: `${i % 40}@g.us` }]],
   ['/watchdog/ping', () => ['POST', '/watchdog/ping', {}]],
 ]

@@ -95,13 +95,3 @@ async function antibanTurn(account: string, jid: string): Promise<void> {
   }
 }
 
-/**
- * El socket sin limitar, para los pocos casos en que hay que saltárselo.
- *
- * Hoy no lo usa nadie a propósito: si algo necesita salir sin control, que sea
- * una decisión explícita y visible, no un `sock.sendMessage` más entre otros
- * quinientos.
- */
-export function rawSendMessage(sock: WASocket): WASocket['sendMessage'] {
-  return sock.sendMessage
-}

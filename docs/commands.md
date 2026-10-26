@@ -1,10 +1,10 @@
 <div align="center">
 
-# 📖 Referencia de Comandos — WinsiBot v8.10.0
+# 📖 Referencia de Comandos — WinsiBot v8.18.0
 
 [![Comandos](https://img.shields.io/badge/Comandos-190%2B-6C63FF?style=for-the-badge)](.)
 [![Categorías](https://img.shields.io/badge/Categorías-19-00C9FF?style=for-the-badge)](.)
-[![Versión](https://img.shields.io/badge/Versión-8.10.0-brightgreen?style=flat-square)](../README.md)
+[![Versión](https://img.shields.io/badge/Versión-8.18.0-brightgreen?style=flat-square)](../README.md)
 
 [🇬🇧 English version →](commands.en.md) &nbsp;·&nbsp; [💰 Guía de economía →](economy.md) &nbsp;·&nbsp; [← Volver al README](../README.md)
 
@@ -40,14 +40,14 @@
 |---|-----------|:--------:|
 | 1 | [🛠️ General](#%EF%B8%8F-general) | 19 |
 | 2 | [🤖 IA / ChatGPT](#-ia--chatgpt) | 4 |
-| 3 | [🎮 RPG / Economía](#-rpg--economía) | 27 |
+| 3 | [🎮 RPG / Economía](#-rpg--economía) | 29 |
 | 4 | [🎴 Gacha / Personajes](#-gacha--personajes) | 6 |
 | 5 | [💑 Parejas](#-parejas) | 5 |
 | 6 | [🎭 Roleplay](#-roleplay) | 10 |
 | 7 | [🎉 Diversión](#-diversión) | 17 |
 | 8 | [🕹️ Juegos](#%EF%B8%8F-juegos) | 7 |
 | 9 | [🎁 Regalos](#-regalos) | 1 |
-| 10 | [🖼️ Media & Stickers](#%EF%B8%8F-media--stickers) | 18 |
+| 10 | [🖼️ Media & Stickers](#%EF%B8%8F-media--stickers) | 32 |
 | 11 | [🔽 Descargas](#-descargas) | 7 |
 | 12 | [🔍 Scrapers / Búsqueda](#-scrapers--búsqueda) | 4 |
 | 13 | [🎵 Música](#-música) | 1 |
@@ -145,7 +145,8 @@
 
 | Comando | Aliases | Cooldown | Permiso | Descripción |
 |---------|---------|:--------:|:-------:|-------------|
-| `perfil` | `profile`, `miperfil`, `yo` | 5s | 👤 | Ver tu perfil o el de otro usuario (`@mención`) |
+| `simular` | `simulate`, `sim`, `probabilidad` | 30s | 👤 | Miles de peleas contra la CPU de `arena` (`simular facil\|normal\|dificil`) con cuatro formas de jugar: cuántas veces gana cada una, con su margen, y cuál conviene |
+| `perfil` | `profile`, `miperfil`, `yo` | 5s | 👤 | Tu perfil o el de otro (`@mención`), como una tarjeta con tu foto, el nivel, las barras de experiencia y salud y tus números; `perfil texto` para la versión en texto |
 | `setdesc` / `deldesc` | `setdescription`, `descripcion` | 5s | 👤 | Tu descripción en el perfil (hasta 140 caracteres) |
 | `setgenre` / `delgenre` | `setgenero`, `genero` | 5s | 👤 | Tu género en el perfil: `hombre`, `mujer` u `otro` |
 | `xp` | `exp`, `experiencia`, `stats`, `nivel` | 5s | 👤 | Estadísticas RPG detalladas |
@@ -215,6 +216,7 @@
 | `adivinar` | `drawguess`, `dibujar`, `guess` | 20s | 👤 | Mini-juego de dibujar y adivinar en grupo |
 | `raid` | `jefe`, `boss`, `worldboss`, `atacar` | 1min por golpe | 👥 | Jefe de mundo: el mismo para todos los grupos. Aparece cada 6 h y escapa en 60 min. Dos jugadores seguidos con compañeros de elementos que combinan disparan una reacción. El jefe contraataca (ver `salud`). `atacar`, `on`/`off` (admins: avisos en el grupo), `invocar` (owner) |
 | `mazmorra` | `dungeon`, `mazmorras`, `calabozo` | 10s por puerta | 👥 | La mazmorra del día, la misma para todos los grupos: `entrar`, `<número de puerta>`, `salir` (cobrar) y `ranking`. Una expedición por persona por día |
+| `explorar` | `explore`, `cueva`, `cave`, `caverna` | 60s por persona | 👥 | La cueva del grupo, de 40x40 con niebla: todos mueven la misma ficha (`explorar n\|s\|e\|o`) y lo que aparece —cofres, trampas, monstruos, fuentes, salas secretas— le toca a quien dio el paso. `explorar mapa` manda la imagen entera. La 🏺 reliquia reparte ¥ entre todos los que exploraron y abre otra cueva |
 | `poker` | `póker`, `holdem`, `casinoholdem` | 2s | 👤 | Casino Hold'em contra la casa: `poker <ante>`, después `poker ir` (paga el doble) o `poker retirarse`. El crupier juega con par de 4 o más |
 | `blackjack` | `bj`, `21`, `pedir`, `plantarse`, `doblar` | 2s | 👤 | Blackjack contra el crupier: ganar paga ×2, blackjack 3:2, el crupier se planta en 17. Apuesta de ¥10 a ¥500.000 |
 
@@ -361,6 +363,9 @@
 
 | Comando | Aliases | Cooldown | Permiso | Descripción |
 |---------|---------|:--------:|:-------:|-------------|
+| `efectos` | `audiofx`, `effects` | 5s | 👤 | La lista de los efectos de audio |
+| `nightcore` · `lento` · `rapido` · `bass` · `reverb` · `eco` | `nc`, `slowed`, `fast`, `bassboost`, `reverbe`, `echo` | 10s | 👤 | Citando un audio, una nota de voz o un video, devuelve la nota de voz con el efecto (hasta 5 min; lo de más de 15 min no se baja) |
+| `ardilla` · `grave` · `robot` · `reversa` · `radio` · `vibrato` · `8d` | `chipmunk`, `deep`, `reverse`, `phone`, `audio8d` | 10s | 👤 | Más efectos, igual. Respetan `audios off` del grupo |
 | `sticker` | `s`, `stiker` | 3s | 👤 | Convierte imagen/video a sticker: `sticker [pack \| autor]`; citando un sticker, le cambia pack y autor |
 | `take` | `wm`, `tomar` | 3s | 👤 | Citando un sticker, le pone tu pack y autor (`take [pack \| autor]`), sin recodificarlo |
 | `setmeta` / `delmeta` | `setstickermeta`, `delstickermeta` | 3s | 👤 | El pack y autor de tus stickers: `setmeta Mi pack \| Yo` |

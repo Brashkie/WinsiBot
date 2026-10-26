@@ -5,9 +5,10 @@ import { config } from '@config'
 import { logger } from './logger.js'
 import { registerSemaphore, shouldShed, priorityOf, loadLevel } from './loadShedding.js'
 import { color, themes } from 'ansimax'
+import { anchoTerminal, anchoTexto, cortar } from '@lib/terminal.js'
 import type { BotContext } from '../types/index.js'
 import { handleNotFound } from '@plugins/commands/general/notfound.js'
-import { analyzeIntent, learnConversation, getAIContext } from '@lib/nativeBridge.js'
+import { analyzeIntent, learnConversation, getAIContext, ingerirMensaje } from '@lib/nativeBridge.js'
 import { hepein } from '@lib/hepein.js'
 import { safeSend } from '@lib/media_sender.js'
 import {
@@ -457,10 +458,15 @@ export async function handleMessage(msg: WAMessage, sock: WASocket): Promise<voi
     ).trim()
 
     const isGroupEarly  = jidEarly.endsWith('@g.us')
-    const chatLabel     = isGroupEarly ? color.magenta('Grupo') : themes.warning('Privado')
-    const meLabel       = msg.key.fromMe ? color.dim('fromMe') : color.cyan('entrante')
-    const textLabel     = textEarly ? `"${textEarly.slice(0, 50)}"` : color.dim('(sin texto)')
-    console.log(`  ${themes.success('◈')} ${color.bold('Handler')}  ${chatLabel} ${color.dim(jidEarly.replace('@g.us','').replace('@s.whatsapp.net',''))}  ${meLabel}  ${textLabel}`)
+    const chat          = isGroupEarly ? 'Grupo' : 'Privado'
+    const yo            = msg.key.fromMe ? 'fromMe' : 'entrante'
+    const id            = jidEarly.replace('@g.us', '').replace('@s.whatsapp.net', '')
+    // Un renglón por mensaje: en Termux vertical (40-50 columnas) se partía en
+    // dos o tres. Se corta solo el texto, que es lo que varía, con lo que deja
+    // libre el resto (ver lib/terminal.ts: truncateAnsi costaba ~290 µs).
+    const fijo          = anchoTexto(`  ◈ Handler  ${chat} ${id}  ${yo}  ""`)
+    const textLabel     = textEarly ? `"${cortar(textEarly, Math.min(50, anchoTerminal() - fijo))}"` : color.dim('(sin texto)')
+    console.log(`  ${themes.success('◈')} ${color.bold('Handler')}  ${isGroupEarly ? color.magenta(chat) : themes.warning(chat)} ${color.dim(id)}  ${msg.key.fromMe ? color.dim(yo) : color.cyan(yo)}  ${textLabel}`)
 
     if (msg.key.fromMe) return
 
@@ -548,18 +554,19 @@ export async function handleMessage(msg: WAMessage, sock: WASocket): Promise<voi
     // ─── Entrenamiento (Hepein) — aprende de cada mensaje real del grupo ──────
     // Fire-and-forget: no bloquea el handler ni afecta la latencia del mensaje.
     //
-    // hepein.record() va a Rust (POST /ai/observe), a la MISMA tabla
-    // `conversations` que llena learnConversation() unas líneas más abajo en
-    // handleAIResponse. Hasta ahora iba a Python, que guardaba una segunda
-    // copia del mensaje en Parquet para calcular el mismo perfil de estilo:
-    // dos almacenes y una llamada HTTP a Python por cada mensaje de grupo.
+    // Va a Rust en UN viaje (POST /msg/ingest, ver ingerirMensaje): clasificar
+    // el texto, guardarlo en la tabla `conversations` —la misma que llena
+    // learnConversation() en handleAIResponse— y actualizar la memoria del
+    // remitente. Eran tres viajes por mensaje de grupo. La clasificación queda
+    // en caché para el antitóxico y el anti-spam de más abajo.
+    //
+    // Los textos de menos de 3 caracteres no se guardan para el estilo (como
+    // hacía hepein.record), pero sí cuentan para la memoria.
     if (ctx.isGroup && ctx.text) {
-      const isReply = !!msg.message?.extendedTextMessage?.contextInfo?.quotedMessage
-      hepein.record({ groupJid: ctx.jid, senderJid: ctx.sender, text: ctx.text, isReply })
-
-      analyzeIntent(ctx.text)
-        .then(nlp => hepein.updateMemory(ctx.sender, ctx.text, nlp?.primary ?? 'neutral', !!ctx.prefix))
-        .catch(() => {})
+      ingerirMensaje({
+        sender: ctx.sender, gjid: ctx.jid, text: ctx.text,
+        isCmd: !!ctx.prefix, observar: ctx.text.trim().length >= 3,
+      })
     }
 
     // ─── AFK check ────────────────────────────────────────────────────────────

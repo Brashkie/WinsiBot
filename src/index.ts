@@ -14,7 +14,7 @@ import { sessionClient } from '@lib/session.js'
 import { flush as flushBotStats } from '@core/botStats.js'
 import { rustRequest } from '@lib/rustHttp.js'
 import { SESSION_API, sessionApiBinary, sessionApiHome } from '@lib/sessionApiPaths.js'
-import { color, gradient, loader, ascii, themes, configure, components, BG, animate } from 'ansimax'
+import { color, gradient, loader, ascii, themes, configure, components, BG, animate, canAnimate, setTitle, getTerminalWidth, visibleLen } from 'ansimax'
 import { versionDelBot } from '@lib/version.js'
 
 // ffmpeg-static ya era una dependencia del proyecto, pero nada la usaba —
@@ -326,19 +326,35 @@ function platformLabel(): string {
 const MATRIX_GREEN  = '#00ff41'
 const MATRIX_GREENS = [MATRIX_GREEN, '#008f11', MATRIX_GREEN]
 
+/** Cuántas veces el supervisor reinició el bot (0 = el primer arranque). */
+const REINICIO = Number(process.env.WINSI_REINICIO ?? 0)
+
+/** El título de la ventana de la terminal (Termux lo muestra en la barra). */
+function titulo(estado: string): void {
+  if (process.stdout.isTTY) process.stdout.write(setTitle(`${config.botName} · ${estado}`))
+}
+
 async function printBanner() {
-  console.clear()
+  // En un reinicio NO se borra la pantalla: arriba está por qué se cayó.
+  if (REINICIO === 0) console.clear()
+  else console.log(`\n  ${themes.warning('↻')} ${color.bold(`Reinicio #${REINICIO}`)} ${color.dim('— lo de arriba es lo que pasó')}`)
   console.log()
+  titulo('iniciando')
 
   // Intro tipo "terminal descifrando texto" antes del logo — símbolos random
   // que se van resolviendo en el texto real. Charset a propósito solo ASCII
   // (sin katakana/unicode raro) porque la codepage de la consola de Windows
   // ya mostraba mojibake con acentos normales — no hay que darle más leña.
-  await animate.reveal('DESCIFRANDO SESION...', {
-    charset: '01#$%&*<>[]{}/\\?!',
-    duration: 550,
-  }).catch(() => {})
-  console.log()
+  //
+  // Solo en el primer arranque y si la terminal anima (canAnimate: hay TTY y
+  // colores); en un log, con NO_COLOR o en un reinicio, no se espera nada.
+  if (REINICIO === 0 && canAnimate()) {
+    await animate.reveal('DESCIFRANDO SESION...', {
+      charset: '01#$%&*<>[]{}/\\?!',
+      duration: 550,
+    }).catch(() => {})
+    console.log()
+  }
 
   // Título con gradiente — ASCII art si está disponible, fallback a texto
   let title: string
@@ -351,6 +367,12 @@ async function printBanner() {
   } catch {
     title = `  ${gradient(config.botName + ' v' + versionDelBot(), MATRIX_GREENS)}`
   }
+  // El logo grande mide ~60 columnas: en una terminal más angosta (Termux
+  // vertical) se partía renglón por renglón. Ahí va el nombre en texto.
+  const ancho = getTerminalWidth()
+  if (Math.max(...title.split('\n').map(l => visibleLen(l))) > ancho) {
+    title = `  ${gradient(config.botName.toUpperCase(), MATRIX_GREENS)}`
+  }
   console.log(title)
   console.log(`  ${color.dim('by Hepein Oficial')}  ${color.dim('·')}  ${themes.success('sistema en línea')}`)
   console.log()
@@ -360,14 +382,24 @@ async function printBanner() {
     components.badge('node',     process.version,  { labelBg: BG.black, valueBg: BG.brightGreen }),
     components.badge('platform', platformLabel(),  { labelBg: BG.black, valueBg: BG.green }),
     components.badge('github',   'Brashkie',        { labelBg: BG.black, valueBg: BG.brightGreen }),
-  ].join(' ')
-  console.log(`  ${badges}`)
+  ]
+  // Los badges en las filas que hagan falta para que entren, en vez de una
+  // sola línea de ~70 columnas que la terminal partía por cualquier lado.
+  const filas: string[][] = [[]]
+  let usado = 0
+  for (const b of badges) {
+    const w = visibleLen(b) + 1
+    if (usado + w > ancho - 2 && filas.at(-1)!.length) { filas.push([]); usado = 0 }
+    filas.at(-1)!.push(b)
+    usado += w
+  }
+  for (const f of filas) console.log(`  ${f.join(' ')}`)
   console.log()
-  console.log(`  ${ascii.divider({ width: 40 })}`)
+  console.log(`  ${ascii.divider({ width: Math.min(40, ancho - 4) })}`)
   console.log()
-
-  await loader.progressAnimate(6, 'Iniciando sistema...', { delay: 280, color: MATRIX_GREEN })
-  console.log()
+  // Acá había una barra "Iniciando sistema..." de 6 pasos de 280 ms que no
+  // esperaba nada: 1,7 s de demora antes de levantar la Session API, en cada
+  // arranque y en cada reinicio. Lo que de verdad tarda tiene su spinner abajo.
 }
 
 // ─── Info de conexión ─────────────────────────────────────────────────────────
@@ -424,12 +456,16 @@ async function main() {
   })
 
   const stopConn = loader.spin('Conectando a WhatsApp...')
+  titulo('conectando')
 
   winsi.on('ready', async (sock) => {
     stopConn('WhatsApp conectado', true)
     const jid = sock.user?.id ?? ''
     const { commandRegistry } = await import('@plugins/commands/index.js')
-    await printConnected(jid, commandRegistry.size)
+    // El registro tiene una entrada por nombre Y por alias (808 claves para
+    // 242 comandos): se cuentan los comandos, no las claves.
+    await printConnected(jid, new Set(commandRegistry.values()).size)
+    titulo('activo')
 
     try {
       const { startWebhookReceiver } = await import('@plugins/webhooks/receiver.js')

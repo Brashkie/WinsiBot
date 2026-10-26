@@ -4,6 +4,9 @@ import { getUserData, getUserClan, expForLevel, userData } from '@core/events.js
 import { getUserInventory } from './rollwaifu.js'
 import { safeSend } from '@lib/media_sender.js'
 import { tx, type Idioma } from '@lib/i18n.js'
+import { tarjetaPerfil, type Etiquetas } from '@lib/profileCard.js'
+import { downloadBuffer } from '@lib/downloader.js'
+import { logger } from '@core/logger.js'
 
 const bar = (cur: number, max: number, len = 10) => {
   const filled = Math.min(len, Math.floor((cur / max) * len))
@@ -31,6 +34,33 @@ const T = {
   comandos: { es: '□ Comandos usados » *{v}*', en: '□ Commands used » *{v}*', pt: '□ Comandos usados » *{v}*' },
   salud:    { es: '❤ Salud » {v}/100', en: '❤ Health » {v}/100', pt: '❤ Saúde » {v}/100' },
   crimen:   { es: '🔥 Crimen » {v}', en: '🔥 Crime » {v}', pt: '🔥 Crime » {v}' },
+  // La tarjeta
+  t_nivel:  { es: 'Nivel', en: 'Level', pt: 'Nível' },
+  t_puesto: { es: 'Puesto', en: 'Rank', pt: 'Posição' },
+  t_exp:    { es: 'Experiencia', en: 'Experience', pt: 'Experiência' },
+  t_salud:  { es: 'Salud', en: 'Health', pt: 'Saúde' },
+  t_mon:    { es: 'Monedas', en: 'Coins', pt: 'Moedas' },
+  t_oro:    { es: 'Oro', en: 'Gold', pt: 'Ouro' },
+  t_drag:   { es: 'Dragones', en: 'Dragons', pt: 'Dragões' },
+  t_cmds:   { es: 'Comandos', en: 'Commands', pt: 'Comandos' },
+  t_pareja: { es: 'Pareja', en: 'Partner', pt: 'Par' },
+  t_cumple: { es: 'Cumpleaños', en: 'Birthday', pt: 'Aniversário' },
+  pie:      { es: '「✦」*{n}*  ·  `{p}perfil texto` para la versión en texto', en: '「✦」*{n}*  ·  `{p}perfil texto` for the text version', pt: '「✦」*{n}*  ·  `{p}perfil texto` para a versão em texto' },
+}
+
+/** Las palabras de la tarjeta, en el idioma de quien la pide. */
+const etiquetas = (lang: Idioma): Etiquetas => ({
+  nivel: tx(lang, T.t_nivel), puesto: tx(lang, T.t_puesto), experiencia: tx(lang, T.t_exp),
+  salud: tx(lang, T.t_salud), monedas: tx(lang, T.t_mon), oro: tx(lang, T.t_oro),
+  dragones: tx(lang, T.t_drag), harem: 'Harem', brasas: 'BrasEmbers', comandos: tx(lang, T.t_cmds),
+  pareja: tx(lang, T.t_pareja), cumple: tx(lang, T.t_cumple),
+})
+
+/** "DD/MM" → "25 de octubre" / "October 25": corto, para la tarjeta. */
+function cumpleCorto(birth: string, lang: Idioma): string | undefined {
+  const m = birth.match(/^(\d{2})\/(\d{2})$/)
+  if (!m) return undefined
+  return new Date(2000, Number(m[2]) - 1, Number(m[1])).toLocaleDateString(LOCALE[lang], { day: 'numeric', month: 'long' })
 }
 
 // "DD/MM" guardado por !birthday → "sábado, 10 de enero" / "Saturday, January 10"
@@ -74,7 +104,7 @@ const command: Command = {
   category:    'rpg',
   cooldown:    5,
 
-  async execute({ sock, jid, msg, sender, pushName, lang }) {
+  async execute({ sock, jid, msg, sender, pushName, lang, args, prefix }) {
     // Objetivo: @mención tiene prioridad, si no hay se usa a quién se le
     // respondió (contextInfo.participant = remitente del mensaje citado),
     // si no hay ninguno de los dos es el propio remitente.
@@ -145,6 +175,39 @@ const command: Command = {
       pfpUrl = await sock.profilePictureUrl(target, 'image')
     } catch {
       pfpUrl = undefined
+    }
+
+    // La tarjeta, salvo que se pida el texto (#perfil texto). Si algo falla al
+    // dibujarla, sale el texto de siempre.
+    if (!['texto', 'text', 'txt'].includes((args[0] ?? '').toLowerCase())) {
+      try {
+        const foto = pfpUrl ? await downloadBuffer(pfpUrl).catch(() => null) : null
+        const marry = user.profile.marry
+        const imagen = await tarjetaPerfil({
+          nombre: name ?? '',
+          rol: user.profile.role,
+          nivel: user.level,
+          exp: user.exp,
+          expNecesaria: need,
+          puesto: rankPos,
+          salud: saludDe(user),
+          monedas: user.money + user.bank,
+          oro: user.oro,
+          dragones: user.dragons.length,
+          harem: harem.length,
+          brasas: user.embers,
+          comandos: user.commandsUsed,
+          descripcion: user.profile.description || undefined,
+          clan: clan ? `[${clan.tag}] ${clan.name}` : undefined,
+          pareja: marry ? (getUserData(marry).name || marry.split('@')[0]) : undefined,
+          cumple: cumpleCorto(user.profile.birth, lang),
+          premium: user.premium,
+        }, etiquetas(lang), foto)
+        await safeSend(() => sock.sendMessage(jid, { image: imagen, caption: tx(lang, T.pie, { n: name, p: prefix }), mentions }, { quoted: msg }))
+        return
+      } catch (err) {
+        logger.warn({ err }, 'perfil: no se pudo dibujar la tarjeta, va el texto')
+      }
     }
 
     if (pfpUrl) {

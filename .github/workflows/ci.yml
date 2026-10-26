@@ -57,6 +57,15 @@ jobs:
       - name: Tests con los kernels nativos
         run: cargo test --release -p winsibot-session-api --features native
 
+      # En x86-64 cada kernel de Zig viene dos veces: baseline y x86-64-v3
+      # (AVX2), y se elige según la CPU (src/simd.rs). El paso de arriba usa la
+      # v3 si el runner la tiene; este obliga la baseline, así las dos quedan
+      # probadas contra la referencia en Rust en cada push.
+      - name: Tests con los kernels nativos en baseline (SSE2)
+        run: cargo test --release -p winsibot-session-api --features native
+        env:
+          WINSI_SIMD: baseline
+
   # ─── Kernels nativos en ARM ──────────────────────────────────────────────────
   # Los mismos tests bit a bit, EJECUTADOS en ARM64, que es donde corre Termux.
   # Los kernels de Zig son vectores (@Vector), y en ARM esos vectores son NEON

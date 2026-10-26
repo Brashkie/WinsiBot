@@ -143,9 +143,3 @@ export class CircuitBreaker {
 // Rust está en el camino de cada mensaje (rate/check) y es más crítico para la
 // sesión, así que se le da algo más de margen antes de cortar.
 export const rustCircuit = new CircuitBreaker('rust', { failureThreshold: 8, openMs: 20_000 })
-
-const registry = [rustCircuit]
-
-export function circuitStats() {
-  return registry.map(c => c.stats())
-}

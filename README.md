@@ -1,6 +1,6 @@
 <div align="center">
 
-<img src="https://capsule-render.vercel.app/api?type=waving&color=0:6C63FF,100:00C9FF&height=180&section=header&text=WinsiBot&fontSize=62&fontColor=ffffff&fontAlignY=38&desc=v8.10.0%20%E2%80%94%20Enterprise%20WhatsApp%20Bot&descAlignY=58&descSize=18" width="100%"/>
+<img src="https://capsule-render.vercel.app/api?type=waving&color=0:6C63FF,100:00C9FF&height=180&section=header&text=WinsiBot&fontSize=62&fontColor=ffffff&fontAlignY=38&desc=v8.18.0%20%E2%80%94%20Enterprise%20WhatsApp%20Bot&descAlignY=58&descSize=18" width="100%"/>
 
 <br/>
 
@@ -17,7 +17,7 @@
 
 > Bot de WhatsApp de alto rendimiento con arquitectura multi-lenguaje de tres capas.<br/>
 > Sin límite artificial de grupos, pensado para miles de mensajes por hora y múltiples instancias.<br/>
-> v8.17.0 — **Habla tu idioma, 35 comandos nuevos y más liviano.** Español, inglés y portugués según el país de cada número; `#take`, paquetes de stickers, bienvenida propia, salud y cuidados del compañero, `#actividad`, `#fantasmas`, `#sorteo` y más; de 31 dependencias a 14 y el núcleo de 16 a 9 MB.<br/>
+> v8.18.0 — **Los kernels aprovechan toda la CPU, y más para jugar.** `#upscale` de ~121 a ~73 ms con una copia para AVX2 elegida al arrancar; un viaje a Rust por mensaje en vez de tres; `#explorar`, `#simular`, `#perfil` como tarjeta y 13 efectos de audio; Termux arranca con el supervisor.<br/>
 
 <br/>
 
@@ -63,24 +63,23 @@
 |------|-----------|----------------|
 | 🟦 **Core** | TypeScript / Node.js | Protocolo WhatsApp, dispatcher de comandos, RPG, economía, panel web |
 | ⚙️ **Session + IA** | Rust / Axum | Creds atómicas y snapshots, tracker Bad MAC, rate limiter, antiban, clasificación de intenciones, personalidad y humor, reputación, perfiles de estilo, Ollama y APIs cloud, imágenes |
-| 🧮 **Kernels nativos** | C + Zig | Anime4K y el códec JPEG, compilados con Zig dentro del binario de la Session API. Se usa el que gana midiendo |
+| 🧮 **Kernels nativos** | C + Zig | Anime4K y el códec JPEG, compilados con Zig dentro del binario de la Session API. Se usa el que gana midiendo, y en x86-64 la copia para AVX2 si la CPU la tiene |
 
-### Novedades en v8.17.0
+### Novedades en v8.18.0
 
-**Habla tu idioma, 35 comandos nuevos y más liviano.** El detalle completo, con cada medición, está en el [CHANGELOG](CHANGELOG.md).
+**Los kernels aprovechan toda la CPU, y más para jugar.** El detalle completo, con cada medición, está en el [CHANGELOG](CHANGELOG.md).
 
 | Área | Cambio |
 |------|--------|
-| **Habla tu idioma** | Español, inglés y portugués: lo elegís con `#idioma`, o el bot lo deduce del país de tu número (+55 → portugués) o usa el del grupo. Avisos, menú, ayuda, las descripciones de los 242 comandos y los más usados, con alias como `#ajuda` o `#trabalhar`. Un mensaje que no es un comando no paga nada por esto |
-| **Para el grupo** | `#actividad` (quién escribe más), `#fantasmas` (los que no escriben, y sacarlos), `#paises`, `#nota` y `#reglas`, `#sorteo`, `#cerrar`/`#abrir`, `#promote`, y la bienvenida propia de cada grupo con `#setwelcome` y `#testwelcome` |
-| **Para jugar** | `#ship`, `#parejas`, listas de partidas por equipos (`#lista`, `#mapa`), `#slap`. Salud de verdad: el jefe del raid contraataca y te curás con `#curar` o `#hospital`; y el compañero pelea mejor si lo cuidás (`#pet comida`, `agua`, `pasear`) |
-| **Stickers** | `#qc` (un mensaje como sticker), `#texto`, `#take` (tu pack y autor en un sticker ajeno, sin recodificarlo), `#setmeta`, `#toimg`, y paquetes con nombre (`#newpack`, `#stickeradd`, `#getpack`) |
-| **Perfil** | `#setdesc`, `#setgenre`, `#cumples` (los próximos del grupo), `#getpic` |
-| **Más liviano** | De **31 dependencias a 14**: lo que hacían `openai`, `zod`, `moment-timezone`, `dotenv` y otras 13 lo hace Node 24 o unas líneas propias. El núcleo arranca en **~92 ms en vez de 201** y ocupa **9 MB en vez de 16**. Los grupos, en un log binario que escribe solo el que cambió |
-| **Kernels** | Los empujes de Anime4K en Zig vectorial, el Sobel fusionado, y el Huffman del JPEG en todos los núcleos (**27 → 11 ms**). `#upscale` de ~275 a ~130 ms sin contar el JPEG, igual bit a bit, probado también en ARM |
-| **Fixes** | Dos copias de `sharp` tumbaban el proceso al usar `#tweet` y `#sticker` en la misma sesión; la espera entre comandos se esquivaba cambiando de alias; el saludo de cumpleaños podía salir dos veces |
+| **Kernels** | Una segunda copia de los kernels de Zig para **AVX2** (x86-64-v3), elegida al arrancar si la CPU la tiene; la pasada de Anime4K entera en **un solo kernel** que no escribe imágenes intermedias; y todos los núcleos, no hasta 8. `#upscale` de **~121 a ~73 ms**, dando lo mismo bit a bit (CI prueba las dos copias) |
+| **Menos viajes a Rust** | Cada mensaje de grupo hace **un** viaje a la Session API en vez de tres (`/msg/ingest`): −55% de CPU del lado de Rust |
+| **`#explorar`** | Una cueva de 40x40 por grupo, con niebla: todos mueven la misma ficha, con cofres, trampas, monstruos, fuentes, salas secretas y una reliquia que reparte entre los que exploraron. 625 bytes por grupo y ~10 µs por paso |
+| **`#simular`** | Miles de peleas contra la CPU de `#arena` con cuatro formas de jugar, con su margen al 95%. La CPU tiene una copia en Rust, en todos los núcleos, que un test exige igual a la de TypeScript: contra la difícil, de ±27% a **±2%** |
+| **`#perfil` y audio** | El perfil sale como tarjeta (imagen) y hay **13 efectos de audio**: `#nightcore`, `#lento`, `#bass`, `#reverb`, `#8d`, `#robot` y más (`#efectos`) |
+| **Termux y consola** | `start.sh` pasaba por alto al supervisor (sin el límite de memoria ni la detección de cuelgues); ahora no. Arranque sin esperas de adorno (−1,7 s) y la consola se adapta a terminales angostas |
+| **Limpieza** | Fuera un filtro anti-NSFW que nunca estuvo conectado y código muerto; clippy a cero |
 
-**Para actualizar:** `npm install`. Al primer arranque, `groups.json` se migra solo a `data/groups.aof`.
+**Para actualizar:** `npm install` (baja la Session API 5.11.0). Hace falta `ffmpeg` para los efectos de audio.
 
 ---
 
@@ -151,6 +150,7 @@
 - Misiones: trabajo, minería, cofre, crimen, robo
 - **Sistema de regalos**: catálogo 30+ items, buzón, wishlist, trueques
 - **Arena PvP**: ELO, 9 divisiones, apuestas, 5 acciones de combate
+- **Cueva por grupo** (`#explorar`): 40x40 con niebla, una ficha para todos, reliquia por temporada
 - **Dragon City**: 579 dragones reales, huevos, evolución con video, Oro pasivo
 - **Quiz de programación**: 42 preguntas, ELO, 5 dificultades
 - **Draw & Guess**: 55 palabras, pistas progresivas, puntuación
@@ -201,7 +201,7 @@
 
 ```
 ╔════════════════════════════════════════════════╗
-║                WinsiBot v8.17.0                ║
+║                WinsiBot v8.18.0                ║
 ╠═════════════════════╦══════════════════════════╣
 ║      TypeScript     ║           Rust           ║
 ║    Node.js :4001    ║                          ║
@@ -240,11 +240,11 @@
 
 | Herramienta | Versión mínima | Requerido | Notas |
 |-------------|---------------|:---------:|-------|
-| Node.js | 20.x LTS | ✅ | `node --version` |
+| Node.js | 20.12+ | ✅ | `node --version` |
 | npm | 9.x | ✅ | incluido con Node |
 | Rust + Cargo | 1.75+ | ❌ | solo para compilar la Session API vos mismo: `npm install` baja el binario de tu plataforma |
 | Ollama **o** [Cosxamix](https://github.com/Brashkie/Cosxamix) | latest | ❌ | IA local (recomendado, 16 GB RAM+). Los dos hablan el mismo dialecto, así que cambiar de uno a otro son tres líneas del `.env` — ver `.env.example` |
-| FFmpeg | 6.x | ❌ | conversión de media |
+| FFmpeg | 6.x | ❌ | stickers animados, notas de voz, efectos de audio, videos de los dragones. En Windows, Linux y macOS viene con `npm install` (`ffmpeg-static`); en Termux, `pkg install ffmpeg` |
 | yt-dlp | reciente | ❌ | descargas de YouTube y otros sitios. Ejecutable en `bin/` o en el `PATH`; en Termux, `pkg install yt-dlp` |
 
 **Sistemas operativos soportados:** Windows 10/11 · Ubuntu 20.04+ · Debian 11+ · macOS 12+ · Android (Termux)
@@ -299,7 +299,7 @@ npm start
 ```bash
 # 0 — Paquetes del sistema (una sola vez)
 pkg update && pkg upgrade -y
-pkg install -y nodejs-lts git tmux
+pkg install -y nodejs-lts git tmux ffmpeg
 
 # Opcional — solo si el bot va a leer/escribir en el almacenamiento compartido
 # del teléfono (fuera de su propia carpeta de datos):
@@ -314,11 +314,13 @@ Los comandos de imagen (`#toanime`, `#removebg`, `#upscale`) **funcionan en el t
 
 **Lo único que puede compilar desde fuente** es `sharp` (lleva libvips), que no trae binario para Android. Si `npm install` falla ahí, instalá `pkg install -y clang make pkg-config` y repetí.
 
+**Arrancar: `./start.sh`.** Hace todo lo que en el teléfono es fácil olvidarse: verifica Node (20.12 o más nuevo), corre `npm install` si faltan dependencias, compila si hay cambios en `src/` (después de un `git pull`), pide el **wake lock** de Termux para que Android no duerma el bot con la pantalla apagada (si está instalado `termux-api`), y arranca el supervisor, que reinicia el bot si se cae o se cuelga y en Termux le pone un techo de 512 MB al heap. Sin terminal (con `nohup`, a un log) o con `NO_COLOR=1`, sale sin colores ni animaciones.
+
 **Mantener el bot corriendo en segundo plano:**
 
-- `termux-wake-lock` antes de iniciar el bot evita que Android mate el proceso al apagar la pantalla (`termux-wake-unlock` para liberarlo después).
-- Corré el bot dentro de una sesión de `tmux` (`tmux new -s winsibot`, después `npm run start`) para que el proceso siga vivo aunque cierres la app de Termux — reconectá con `tmux attach -t winsibot`.
-- Para autoarranque al reiniciar el teléfono, instalá el complemento **Termux:Boot** (F-Droid) y agregá un script en `~/.termux/boot/`.
+- Corré el bot dentro de una sesión de `tmux` (`tmux new -s winsibot`, después `./start.sh`) para que el proceso siga vivo aunque cierres la app de Termux — reconectá con `tmux attach -t winsibot`.
+- Para autoarranque al reiniciar el teléfono, instalá el complemento **Termux:Boot** (F-Droid) y agregá un script en `~/.termux/boot/` que haga `cd ~/WinsiBot && ./start.sh`.
+- La consola se adapta al ancho: con el teléfono vertical (40–50 columnas) cada mensaje es un renglón y el logo grande pasa a texto, en vez de partirse.
 
 > **RAM:** Ollama (IA local) generalmente no es viable en un teléfono común — usá las APIs cloud (`OPENAI_API_KEY`/`ANTHROPIC_API_KEY`/`GEMINI_API_KEY`), o dejá que el bot responda con su motor local de plantillas, que no necesita ningún modelo.
 ---
@@ -487,7 +489,7 @@ El bot tiene **200+ comandos** en **16 categorías**.
 | Categoría | Comandos destacados | Descripción |
 |-----------|--------------------|----|
 | 🤖 IA | `!gpt` `!claude` `!imagine` `!translate` | Chat multi-modelo, imágenes, traducciones |
-| 💰 RPG | `!work` `!daily` `!perfil` `!setdesc` `!setgenre` `!salud` `!hospital` `!rw` `!clan` `!prestige` `!harem` `!forjar` `!subasta` `!leveltop` | Economía, salud, gacha, niveles (racha en daily), clanes, prestige, forja, subastas |
+| 💰 RPG | `!work` `!daily` `!perfil` (tarjeta) `!simular` `!explorar` `!setdesc` `!setgenre` `!salud` `!hospital` `!rw` `!clan` `!prestige` `!harem` `!forjar` `!subasta` `!leveltop` | Economía, salud, gacha, niveles (racha en daily), clanes, prestige, forja, subastas |
 | 🎮 Juegos | `!arena` `!raid` `!mazmorra` `!bj` `!poker` `!quiz` `!adivinar` `!pet` | PvP Arena (y contra la CPU), jefe de mundo, mazmorra del día, blackjack, Casino Hold'em, Quiz coding, Draw & Guess, dragones |
 | 🎁 Social | `!regalo` | Sistema de regalos, buzón, wishlist, trueques |
 | 🛡️ Admin | `!ban` `!kick` `!promote` `!cerrar` `!fantasmas` `!antilink` `!warn` `!setwelcome` `!testwelcome` | Moderación de grupos, dar admin, cerrar el grupo, inactivos, bienvenida propia |
@@ -497,6 +499,7 @@ El bot tiene **200+ comandos** en **16 categorías**.
 | 🎮 Fun | `!asesino` `!historia` `!ship` `!parejas` `!lista` `!meme` `!sega` `!giphy` `!top` | Asesino en el chat (estilo Mafia), teléfono descompuesto con IA, compatibilidad, listas de partidas, entretenimiento |
 | 💞 Roleplay | `!hug` `!kiss` `!pat` `!slap` `!kill` `!punch` `!laugh` `!sad` `!sleep` | GIFs de anime interactivos |
 | 🎵 Música | `!play` `!lyrics` `!spotify` | Audio y letras |
+| 🎚️ Efectos de audio | `!nightcore` `!bass` `!reverb` `!lento` `!robot` `!ardilla` `!8d` `!efectos` | 13 efectos sobre un audio, una nota de voz o un video citado |
 | 🌐 Media | `!anime` `!removebg` `!wimage` | Imágenes de anime, fondo, personajes |
 | 🔧 Util | `!getpic` `!suggest` `!resumen` `!encuesta` `!recordar` `!sorteo` `!nota` `!actividad` `!paises` `!tts` `!clima` `!imagen` | ¿Qué me perdí?, encuestas, recordatorios, sorteos, notas del grupo, actividad, países, texto a voz sin internet, clima, imágenes |
 | ℹ️ Info | `!ping` `!creator` `!infobot` `!menu` `!idioma` | Información del bot, idioma (es/en/pt) |
@@ -667,6 +670,8 @@ curl -H "x-api-key: TU_CLAVE" http://127.0.0.1:3001/messages/pending
 | `POST` | `/watchdog/ping` | Heartbeat desde Node.js |
 | `GET` | `/watchdog/status` | Vivo/muerto + tiempo del último ping |
 | | **IA** | |
+| `POST` | `/arena/simular` | #simular: miles de peleas contra la CPU de #arena en todos los núcleos, con las mismas reglas que el bot (un test cruzado lo exige) |
+| `POST` | `/msg/ingest` | Lo que el bot pide por cada mensaje de grupo, en un viaje: clasificarlo, guardarlo para el estilo del grupo y actualizar la memoria del remitente |
 | `POST` | `/nlp/fast` | Clasificación de intenciones por reglas (sub-ms) |
 | `POST` | `/ai/learn` | Guardar un intercambio con la IA |
 | `POST` | `/ai/observe` | Guardar un mensaje suelto de grupo (alimenta el perfil) |
@@ -769,8 +774,7 @@ WinsiBot/
 │   │       ├── antispam.ts           # Detección de spam
 │   │       ├── antilink.ts           # Filtro de enlaces
 │   │       ├── antidelete.ts         # Reenvío de mensajes eliminados
-│   │       ├── anticall.ts           # Bloqueo de llamadas
-│   │       └── nsfw.ts               # Control de contenido adulto
+│   │       └── anticall.ts           # Bloqueo de llamadas
 │   ├── lib/
 │   │   ├── authStateCbor.ts          # Sesión de Baileys en CBOR (creds/keys) en vez de JSON
 │   │   ├── authVerifier.ts           # Verificación Curve25519 + restauración sin QR
@@ -804,7 +808,7 @@ WinsiBot/
 │       ├── server.ts                 # API + WS + estático de web/dist
 │       ├── auth.ts                   # Login vinculando WhatsApp (#login <código>)
 │       └── routes/                   # /api/subbots, /api/groups, /api/admin
-├── crates/session-api/               # Session API v5.10.0 (Rust) — workspace en Cargo.toml de la raíz
+├── crates/session-api/               # Session API v5.11.0 (Rust) — workspace en Cargo.toml de la raíz
 │   ├── native/                       # Kernels en C y Zig, compilados con Zig dentro del binario
 │   │   ├── lib.zig                   # Raíz: trae los demás .zig
 │   │   ├── anime4k.c                 # push_color y push_gradient (1,35x sobre Rust)

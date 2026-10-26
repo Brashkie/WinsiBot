@@ -92,7 +92,7 @@ pub fn filaSobel(arriba: [*]const u8, medio: [*]const u8, abajo: [*]const u8, sa
 /// Cada fila se copia de `src` a `dst` y después se le reescribe el alfa del
 /// interior; el borde queda copiado. Antes Rust clonaba la imagen entera antes
 /// de llamar, en un solo hilo, y eso pesaba más que el cálculo repartido.
-export fn winsi_a4k_gradient_zig(src: [*]const u8, dst: [*]u8, w: u32, h: u32, y0: u32, y1: u32) callconv(.C) void {
+pub fn winsi_a4k_gradient_zig(src: [*]const u8, dst: [*]u8, w: u32, h: u32, y0: u32, y1: u32) callconv(.C) void {
     const ancho: usize = w;
     var y: usize = y0;
     while (y < @min(y1, h)) : (y += 1) {

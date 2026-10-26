@@ -117,6 +117,12 @@ pub struct RateLimiter {
     call_count: Arc<AtomicU32>,
 }
 
+impl Default for RateLimiter {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl RateLimiter {
     pub fn new() -> Self {
         // Un shard por núcleo lógico (potencia de 2, DashMap lo exige) — con
@@ -144,7 +150,7 @@ impl RateLimiter {
         // de DashMap toma los locks de shard uno a la vez, nunca todo el
         // mapa de golpe, así que no bloquea checks concurrentes de otros
         // senders mientras barre.
-        if calls % CLEANUP_EVERY == 0 {
+        if calls.is_multiple_of(CLEANUP_EVERY) {
             self.inner.retain(|_, v| {
                 now.duration_since(v.last_seen) < Duration::from_secs(INACTIVE_SECS)
             });

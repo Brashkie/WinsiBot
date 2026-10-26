@@ -1,10 +1,7 @@
-//! Raíz de los kernels de Zig: `zig build-lib` compila un solo archivo .zig, y
-//! este trae a los demás. Sin la referencia, Zig no analizaría esos archivos y
-//! sus `export fn` no llegarían a la librería.
+//! Raíz de los kernels de Zig en baseline: `zig build-lib` compila un solo
+//! archivo .zig, y este trae a los demás. Los símbolos los exporta exports.zig,
+//! sin sufijo; la versión para x86-64-v3 es lib_v3.zig.
 
 comptime {
-    _ = @import("anime4k.zig");
-    _ = @import("anime4k_push.zig");
-    _ = @import("jpeg.zig");
-    _ = @import("resize.zig");
+    @import("exports.zig").exportar("");
 }

@@ -1,10 +1,10 @@
 <div align="center">
 
-# 📖 Command Reference — WinsiBot v8.10.0
+# 📖 Command Reference — WinsiBot v8.18.0
 
 [![Commands](https://img.shields.io/badge/Commands-190%2B-6C63FF?style=for-the-badge)](.)
 [![Categories](https://img.shields.io/badge/Categories-19-00C9FF?style=for-the-badge)](.)
-[![Version](https://img.shields.io/badge/Version-8.10.0-brightgreen?style=flat-square)](../README.en.md)
+[![Version](https://img.shields.io/badge/Version-8.18.0-brightgreen?style=flat-square)](../README.en.md)
 
 [🇪🇸 Versión en español →](commands.md) &nbsp;·&nbsp; [💰 Economy guide →](economy.en.md) &nbsp;·&nbsp; [← Back to README](../README.en.md)
 
@@ -40,14 +40,14 @@
 |---|----------|:--------:|
 | 1 | [🛠️ General](#%EF%B8%8F-general) | 19 |
 | 2 | [🤖 AI / ChatGPT](#-ai--chatgpt) | 4 |
-| 3 | [🎮 RPG / Economy](#-rpg--economy) | 27 |
+| 3 | [🎮 RPG / Economy](#-rpg--economy) | 29 |
 | 4 | [🎴 Gacha / Characters](#-gacha--characters) | 6 |
 | 5 | [💑 Couples](#-couples) | 5 |
 | 6 | [🎭 Roleplay](#-roleplay) | 10 |
 | 7 | [🎉 Fun](#-fun) | 17 |
 | 8 | [🕹️ Games](#%EF%B8%8F-games) | 7 |
 | 9 | [🎁 Gifts](#-gifts) | 1 |
-| 10 | [🖼️ Media & Stickers](#%EF%B8%8F-media--stickers) | 18 |
+| 10 | [🖼️ Media & Stickers](#%EF%B8%8F-media--stickers) | 32 |
 | 11 | [🔽 Downloads](#-downloads) | 7 |
 | 12 | [🔍 Scrapers / Search](#-scrapers--search) | 4 |
 | 13 | [🎵 Music](#-music) | 1 |
@@ -145,7 +145,8 @@
 
 | Command | Aliases | Cooldown | Permission | Description |
 |---------|---------|:--------:|:----------:|-------------|
-| `perfil` | `profile`, `miperfil`, `yo` | 5s | 👤 | View your profile or another user's (`@mention`) |
+| `simular` | `simulate`, `sim`, `probabilidad` | 30s | 👤 | Thousands of fights against the `arena` CPU (`simular facil\|normal\|dificil`) with four ways of playing: how often each wins, with its margin, and which one to use |
+| `perfil` | `profile`, `miperfil`, `yo` | 5s | 👤 | Your profile or someone else's (`@mention`), as a card with your photo, level, experience and health bars and your numbers; `perfil texto` for the text version |
 | `setdesc` / `deldesc` | `setdescription`, `descripcion` | 5s | 👤 | Your profile description (up to 140 characters) |
 | `setgenre` / `delgenre` | `setgenero`, `genero` | 5s | 👤 | Your gender on the profile: `hombre`, `mujer` or `otro` |
 | `xp` | `exp`, `experiencia`, `stats`, `nivel` | 5s | 👤 | Detailed RPG statistics |
@@ -215,6 +216,7 @@
 | `adivinar` | `drawguess`, `dibujar`, `guess` | 20s | 👤 | Group draw-and-guess mini-game |
 | `raid` | `jefe`, `boss`, `worldboss`, `atacar` | 1min per hit | 👥 | World boss: the same one for every group. Spawns every 6 h and escapes after 60 min. Two players in a row with companions whose elements combine trigger a reaction. The boss hits back (see `salud`). `atacar`, `on`/`off` (admins: announcements in the group), `invocar` (owner) |
 | `mazmorra` | `dungeon`, `mazmorras`, `calabozo` | 10s per door | 👥 | The daily dungeon, the same for every group: `entrar` (enter), `<door number>`, `salir` (cash out) and `ranking`. One expedition per person per day |
+| `explorar` | `explore`, `cueva`, `cave`, `caverna` | 60s per person | 👥 | The group's 40x40 cave with fog of war: everyone moves the same token (`explorar n\|s\|e\|o`) and whatever shows up —chests, traps, monsters, fountains, secret rooms— goes to whoever took the step. `explorar mapa` sends the whole image. The 🏺 relic splits ¥ among everyone who explored and opens a new cave |
 | `poker` | `póker`, `holdem`, `casinoholdem` | 2s | 👤 | Casino Hold'em against the house: `poker <ante>`, then `poker ir` (pays double) or `poker retirarse` (fold). Dealer qualifies with a pair of 4s or better |
 | `blackjack` | `bj`, `21`, `pedir`, `plantarse`, `doblar` | 2s | 👤 | Blackjack against the dealer: a win pays ×2, blackjack 3:2, dealer stands on 17. Bets from ¥10 to ¥500,000 |
 
@@ -361,6 +363,9 @@
 
 | Command | Aliases | Cooldown | Permission | Description |
 |---------|---------|:--------:|:----------:|-------------|
+| `efectos` | `audiofx`, `effects` | 5s | 👤 | The list of audio effects |
+| `nightcore` · `lento` · `rapido` · `bass` · `reverb` · `eco` | `nc`, `slowed`, `fast`, `bassboost`, `reverbe`, `echo` | 10s | 👤 | Quoting an audio, a voice note or a video, sends back the voice note with the effect (up to 5 min; anything over 15 min isn't downloaded) |
+| `ardilla` · `grave` · `robot` · `reversa` · `radio` · `vibrato` · `8d` | `chipmunk`, `deep`, `reverse`, `phone`, `audio8d` | 10s | 👤 | More effects, same way. They respect the group's `audios off` |
 | `sticker` | `s`, `stiker` | 3s | 👤 | Convert image/video to sticker: `sticker [pack \| author]`; quoting a sticker, changes its pack and author |
 | `take` | `wm`, `tomar` | 3s | 👤 | Quoting a sticker, puts your pack and author on it (`take [pack \| author]`), without re-encoding |
 | `setmeta` / `delmeta` | `setstickermeta`, `delstickermeta` | 3s | 👤 | The pack and author of your stickers: `setmeta My pack \| Me` |

@@ -122,7 +122,7 @@ fn bloque(m: *[8]V, div: *const [8]V, out: [*]i16) void {
 /// Cuántos `f32` de borrador necesita `winsi_jpeg_coefs` para una imagen de
 /// ancho `w`: una franja de 16 filas de Y, Cb y Cr a resolución completa, más
 /// las 8 filas de Cb y Cr submuestreadas.
-export fn winsi_jpeg_scratch_len(w: u32) callconv(.C) usize {
+pub fn winsi_jpeg_scratch_len(w: u32) callconv(.C) usize {
     const pw: usize = ((w + 15) / 16) * 16;
     return 16 * pw * 3 + 8 * (pw / 2) * 2;
 }
@@ -176,7 +176,7 @@ fn fila_ycc(comptime C: usize, rgb: [*]const u8, w: usize, sy: usize, pw: usize,
 /// imagen, así que la memoria extra no crece con el alto.
 ///
 /// `canales` es 3 para RGB o 4 para RGBA.
-export fn winsi_jpeg_coefs(
+pub fn winsi_jpeg_coefs(
     rgb: [*]const u8,
     w: u32,
     h: u32,

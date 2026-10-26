@@ -1,5 +1,6 @@
 import type { BotContext } from '../../types/index.js'
 import { color, themes, ascii } from 'ansimax'
+import { anchoTerminal, cortar } from '@lib/terminal.js'
 // La hora de Lima con Intl, que Node ya trae. Era moment-timezone, con su base
 // de zonas horarias entera en memoria, para formatear HH:mm:ss en cada mensaje.
 // El formateador se arma una vez: crearlo es lo caro, usarlo no.
@@ -52,12 +53,15 @@ export async function loggerMiddleware(ctx: BotContext): Promise<boolean> {
   // persiste cada mensaje (logMessage/pending, fire-and-forget más abajo)
   // así que no se pierde nada de trazabilidad real, solo se achica lo que
   // se pinta en vivo en consola para lo que no es un comando.
+  // Lo que varía (el texto, el nombre) se corta para que la caja o el renglón
+  // entren en la terminal: en Termux vertical se partían. Ver lib/terminal.ts.
+  const ancho = anchoTerminal()
   if (isCmd) {
     const body = [
       `${color.dim('❖')} ${color.bold('Hora')}      ${themes.success(time)}`,
-      `${color.dim('❖')} ${color.bold('Usuario')}   ${color.cyan(ctx.pushName)} ${color.dim('(' + formatJid(ctx.sender) + ')')}`,
+      `${color.dim('❖')} ${color.bold('Usuario')}   ${color.cyan(cortar(ctx.pushName, Math.max(4, ancho - 26 - formatJid(ctx.sender).length)))} ${color.dim('(' + formatJid(ctx.sender) + ')')}`,
       `${color.dim('❖')} ${color.bold('Chat')}      ${ctx.isGroup ? color.magenta('Grupo') : themes.warning('Privado')} ${color.dim(formatJid(ctx.jid))}`,
-      `${color.dim('❖')} ${color.bold('Texto')}     ${ctx.text.slice(0, 60)}${ctx.text.length > 60 ? color.dim('...') : ''}`,
+      `${color.dim('❖')} ${color.bold('Texto')}     ${cortar(ctx.text, Math.max(8, Math.min(60, ancho - 22)))}`,
       `${color.dim('❖')} ${color.bold('Tipo')}      ${getTypeColor(type)} ${color.bold(color.magenta(`CMD: ${ctx.command}`))}`,
       `${color.dim('❖')} ${color.bold('Owner')}     ${ctx.isOwner ? themes.success('✔ Si') : themes.error('✗ No')}`,
     ].join('\n')
@@ -66,13 +70,14 @@ export async function loggerMiddleware(ctx: BotContext): Promise<boolean> {
       title:       config.botName,
       titleAlign:  'center',
       borderStyle: 'rounded',
-      padding:     1,
+      // Sin el margen interno en una terminal angosta: son 2 columnas más.
+      padding:     ancho < 60 ? 0 : 1,
     })
 
     console.log(header)
   } else {
     console.log(
-      `${color.dim('❖')} ${themes.success(time)} ${color.dim(formatJid(ctx.jid))} ${color.cyan(ctx.pushName)} ${color.dim('·')} ${getTypeColor(type)}`,
+      `${color.dim('❖')} ${themes.success(time)} ${color.dim(formatJid(ctx.jid))} ${color.cyan(cortar(ctx.pushName, Math.max(4, ancho - 24 - formatJid(ctx.jid).length)))} ${color.dim('·')} ${getTypeColor(type)}`,
     )
   }
 

@@ -133,6 +133,12 @@ pub struct BadMacTracker {
     global: Arc<Mutex<GlobalState>>,
 }
 
+impl Default for BadMacTracker {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl BadMacTracker {
     pub fn new() -> Self {
         Self {

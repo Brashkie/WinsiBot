@@ -260,6 +260,9 @@ const D: Record<string, Traduccion> = {
   setwelcome:   { en: 'The group\'s welcome text  |  !setwelcome Hi @user, welcome to @group', pt: 'O texto de boas-vindas do grupo  |  !setwelcome Oi @user, bem-vind@ ao @group' },
   setbye:       { en: 'The group\'s goodbye text  |  !setbye Bye @user', pt: 'O texto de despedida do grupo  |  !setbye Tchau @user' },
   delwelcome:   { en: 'Back to the default welcome and goodbye', pt: 'Volta às boas-vindas e despedida de sempre' },
+  efectos:      { en: 'Audio effects: nightcore, bass, reverb, robot and more', pt: 'Efeitos de áudio: nightcore, bass, reverb, robô e mais' },
+  explorar:     { en: 'The group\'s cave with fog of war: move together and find the relic  |  !explorar [n|s|e|o|mapa]', pt: 'A caverna do grupo com névoa: andem juntos e achem a relíquia  |  !explorar [n|s|e|o|mapa]' },
+  simular:      { en: 'How often you\'d beat the #arena CPU depending on how you play  |  !simular [facil|normal|dificil]', pt: 'Quantas vezes você ganharia da CPU do #arena conforme joga  |  !simular [facil|normal|dificil]' },
   testwelcome:  { en: 'Shows the welcome (or the goodbye, with #testbye) as if you had joined', pt: 'Mostra as boas-vindas (ou a despedida, com #testbye) como se você entrasse' },
 }
 
@@ -271,6 +274,9 @@ export function descripcion(cmd: { name: string; description: string }, idioma: 
   // Los 28 interruptores del grupo (antibot, welcome…) dicen todos lo mismo.
   const llave = /^Activa\/desactiva (\S+) en el grupo$/.exec(cmd.description)
   if (llave) return idioma === 'en' ? `Turn ${llave[1]} on/off in the group` : `Liga/desliga o ${llave[1]} no grupo`
+  // Los 13 efectos de audio (media/audioEffects.ts) también dicen lo mismo.
+  const efecto = /^Efecto (\S+) a un audio o video, citándolo$/.exec(cmd.description)
+  if (efecto) return idioma === 'en' ? `${efecto[1]} effect on an audio or video, quoting it` : `Efeito ${efecto[1]} num áudio ou vídeo, citando`
   return cmd.description
 }
 

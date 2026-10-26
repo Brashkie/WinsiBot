@@ -89,6 +89,25 @@ unsafe extern "C" {
         y0: u32,
         y1: u32,
         fila: *mut f32,
+        luma: u32,
+    );
+    #[cfg(winsi_v3)]
+    fn winsi_resize_rgba_v3(
+        src: *const u8,
+        w_in: u32,
+        dst: *mut u8,
+        w_out: u32,
+        vy_left: *const u32,
+        vy_n: *const u32,
+        vy_w: *const f32,
+        hx_left: *const u32,
+        hx_n: *const u32,
+        hx_w: *const f32,
+        maxt: u32,
+        y0: u32,
+        y1: u32,
+        fila: *mut f32,
+        luma: u32,
     );
 }
 
@@ -96,6 +115,13 @@ unsafe extern "C" {
 /// no está cubierto (vacío, o achicar mucho) y hay que usar el crate.
 #[cfg(feature = "native")]
 pub fn catmullrom_nativo(img: &RgbaImage, w: u32, h: u32) -> Option<RgbaImage> {
+    catmullrom_nativo_con(img, w, h, false)
+}
+
+/// Lo mismo; con `luma`, el alfa de la salida es la luminancia de su RGB (ver
+/// lumaFila en resize.zig).
+#[cfg(feature = "native")]
+fn catmullrom_nativo_con(img: &RgbaImage, w: u32, h: u32, luma: bool) -> Option<RgbaImage> {
     let (w0, h0) = img.dimensions();
     if w0 == 0 || h0 == 0 || w == 0 || h == 0 || (w0, h0) == (w, h) {
         return None;
@@ -120,8 +146,7 @@ pub fn catmullrom_nativo(img: &RgbaImage, w: u32, h: u32) -> Option<RgbaImage> {
                 // (left + n <= h0, y lo mismo en x); `dst` mide w·h·4 y cada
                 // hilo escribe solo sus filas [y0, y1); `fila` es de este hilo.
                 unsafe {
-                    winsi_resize_rgba(
-                        src as *const u8,
+                    crate::zig!(winsi_resize_rgba, winsi_resize_rgba_v3, src as *const u8,
                         w0,
                         dst as *mut u8,
                         w,
@@ -135,12 +160,40 @@ pub fn catmullrom_nativo(img: &RgbaImage, w: u32, h: u32) -> Option<RgbaImage> {
                         y0,
                         y1,
                         fila.as_mut_ptr(),
-                    )
+                        u32::from(luma))
                 }
             });
         }
     });
     Some(salida)
+}
+
+/// Lo que pide Anime4K para empezar: la imagen redimensionada en RGBA, con la
+/// luminancia en el alfa. Con la feature `native`, el redimensionado la deja
+/// escrita fila por fila al terminar cada una, mientras está en la caché (ver
+/// lumaFila en resize.zig): un recorrido de la imagen menos. Da lo mismo bit a
+/// bit que `catmullrom_rgba(&img.to_rgba8())` + `luminancia_en_alfa`, que es el
+/// camino sin la feature.
+pub fn para_anime4k(img: &image::DynamicImage, w: u32, h: u32) -> RgbaImage {
+    // Un RGBA se usa tal cual; lo demás se convierte (leer RGB directo se
+    // probó y es más lento, ver resize.zig).
+    let convertida;
+    let rgba = match img {
+        image::DynamicImage::ImageRgba8(i) => i,
+        otro => {
+            convertida = otro.to_rgba8();
+            &convertida
+        }
+    };
+    #[cfg(feature = "native")]
+    if std::env::var("WINSI_RESIZE").as_deref() != Ok("image") {
+        if let Some(r) = catmullrom_nativo_con(rgba, w, h, true) {
+            return r;
+        }
+    }
+    let mut buf = catmullrom_rgba(rgba, w, h);
+    crate::anime4k::luminancia_en_alfa(&mut buf);
+    buf
 }
 
 /// Catmull-Rom con lo mejor disponible: Zig si está, el crate si no.
@@ -186,6 +239,26 @@ mod tests {
                 let suyo =
                     image::imageops::resize(&img, w * escala, h * escala, FilterType::CatmullRom);
                 assert!(nuestro == suyo, "{w}x{h} x{escala}: distinto del crate");
+            }
+        }
+    }
+
+    #[test]
+    fn para_anime4k_da_lo_mismo_que_convertir_redimensionar_y_luminancia() {
+        // RGB, RGBA y uno que hay que convertir (luma de 16 bits), en tamaños
+        // que no son múltiplos de nada.
+        for (i, &(w, h)) in [(1, 1), (7, 5), (33, 17), (201, 97)].iter().enumerate() {
+            let rgba = imagen(w, h, 31 + i as u32);
+            let rgb = image::DynamicImage::ImageRgba8(rgba.clone()).to_rgb8();
+            let casos = [
+                image::DynamicImage::ImageRgb8(rgb),
+                image::DynamicImage::ImageRgba8(rgba.clone()),
+                image::DynamicImage::ImageLuma16(image::DynamicImage::ImageRgba8(rgba).to_luma16()),
+            ];
+            for img in casos {
+                let mut referencia = image::imageops::resize(&img.to_rgba8(), w * 2, h * 2, FilterType::CatmullRom);
+                crate::anime4k::luminancia_en_alfa(&mut referencia);
+                assert!(para_anime4k(&img, w * 2, h * 2) == referencia, "{w}x{h} {:?}", img.color());
             }
         }
     }

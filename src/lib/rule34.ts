@@ -54,6 +54,3 @@ export function isImagePost(post: Rule34Post): boolean {
   return /\.(jpe?g|png|gif)$/i.test(post.file_url ?? '')
 }
 
-export function isVideoPost(post: Rule34Post): boolean {
-  return /\.(mp4|webm)$/i.test(post.file_url ?? '')
-}

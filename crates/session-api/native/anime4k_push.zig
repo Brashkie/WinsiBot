@@ -257,10 +257,30 @@ inline fn pushGradientLuma(comptime n: usize, v: Vec9(n), f: f32) [4]@Vector(n, 
 
 // ── Recorrer la imagen ────────────────────────────────────────────────────────
 
+/// Los cuatro canales de vuelta a RGBA intercalado. De a 8: los canales
+/// juntos en un vector de 32 bytes, UN @shuffle y UNA escritura; antes eran
+/// 32 escrituras de un byte, el espejo de lo que `seguidos` ya hacía bien al
+/// cargar. (Con @bitCast a vectores de u16 el LLVM de Zig 0.14 fallaba.)
 inline fn guardar(comptime n: usize, salida: [*]u8, x: usize, out: [4]@Vector(n, u8)) void {
-    inline for (0..n) |i| {
-        inline for (0..4) |k| salida[(x + i) * 4 + k] = out[k][i];
+    if (n == 1) {
+        inline for (0..4) |k| salida[x * 4 + k] = out[k][0];
+        return;
     }
+    const a0: [n]u8 = out[0];
+    const a1: [n]u8 = out[1];
+    const a2: [n]u8 = out[2];
+    const a3: [n]u8 = out[3];
+    const juntos: @Vector(4 * n, u8) = a0 ++ a1 ++ a2 ++ a3;
+    salida[x * 4 ..][0 .. 4 * n].* = @shuffle(u8, juntos, undefined, intercalarRgba(n));
+}
+
+/// Del orden r0..r7 g0..g7 b0..b7 a0..a7 al de los píxeles: r0 g0 b0 a0 r1 …
+fn intercalarRgba(comptime n: usize) [4 * n]i32 {
+    var m: [4 * n]i32 = undefined;
+    for (0..n) |i| {
+        for (0..4) |k| m[i * 4 + k] = @intCast(k * n + i);
+    }
+    return m;
 }
 
 /// Una fila de salida a partir de sus tres filas de entrada.
@@ -295,12 +315,12 @@ fn recorrer(comptime kernel: anytype, src: [*]const u8, dst: [*]u8, w32: u32, h3
 }
 
 /// pushColor de las filas [y0, y1) de la salida (Rust reparte franjas entre núcleos).
-export fn winsi_a4k_push_color_zig(src: [*]const u8, dst: [*]u8, w: u32, h: u32, f: f32, y0: u32, y1: u32) callconv(.C) void {
+pub fn winsi_a4k_push_color_zig(src: [*]const u8, dst: [*]u8, w: u32, h: u32, f: f32, y0: u32, y1: u32) callconv(.C) void {
     recorrer(pushColor, src, dst, w, h, f, y0, y1);
 }
 
 /// pushGradient de las filas [y0, y1) de la salida.
-export fn winsi_a4k_push_gradient_zig(src: [*]const u8, dst: [*]u8, w: u32, h: u32, f: f32, y0: u32, y1: u32) callconv(.C) void {
+pub fn winsi_a4k_push_gradient_zig(src: [*]const u8, dst: [*]u8, w: u32, h: u32, f: f32, y0: u32, y1: u32) callconv(.C) void {
     recorrer(pushGradient, src, dst, w, h, f, y0, y1);
 }
 
@@ -317,7 +337,7 @@ export fn winsi_a4k_push_gradient_zig(src: [*]const u8, dst: [*]u8, w: u32, h: u
 /// Con `luma` distinto de 0, el alfa de la salida es su luminancia (ver
 /// pushGradientLuma): la pasada siguiente no tiene que recorrer la imagen otra
 /// vez para calcularla.
-export fn winsi_a4k_gradient_push_zig(src: [*]const u8, dst: [*]u8, w32: u32, h32: u32, f: f32, y0: u32, y1: u32, anillo: [*]u8, luma: u32) callconv(.C) void {
+pub fn winsi_a4k_gradient_push_zig(src: [*]const u8, dst: [*]u8, w32: u32, h32: u32, f: f32, y0: u32, y1: u32, anillo: [*]u8, luma: u32) callconv(.C) void {
     @setEvalBranchQuota(100_000);
     const w: usize = w32;
     const h: usize = h32;
@@ -350,6 +370,88 @@ export fn winsi_a4k_gradient_push_zig(src: [*]const u8, dst: [*]u8, w32: u32, h3
             unaFila(pushGradientLuma, a, m, b, dst + y * largo, w, f);
         } else {
             unaFila(pushGradient, a, m, b, dst + y * largo, w, f);
+        }
+    }
+}
+
+/// Un anillo de filas calculadas a pedido: el lugar `r % n` guarda la fila `r`.
+fn Anillo(comptime n: usize) type {
+    return struct {
+        mem: [*]u8,
+        largo: usize,
+        en: [n]usize = [_]usize{~@as(usize, 0)} ** n,
+
+        /// El lugar de la fila `r`, y si ya estaba calculada.
+        fn lugar(self: *@This(), r: usize) struct { p: [*]u8, lista: bool } {
+            const i = r % n;
+            const lista = self.en[i] == r;
+            self.en[i] = r;
+            return .{ .p = self.mem + i * self.largo, .lista = lista };
+        }
+    };
+}
+
+/// Una PASADA entera de Anime4K, filas [y0, y1) de la salida: pushColor, el
+/// Sobel y pushGradient —y, con `luma`, la luminancia de la pasada siguiente—,
+/// sin ninguna imagen intermedia. Lo mismo, bit a bit, que
+/// winsi_a4k_push_color_zig seguido de winsi_a4k_gradient_push_zig.
+///
+/// Por qué: con los núcleos ocupados, la pasada deja de estar limitada por el
+/// cálculo y pasa a estarlo por la memoria. Separados, pushColor escribía una
+/// imagen entera (25 MB sobre 3072x2048) para que el Sobel la volviera a leer.
+/// Acá cada fila de pushColor se calcula en un anillo de CINCO filas —el
+/// Sobel de la fila r pide las de pushColor r-1..r+1, y el empuje de la fila y
+/// pide las del Sobel y-1..y+1, o sea pushColor y-2..y+2— y el Sobel en otro de
+/// tres, como en winsi_a4k_gradient_push_zig. Los dos entran en la caché: la
+/// imagen se lee una vez y se escribe una vez por pasada. Cada hilo recalcula
+/// dos filas de pushColor de más arriba y abajo de su franja.
+///
+/// `anillo_c` mide 5·w·4 bytes y `anillo_g`, 3·w·4.
+pub fn winsi_a4k_pass_zig(src: [*]const u8, dst: [*]u8, w32: u32, h32: u32, fc: f32, fg: f32, y0: u32, y1: u32, anillo_c: [*]u8, anillo_g: [*]u8, luma: u32) callconv(.C) void {
+    @setEvalBranchQuota(100_000);
+    const w: usize = w32;
+    const h: usize = h32;
+    const largo = w * 4;
+    var color = Anillo(5){ .mem = anillo_c, .largo = largo };
+    var grad = Anillo(3){ .mem = anillo_g, .largo = largo };
+
+    const F = struct {
+        /// La fila `r` de la salida de pushColor.
+        fn deColor(r: usize, s: [*]const u8, ww: usize, hh: usize, f: f32, an: *Anillo(5)) [*]const u8 {
+            @setEvalBranchQuota(100_000);
+            const l = an.lugar(r);
+            if (!l.lista) {
+                const rn = if (r == 0) 0 else r - 1;
+                const rp = if (r == hh - 1) r else r + 1;
+                unaFila(pushColor, s + rn * ww * 4, s + r * ww * 4, s + rp * ww * 4, l.p, ww, f);
+            }
+            return l.p;
+        }
+        /// La fila `r` del Sobel, sobre la salida de pushColor.
+        fn deSobel(r: usize, s: [*]const u8, ww: usize, hh: usize, f: f32, an: *Anillo(5), ag: *Anillo(3)) [*]const u8 {
+            const l = ag.lugar(r);
+            if (!l.lista) {
+                const esInterior = hh >= 3 and r >= 1 and r + 1 < hh;
+                const arriba = deColor(if (esInterior) r - 1 else r, s, ww, hh, f, an);
+                const medio = deColor(r, s, ww, hh, f, an);
+                const abajo = deColor(if (esInterior) r + 1 else r, s, ww, hh, f, an);
+                sobel.filaSobel(arriba, medio, abajo, l.p, ww, esInterior);
+            }
+            return l.p;
+        }
+    };
+
+    var y: usize = y0;
+    while (y < @min(y1, h32)) : (y += 1) {
+        const yn = if (y == 0) 0 else y - 1;
+        const yp = if (y == h - 1) y else y + 1;
+        const a = F.deSobel(yn, src, w, h, fc, &color, &grad);
+        const m = F.deSobel(y, src, w, h, fc, &color, &grad);
+        const b = F.deSobel(yp, src, w, h, fc, &color, &grad);
+        if (luma != 0) {
+            unaFila(pushGradientLuma, a, m, b, dst + y * largo, w, fg);
+        } else {
+            unaFila(pushGradient, a, m, b, dst + y * largo, w, fg);
         }
     }
 }

@@ -12,6 +12,8 @@
 fn main() {
     println!("cargo:rerun-if-changed=native/");
     println!("cargo:rerun-if-changed=build.rs");
+    // Hay kernels de Zig para x86-64-v3 en la librería (ver compilar_nativo).
+    println!("cargo:rustc-check-cfg=cfg(winsi_v3)");
 
     #[cfg(feature = "native")]
     compilar_nativo();
@@ -19,12 +21,11 @@ fn main() {
 
 /// Traduce el target de Rust al de Zig.
 ///
-/// `-mcpu=baseline` en todos A PROPÓSITO: el binario de Rust tampoco pide
-/// nada más que lo básico de cada arquitectura (no hay `target-cpu` en ningún
-/// `.cargo/config.toml`), y la comparación tiene que ser entre lenguajes, no
-/// entre conjuntos de instrucciones. Además el binario se publica para correr
-/// en cualquier máquina: un `x86_64_v3` acá se moriría con instrucción ilegal
-/// en una CPU sin AVX2.
+/// `-mcpu=baseline` en la librería principal: el binario se publica para
+/// correr en cualquier máquina, y un `x86_64_v3` ahí se moriría con
+/// instrucción ilegal en una CPU sin AVX2. Lo que sí se aprovecha, desde la
+/// 8.18.0, es una SEGUNDA copia de los kernels de Zig para x86-64-v3 que Rust
+/// elige al arrancar si la CPU la soporta (ver compilar_nativo y src/simd.rs).
 #[cfg(feature = "native")]
 fn zig_target(rust_target: &str) -> &'static str {
     match rust_target {
@@ -62,6 +63,28 @@ fn compilar_nativo() {
     };
     let destino = salida.join(nombre);
 
+    // En x86-64, los kernels de Zig también para x86-64-v3 (AVX2, BMI2, FMA),
+    // con sufijo `_v3` (native/lib_v3.zig): un objeto aparte que entra en la
+    // misma librería, así compiler-rt va una sola vez. Rust los usa solo si la
+    // CPU los soporta (src/simd.rs); el resto sigue en baseline. Medido sobre
+    // #upscale en un hilo: 507 → 378 ms, igual bit a bit.
+    let arch = std::env::var("CARGO_CFG_TARGET_ARCH").expect("CARGO_CFG_TARGET_ARCH");
+    let objeto_v3 = (arch == "x86_64" && std::env::var("WINSI_SIN_V3").is_err()).then(|| {
+        let obj = salida.join(if os == "windows" { "winsi_v3.obj" } else { "winsi_v3.o" });
+        let mut c = Command::new("zig");
+        c.args(["build-obj", "native/lib_v3.zig", "-OReleaseFast", "-fPIC", "-mcpu=x86_64_v3"]);
+        if target != host {
+            c.arg("-target").arg(zig_target(&target));
+        }
+        c.arg(format!("-femit-bin={}", obj.display()));
+        match c.status() {
+            Ok(st) if st.success() => obj,
+            Ok(st) => panic!("zig build-obj (x86-64-v3) falló ({st:?}) para {target}"),
+            Err(e) => panic!("no pude ejecutar `zig`: {e}"),
+        }
+    });
+    println!("cargo:rerun-if-env-changed=WINSI_SIN_V3");
+
     let mut cmd = Command::new("zig");
     // lib.zig es la raíz: trae anime4k.zig y jpeg.zig.
     cmd.args(["build-lib", "native/lib.zig"]);
@@ -77,7 +100,15 @@ fn compilar_nativo() {
         "native/anime4k.c",
         "native/jpeg.c",
     ]);
-    cmd.args(["-static", "-OReleaseFast", "-fPIC", "-mcpu=baseline"]);
+    if let Some(obj) = &objeto_v3 {
+        cmd.arg(obj);
+    }
+    // WINSI_ZIG_CPU cambia el conjunto de instrucciones (`native`, `x86_64_v3`…)
+    // para medir o para una máquina propia; lo publicado sigue en baseline.
+    println!("cargo:rerun-if-env-changed=WINSI_ZIG_CPU");
+    let cpu = std::env::var("WINSI_ZIG_CPU").unwrap_or_else(|_| "baseline".into());
+    cmd.args(["-static", "-OReleaseFast", "-fPIC"]);
+    cmd.arg(format!("-mcpu={cpu}"));
     // Compilando para la propia máquina no se pasa -target, que es lo probado
     // en Cosxamix con el mismo toolchain de Rust (MSVC en Windows).
     if target != host {
@@ -101,4 +132,7 @@ fn compilar_nativo() {
 
     println!("cargo:rustc-link-search=native={}", salida.display());
     println!("cargo:rustc-link-lib=static=winsi_native");
+    if objeto_v3.is_some() {
+        println!("cargo:rustc-cfg=winsi_v3");
+    }
 }

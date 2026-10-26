@@ -323,11 +323,7 @@ impl SubBotManager {
             .get(owner_jid)
             .map(|last| {
                 let elapsed = unix_now().saturating_sub(*last);
-                if elapsed < cfg.cooldown_seconds {
-                    cfg.cooldown_seconds - elapsed
-                } else {
-                    0
-                }
+                cfg.cooldown_seconds.saturating_sub(elapsed)
             })
             .unwrap_or(0);
 

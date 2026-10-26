@@ -22,7 +22,7 @@ use std::time::{SystemTime, UNIX_EPOCH};
 thread_local! {
     /// Un estado por hilo: así no hay candado ni contención entre las tareas
     /// de tokio, que es donde esto se llama.
-    static ESTADO: Cell<u64> = Cell::new(0);
+    static ESTADO: Cell<u64> = const { Cell::new(0) };
 }
 
 fn semilla() -> u64 {

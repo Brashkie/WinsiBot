@@ -1,0 +1,3 @@
+# Los scripts de shell siempre con LF: con CRLF, bash en Termux y Linux
+# falla con "$'\r': command not found" en la primera línea.
+*.sh text eol=lf

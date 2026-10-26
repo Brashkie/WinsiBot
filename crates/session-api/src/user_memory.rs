@@ -303,7 +303,7 @@ pub fn actualizar(db: &ConvDb, jid: &str, req: &UpdateRequest) -> Result<Perfil,
 
     // Hora UTC, igual que el perfil de estilo de conversations.rs: lo que
     // interesa es el patrón relativo, no la hora de pared de nadie.
-    let hora = ((ts / 3_600_000) % 24) as i64;
+    let hora = (ts / 3_600_000) % 24;
     if !p.active_hours.contains(&hora) {
         p.active_hours.push(hora);
         p.active_hours.sort_unstable();

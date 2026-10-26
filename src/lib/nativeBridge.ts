@@ -106,6 +106,53 @@ async function consultarIntent(text: string): Promise<NLPIntent | null | typeof 
   }
 }
 
+/**
+ * Lo que el bot le dice a Rust por cada mensaje de grupo, en UN viaje
+ * (POST /msg/ingest): clasificarlo, guardarlo para el estilo del grupo
+ * (`observar`) y actualizar la memoria del remitente. Hasta la 8.17.0 eran
+ * tres viajes —/nlp/fast, /ai/observe y /ai/memory/:jid/update—, cada uno con
+ * su piso de ~50 µs de CPU en Rust más lo que cuesta del lado de Node.
+ *
+ * La clasificación queda en el mismo caché que `analyzeIntent`: el antitóxico
+ * y el anti-spam, que preguntan por el mismo texto enseguida, esperan esta
+ * respuesta en vez de hacer otro viaje. No se espera nada más: como antes,
+ * guardar y la memoria son fire-and-forget.
+ */
+export function ingerirMensaje(m: { sender: string; gjid: string; text: string; isCmd: boolean; observar: boolean }): void {
+  const p: Promise<NLPIntent | null | typeof FALLO> = rustClient
+    .post<RustNlpResult>('/msg/ingest', {
+      sender: m.sender, gjid: m.gjid, text: m.text, is_cmd: m.isCmd, observar: m.observar,
+    }, { timeout: 300 })
+    .then((res) => (res.data?.ok ? (res.data.intent !== 'unknown' ? { text: m.text, primary: res.data.intent } : null) : FALLO))
+    .catch(() => FALLO)
+  const vigente = nlpCache.get(m.text)
+  if (!vigente || vigente.hasta <= Date.now()) {
+    nlpStats.viajes++
+    nlpCache.set(m.text, { p, hasta: Date.now() + NLP_CACHE_MS })
+    p.then((r) => { if (r === FALLO) nlpCache.delete(m.text) })
+  }
+}
+
+/** Lo que devuelve POST /arena/simular: peleas y victorias por estilo. */
+export interface CuentaArena { estilo: 'agresivo' | 'arriesgado' | 'defensivo' | 'inteligente'; peleas: number; victorias: number; turnos: number }
+
+/**
+ * #simular en Rust (ver crates/session-api/src/arena.rs): las mismas reglas y
+ * la misma CPU que pvp.ts y arenaAI.ts —un test cruzado lo exige—, en todos
+ * los núcleos. Contra la CPU difícil, 2.000 peleas por estilo en ~2 s, donde
+ * en JavaScript entraban ~20 en 6. null si la Session API no está.
+ */
+export async function simularArena(nivel: 'facil' | 'normal' | 'dificil', peleas: number, maxMs: number): Promise<CuentaArena[] | null> {
+  try {
+    const res = await rustClient.post<{ ok: boolean; resultados?: CuentaArena[] }>(
+      '/arena/simular', { nivel, peleas, max_ms: maxMs }, { timeout: maxMs + 5_000 },
+    )
+    return res.data?.ok && res.data.resultados?.length ? res.data.resultados : null
+  } catch {
+    return null
+  }
+}
+
 // ─── AI conversaciones y perfiles de estilo (Rust) ────────────────────────────
 
 export interface AIContext {
@@ -454,20 +501,6 @@ export async function aiImitate(prompt: string, targetJid: string): Promise<{
     }
     logger.debug({ err: err?.message }, 'aiImitate falló')
     return null
-  }
-}
-
-/** Registra el mensaje en la reputación del usuario. Fire-and-forget. */
-export async function updateUserMemory(
-  jid: string, text: string, intent: string, isCmd = false,
-): Promise<void> {
-  try {
-    await rustClient.post(
-      `/ai/memory/${encodeURIComponent(jid)}/update`,
-      { text, intent, is_cmd: isCmd },
-    )
-  } catch {
-    // fire-and-forget — ignorar errores
   }
 }
 

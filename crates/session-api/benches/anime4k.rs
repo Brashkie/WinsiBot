@@ -72,6 +72,28 @@ fn kernels(c: &mut Criterion) {
         b.iter(|| anime4k::push_gradient_zig(black_box(&img), A4K_FUERZA_GRADIENTE))
     });
     g.finish();
+
+    // Una pasada entera de Anime4K: los tres kernels por separado contra la
+    // pasada en un solo kernel de Zig, sin imágenes intermedias (8.18.0).
+    let mut g = c.benchmark_group("pasada");
+    g.bench_function("rust", |b| {
+        b.iter(|| {
+            let pc = anime4k::push_color_rust(black_box(&img), A4K_FUERZA_COLOR);
+            anime4k::push_gradient_rust(&anime4k::gradiente_rust(&pc), A4K_FUERZA_GRADIENTE)
+        })
+    });
+    #[cfg(feature = "native")]
+    g.bench_function("zig_por_etapas", |b| {
+        b.iter(|| {
+            let pc = anime4k::push_color_zig(black_box(&img), A4K_FUERZA_COLOR);
+            anime4k::gradiente_y_push_zig(&pc, A4K_FUERZA_GRADIENTE)
+        })
+    });
+    #[cfg(feature = "native")]
+    g.bench_function("zig_fusionada", |b| {
+        b.iter(|| anime4k::pasada_zig(black_box(&img), A4K_FUERZA_COLOR, A4K_FUERZA_GRADIENTE, false))
+    });
+    g.finish();
 }
 
 criterion_group!(benches, kernels);

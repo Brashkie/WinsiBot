@@ -7,7 +7,7 @@
 
 const LADO = 512
 /** Con "sans-serif" a secas, en Windows librsvg cae en una fuente de ancho fijo. */
-const FUENTES = 'Arial, Helvetica, Segoe UI, DejaVu Sans, Noto Sans, Roboto, sans-serif'
+export const FUENTES = 'Arial, Helvetica, Segoe UI, DejaVu Sans, Noto Sans, Roboto, sans-serif'
 /** Ancho medio de un carácter, en "em". Conservador: si sobra, queda aire; si
  *  falta, el texto se sale de la burbuja (pasaba con 0,56). */
 const ANCHO_LETRA = 0.62
@@ -39,7 +39,7 @@ export function partir(texto: string, ancho: number): string[] {
 }
 
 /** Un color estable para cada nombre, como WhatsApp en los grupos. */
-function colorDe(nombre: string): string {
+export function colorDe(nombre: string): string {
   const paleta = ['#e542a3', '#35cd96', '#6bcbef', '#fe7c7f', '#ba73e8', '#ffa97a', '#53bdeb', '#1f7aec']
   let h = 0
   for (const c of nombre) h = (h * 31 + c.codePointAt(0)!) >>> 0

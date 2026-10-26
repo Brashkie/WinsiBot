@@ -30,6 +30,12 @@ struct Inner {
     last_died_at: Option<u64>, // unix timestamp de la última muerte detectada
 }
 
+impl Default for WatchdogState {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl WatchdogState {
     pub fn new() -> Self {
         Self {

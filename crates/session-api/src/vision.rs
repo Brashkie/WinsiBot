@@ -358,20 +358,15 @@ pub fn upscale_rgba(
     // algoritmo (cv2.INTER_CUBIC en la referencia).
     // Con la feature `native`, en Zig: pasadas fusionadas, SIMD y todos los
     // núcleos, idéntico bit a bit al crate (ver resize.rs).
-    let mut buf = crate::resize::catmullrom_rgba(&img.to_rgba8(), w, h);
-
-    // Cada pasada empieza con la luminancia en el alfa. La de la primera se
-    // calcula acá; la de las siguientes la deja el final de la anterior (el
-    // kernel fusionado la escribe al guardar los píxeles: un recorrido menos).
-    anime4k::luminancia_en_alfa(&mut buf);
+    //
+    // Cada pasada empieza con la luminancia en el alfa. La de la primera la
+    // deja el redimensionado al escribir la salida (resize::para_anime4k, que
+    // además lee la imagen tal como salió del decodificador, sin pasarla antes
+    // a RGBA); la de las siguientes, el final de la anterior.
+    let mut buf = crate::resize::para_anime4k(&img, w, h);
     for i in 0..A4K_PASADAS {
-        buf = anime4k::push_color(&buf, A4K_FUERZA_COLOR);
-        // El Sobel y su empuje, fusionados cuando los dos están en Zig.
-        buf = if i + 1 < A4K_PASADAS {
-            anime4k::gradiente_y_push_y_luma(&buf, A4K_FUERZA_GRADIENTE)
-        } else {
-            anime4k::gradiente_y_push(&buf, A4K_FUERZA_GRADIENTE)
-        };
+        // La pasada entera en un recorrido cuando los kernels están en Zig.
+        buf = anime4k::pasada(&buf, A4K_FUERZA_COLOR, A4K_FUERZA_GRADIENTE, i + 1 < A4K_PASADAS);
     }
 
     Ok((buf, (w0, h0), (w, h)))

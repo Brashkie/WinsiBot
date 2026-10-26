@@ -39,16 +39,30 @@ const HANG_RESTART_COOLDOWN_MS = 5 * 60_000 // no forzar reinicios por cuelgue m
 // de sobra. Medido con una carga parecida a la del bot —crear, serializar y
 // descartar objetos de mensaje—: RAM máxima de 262 a 73 MB, con el mismo CPU y
 // el mismo tiempo dentro del ruido. WINSI_NODE_FLAGS las reemplaza.
-const NODE_FLAGS = (process.env.WINSI_NODE_FLAGS ?? '--max-semi-space-size=4').split(/\s+/).filter(Boolean)
+//
+// En Termux se suma un techo para el heap viejo (512 MB): Android mata sin
+// aviso al proceso que se pasa, y es mejor que V8 recolecte antes. Lo ponía
+// start.sh, que hasta la 8.17.0 lanzaba dist/index.js directo —sin esta capa,
+// sin la generación joven chica y sin la detección de cuelgues—.
+const EN_TERMUX = !!process.env.TERMUX_VERSION || (process.env.PREFIX ?? '').includes('com.termux')
+const NODE_FLAGS = (process.env.WINSI_NODE_FLAGS ?? `--max-semi-space-size=4${EN_TERMUX ? ' --max-old-space-size=512' : ''}`)
+  .split(/\s+/).filter(Boolean)
 
 let child:        ChildProcess | null = null
 let stopping                          = false
 let startedAt                         = 0
 let lastHangRestart                   = 0
+let reinicios                         = 0
 
 function startChild(): void {
   startedAt = Date.now()
-  child = spawn('node', [...NODE_FLAGS, 'dist/index.js'], { stdio: 'inherit' })
+  // El bot sabe si es un reinicio: no borra la pantalla —ahí está por qué se
+  // cayó— ni repite la animación de apertura.
+  child = spawn('node', [...NODE_FLAGS, 'dist/index.js'], {
+    stdio: 'inherit',
+    env: { ...process.env, WINSI_REINICIO: String(reinicios) },
+  })
+  reinicios++
 
   child.on('exit', (code, signal) => {
     child = null

@@ -5,7 +5,6 @@ import axios from 'axios'
 // nunca este comando, porque loadCommands importa todos los comandos al
 // arrancar y este se arrastraba con ellos.
 const cheerio = () => import('cheerio').then((m) => m.load)
-import { downloadBuffer } from './downloader.js'
 import { USER_AGENT } from '@config'
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -146,11 +145,4 @@ export async function getRule34VideoDetails(pageUrl: string): Promise<Rule34Vide
     uploader,
     categories,
   }
-}
-
-/** Resuelve y descarga el video de una página de resultado — null si algo falla. */
-export async function downloadRule34Video(pageUrl: string): Promise<Buffer | null> {
-  const details = await getRule34VideoDetails(pageUrl)
-  if (!details?.videoUrl) return null
-  return downloadBuffer(details.videoUrl)
 }

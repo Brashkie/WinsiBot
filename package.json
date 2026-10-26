@@ -1,7 +1,7 @@
 {
   "name": "winsi-bot",
-  "version": "8.17.0",
-  "description": "WinsiBot v8.12.0 - High-performance WhatsApp bot (TypeScript + Rust), advanced AI, RPG economy and resilience for very active groups. Python is no longer required to install or run it: the bot makes zero calls to it, and the two console tools that remain compile to native executables with Nuitka. Installing is `npm install` and nothing else - the Rust Session API binary is fetched prebuilt for your platform (5 targets, Termux included) with its SHA-256 verified, instead of a ~4 minute cargo build that needed Rust installed. The three image commands moved to Rust with the `ort` crate: #toanime goes from 3.7 GB of torch to an 8 MB ONNX model, #removebg keeps the same isnetis model, and #upscale is Anime4K ported - no model to download and no temp files, 175 ms. ONNX Runtime is linked statically, so the binary is still a single file. Thirteen real bugs fixed along the way, among them: `npm run build` never cleaned `dist/`, so 35 command keys were served by source-less code including two removed seven releases earlier; /ml/predict/spam was deleting legitimate messages; the Session API could not start if you followed `.env.example`; and the `trusted` reputation tier was unreachable. 140 Rust unit tests, up from zero.",
+  "version": "8.18.0",
+  "description": "WinsiBot v8.18.0 - Ultralight WhatsApp bot: TypeScript core, Rust Session API, and C and Zig kernels (AVX2 copy picked at startup). Speaks Spanish, English and Portuguese; RPG economy, group cave exploration, arena with a Monte Carlo simulator, audio effects and image tools. Install is `npm install` and nothing else: the Session API binary is fetched prebuilt for your platform, Termux included, with its SHA-256 verified.",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
   "type": "module",
@@ -103,7 +103,7 @@
     "@hono/node-server": "^2.0.12",
     "@msgpack/msgpack": "^3.1.3",
     "@whiskeysockets/baileys": "^6.7.18",
-    "ansimax": "^1.4.10",
+    "ansimax": "^1.7.7",
     "axios": "^1.7.3",
     "cbor-x": "^1.6.4",
     "cheerio": "^1.0.0",
@@ -131,6 +131,6 @@
     "sharp": "^0.34.1"
   },
   "engines": {
-    "node": ">=20.0.0"
+    "node": ">=20.12.0"
   }
 }

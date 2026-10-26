@@ -249,6 +249,11 @@ async fn principal() {
         .route("/sessions/backup", get(routes::read_backup))
         // ─── NLP fast-path ───────────────────────────────────────────────────
         .route("/nlp/fast", post(nlp::nlp_fast))
+        // Clasificar, observar y la memoria del remitente en UN viaje: lo que el
+        // bot pide por cada mensaje de grupo (ver ingest.rs).
+        .route("/msg/ingest", post(winsibot_session_api::ingest::ingest))
+        // #simular: miles de peleas contra la CPU de #arena, en todos los núcleos (ver arena.rs).
+        .route("/arena/simular", post(winsibot_session_api::arena::simular_handler))
         // ─── AI conversations (SQLite) ────────────────────────────────────────
         .route("/ai/learn", post(conversations::ai_learn))
         .route("/ai/context/:sender", get(conversations::ai_context))

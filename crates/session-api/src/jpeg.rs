@@ -27,7 +27,22 @@ mod ffi {
     unsafe extern "C" {
         pub fn winsi_jpeg_tables(calidad: i32, qy: *mut u8, qc: *mut u8);
         pub fn winsi_jpeg_scratch_len(w: u32) -> usize;
+        #[cfg(winsi_v3)]
+        pub fn winsi_jpeg_scratch_len_v3(w: u32) -> usize;
         pub fn winsi_jpeg_coefs(
+            rgb: *const u8,
+            w: u32,
+            h: u32,
+            qy: *const u8,
+            qc: *const u8,
+            out: *mut i16,
+            scratch: *mut f32,
+            my0: u32,
+            my1: u32,
+            canales: u32,
+        );
+        #[cfg(winsi_v3)]
+        pub fn winsi_jpeg_coefs_v3(
             rgb: *const u8,
             w: u32,
             h: u32,
@@ -187,9 +202,8 @@ fn coefs_y_armar(px: &[u8], canales: u32, w: u32, h: u32, calidad: u8, hilos: us
                 // hilo escribe solo los de sus filas de MCU; el `scratch` es de
                 // este hilo y mide lo que pide el propio kernel.
                 unsafe {
-                    let mut scratch = vec![0f32; ffi::winsi_jpeg_scratch_len(w)];
-                    ffi::winsi_jpeg_coefs(
-                        src as *const u8,
+                    let mut scratch = vec![0f32; crate::zig!(ffi::winsi_jpeg_scratch_len, ffi::winsi_jpeg_scratch_len_v3, w)];
+                    crate::zig!(ffi::winsi_jpeg_coefs, ffi::winsi_jpeg_coefs_v3, src as *const u8,
                         w,
                         h,
                         qyp as *const u8,
@@ -198,8 +212,7 @@ fn coefs_y_armar(px: &[u8], canales: u32, w: u32, h: u32, calidad: u8, hilos: us
                         scratch.as_mut_ptr(),
                         my0,
                         my1,
-                        canales,
-                    );
+                        canales);
                 }
             });
         }

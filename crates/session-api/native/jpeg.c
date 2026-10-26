@@ -195,6 +195,13 @@ static void bloque(escritor *e, const int16_t c[64], int *dc_prev,
     uint32_t val = (uint32_t)(diff < 0 ? diff - 1 : diff) & ((1u << n) - 1);
     bits(e, ((uint32_t)dc->codigo[n] << n) | val, dc->largo[n] + n);
 
+    /* Se probó (8.18.0) armar primero una máscara de 64 bits con los AC
+     * distintos de cero y saltar entre ellos con ctz, como libjpeg-turbo: el
+     * mismo flujo de bits, pero MÁS LENTO (11,7 → 13,1 ms en un hilo sobre
+     * 3072x2048), porque el bucle que arma la máscara cuesta más que lo que
+     * ahorra saltar los ceros. Se quedó este. Compilado para x86-64-v3
+     * (BMI2, LZCNT) gana un 8% (11,8 → 10,9 ms), que con todos los núcleos son
+     * décimas de ms: no justifica compilar el C dos veces. */
     int ceros = 0;
     for (int k = 1; k < 64; k++) {
         int v = c[k];

@@ -32,7 +32,7 @@
 import {
   observeMessage, getUserStyle, getGroupStyle,
   deleteUserStyle, getCorpusStats,
-  aiRespond, aiImitate, updateUserMemory,
+  aiRespond, aiImitate,
   type UserStyleProfile, type GroupStyleProfile,
 } from './nativeBridge.js'
 import { logger } from '../core/logger.js'
@@ -95,16 +95,6 @@ export const hepein = {
     // llegaba a leer nunca.
     observeMessage(senderJid, groupJid, text)
       .catch(err => logger.debug({ err }, 'Hepein record silenciado'))
-  },
-
-  /**
-   * Actualiza la reputación y el comportamiento del usuario.
-   * Fire-and-forget — no bloquea el handler.
-   */
-  updateMemory(jid: string, text: string, intent: string, isCmd = false): void {
-    if (!jid || !text?.trim()) return
-    updateUserMemory(jid, text, intent, isCmd)
-      .catch(err => logger.debug({ err }, 'user_memory update silenciado'))
   },
 
   /**

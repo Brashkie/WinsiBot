@@ -56,8 +56,21 @@ function esperado(s: BattleState, accion: BattleAction, prof: number): number {
   return total / CUANTILES.length
 }
 
+/** Valores ya calculados dentro de UNA decisión (ver mejorAccion). */
+let memo: Map<number, number> | null = null
+
 function valor(s: BattleState, prof: number): number {
   if (prof <= 0 || s.hp1 <= 0 || s.hp2 <= 0) return evaluar(s)
+  // La misma situación a la misma profundidad vale lo mismo: se guarda.
+  const k = ((((((s.hp1 * 101 + s.hp2) * 33 + s.shield1) * 33 + s.shield2) * 2 + +s.ultimateUsed1) * 2 + +s.ultimateUsed2) * 2 + +(s.turn === CPU)) * 8 + prof
+  const ya = memo?.get(k)
+  if (ya !== undefined) return ya
+  const r = valorSinMemo(s, prof)
+  memo?.set(k, r)
+  return r
+}
+
+function valorSinMemo(s: BattleState, prof: number): number {
   const esCpu = s.turn === CPU
   let mejor = esCpu ? -Infinity : Infinity
   for (const a of legales(s, esCpu)) {
@@ -67,16 +80,56 @@ function valor(s: BattleState, prof: number): number {
   return mejor
 }
 
-/** La acción de la CPU en su turno. `azar()` da un número en [0, 1). */
-export function elegirAccion(s: BattleState, nivel: NivelCpu, azar: () => number = Math.random): BattleAction {
+/**
+ * La mejor acción para la CPU según el cálculo, sin el error a propósito del
+ * nivel fácil y normal. Depende solo del estado, así que #simular la guarda
+ * (ver `cacheDeDecisiones`) y no la recalcula en cada pelea.
+ */
+export function mejorAccion(s: BattleState, nivel: NivelCpu): BattleAction {
   const opciones = legales(s, true)
-  if (azar() < ERROR[nivel]) return opciones[Math.floor(azar() * opciones.length)]!
   const prof = PROFUNDIDAD[nivel]
   let mejor = opciones[0]!
   let mejorV = -Infinity
-  for (const a of opciones) {
-    const v = esperado(s, a, prof)
-    if (v > mejorV) { mejorV = v; mejor = a }
+  memo = new Map()
+  try {
+    for (const a of opciones) {
+      const v = esperado(s, a, prof)
+      if (v > mejorV) { mejorV = v; mejor = a }
+    }
+  } finally {
+    memo = null
   }
   return mejor
+}
+
+/** La acción de la CPU en su turno. `azar()` da un número en [0, 1). `mejor`
+ *  permite pasarle una `mejorAccion` guardada (#simular). */
+export function elegirAccion(
+  s: BattleState,
+  nivel: NivelCpu,
+  azar: () => number = Math.random,
+  mejor: (s: BattleState, nivel: NivelCpu) => BattleAction = mejorAccion,
+): BattleAction {
+  const opciones = legales(s, true)
+  if (azar() < ERROR[nivel]) return opciones[Math.floor(azar() * opciones.length)]!
+  return mejor(s, nivel)
+}
+
+/**
+ * Una `mejorAccion` que recuerda: la clave es todo lo que la decisión mira
+ * (vida, escudos, ultimates, de quién es el turno). Miles de peleas simuladas
+ * pasan por las mismas posiciones —todas empiezan igual—, y contra la CPU
+ * difícil cada decisión son ~50.000 hojas de búsqueda.
+ */
+export function cacheDeDecisiones(max = 200_000): (s: BattleState, nivel: NivelCpu) => BattleAction {
+  const memo = new Map<string, BattleAction>()
+  return (s, nivel) => {
+    const k = `${nivel}|${s.turn === CPU ? 1 : 0}|${s.hp1}|${s.hp2}|${s.shield1}|${s.shield2}|${+s.ultimateUsed1}${+s.ultimateUsed2}`
+    let a = memo.get(k)
+    if (a === undefined) {
+      a = mejorAccion(s, nivel)
+      if (memo.size < max) memo.set(k, a)
+    }
+    return a
+  }
 }

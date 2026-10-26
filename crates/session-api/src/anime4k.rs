@@ -318,6 +318,15 @@ mod ffi {
             y0: u32,
             y1: u32,
         );
+        #[cfg(winsi_v3)]
+        pub fn winsi_a4k_gradient_zig_v3(
+            src: *const u8,
+            dst: *mut u8,
+            w: u32,
+            h: u32,
+            y0: u32,
+            y1: u32,
+        );
         pub fn winsi_a4k_push_color_zig(
             src: *const u8,
             dst: *mut u8,
@@ -327,7 +336,27 @@ mod ffi {
             y0: u32,
             y1: u32,
         );
+        #[cfg(winsi_v3)]
+        pub fn winsi_a4k_push_color_zig_v3(
+            src: *const u8,
+            dst: *mut u8,
+            w: u32,
+            h: u32,
+            f: f32,
+            y0: u32,
+            y1: u32,
+        );
         pub fn winsi_a4k_push_gradient_zig(
+            src: *const u8,
+            dst: *mut u8,
+            w: u32,
+            h: u32,
+            f: f32,
+            y0: u32,
+            y1: u32,
+        );
+        #[cfg(winsi_v3)]
+        pub fn winsi_a4k_push_gradient_zig_v3(
             src: *const u8,
             dst: *mut u8,
             w: u32,
@@ -347,15 +376,56 @@ mod ffi {
             anillo: *mut u8,
             luma: u32,
         );
+        #[cfg(winsi_v3)]
+        pub fn winsi_a4k_gradient_push_zig_v3(
+            src: *const u8,
+            dst: *mut u8,
+            w: u32,
+            h: u32,
+            f: f32,
+            y0: u32,
+            y1: u32,
+            anillo: *mut u8,
+            luma: u32,
+        );
+        pub fn winsi_a4k_pass_zig(
+            src: *const u8,
+            dst: *mut u8,
+            w: u32,
+            h: u32,
+            fc: f32,
+            fg: f32,
+            y0: u32,
+            y1: u32,
+            anillo_c: *mut u8,
+            anillo_g: *mut u8,
+            luma: u32,
+        );
+        #[cfg(winsi_v3)]
+        pub fn winsi_a4k_pass_zig_v3(
+            src: *const u8,
+            dst: *mut u8,
+            w: u32,
+            h: u32,
+            fc: f32,
+            fg: f32,
+            y0: u32,
+            y1: u32,
+            anillo_c: *mut u8,
+            anillo_g: *mut u8,
+            luma: u32,
+        );
     }
 }
 
-/// Cuántos hilos usan los kernels nativos: todos los núcleos, hasta 8.
+/// Cuántos hilos usan los kernels nativos: todos los núcleos, hasta 16.
 ///
 /// Los tres kernels calculan cada fila de salida mirando solo las vecinas de
 /// la entrada, así que una imagen se reparte en franjas sin coordinar nada.
-/// Hasta la 8.16.0 corrían en un solo núcleo. Más de 8 no rinde para las
-/// imágenes de un chat, y `WINSI_HILOS` lo cambia —1 para medir un núcleo—.
+/// Hasta la 8.16.0 corrían en un solo núcleo. El tope era 8 con la idea de
+/// que más no rendía, pero medido no es así: en una CPU de 12 hilos, #upscale
+/// de 3072x2048 baja de ~91 a ~73 ms pasando de 8 a 12 (8.18.0). Ahora el tope
+/// es 16. `WINSI_HILOS` lo cambia —1 para medir un núcleo—.
 pub fn hilos() -> usize {
     use std::sync::OnceLock;
     static H: OnceLock<usize> = OnceLock::new();
@@ -363,7 +433,7 @@ pub fn hilos() -> usize {
         std::env::var("WINSI_HILOS")
             .ok()
             .and_then(|v| v.parse().ok())
-            .unwrap_or_else(|| std::thread::available_parallelism().map_or(1, |n| n.get().min(8)))
+            .unwrap_or_else(|| std::thread::available_parallelism().map_or(1, |n| n.get().min(16)))
             .max(1)
     })
 }
@@ -431,7 +501,7 @@ pub fn gradiente_zig(img: &RgbaImage) -> RgbaImage {
     let (src, dst) = (img.as_ptr() as usize, salida.as_mut_ptr() as usize);
     // SAFETY: como arriba.
     en_franjas(h, |y0, y1| unsafe {
-        ffi::winsi_a4k_gradient_zig(src as *const u8, dst as *mut u8, w, h, y0, y1)
+        crate::zig!(ffi::winsi_a4k_gradient_zig, ffi::winsi_a4k_gradient_zig_v3, src as *const u8, dst as *mut u8, w, h, y0, y1)
     });
     salida
 }
@@ -457,7 +527,7 @@ pub fn push_color_zig(img: &RgbaImage, fuerza: f32) -> RgbaImage {
     let (src, dst) = (img.as_ptr() as usize, salida.as_mut_ptr() as usize);
     // SAFETY: como en push_color_c.
     en_franjas(h, |y0, y1| unsafe {
-        ffi::winsi_a4k_push_color_zig(src as *const u8, dst as *mut u8, w, h, fuerza, y0, y1)
+        crate::zig!(ffi::winsi_a4k_push_color_zig, ffi::winsi_a4k_push_color_zig_v3, src as *const u8, dst as *mut u8, w, h, fuerza, y0, y1)
     });
     salida
 }
@@ -470,7 +540,7 @@ pub fn push_gradient_zig(img: &RgbaImage, fuerza: f32) -> RgbaImage {
     let (src, dst) = (img.as_ptr() as usize, salida.as_mut_ptr() as usize);
     // SAFETY: como en push_color_c.
     en_franjas(h, |y0, y1| unsafe {
-        ffi::winsi_a4k_push_gradient_zig(src as *const u8, dst as *mut u8, w, h, fuerza, y0, y1)
+        crate::zig!(ffi::winsi_a4k_push_gradient_zig, ffi::winsi_a4k_push_gradient_zig_v3, src as *const u8, dst as *mut u8, w, h, fuerza, y0, y1)
     });
     salida
 }
@@ -496,8 +566,7 @@ pub fn gradiente_y_push_zig_con(img: &RgbaImage, fuerza: f32, luma: bool) -> Rgb
         // SAFETY: como en push_color_c; el anillo es de este hilo y mide las
         // tres filas que pide el kernel.
         unsafe {
-            ffi::winsi_a4k_gradient_push_zig(
-                src as *const u8,
+            crate::zig!(ffi::winsi_a4k_gradient_push_zig, ffi::winsi_a4k_gradient_push_zig_v3, src as *const u8,
                 dst as *mut u8,
                 w,
                 h,
@@ -505,8 +574,7 @@ pub fn gradiente_y_push_zig_con(img: &RgbaImage, fuerza: f32, luma: bool) -> Rgb
                 y0,
                 y1,
                 anillo.as_mut_ptr(),
-                u32::from(luma),
-            )
+                u32::from(luma))
         }
     });
     salida
@@ -648,6 +716,55 @@ pub fn gradiente_y_push(img: &RgbaImage, fuerza: f32) -> RgbaImage {
     push_gradient(&gradiente(img), fuerza)
 }
 
+/// Una pasada entera de Anime4K en un solo kernel de Zig: pushColor, Sobel,
+/// pushGradient y, con `luma`, la luminancia de la pasada siguiente, sin
+/// imágenes intermedias (ver winsi_a4k_pass_zig).
+#[cfg(feature = "native")]
+pub fn pasada_zig(img: &RgbaImage, fuerza_color: f32, fuerza_gradiente: f32, luma: bool) -> RgbaImage {
+    let (w, h) = (img.width(), img.height());
+    let mut salida = RgbaImage::new(w, h);
+    let (src, dst) = (img.as_ptr() as usize, salida.as_mut_ptr() as usize);
+    en_franjas(h, |y0, y1| {
+        let mut anillo_c = vec![0u8; w as usize * 4 * 5];
+        let mut anillo_g = vec![0u8; w as usize * 4 * 3];
+        // SAFETY: como en push_color_c; los anillos son de este hilo y miden
+        // las cinco y tres filas que pide el kernel.
+        unsafe {
+            crate::zig!(
+                ffi::winsi_a4k_pass_zig,
+                ffi::winsi_a4k_pass_zig_v3,
+                src as *const u8,
+                dst as *mut u8,
+                w,
+                h,
+                fuerza_color,
+                fuerza_gradiente,
+                y0,
+                y1,
+                anillo_c.as_mut_ptr(),
+                anillo_g.as_mut_ptr(),
+                u32::from(luma)
+            )
+        }
+    });
+    salida
+}
+
+/// Una pasada de Anime4K sobre una imagen con la luminancia en el alfa:
+/// [`push_color`], [`gradiente_y_push`] y, con `luma`, la luminancia de la
+/// siguiente. Con los kernels en Zig, todo en un solo recorrido; si no, paso
+/// por paso con los que estén elegidos.
+pub fn pasada(img: &RgbaImage, fuerza_color: f32, fuerza_gradiente: f32, luma: bool) -> RgbaImage {
+    #[cfg(feature = "native")]
+    {
+        if elegido() == (Backend::Zig, Backend::Zig, Backend::Zig) {
+            return pasada_zig(img, fuerza_color, fuerza_gradiente, luma);
+        }
+    }
+    let pc = push_color(img, fuerza_color);
+    if luma { gradiente_y_push_y_luma(&pc, fuerza_gradiente) } else { gradiente_y_push(&pc, fuerza_gradiente) }
+}
+
 /// [`gradiente_y_push`] y después [`luminancia_en_alfa`]: el final de una pasada
 /// de Anime4K y el comienzo de la siguiente. Con los kernels en Zig, la
 /// luminancia sale del mismo kernel, sin otro recorrido de la imagen.
@@ -780,6 +897,12 @@ mod tests {
                     push_gradient_rust(&gradiente_rust(&pc), f),
                     "gradiente+push_gradient fusionados {w}x{h} f={f}"
                 );
+                // La pasada entera en un kernel, contra la cadena de referencia
+                // (con y sin la luminancia de la siguiente).
+                let mut ref_luma = push_gradient_rust(&gradiente_rust(&push_color_rust(&img, f)), f);
+                assert_eq!(pasada_zig(&img, f, f, false), ref_luma, "pasada fusionada {w}x{h} f={f}");
+                luminancia_en_alfa(&mut ref_luma);
+                assert_eq!(pasada_zig(&img, f, f, true), ref_luma, "pasada fusionada con luma {w}x{h} f={f}");
                 // Y con la luminancia de la pasada siguiente escrita en el alfa.
                 let mut referencia = push_gradient_rust(&gradiente_rust(&pc), f);
                 luminancia_en_alfa(&mut referencia);
