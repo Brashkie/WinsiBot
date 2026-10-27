@@ -18,12 +18,14 @@
 // dice qué hacer. Compilar desde fuente sigue funcionando igual que siempre.
 //
 // Para saltárselo a propósito: WINSIBOT_SKIP_PREBUILT=1 npm install
+//
+// Lo de bajar, verificar e instalar está en `prebuilt.js`, que comparte con
+// `fetch_cosxamix.js`.
 
-import { createHash } from 'node:crypto'
-import { existsSync, mkdirSync, writeFileSync, chmodSync, renameSync, unlinkSync } from 'node:fs'
+import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { arch, platform } from 'node:os'
-import { readFileSync } from 'node:fs'
+import { Abandonar, instalar, salir, target, yaEsta } from './prebuilt.js'
 
 const ROOT  = process.cwd()
 // En bin/, junto a ffmpeg y yt-dlp. Hasta la 8.14.0 iba a rust/target/release,
@@ -31,31 +33,6 @@ const ROOT  = process.cwd()
 // pisa una compilación local, que queda en target/ del workspace.
 const DEST  = join(ROOT, 'bin')
 const REPO  = process.env.WINSIBOT_REPO ?? 'Brashkie/WinsiBot'
-
-/** Target de Rust para esta máquina, o null si no lo publicamos. */
-function target() {
-  const a = arch()
-  // Termux informa `android` como plataforma, y su target es el de Android,
-  // NO el de Linux: usa la libc Bionic, no glibc. Confundirlos da un binario
-  // que descarga bien y no arranca.
-  const esAndroid = platform() === 'android' || !!process.env.PREFIX?.includes('com.termux')
-
-  if (esAndroid) return a === 'arm64' ? 'aarch64-linux-android' : null
-  switch (`${platform()}-${a}`) {
-    case 'win32-x64':   return 'x86_64-pc-windows-msvc'
-    case 'win32-arm64': return 'aarch64-pc-windows-msvc'
-    case 'linux-x64':   return 'x86_64-unknown-linux-gnu'
-    case 'linux-arm64': return 'aarch64-unknown-linux-gnu'
-    case 'darwin-arm64':return 'aarch64-apple-darwin'
-    // Mac Intel no tiene binario publicado, y es a propósito: `ort` no
-    // encuentra build de ONNX Runtime para ese target, así que el workflow ni
-    // lo intenta. Devolver null acá —en vez del nombre del target— hace que se
-    // avise de entrada, en lugar de salir a pedir un archivo que nunca va a
-    // estar y reportar un 404, que parecería una release rota.
-    case 'darwin-x64':  return null
-    default:            return null
-  }
-}
 
 /**
  * La versión del BOT, que es la que etiqueta la release.
@@ -72,27 +49,6 @@ function version() {
   return v
 }
 
-/**
- * Se usa para abandonar sin romper la instalación.
- *
- * Lanza en vez de llamar a `process.exit()`, y eso importa: salir de golpe con
- * una petición HTTP todavía en vuelo hace que libuv aborte con
- * `UV_HANDLE_CLOSING` y **código 127**, que npm interpreta como un postinstall
- * fallido y corta la instalación entera. Comprobado: pasaba en el camino del
- * 404, que es justo el más común mientras no haya release publicada.
- */
-class Abandonar extends Error {}
-
-function salir(motivo) {
-  throw new Abandonar(motivo)
-}
-
-async function bajar(url) {
-  const r = await fetch(url, { redirect: 'follow' })
-  if (!r.ok) throw new Error(`HTTP ${r.status}`)
-  return Buffer.from(await r.arrayBuffer())
-}
-
 async function main() {
   if (process.env.WINSIBOT_SKIP_PREBUILT) salir('salteado por WINSIBOT_SKIP_PREBUILT')
 
@@ -101,49 +57,22 @@ async function main() {
   // Al lado del binario queda la versión que se bajó. Antes bastaba con que
   // existiera un binario para no bajar nada, así que actualizar el bot dejaba
   // la API vieja para siempre.
-  const marca = join(DEST, `${exe}.version`)
-  if (existsSync(join(DEST, exe)) && existsSync(marca) && readFileSync(marca, 'utf8').trim() === v) return
+  if (yaEsta(DEST, exe, v)) return
 
-  const t = target()
+  // Mac Intel no tiene binario publicado (`ort` no encuentra ONNX Runtime para
+  // ese target, así que el workflow ni lo intenta); Windows en ARM sí.
+  const t = target({ macIntel: false, winArm: true })
   if (!t) salir(`no publicamos binario para ${platform()}-${arch()}`)
 
-  const base = `https://github.com/${REPO}/releases/download/v${v}`
-  const nombre = `winsibot-session-api-${t}${platform() === 'win32' ? '.exe' : ''}`
-
   console.log(`  ◈ Bajando binario de Rust v${v} para ${t}...`)
-
-  let bin, suma
-  try {
-    // El checksum va primero: si la release existe pero está incompleta,
-    // mejor enterarse antes de bajar 30 MB.
-    suma = (await bajar(`${base}/${nombre}.sha256`)).toString('utf8').trim().split(/\s+/)[0]
-    bin  = await bajar(`${base}/${nombre}`)
-  } catch (e) {
-    salir(`no disponible (${e.message})`)
-  }
-
-  const real = createHash('sha256').update(bin).digest('hex')
-  if (real !== suma) {
-    // Un binario con checksum distinto no se usa y no se deja en disco: puede
-    // ser una descarga corrupta, pero también otra cosa.
-    salir(`checksum no coincide (esperaba ${suma.slice(0, 16)}…, obtuve ${real.slice(0, 16)}…)`)
-  }
-
-  mkdirSync(DEST, { recursive: true })
-  // Se escribe a un temporal y se renombra: si el proceso muere a mitad, no
-  // queda un ejecutable truncado que después falla de forma confusa.
-  const tmp = join(DEST, `${exe}.tmp`)
-  writeFileSync(tmp, bin)
-  if (platform() !== 'win32') chmodSync(tmp, 0o755)
-  try {
-    renameSync(tmp, join(DEST, exe))
-  } catch (e) {
-    try { unlinkSync(tmp) } catch {}
-    salir(`no se pudo instalar (${e.message})`)
-  }
-  writeFileSync(marca, v)
-
-  console.log(`  ✔ Binario listo (${(bin.length / 1048576).toFixed(1)} MB) — no hace falta compilar Rust`)
+  const bytes = await instalar({
+    base: `https://github.com/${REPO}/releases/download/v${v}`,
+    nombre: `winsibot-session-api-${t}${platform() === 'win32' ? '.exe' : ''}`,
+    dest: DEST,
+    exe,
+    version: v,
+  })
+  console.log(`  ✔ Binario listo (${(bytes / 1048576).toFixed(1)} MB) — no hace falta compilar Rust`)
 }
 
 main().catch((e) => {

@@ -243,7 +243,7 @@
 | Node.js | 20.12+ | ✅ | `node --version` |
 | npm | 9.x | ✅ | incluido con Node |
 | Rust + Cargo | 1.75+ | ❌ | solo para compilar la Session API vos mismo: `npm install` baja el binario de tu plataforma |
-| Ollama **o** [Cosxamix](https://github.com/Brashkie/Cosxamix) | latest | ❌ | IA local (recomendado, 16 GB RAM+). Los dos hablan el mismo dialecto, así que cambiar de uno a otro son tres líneas del `.env` — ver `.env.example` |
+| Ollama **o** [Cosxamix](https://github.com/Brashkie/Cosxamix) | latest | ❌ | IA local (recomendado, 16 GB RAM+). Los dos hablan el mismo dialecto, así que cambiar de uno a otro son tres líneas del `.env` — ver `.env.example`. Con el `.env` apuntando a Cosxamix, `npm install` baja su binario solo (`npm run cosxamix:fetch` para bajarlo igual), y `npm run cosxamix:model` baja el modelo preguntando, con el tamaño elegido según la RAM. Con los dos, el bot lo arranca solo y lo vigila |
 | FFmpeg | 6.x | ❌ | stickers animados, notas de voz, efectos de audio, videos de los dragones. En Windows, Linux y macOS viene con `npm install` (`ffmpeg-static`); en Termux, `pkg install ffmpeg` |
 | yt-dlp | reciente | ❌ | descargas de YouTube y otros sitios. Ejecutable en `bin/` o en el `PATH`; en Termux, `pkg install yt-dlp` |
 

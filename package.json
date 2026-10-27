@@ -6,8 +6,10 @@
   "types": "dist/index.d.ts",
   "type": "module",
   "scripts": {
-    "postinstall": "node scripts/fetch_rust.js",
+    "postinstall": "node scripts/fetch_rust.js && node scripts/fetch_cosxamix.js",
     "rust:fetch": "node scripts/fetch_rust.js",
+    "cosxamix:fetch": "node scripts/fetch_cosxamix.js --siempre",
+    "cosxamix:model": "node scripts/cosxamix_model.js",
     "prestart": "npm run build",
     "start": "node dist/supervisor.js",
     "start:unsupervised": "node --max-semi-space-size=4 dist/index.js",
@@ -129,6 +131,9 @@
   "optionalDependencies": {
     "ffmpeg-static": "^5.2.0",
     "sharp": "^0.34.1"
+  },
+  "config": {
+    "cosxamix": "0.6.0"
   },
   "engines": {
     "node": ">=20.12.0"

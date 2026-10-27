@@ -2,7 +2,7 @@ import './lib/env.js'
 import readline from 'readline'
 import { spawn, type ChildProcess } from 'child_process'
 import { join, resolve } from 'path'
-import { existsSync } from 'fs'
+import { closeSync, existsSync, mkdirSync, openSync } from 'fs'
 import ffmpegStatic from 'ffmpeg-static'
 import { winsiSocket } from '@core/socket.js'
 import { handleMessage, getActiveHandlerCount } from '@core/handler.js'
@@ -16,6 +16,7 @@ import { rustRequest } from '@lib/rustHttp.js'
 import { SESSION_API, sessionApiBinary, sessionApiHome } from '@lib/sessionApiPaths.js'
 import { color, gradient, loader, ascii, themes, configure, components, BG, animate, canAnimate, setTitle, getTerminalWidth, visibleLen } from 'ansimax'
 import { versionDelBot } from '@lib/version.js'
+import { FALLOS_PARA_COLGADO, planear, reintentar, rutas } from '@lib/cosxamixLaunch.js'
 
 // ffmpeg-static ya era una dependencia del proyecto, pero nada la usaba —
 // fluent-ffmpeg (usado por wa-sticker-formatter para stickers animados desde
@@ -312,6 +313,91 @@ async function ensureRust(): Promise<void> {
   else    stopSpin('Rust no respondió a tiempo — continuando sin él', false)
 }
 
+// ─── Cosxamix auto-arranque ──────────────────────────────────────────────────
+//
+// Si el .env apunta a un Cosxamix local (ver lib/cosxamixLaunch.ts), el bot lo
+// levanta como a la Session API, pero SIN esperarlo: cargar el modelo tarda
+// ~45 s, y mientras tanto la Session API ve que no responde y sigue con el
+// resto de la cascada de IA. Se lo vigila con /health cada 30 s: si deja de
+// responder tres veces seguidas después de haber estado arriba, se lo mata y se
+// lo relanza.
+
+let cosxamix: ChildProcess | null = null
+const caidasCosxamix: number[] = []
+
+async function cosxamixResponde(puerto: string): Promise<boolean> {
+  try {
+    const r = await fetch(`http://127.0.0.1:${puerto}/health`, { signal: AbortSignal.timeout(10_000) })
+    return r.ok
+  } catch {
+    return false
+  }
+}
+
+async function ensureCosxamix(): Promise<void> {
+  const plan = planear(process.env, process.cwd())
+  if (!plan.arrancar) {
+    // Que no lo use es lo normal y no se dice nada; que lo pida y falte algo, sí.
+    if (plan.motivo !== 'el .env no apunta a Cosxamix') logger.warn(`Cosxamix: ${plan.motivo}`)
+    return
+  }
+  const puerto = plan.entorno.COSXAMIX_PORT!
+  // Si ya hay uno corriendo —lanzado a mano, o de un bot anterior que no lo
+  // cerró—, se usa ese.
+  if (await cosxamixResponde(puerto)) {
+    console.log(`  ${themes.success('✔')} Cosxamix ya estaba corriendo en el puerto ${puerto}`)
+    return
+  }
+
+  const r = rutas(process.cwd())
+  mkdirSync(r.home, { recursive: true })
+  // Su salida a un archivo, que se reescribe en cada arranque: la de la
+  // última vez es la que explica una caída. El descriptor va directo al hijo
+  // y se cierra acá, así que el bot no lee ni copia un byte de ese log.
+  const log = openSync(r.log, 'w')
+  const t0 = Date.now()
+  const proc = spawn(r.binario, [], { cwd: r.home, env: { ...process.env, ...plan.entorno }, stdio: ['ignore', log, log] })
+  closeSync(log)
+  cosxamix = proc
+  spawnedChildren.push(proc)
+  console.log(`  ${themes.info('◈')} Cosxamix: cargando ${plan.entorno.COSXAMIX_GGUF} en segundo plano ${color.dim('(~45 s; mientras tanto, el resto de la IA)')}`)
+
+  let arriba = false
+  let colgado = false
+  let fallos = 0
+  const vigilante = setInterval(() => {
+    void cosxamixResponde(puerto).then((ok) => {
+      if (ok) {
+        if (!arriba) logger.info(`Cosxamix listo en ${Math.round((Date.now() - t0) / 1000)} s`)
+        arriba = true
+        fallos = 0
+        return
+      }
+      // Mientras carga no responde, y eso no es un cuelgue.
+      if (!arriba || ++fallos < FALLOS_PARA_COLGADO) return
+      logger.warn(`Cosxamix no responde a /health hace ${FALLOS_PARA_COLGADO} chequeos — se reinicia`)
+      colgado = true
+      proc.kill('SIGKILL')
+    })
+  }, 30_000)
+  vigilante.unref()
+
+  proc.on('error', (err) => logger.warn(`Cosxamix no pudo iniciar: ${err.message}`))
+  proc.on('exit', (code) => {
+    clearInterval(vigilante)
+    if (cosxamix === proc) cosxamix = null
+    // Matado por un cuelgue sale con señal y código null: se relanza igual.
+    if (_shuttingDown || (code === 0 && !colgado)) return
+    caidasCosxamix.push(Date.now())
+    if (!reintentar(caidasCosxamix, Date.now())) {
+      logger.warn(`Cosxamix se cayó 5 veces en 10 minutos — no se relanza. Ver ${r.log}`)
+      return
+    }
+    logger.warn(`Cosxamix terminó (${colgado ? 'colgado' : `código ${code}`}) — se relanza en 5 s`)
+    setTimeout(() => ensureCosxamix().catch(() => {}), 5_000).unref()
+  })
+}
+
 // ─── Banner ───────────────────────────────────────────────────────────────────
 function platformLabel(): string {
   return process.platform === 'win32'  ? 'Windows'
@@ -439,6 +525,8 @@ async function main() {
   // Rust → Python. El bot levanta sus propias dependencias — un solo árbol de
   // procesos, un solo lugar donde se limpian.
   await ensureRust()
+  // Sin await de su carga: arranca en segundo plano (ver ensureCosxamix).
+  await ensureCosxamix()
 
   const stopData = loader.spin('Cargando datos guardados...')
   await loadAll()
