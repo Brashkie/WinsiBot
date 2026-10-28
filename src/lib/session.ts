@@ -228,10 +228,12 @@ export class SessionClient {
    * GLOBAL de Rust se dispara (corrupción repartida entre muchos grupos a
    * la vez), no para un Bad MAC aislado de un solo grupo.
    */
-  async clearSignalSessions(groupJid?: string): Promise<ClearSignalResult> {
+  async clearSignalSessions(groupJid?: string, propios: string[] = []): Promise<ClearSignalResult> {
+    // `propios`: los usuarios de la propia cuenta, que nunca se borran (ver
+    // `es_propio` en crates/session-api/src/routes.rs).
     return apiFetch<ClearSignalResult>(
       '/sessions/signal/clear',
-      { method: 'POST', body: JSON.stringify(groupJid ? { groupJid } : {}) },
+      { method: 'POST', body: JSON.stringify(groupJid ? { groupJid, propios } : { propios }) },
       { timeoutMs: 15_000 },
     )
   }
@@ -296,11 +298,22 @@ export class SessionClient {
     }).catch(() => {})
   }
 
-  /** El número `account` se acaba de vincular: empieza su calentamiento. */
-  async antibanPaired(account: string): Promise<void> {
+  /**
+   * Se escaneó un QR para `account`. Si `numero` es el que esa sesión ya
+   * tenía, no empieza calentamiento: es el mismo número vinculado otra vez.
+   */
+  async antibanPaired(account: string, numero?: string): Promise<void> {
     await apiFetch('/antiban/paired', {
       method: 'POST',
-      body:   JSON.stringify({ session: account }),
+      body:   JSON.stringify({ session: account, ...(numero ? { numero } : {}) }),
+    }).catch(() => {})
+  }
+
+  /** Qué número tiene `account`: se avisa en cada conexión (ver antiban.rs). */
+  async antibanNumero(account: string, numero: string): Promise<void> {
+    await apiFetch('/antiban/numero', {
+      method: 'POST',
+      body:   JSON.stringify({ session: account, numero }),
     }).catch(() => {})
   }
 

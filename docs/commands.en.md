@@ -1,10 +1,10 @@
 <div align="center">
 
-# 📖 Command Reference — WinsiBot v8.18.0
+# 📖 Command Reference — WinsiBot v9.0.0
 
 [![Commands](https://img.shields.io/badge/Commands-190%2B-6C63FF?style=for-the-badge)](.)
 [![Categories](https://img.shields.io/badge/Categories-19-00C9FF?style=for-the-badge)](.)
-[![Version](https://img.shields.io/badge/Version-8.18.0-brightgreen?style=flat-square)](../README.en.md)
+[![Version](https://img.shields.io/badge/Version-9.0.0-brightgreen?style=flat-square)](../README.en.md)
 
 [🇪🇸 Versión en español →](commands.md) &nbsp;·&nbsp; [💰 Economy guide →](economy.en.md) &nbsp;·&nbsp; [← Back to README](../README.en.md)
 
@@ -113,7 +113,7 @@
 | `olvidar` | `forgetme`, `borrariadat` | — | 👤 | **Privacy:** wipes every message of yours that was stored, and your profile |
 | `hepeinstats` | `iaestats`, `trainerinfo` | — | ⭐ | Corpus size: messages, users, groups and disk |
 
-> **Models:** **Ollama (local)** → GPT → Gemini → Claude, with automatic fallback.
+> **Models:** **Cosxamix (the in-house AI, by default) or Ollama** → GPT → Gemini → Claude, with automatic fallback.
 > If none answer, the bot uses its local template engine: 489 phrases across 12
 > modes, honouring the group's mode and avoiding recent replies — so it always
 > says something. Limit: 20 messages/hour per user.
@@ -649,7 +649,7 @@
 | `exec` | `eval`, `run` | — | 👑 | Execute JavaScript code in the bot's context |
 | `terminal` | `term`, `shell`, `cmd` | — | 👑 | Execute a command in the server terminal |
 | `fetch` | `get`, `url` | — | 👑 | Fetch the content of a URL |
-| `restart` | `reiniciar`, `reboot`, `reset` | — | 👑 | Restart the bot (requires PM2 or nodemon) |
+| `restart` | `reiniciar`, `reboot`, `reset` | — | 👑 | Restarts the bot: saves everything and exits, and the `npm start` supervisor brings it back |
 
 ```
 !addpremium @user 30        ← 30 days of premium

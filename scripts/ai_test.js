@@ -15,7 +15,7 @@
 // el bot llamaba al equivocado: ai/intent_classifier.py sí usa el vocabulario
 // correcto, pero ningún punto del bot lo llamaba.
 
-import 'dotenv/config'
+import './env.js'
 import { ascii, color, themes } from 'ansimax'
 
 const RUST_URL = process.env.SESSION_API_URL ?? process.env.RUST_API_URL ?? 'http://127.0.0.1:18080'

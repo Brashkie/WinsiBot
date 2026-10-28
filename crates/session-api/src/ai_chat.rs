@@ -377,12 +377,19 @@ fn env(clave: &str, por_defecto: &str) -> String {
     std::env::var(clave).unwrap_or_else(|_| por_defecto.to_string())
 }
 
-/// Timeout de Ollama. Generoso a propósito: una respuesta corta con un modelo
-/// de 3B en CPU, sin GPU, tarda ~19 s medidos; con el system prompt cargado de
-/// vocabulario del grupo pasa de eso fácil. Cortar antes fuerza el fallback a
-/// plantillas para respuestas que iban a llegar igual.
+// La IA local por defecto, desde la 9.0.0: Cosxamix, el runtime propio, que el
+// bot baja y arranca solo. Ollama sigue funcionando igual con `OLLAMA_URL`,
+// `OLLAMA_MODEL` y `OLLAMA_TIMEOUT` —los nombres quedan por el dialecto, que es
+// el de Ollama—; solo dejó de ser lo que se usa sin decir nada.
+const URL_LOCAL: &str = "http://127.0.0.1:11435";
+const MODELO_LOCAL: &str = "qwen2.5-3b-instruct-q3_k_m";
+
+/// Timeout de la IA local. Generoso a propósito: una respuesta corta con un
+/// modelo de 3B en CPU, sin GPU, tarda varios segundos, y Cosxamix tarda ~45 s
+/// en cargar el 3B al arrancar. Cortar antes fuerza el fallback a plantillas
+/// para respuestas que iban a llegar igual.
 fn ollama_timeout() -> Duration {
-    Duration::from_secs_f64(env("OLLAMA_TIMEOUT", "40").parse().unwrap_or(40.0))
+    Duration::from_secs_f64(env("OLLAMA_TIMEOUT", "60").parse().unwrap_or(60.0))
 }
 
 async fn cliente(timeout: Duration) -> Result<reqwest::Client, String> {
@@ -399,13 +406,13 @@ async fn cliente(timeout: Duration) -> Result<reqwest::Client, String> {
 pub async fn ollama_disponible(modelo: Option<&str>) -> bool {
     let objetivo = modelo
         .map(str::to_string)
-        .unwrap_or_else(|| env("OLLAMA_MODEL", "llama3.2:3b"));
+        .unwrap_or_else(|| env("OLLAMA_MODEL", MODELO_LOCAL));
     let base = objetivo.split(':').next().unwrap_or(&objetivo).to_string();
 
     let Ok(c) = cliente(Duration::from_secs(2)).await else {
         return false;
     };
-    let url = format!("{}/api/tags", env("OLLAMA_URL", "http://localhost:11434"));
+    let url = format!("{}/api/tags", env("OLLAMA_URL", URL_LOCAL));
     let Ok(r) = c.get(&url).send().await else {
         return false;
     };
@@ -433,12 +440,12 @@ async fn ollama_chat(
 ) -> Option<String> {
     let objetivo = modelo
         .map(str::to_string)
-        .unwrap_or_else(|| env("OLLAMA_MODEL", "llama3.2:3b"));
+        .unwrap_or_else(|| env("OLLAMA_MODEL", MODELO_LOCAL));
     let c = cliente(ollama_timeout()).await.ok()?;
     // Endpoint compatible con OpenAI, igual que usaba ollama_client.py.
     let url = format!(
         "{}/v1/chat/completions",
-        env("OLLAMA_URL", "http://localhost:11434")
+        env("OLLAMA_URL", URL_LOCAL)
     );
 
     let r = c
@@ -574,8 +581,11 @@ async fn claude(prompt: &str, system: &str, key: &str) -> Option<String> {
 /// Pide una respuesta a la primera IA que conteste.
 ///
 /// Con `modelo` informado —una palabra disparadora de WhatsApp pide un modelo
-/// local concreto— se prueba SOLO ese y no se cae a la nube: si el usuario pidió
-/// ese modelo, contestar con otro no es lo que pidió.
+/// local concreto— se prueba primero ese, y si no está instalado se sigue con
+/// el orden de siempre. Hasta la 8.18.0 se probaba SOLO ese y se devolvía
+/// `None`: quien escribía "winsi" sin tener `phi3` recibía una plantilla aunque
+/// el modelo del .env estuviera ahí. Quien escribe no sabe que una palabra
+/// "pide" un modelo; lo que pide es una respuesta.
 ///
 /// Sin `modelo`, el orden de siempre: Ollama (local, gratis, sin internet), GPT,
 /// Gemini y Claude, cada uno solo si hay clave.
@@ -596,7 +606,7 @@ pub async fn generar_ia(
                 return Some(t);
             }
         }
-        return None;
+        tracing::debug!("IA: el modelo pedido ({}) no está, sigue con el del .env", m);
     }
 
     if ollama_disponible(None).await {

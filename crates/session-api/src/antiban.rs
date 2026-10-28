@@ -206,6 +206,10 @@ struct Sesion {
     /// Cuándo se vinculó el número, si se vio. `None` es una sesión de antes
     /// de este módulo: madura, sin calentamiento.
     emparejado_ms: Option<u64>,
+    /// Qué número es, para no confundir "otro número" con "el mismo número,
+    /// vinculado otra vez" (ver `emparejado`).
+    #[serde(default)]
+    numero: Option<String>,
     enfriado_hasta: u64,
     racha_429: u32,
     ultimo_429: u64,
@@ -372,12 +376,38 @@ impl Motor {
         }
     }
 
-    /// El número se acaba de vincular: empieza el calentamiento.
-    pub fn emparejado(&mut self, sesion: &str, ahora: u64) {
+    /// Se escaneó un QR: si es un número nuevo, empieza el calentamiento.
+    /// Devuelve si empezó.
+    ///
+    /// Vincular **otra vez el mismo número** no lo vuelve nuevo: WhatsApp mide
+    /// la cuenta, no el dispositivo. Hasta la 8.18.0 eso también arrancaba el
+    /// calentamiento, y un bot con meses y miles de usuarios quedó con 40
+    /// mensajes por día después de escanear el QR. Ahora, si el número es el
+    /// que esta sesión ya tenía, no se toca nada: si venía en calentamiento lo
+    /// sigue desde su fecha —vincular de nuevo no sirve para saltarlo—, y si
+    /// era madura sigue madura.
+    pub fn emparejado(&mut self, sesion: &str, numero: Option<&str>, ahora: u64) -> bool {
         let s = self.sesiones.entry(sesion.to_owned()).or_default();
+        if numero.is_some() && s.numero.as_deref() == numero {
+            return false;
+        }
+        if let Some(n) = numero {
+            s.numero = Some(n.to_owned());
+        }
         s.emparejado_ms = Some(ahora);
         // Lo que se haya enviado con un vínculo anterior no cuenta para este.
         s.envios.clear();
+        true
+    }
+
+    /// El bot avisa qué número tiene la sesión cada vez que conecta. Solo se
+    /// anota si no se sabía: es lo que deja reconocer a una sesión madura
+    /// cuando, más adelante, se escanee el QR otra vez.
+    pub fn conocer(&mut self, sesion: &str, numero: &str) {
+        let s = self.sesiones.entry(sesion.to_owned()).or_default();
+        if s.numero.is_none() && !numero.is_empty() {
+            s.numero = Some(numero.to_owned());
+        }
     }
 
     pub fn estado(&self, sesion: &str, ahora: u64) -> Estado {
@@ -504,10 +534,16 @@ impl Antiban {
         self.con(|m| m.reportar(sesion, jid, codigo, ahora_ms()))
     }
 
-    pub fn emparejado(&self, sesion: &str) {
-        self.con(|m| m.emparejado(sesion, ahora_ms()));
+    pub fn emparejado(&self, sesion: &str, numero: Option<&str>) -> bool {
+        let empezo = self.con(|m| m.emparejado(sesion, numero, ahora_ms()));
         // El vínculo es lo único que no se puede reconstruir: va ya.
         self.guardar();
+        empezo
+    }
+
+    pub fn conocer(&self, sesion: &str, numero: &str) {
+        self.con(|m| m.conocer(sesion, numero));
+        self.sucio.store(true, std::sync::atomic::Ordering::Relaxed);
     }
 
     pub fn estado(&self, sesion: &str) -> Estado {
@@ -592,15 +628,39 @@ pub struct SoloSesion {
     session: String,
 }
 
-/// `POST /antiban/paired` — `{ session }`: el número se acaba de vincular.
+#[derive(Deserialize)]
+pub struct SesionNumero {
+    session: String,
+    #[serde(default)]
+    numero: Option<String>,
+}
+
+/// `POST /antiban/paired` — `{ session, numero? }`: se escaneó un QR.
 pub async fn paired(
     State(st): State<AppState>,
-    Json(b): Json<SoloSesion>,
+    Json(b): Json<SesionNumero>,
 ) -> Json<serde_json::Value> {
     let a = st.antiban.clone();
-    let sesion = b.session.clone();
-    let _ = tokio::task::spawn_blocking(move || a.emparejado(&sesion)).await;
-    tracing::info!(session = %b.session, "antiban: número vinculado, empieza el calentamiento");
+    let (sesion, numero) = (b.session.clone(), b.numero.clone());
+    let empezo = tokio::task::spawn_blocking(move || a.emparejado(&sesion, numero.as_deref()))
+        .await
+        .unwrap_or(false);
+    if empezo {
+        tracing::info!(session = %b.session, "antiban: número nuevo vinculado, empieza el calentamiento");
+    } else {
+        tracing::info!(session = %b.session, "antiban: el mismo número, vinculado otra vez: sin calentamiento nuevo");
+    }
+    Json(serde_json::json!({ "ok": true, "calentamiento": empezo }))
+}
+
+/// `POST /antiban/numero` — `{ session, numero }`: qué número tiene la sesión.
+pub async fn numero(
+    State(st): State<AppState>,
+    Json(b): Json<SesionNumero>,
+) -> Json<serde_json::Value> {
+    if let Some(n) = b.numero.as_deref() {
+        st.antiban.conocer(&b.session, n);
+    }
     Json(serde_json::json!({ "ok": true }))
 }
 
@@ -744,7 +804,7 @@ mod tests {
                 Decision::Enviar { .. }
             ));
         }
-        m.emparejado("nueva", 0);
+        m.emparejado("nueva", None, 0);
         assert!(matches!(
             m.permiso("nueva", "x", 0, 0.5, 0.25),
             Decision::Enviar { .. }
@@ -782,6 +842,38 @@ mod tests {
                 Decision::Enviar { .. }
             ));
         }
+    }
+
+    #[test]
+    fn el_mismo_numero_vinculado_otra_vez_no_empieza_calentamiento() {
+        let mut m = Motor::new(Politica {
+            calentamiento: vec![2, 4],
+            ..sin_pausa()
+        });
+        // Una sesión madura de meses: el bot anota su número al conectar.
+        m.conocer("main", "51950270105");
+        // Se escanea el QR otra vez, con el mismo número: sin tope.
+        assert!(!m.emparejado("main", Some("51950270105"), 0));
+        for _ in 0..10 {
+            assert!(matches!(m.permiso("main", "x", 0, 0.5, 0.25), Decision::Enviar { .. }));
+        }
+        // Con OTRO número sí: ese sí es nuevo.
+        assert!(m.emparejado("main", Some("51999999999"), 0));
+        assert_eq!(m.estado("main", 0).dia_calentamiento, Some(1));
+    }
+
+    #[test]
+    fn vincular_otra_vez_no_salta_un_calentamiento_en_curso() {
+        let mut m = Motor::new(Politica {
+            calentamiento: vec![2, 4, 8],
+            ..sin_pausa()
+        });
+        assert!(m.emparejado("sub", Some("51911111111"), 0));
+        // Al día siguiente se vuelve a vincular: sigue en el día 2, no el 1,
+        // y tampoco sale del calentamiento.
+        let d2 = DIA + 1;
+        assert!(!m.emparejado("sub", Some("51911111111"), d2));
+        assert_eq!(m.estado("sub", d2).dia_calentamiento, Some(2));
     }
 
     #[test]
@@ -888,7 +980,7 @@ mod tests {
         let archivo = dir.join("antiban.json");
         {
             let a = Antiban::cargar(&archivo, Politica::default());
-            a.emparejado("sub");
+            a.emparejado("sub", None);
             a.permiso("sub", "g");
             a.guardar();
         }

@@ -31,14 +31,17 @@ describe('target', () => {
 })
 
 describe('Cosxamix', () => {
-  it('se baja solo si el .env apunta a su puerto', () => {
+  it('se baja salvo que el .env apunte a otro lado', () => {
     expect(loUsa('OLLAMA_URL=http://127.0.0.1:11435\n')).toBe(true)
     expect(loUsa('OLLAMA_URL="http://localhost:11435"\r\nOTRA=1')).toBe(true)
     expect(loUsa('OLLAMA_URL=http://localhost:11434')).toBe(false)
-    // Comentada, como viene en .env.example, no cuenta.
+    // Comentada no cuenta: lo que vale es la que está activa.
     expect(loUsa('OLLAMA_URL=http://localhost:11434\n# OLLAMA_URL=http://127.0.0.1:11435')).toBe(false)
-    expect(loUsa('')).toBe(false)
-    expect(loUsa(undefined)).toBe(false)
+    // Sin OLLAMA_URL, o sin .env todavía: Cosxamix es lo de por defecto.
+    expect(loUsa('# OLLAMA_URL=http://localhost:11434\nOTRA=1')).toBe(true)
+    expect(loUsa('')).toBe(true)
+    expect(loUsa(undefined)).toBe(true)
+    expect(loUsa('OLLAMA_URL=no-es-url')).toBe(false)
   })
 
   it('el nombre del archivo, como lo arma su release.yml', () => {

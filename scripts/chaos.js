@@ -33,7 +33,7 @@ const sleep   = (ms) => new Promise(r => setTimeout(r, ms))
 // hablan con la API fallaban todas con "API key inválida o faltante", que suena
 // a clave mal configurada y en realidad era este script sin leer el archivo.
 // El import va primero y no pisa lo que ya venga del entorno.
-import 'dotenv/config'
+import './env.js'
 
 // CHAOS_RUST_URL tiene que aplicarse ACÁ, antes del primer import de dist/.
 //

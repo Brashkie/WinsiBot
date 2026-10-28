@@ -22,7 +22,7 @@
 // compatible con OpenAI —que es el que usa el bot— respeta `keep_alive`, o si
 // hay que pasarse al nativo `/api/chat` para controlarlo.
 
-import 'dotenv/config'
+import './env.js'
 import { color } from 'ansimax'
 
 const URL    = process.env.OLLAMA_URL   ?? 'http://localhost:11434'

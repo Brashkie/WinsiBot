@@ -1,7 +1,7 @@
 {
   "name": "winsi-bot",
-  "version": "8.18.0",
-  "description": "WinsiBot v8.18.0 - Ultralight WhatsApp bot: TypeScript core, Rust Session API, and C and Zig kernels (AVX2 copy picked at startup). Speaks Spanish, English and Portuguese; RPG economy, group cave exploration, arena with a Monte Carlo simulator, audio effects and image tools. Install is `npm install` and nothing else: the Session API binary is fetched prebuilt for your platform, Termux included, with its SHA-256 verified.",
+  "version": "9.0.0",
+  "description": "WinsiBot v9.0.0 - Ultralight WhatsApp bot with its own local AI: Cosxamix, downloaded and started by the bot itself, answers by default with no API key and no Ollama. TypeScript core, Rust Session API, and C and Zig kernels (AVX2 copy picked at startup). Speaks Spanish, English and Portuguese; RPG economy, group cave exploration, arena with a Monte Carlo simulator, audio effects and image tools. Install is `npm install` and nothing else: the Session API binary is fetched prebuilt for your platform, Termux included, with its SHA-256 verified.",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
   "type": "module",
@@ -122,7 +122,6 @@
     "@types/qrcode": "^1.5.6",
     "@types/ws": "^8.18.1",
     "@vitest/coverage-v8": "^2.1.3",
-    "nodemon": "^3.1.10",
     "tsc-alias": "^1.8.17",
     "tsx": "^4.19.1",
     "typescript": "^5.6.3",

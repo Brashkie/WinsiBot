@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 // npm run status — estado de todos los servicios del bot
 
-import 'dotenv/config'
+import './env.js'
 import { execSync } from 'child_process'
 import { existsSync } from 'fs'
 import { join }       from 'path'
@@ -11,12 +11,11 @@ const WIN  = process.platform === 'win32'
 const API_EXE = WIN ? 'winsibot-session-api.exe' : 'winsibot-session-api'
 const ROOT = process.cwd()
 
-// Puertos leídos de .env — antes estaban hardcodeados (Rust en 3001), pero
-// el puerto real configurado (SESSION_API_URL/RUST_API_URL) es 18080 desde
-// hace rato. Con el valor viejo, este chequeo siempre marcaba Rust como
-// caído aunque estuviera corriendo perfectamente.
-const RUST_URL = process.env.SESSION_API_URL ?? process.env.RUST_API_URL ?? 'http://127.0.0.1:18080'
-const RUST_PORT = Number(new URL(RUST_URL).port) || 18080
+// El puerto sale de SESSION_API_URL, como en el bot (src/config.ts) y en la
+// Session API: el valor por defecto es el mismo 3001 de los tres. Antes este
+// decía 18080 y además leía RUST_API_URL, un nombre que nadie más usa.
+const RUST_URL = process.env.SESSION_API_URL ?? 'http://127.0.0.1:3001'
+const RUST_PORT = Number(new URL(RUST_URL).port) || 3001
 // Acá también se comprobaba la API de Python. Se fue en la 8.11.0 junto con
 // los tres comandos de imagen, que eran lo último que servía.
 const SERVICES = [

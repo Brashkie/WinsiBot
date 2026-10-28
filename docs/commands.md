@@ -1,10 +1,10 @@
 <div align="center">
 
-# 📖 Referencia de Comandos — WinsiBot v8.18.0
+# 📖 Referencia de Comandos — WinsiBot v9.0.0
 
 [![Comandos](https://img.shields.io/badge/Comandos-190%2B-6C63FF?style=for-the-badge)](.)
 [![Categorías](https://img.shields.io/badge/Categorías-19-00C9FF?style=for-the-badge)](.)
-[![Versión](https://img.shields.io/badge/Versión-8.18.0-brightgreen?style=flat-square)](../README.md)
+[![Versión](https://img.shields.io/badge/Versión-9.0.0-brightgreen?style=flat-square)](../README.md)
 
 [🇬🇧 English version →](commands.en.md) &nbsp;·&nbsp; [💰 Guía de economía →](economy.md) &nbsp;·&nbsp; [← Volver al README](../README.md)
 
@@ -113,7 +113,7 @@
 | `olvidar` | `forgetme`, `borrariadat` | — | 👤 | **Privacidad:** borra todos tus mensajes guardados y tu perfil |
 | `hepeinstats` | `iaestats`, `trainerinfo` | — | ⭐ | Tamaño del corpus: mensajes, usuarios, grupos y disco |
 
-> **Modelos:** **Ollama (local)** → GPT → Gemini → Claude, con caída automática.
+> **Modelos:** **Cosxamix (la IA propia, por defecto) u Ollama** → GPT → Gemini → Claude, con caída automática.
 > Si ninguno responde, el bot usa su motor local de plantillas: 489 frases en 12
 > modos, respetando el modo del grupo y sin repetir las últimas respuestas — así
 > que siempre contesta algo. Límite: 20 mensajes/hora por usuario.
@@ -649,7 +649,7 @@
 | `exec` | `eval`, `run` | — | 👑 | Ejecuta código JavaScript en el contexto del bot |
 | `terminal` | `term`, `shell`, `cmd` | — | 👑 | Ejecuta un comando en la terminal del servidor |
 | `fetch` | `get`, `url` | — | 👑 | Obtiene el contenido de una URL |
-| `restart` | `reiniciar`, `reboot`, `reset` | — | 👑 | Reinicia el bot (requiere PM2 o nodemon) |
+| `restart` | `reiniciar`, `reboot`, `reset` | — | 👑 | Reinicia el bot: guarda todo y sale, y el supervisor de `npm start` lo vuelve a levantar |
 
 ```
 !addpremium @usuario 30        ← 30 días de premium

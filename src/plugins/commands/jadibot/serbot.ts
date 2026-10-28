@@ -369,7 +369,7 @@ export async function startSubBot(
   subSock.ev.on('connection.update', (update: any) => {
     if (update?.isNewLogin) {
       import('@lib/session.js')
-        .then(({ sessionClient }) => sessionClient.antibanPaired(phone))
+        .then(({ sessionClient }) => sessionClient.antibanPaired(phone, phone))
         .catch(() => {})
     }
   })

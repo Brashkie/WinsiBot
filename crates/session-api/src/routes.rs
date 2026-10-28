@@ -480,6 +480,26 @@ pub async fn read_backup(
 pub struct ClearSignalBody {
     #[serde(rename = "groupJid")]
     group_jid: Option<String>,
+    /// Usuarios cuyos archivos NO se tocan: los de la propia cuenta, por
+    /// número y por LID, sin dispositivo ni dominio (`51950270105`,
+    /// `161087160889568`). Ver `es_propio`.
+    #[serde(default)]
+    propios: Vec<String>,
+}
+
+/// Si un archivo de Signal es de la propia cuenta: la sesión con el teléfono
+/// y con los otros dispositivos propios (`session-<usuario>.<dispositivo>`),
+/// o una clave de grupo que mandó uno de ellos (`sender-key-<grupo>--<usuario>--<dispositivo>`).
+///
+/// Hasta la 8.18.0 el borrado global se los llevaba con todo lo demás. Visto
+/// en producción: borró `session-51950270105.0`, la sesión con el propio
+/// teléfono, y desde ahí ningún mensaje mandado desde el teléfono (`fromMe`)
+/// se pudo descifrar. Esos Bad MAC disparaban otro borrado, y el bot quedaba
+/// en un bucle que él mismo alimentaba.
+fn es_propio(nombre: &str, propios: &[String]) -> bool {
+    propios.iter().filter(|u| !u.is_empty()).any(|u| {
+        nombre.starts_with(&format!("session-{u}.")) || nombre.contains(&format!("--{u}--"))
+    })
 }
 
 pub async fn clear_signal_sessions(
@@ -487,9 +507,10 @@ pub async fn clear_signal_sessions(
     body: Option<Json<ClearSignalBody>>,
 ) -> Json<serde_json::Value> {
     let auth_dir = state.auth_dir.clone();
-    let group_jid = body
-        .and_then(|Json(b)| b.group_jid)
-        .filter(|g| !g.is_empty());
+    let (group_jid, propios) = match body {
+        Some(Json(b)) => (b.group_jid.filter(|g| !g.is_empty()), b.propios),
+        None => (None, Vec::new()),
+    };
 
     // std::fs::read_dir/remove_file son BLOQUEANTES — llamarlos directo en un
     // handler async de Axum congela el hilo del runtime de Tokio hasta que
@@ -543,7 +564,7 @@ pub async fn clear_signal_sessions(
                 }
             };
 
-            if !is_signal_file {
+            if !is_signal_file || es_propio(&name_str, &propios) {
                 continue;
             }
 
@@ -989,5 +1010,27 @@ pub async fn stats_top_commands(
             StatusCode::INTERNAL_SERVER_ERROR,
             Json(serde_json::json!({ "ok": false, "error": e.to_string() })),
         ),
+    }
+}
+
+#[cfg(test)]
+mod tests_propios {
+    use super::es_propio;
+
+    #[test]
+    fn no_se_borra_lo_de_la_propia_cuenta() {
+        let propios = vec!["51950270105".to_string(), "161087160889568".to_string()];
+        // La sesión con el propio teléfono y con otro dispositivo propio.
+        assert!(es_propio("session-51950270105.0.cbor", &propios));
+        assert!(es_propio("session-161087160889568.7.cbor", &propios));
+        // Una clave de grupo que mandó un dispositivo propio.
+        assert!(es_propio("sender-key-120363363621316758@g.us--161087160889568--7.cbor", &propios));
+        // Lo de otros sí se puede borrar.
+        assert!(!es_propio("session-160305996898368.0.cbor", &propios));
+        assert!(!es_propio("sender-key-120363363621316758@g.us--160305996898368--0.cbor", &propios));
+        // Un número que empieza igual no es el mismo usuario.
+        assert!(!es_propio("session-519502701050.0.cbor", &propios));
+        // Sin lista, nada es propio: el comportamiento de antes.
+        assert!(!es_propio("session-51950270105.0.cbor", &[]));
     }
 }

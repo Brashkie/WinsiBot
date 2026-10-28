@@ -15,7 +15,7 @@
 //
 // Comandos: status diagnose repair reset-signal reset-qr backup restore logs
 
-import 'dotenv/config'
+import './env.js'
 import { createHash } from 'crypto'
 import { spawn } from 'child_process'
 import { cpSync, existsSync, mkdirSync, readFileSync, readdirSync, rmSync, statSync, unlinkSync, writeFileSync } from 'fs'

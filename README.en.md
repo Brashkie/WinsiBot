@@ -1,6 +1,6 @@
 <div align="center">
 
-<img src="https://capsule-render.vercel.app/api?type=waving&color=0:6C63FF,100:00C9FF&height=180&section=header&text=WinsiBot&fontSize=62&fontColor=ffffff&fontAlignY=38&desc=v8.18.0%20%E2%80%94%20Enterprise%20WhatsApp%20Bot&descAlignY=58&descSize=18" width="100%"/>
+<img src="https://capsule-render.vercel.app/api?type=waving&color=0:6C63FF,100:00C9FF&height=180&section=header&text=WinsiBot&fontSize=62&fontColor=ffffff&fontAlignY=38&desc=v9.0.0%20%E2%80%94%20Enterprise%20WhatsApp%20Bot&descAlignY=58&descSize=18" width="100%"/>
 
 <br/>
 
@@ -17,7 +17,7 @@
 
 > High-performance WhatsApp bot with a three-layer multi-language architecture.<br/>
 > No artificial group limit, built for thousands of messages per hour and multiple instances.<br/>
-> v8.18.0 — **The kernels use the whole CPU, and more to play.** `#upscale` from ~121 to ~73 ms with an AVX2 copy picked at startup; one trip to Rust per message instead of three; `#explorar`, `#simular`, `#perfil` as a card and 13 audio effects; Termux starts through the supervisor.<br/>
+> v9.0.0 — **The AI is in-house and included.** Cosxamix — our own AI runtime — is the default AI: `npm install` downloads it, `npm run cosxamix:model` downloads the model sized to your RAM, and the bot starts and watches it by itself. No API key and no Ollama, and 1.6–1.9x faster per message than with candle. Plus the Bad MAC loop and the antiban's false warm-up, fixed.<br/>
 
 <br/>
 
@@ -65,21 +65,20 @@
 | ⚙️ **Session + AI** | Rust / Axum | Atomic creds and snapshots, Bad MAC tracker, rate limiter, intent classification, personality and humour, reputation, style profiles, Ollama and cloud APIs, images |
 | 🧮 **Native kernels** | C + Zig | Anime4K and the JPEG codec, compiled with Zig into the Session API binary. The fastest one is used, measured, and on x86-64 the AVX2 copy if the CPU has it |
 
-### What's new in v8.18.0
+### What's new in v9.0.0
 
-**The kernels use the whole CPU, and more to play.** The full detail, with every measurement, is in the [CHANGELOG](CHANGELOG.md).
+**The AI is in-house and included.** The full detail, with every measurement, is in the [CHANGELOG](CHANGELOG.md).
 
 | Area | Change |
 |------|--------|
-| **Kernels** | A second copy of the Zig kernels for **AVX2** (x86-64-v3), picked at startup if the CPU has it; Anime4K's whole pass in **a single kernel** that writes no intermediate images; and every core, not just up to 8. `#upscale` from **~121 to ~73 ms**, bit-identical output (CI tests both copies) |
-| **Fewer trips to Rust** | Each group message makes **one** trip to the Session API instead of three (`/msg/ingest`): −55% CPU on the Rust side |
-| **`#explorar`** | A 40x40 cave per group with fog of war: everyone moves the same token, with chests, traps, monsters, fountains, secret rooms and a relic that pays everyone who explored. 625 bytes per group and ~10 µs per step |
-| **`#simular`** | Thousands of fights against the `#arena` CPU with four ways of playing, with a 95% margin. The CPU has a Rust copy on every core, which a test requires to match the TypeScript one: against hard, from ±27% to **±2%** |
-| **`#perfil` and audio** | The profile comes as a card (image) and there are **13 audio effects**: `#nightcore`, `#lento`, `#bass`, `#reverb`, `#8d`, `#robot` and more (`#efectos`) |
-| **Termux and console** | `start.sh` skipped the supervisor (no memory flags, no hang detection); not anymore. Startup without decorative waits (−1.7 s), and the console fits narrow terminals |
-| **Cleanup** | An anti-NSFW filter that was never wired up and dead code are gone; clippy at zero |
+| **Cosxamix, the default AI** | Our own AI runtime replaces Ollama as the first choice: `npm install` downloads its binary (7.5 MB, SHA-256 checked, Termux included), `npm run cosxamix:model` downloads the model after asking, sized to your RAM (3B, 1.5B or 0.5B), and the bot starts it in the background, restarts it if it crashes or hangs, and won't start it without a model. Ollama is still three lines of `.env` away |
+| **Faster** | Cosxamix 0.6.0 answers with its in-house engine and kernels: 1.6–1.9x faster per message than with candle, used as the bot uses it, and 11 of 15 correct against 10 |
+| **Fix: "hepein" ignored `.env`** | It asked for `llama3.2:3b` by name on every message: with any other model it answered a template. Now it uses the one in `.env` |
+| **Fix: the Bad MAC loop** | The automatic cleanup deleted the session with the account's own phone, counted every retry as a new error, and reconnected over private chats with nothing to delete. Now a message counts once, only groups clean up, the account's own files are never touched, and a group two cleanups didn't fix isn't cleaned again |
+| **Fix: 40 messages a day after scanning the QR** | The antiban treated the same number linked again as a new number and put it in warm-up. It now remembers each session's number |
+| **More fixes** | `npm run manage` and five other scripts didn't start (`dotenv`); `#restart` didn't save before exiting; the session used `async-mutex` without having it as a dependency; `nodemon` removed |
 
-**To update:** `npm install` (downloads Session API 5.11.0). `ffmpeg` is needed for the audio effects.
+**To update:** `npm install`, and `npm run cosxamix:model` for the model. If your `.env` points to Ollama you stay on Ollama: the new AI is used with no `OLLAMA_URL`, or with OPTION A in `.env.example`.
 
 ---
 
@@ -93,7 +92,7 @@
 | Language | TypeScript 5.x | End-to-end strict typing |
 | WhatsApp | Baileys 6.x | WA Web multi-device protocol |
 | AI and NLP | Rust | Rule-based intents, personality and humour, reputation, style profiles |
-| Language models | Ollama → GPT → Gemini → Claude | Cascade, falling back to local templates if none answer |
+| Language models | Cosxamix (in-house) or Ollama → GPT → Gemini → Claude | Cascade, falling back to local templates if none answer |
 | Session Store | Rust + Axum + SQLite | Atomic creds, delivery tracking, outbox with dead-letter |
 | Heavy compute | C + Zig (`native` feature) | Anime4K kernels with SIMD and an in-house JPEG codec: Zig for what vectorizes, C for what decides bit by bit |
 | Crypto | `@brashkie/signalis-core` | Curve25519 / Ed25519 / HKDF / AES-GCM (Rust NAPI) |
@@ -159,7 +158,7 @@
 <td width="50%">
 
 ### 🤖 Artificial Intelligence
-- Multi-model: **Ollama or Cosxamix (local)** → GPT → Gemini → Claude, **all from Rust**
+- Multi-model: **Cosxamix (the in-house AI, by default) or Ollama** → GPT → Gemini → Claude, **all from Rust**
 - **12 personality modes** per group, with 489 phrases of their own
 - Learns each user's and the group's style, and mirrors it when replying
 - If no model answers, falls back to local templates without repeating recent ones
@@ -201,7 +200,7 @@
 
 ```
 ╔════════════════════════════════════════════════╗
-║                WinsiBot v8.18.0                ║
+║                WinsiBot v9.0.0                 ║
 ╠═════════════════════╦══════════════════════════╣
 ║      TypeScript     ║           Rust           ║
 ║    Node.js :4001    ║                          ║
@@ -219,8 +218,8 @@
 ║  ├───────────────┤  ║ │ nlp      intenciones │ ║
 ║  │  persistence  │  ║ │ person.  12 modos    │ ║
 ║  │   (strenor)   │  ║ │ memory   reputación  │ ║
-║  ├───────────────┤  ║ │ ai_chat  Ollama→GPT→ │ ║
-║  │ authVerifier  │  ║ │          Gemini→     │ ║
+║  ├───────────────┤  ║ │ ai_chat  Cosxamix→   │ ║
+║  │ authVerifier  │  ║ │          GPT→Gemini→ │ ║
 ║  │  Curve25519   │  ║ │          Claude      │ ║
 ║  └───────────────┘  ║ │ convers. perfiles    │ ║
 ║                     ║ │ imagefx  mosaico     │ ║
@@ -243,7 +242,7 @@
 | Node.js | 20.12+ | ✅ | `node --version` |
 | npm | 9.x | ✅ | bundled with Node |
 | Rust + Cargo | 1.75+ | ❌ | only to build the Session API yourself: `npm install` fetches the binary for your platform |
-| Ollama **or** [Cosxamix](https://github.com/Brashkie/Cosxamix) | latest | ❌ | local AI (recommended, 16 GB RAM+). Both speak the same dialect, so switching between them is three lines of `.env` — see `.env.example`. With `.env` pointing at Cosxamix, `npm install` fetches its binary by itself (`npm run cosxamix:fetch` to fetch it anyway), and `npm run cosxamix:model` downloads the model after asking, sized by RAM. With both in place, the bot starts it by itself and watches it |
+| [Cosxamix](https://github.com/Brashkie/Cosxamix) **or** Ollama | 0.6.0 | ❌ | local AI, no API key. Cosxamix is the default and needs no separate install; Ollama is three lines of `.env` away — see `.env.example`. With `.env` pointing at Cosxamix, `npm install` fetches its binary by itself (`npm run cosxamix:fetch` to fetch it anyway), and `npm run cosxamix:model` downloads the model after asking, sized by RAM. With both in place, the bot starts it by itself and watches it |
 | FFmpeg | 6.x | ❌ | animated stickers, voice notes, audio effects, dragon videos. On Windows, Linux and macOS it comes with `npm install` (`ffmpeg-static`); on Termux, `pkg install ffmpeg` |
 | yt-dlp | recent | ❌ | downloads from YouTube and other sites. Executable in `bin/` or on `PATH`; on Termux, `pkg install yt-dlp` |
 
@@ -257,7 +256,7 @@
 > - **Python left the project in 8.15.0.** It hadn't been on any message path since 8.12.0; now the two console tools are gone too, moved to Node. The only external thing that may pull in Python is **yt-dlp**, for the download commands: its releases ship a standalone executable for Windows, Linux and macOS that doesn't need it, and on Termux `pkg install yt-dlp` installs it.
 > - The first Rust build (`npm run rust:build`) takes a few minutes (~3 min on a desktop; considerably longer on a phone) because it compiles the whole dependency tree with LTO. That's expected — don't close the terminal, just let it run (and keep the device from sleeping).
 
-> **Ollama:** Pull a model before starting — `ollama pull llama3` or `ollama pull mistral`. The bot tries Ollama first and silently falls back to cloud APIs.
+> **Local AI:** after `npm install`, `npm run cosxamix:model` downloads the model (it asks first and picks the size from your RAM). Without a model the bot works the same, with the cloud APIs if you have a key or with its templates. To use Ollama instead: OPTION B in `.env.example` and `ollama pull llama3.2:3b`.
 
 ---
 
@@ -322,7 +321,7 @@ The image commands (`#toanime`, `#removebg`, `#upscale`) **work on the phone**, 
 - For autostart on reboot, install the **Termux:Boot** add-on (F-Droid) and drop a script in `~/.termux/boot/` that runs `cd ~/WinsiBot && ./start.sh`.
 - The console adapts to its width: with the phone upright (40–50 columns) each message is one line and the big logo becomes text, instead of wrapping.
 
-> **RAM:** Ollama (local AI) usually isn't viable on an ordinary phone — use the cloud APIs (`OPENAI_API_KEY`/`ANTHROPIC_API_KEY`/`GEMINI_API_KEY`), or let the bot answer with its local template engine, which needs no model at all.
+> **RAM:** `npm run cosxamix:model` picks the model from the phone's RAM — the 3B from 8 GB, the 1.5B from 6, the 0.5B otherwise — and on an ARM with `sdot` Cosxamix uses its kernels for that instruction. If the phone can't cope, the cloud APIs (`OPENAI_API_KEY`/`ANTHROPIC_API_KEY`/`GEMINI_API_KEY`) or the local template engine, which needs no model at all.
 ---
 
 ## Configuration
@@ -344,8 +343,8 @@ LOG_LEVEL=info                           # silent | info | debug | error
 OPENAI_API_KEY=sk-...                    # GPT-4o-mini / DALL-E 3
 ANTHROPIC_API_KEY=sk-ant-...             # Claude Haiku
 GEMINI_API_KEY=AIza...                   # Gemini 1.5 Flash
-OLLAMA_URL=http://localhost:11434        # Local Ollama (default port)
-OLLAMA_MODEL=llama3.2:3b                 # Model to use with Ollama
+OLLAMA_URL=http://127.0.0.1:11435        # Cosxamix (default); Ollama: http://localhost:11434
+OLLAMA_MODEL=qwen2.5-3b-instruct-q3_k_m  # the one `npm run cosxamix:model` downloaded
 
 # ─── Session API (Rust) ───────────────────────────────────────────────────────
 SESSION_API_URL=http://127.0.0.1:3001
@@ -402,8 +401,10 @@ RUST_LOG=winsibot_session_api=info
 | `OPENAI_API_KEY` | — | GPT / DALL-E (optional) |
 | `ANTHROPIC_API_KEY` | — | Claude (optional) |
 | `GEMINI_API_KEY` | — | Gemini (optional) |
-| `OLLAMA_URL` | `http://localhost:11434` | Local Ollama endpoint (optional) |
-| `OLLAMA_MODEL` | `llama3.2:3b` | Ollama model name |
+| `OLLAMA_URL` | `http://127.0.0.1:11435` | The local AI: Cosxamix by default (the bot starts it), or Ollama at `http://localhost:11434` |
+| `OLLAMA_MODEL` | `qwen2.5-3b-instruct-q3_k_m` | The local AI's model |
+| `OLLAMA_TIMEOUT` | `60` | Seconds to wait for the local AI |
+| `COSXAMIX_MOTOR` | `propio` | `candle` uses Cosxamix's previous engine |
 
 </details>
 
@@ -684,7 +685,7 @@ curl -H "x-api-key: YOUR_KEY" http://127.0.0.1:3001/messages/pending
 | `POST` | `/ai/story` | Broken telephone: a twist from ONE fragment (`modo: seguir`) or a title (`modo: titulo`); `text: null` if no AI answered |
 | `POST` | `/ai/summarize` | Summarize a conversation with AI, without personality; `text: null` if no AI answered |
 | `GET` | `/ai/corpus/stats` | Size of the learning corpus |
-| `POST` | `/ai/chat/respond` | AI reply: Ollama → GPT → Gemini → Claude → template |
+| `POST` | `/ai/chat/respond` | AI reply: Cosxamix or Ollama → GPT → Gemini → Claude → template |
 | `POST` | `/ai/chat/imitate` | Reply imitating a user's style |
 | `POST` | `/ai/personality/respond` | Local template reply (no model) |
 | `GET` · `POST` | `/ai/personality/mode` | Active mode and mode list (GET) · change it (POST) |
@@ -807,7 +808,7 @@ WinsiBot/
 │       ├── server.ts                 # API + WS + web/dist static files
 │       ├── auth.ts                   # WhatsApp-linked login (#login <code>)
 │       └── routes/                   # /api/subbots, /api/groups, /api/admin
-├── crates/session-api/               # Session API v5.11.0 (Rust) — workspace in the root Cargo.toml
+├── crates/session-api/               # Session API v5.12.0 (Rust) — workspace in the root Cargo.toml
 │   ├── native/                       # C and Zig kernels, compiled with Zig into the binary
 │   │   ├── lib.zig                   # Root: pulls in the other .zig files
 │   │   ├── anime4k.c                 # push_color and push_gradient (1.35x over Rust)
@@ -832,7 +833,7 @@ WinsiBot/
 │       ├── imagesearch.rs            # Image search and download (Bing)
 │       ├── personality.rs            # Modes, response templates and humour (embedded data)
 │       ├── user_memory.rs            # Per-user reputation and behaviour
-│       ├── ai_chat.rs                # Real AI: Ollama → GPT → Gemini → Claude, falling back to templates
+│       ├── ai_chat.rs                # Real AI: Cosxamix or Ollama → GPT → Gemini → Claude, falling back to templates
 │       ├── rng.rs                    # Cheap randomness (xorshift64*) for phrases and shuffles
 │       ├── conversations.rs          # AI conversations + user and group style profiles (SQLite)
 │       ├── subbots.rs                # SubBot Manager — quotas, state, config hot-reload
@@ -918,10 +919,16 @@ On Windows you also need **Visual Studio Build Tools** (MSVC). Download them fro
 </details>
 
 <details>
-<summary><b>Ollama not responding / AI falls back to cloud</b></summary>
+<summary><b>The AI answers generic phrases / falls back to cloud</b></summary>
 
-Check Ollama is running: `ollama serve`. Pull a model if you haven't: `ollama pull llama3`.  
-The bot checks Ollama availability at every request and falls back to GPT → Gemini → Claude. If none answer, it uses its **local template engine** — 489 phrases across 12 modes, honouring the group's mode and avoiding recent replies — so it always says something. All of that runs in Rust as of 8.11.0: no Python needed.
+First, who answered: every Cosxamix answer leaves a `generado ... ms=...` line in `data/cosxamix/cosxamix.log`. If it isn't there:
+
+- **Just started:** Cosxamix takes ~45 s to load the 3B; until the console says `Cosxamix listo`, the rest of the cascade answers.
+- **Missing binary or model:** the console says so at startup (`Cosxamix: falta ...`) with the command that fixes it: `npm run cosxamix:fetch` or `npm run cosxamix:model`.
+- **`OLLAMA_MODEL` doesn't match** a downloaded model: the bot doesn't start Cosxamix and says which one is missing.
+- **With Ollama:** `ollama serve` and `ollama pull llama3.2:3b`.
+
+If no AI answers, the bot uses its **local template engine** — 489 phrases across 12 modes, honouring the group's mode and avoiding recent repeats.
 
 </details>
 

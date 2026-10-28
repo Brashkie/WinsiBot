@@ -18,6 +18,9 @@ import { existsSync } from 'fs'
 import { join } from 'path'
 
 export const PUERTO_COSXAMIX = '11435'
+/** Lo que se usa si el .env no dice nada: desde la 9.0.0, Cosxamix con el 3B. */
+export const URL_POR_DEFECTO = `http://127.0.0.1:${PUERTO_COSXAMIX}`
+export const MODELO_POR_DEFECTO = 'qwen2.5-3b-instruct-q3_k_m'
 const LOCALES = new Set(['localhost', '127.0.0.1', '[::1]'])
 
 /** Qué pide el .env, si apunta a un Cosxamix en esta máquina. */
@@ -27,13 +30,12 @@ export interface Pedido {
 }
 
 /**
- * Si `OLLAMA_URL` apunta a un Cosxamix local: esta máquina y el puerto 11435.
- * A otra máquina no se arranca nada —ese Cosxamix es de otro—, y al 11434 es
- * Ollama.
+ * Si la IA local es un Cosxamix en esta máquina: el puerto 11435. Sin
+ * `OLLAMA_URL` en el .env, sí —es lo de por defecto desde la 9.0.0—. A otra
+ * máquina no se arranca nada —ese Cosxamix es de otro—, y al 11434 es Ollama.
  */
 export function pedido(env: Record<string, string | undefined>): Pedido | null {
-  const url = env.OLLAMA_URL
-  if (!url) return null
+  const url = env.OLLAMA_URL?.trim() || URL_POR_DEFECTO
   let u: URL
   try {
     u = new URL(url)
@@ -41,8 +43,7 @@ export function pedido(env: Record<string, string | undefined>): Pedido | null {
     return null
   }
   if (!LOCALES.has(u.hostname) || u.port !== PUERTO_COSXAMIX) return null
-  const modelo = env.OLLAMA_MODEL?.trim()
-  return modelo ? { puerto: u.port, modelo } : null
+  return { puerto: u.port, modelo: env.OLLAMA_MODEL?.trim() || MODELO_POR_DEFECTO }
 }
 
 /** Donde viven sus cosas: el binario en bin/, los modelos y el log en data/. */

@@ -10,7 +10,7 @@
 // Necesita la Session API corriendo y SESSION_API_URL/SESSION_API_KEY en el
 // entorno (o en .env).
 
-import 'dotenv/config'
+import './env.js'
 import { pathToFileURL } from 'url'
 import { join } from 'path'
 

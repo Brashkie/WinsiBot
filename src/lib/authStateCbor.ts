@@ -31,24 +31,13 @@
 // además por fsync y deja una copia .bak de la versión anterior, y un creds
 // ilegible se intenta recuperar del .bak antes de rendirse; si tampoco se
 // puede, el roto se aparta con otro nombre en vez de pisarlo, y se dice.
-import { Mutex } from 'async-mutex'
+import { conCandado } from './fileLock.js'
 import { copyFile, mkdir, open, readFile, readdir, rename, stat, unlink, writeFile } from 'fs/promises'
 import { existsSync } from 'fs'
 import { join } from 'path'
 import { encode as cborEncode, decode as cborDecode } from 'cbor-x'
 import { proto, initAuthCreds, BufferJSON } from '@whiskeysockets/baileys'
 import type { AuthenticationState, AuthenticationCreds } from '@whiskeysockets/baileys'
-
-const fileLocks = new Map<string, Mutex>()
-
-function getFileLock(path: string): Mutex {
-  let mutex = fileLocks.get(path)
-  if (!mutex) {
-    mutex = new Mutex()
-    fileLocks.set(path, mutex)
-  }
-  return mutex
-}
 
 const fixFileName = (file: string): string =>
   file.replace(/\//g, '__').replace(/:/g, '-')
@@ -110,61 +99,46 @@ export const useMultiFileAuthStateCBOR = async (
 ): Promise<{ state: AuthenticationState; saveCreds: () => Promise<void> }> => {
   const writeData = async (data: unknown, file: string): Promise<void> => {
     const filePath = cborPathFor(folder, file)
-    const mutex = getFileLock(filePath)
-    await mutex.acquire().then(async release => {
-      try {
-        if (file === CREDS_FILE) {
-          // La versión que está en disco es entera (se escribió así), y es la
-          // última que funcionó: se guarda como .bak antes de reemplazarla.
-          await copyFile(filePath, `${filePath}.bak`).catch(() => {})
-          await atomicWrite(filePath, cborEncode(data), true)
-        } else {
-          await atomicWrite(filePath, cborEncode(data), false)
-        }
-      } finally {
-        release()
+    await conCandado(filePath, async () => {
+      if (file === CREDS_FILE) {
+        // La versión que está en disco es entera (se escribió así), y es la
+        // última que funcionó: se guarda como .bak antes de reemplazarla.
+        await copyFile(filePath, `${filePath}.bak`).catch(() => {})
+        await atomicWrite(filePath, cborEncode(data), true)
+      } else {
+        await atomicWrite(filePath, cborEncode(data), false)
       }
     })
   }
 
   const readData = async (file: string): Promise<any> => {
     const filePath = cborPathFor(folder, file)
-    const mutex = getFileLock(filePath)
-    return mutex.acquire().then(async release => {
+    return conCandado(filePath, async () => {
       try {
+        const buf = await readFile(filePath)
+        return cborDecode(buf)
+      } catch {
+        // Sin .cbor todavía — ¿hay un .json legado de antes de este cambio?
+        const legacyPath = legacyJsonPathFor(folder, file)
+        if (!existsSync(legacyPath)) return null
         try {
-          const buf = await readFile(filePath)
-          return cborDecode(buf)
+          const raw   = await readFile(legacyPath, { encoding: 'utf-8' })
+          const value = JSON.parse(raw, BufferJSON.reviver)
+          await writeFile(filePath, cborEncode(value)).catch(() => {})
+          await unlink(legacyPath).catch(() => {})
+          return value
         } catch {
-          // Sin .cbor todavía — ¿hay un .json legado de antes de este cambio?
-          const legacyPath = legacyJsonPathFor(folder, file)
-          if (!existsSync(legacyPath)) return null
-          try {
-            const raw   = await readFile(legacyPath, { encoding: 'utf-8' })
-            const value = JSON.parse(raw, BufferJSON.reviver)
-            await writeFile(filePath, cborEncode(value)).catch(() => {})
-            await unlink(legacyPath).catch(() => {})
-            return value
-          } catch {
-            return null
-          }
+          return null
         }
-      } finally {
-        release()
       }
     })
   }
 
   const removeData = async (file: string): Promise<void> => {
     const filePath = cborPathFor(folder, file)
-    const mutex = getFileLock(filePath)
-    await mutex.acquire().then(async release => {
-      try {
-        await unlink(filePath).catch(() => {})
-        await unlink(legacyJsonPathFor(folder, file)).catch(() => {})
-      } finally {
-        release()
-      }
+    await conCandado(filePath, async () => {
+      await unlink(filePath).catch(() => {})
+      await unlink(legacyJsonPathFor(folder, file)).catch(() => {})
     })
   }
 

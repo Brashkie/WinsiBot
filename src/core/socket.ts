@@ -58,6 +58,21 @@ const GLOBAL_BAD_MAC_THRESHOLD = 8
 const GLOBAL_BAD_MAC_WINDOW_MS = 60_000
 const GLOBAL_BAD_MAC_COOLDOWN = 30_000 // un clear global es más disruptivo que uno por grupo
 
+// Limpiezas de un mismo grupo antes de dejar de intentarlo (ver _handleBadMac).
+const MAX_LIMPIEZAS_POR_CHAT = 2
+
+// Los ids de mensaje que ya dieron Bad MAC: un mensaje roto llega otra vez
+// con cada reintento, y tiene que contar una vez. Tope de 2000 ids: al pasarlo
+// se olvida el más viejo (un Set recorre en orden de inserción).
+const badMacVistos = new Set<string>()
+function badMacVisto(id: string | null | undefined): boolean {
+  if (!id) return true
+  if (badMacVistos.has(id)) return false
+  badMacVistos.add(id)
+  if (badMacVistos.size > 2000) badMacVistos.delete(badMacVistos.values().next().value!)
+  return true
+}
+
 export class WinsiSocket extends EventEmitter<WinsiEvents> {
   constructor() {
     super()
@@ -156,6 +171,10 @@ export class WinsiSocket extends EventEmitter<WinsiEvents> {
   >()
   // Grupos que están en proceso de clear
   private clearingGroups = new Set<string>()
+  // Cuántas veces se limpió cada grupo en esta corrida, y los que ya no se
+  // limpian más (ver _handleBadMac).
+  private limpiezas = new Map<string, number>()
+  private rendidos = new Set<string>()
 
   // Bad MAC global — ver comentario de GLOBAL_BAD_MAC_THRESHOLD arriba
   private globalBadMacEvents: number[] = [] // timestamps dentro de la ventana
@@ -461,11 +480,13 @@ export class WinsiSocket extends EventEmitter<WinsiEvents> {
         )
       }
 
-      // Recién vinculado: es un número que empieza, y el antiban le aplica el
-      // calentamiento. Las sesiones que ya existían no pasan nunca por acá.
+      // Se escaneó un QR. Con el número, el antiban distingue un número nuevo
+      // —que pasa por el calentamiento— del mismo número vinculado otra vez,
+      // que no (ver `emparejado` en antiban.rs).
       if (isNewLogin) {
-        logger.info('Número vinculado — empieza el calentamiento del antiban')
-        sessionClient.antibanPaired('main')
+        const numero = (state.creds.me?.id ?? '').split('@')[0]!.split(':')[0]!
+        logger.info('QR escaneado — el antiban decide si el número es nuevo')
+        sessionClient.antibanPaired('main', numero || undefined)
       }
 
       if (receivedPendingNotifications && !this.backlogDone) {
@@ -513,6 +534,10 @@ export class WinsiSocket extends EventEmitter<WinsiEvents> {
         }
         this._startZombieWatchdog()
         this._startPresencePulse()
+        // El antiban anota qué número es esta sesión, si no lo sabía: así un
+        // QR escaneado más adelante con el mismo número no la trata de nueva.
+        const numero = (this.sock?.user?.id ?? '').split('@')[0]!.split(':')[0]!
+        if (numero) void sessionClient.antibanNumero('main', numero)
         logger.info(`${config.botName} conectado`)
         this.emit('ready', this.sock!)
 
@@ -585,13 +610,19 @@ export class WinsiSocket extends EventEmitter<WinsiEvents> {
         const meLabel = msg.key.fromMe ? color.dim('fromMe') : color.cyan('entrante')
 
         if (!msg.message) {
-          const groupJid = msg.key.remoteJid ?? ''
+          // Un mensaje que no se descifra vuelve a llegar con cada reintento
+          // que Baileys pide al remitente: se cuenta y se muestra UNA vez. Antes
+          // contaba cada llegada, y dos o tres mensajes rotos llenaban solos el
+          // umbral de limpieza.
+          if (!badMacVisto(msg.key.id)) continue
           console.log(
             `  ${color.red('◈')} ${color.bold(color.red('Bad MAC'))}  ${chatLabel} ${color.dim(jidShort)}  ${meLabel}`,
           )
-          // ─── Bad MAC flood detection — por grupo, aislado ──────────────────
-          // Un grupo con flood NO afecta a los demás grupos.
-          this._handleBadMac(groupJid)
+          // Solo un grupo tiene algo propio que limpiar: sus claves de grupo.
+          // Un privado no —borrar ahí daba 0 archivos y reconectaba igual, y
+          // al reconectar WhatsApp vuelve a mandar los mismos mensajes—: ahí
+          // lo resuelve el reintento de Baileys, sin tocar nada.
+          if (isGroup) this._handleBadMac(msg.key.remoteJid ?? '')
           continue
         }
 
@@ -745,6 +776,19 @@ export class WinsiSocket extends EventEmitter<WinsiEvents> {
   private _handleBadMac(groupJid: string): void {
     if (!groupJid) return
     if (this.clearingGroups.has(groupJid)) return
+    // Si ya se limpió dos veces y sigue igual, limpiar no lo arregla: lo que
+    // falla es del lado de quien manda, y lo resuelve el reintento de Baileys.
+    // Seguir limpiando solo agrega reconexiones, y cada una trae de vuelta
+    // los mismos mensajes. Visto: el mismo grupo limpiado 4 veces seguidas.
+    if ((this.limpiezas.get(groupJid) ?? 0) >= MAX_LIMPIEZAS_POR_CHAT) {
+      if (!this.rendidos.has(groupJid)) {
+        this.rendidos.add(groupJid)
+        logger.warn(
+          `[socket] grupo ${groupJid.replace('@g.us', '')}: ya se limpió ${MAX_LIMPIEZAS_POR_CHAT} veces y siguen los Bad MAC — no se limpia más; quedan los reintentos de Baileys`,
+        )
+      }
+      return
+    }
     // Ver comentario de backlogDone: en el backlog no se limpia nada.
     if (!this.backlogDone) {
       this.backlogBadMacs++
@@ -771,6 +815,18 @@ export class WinsiSocket extends EventEmitter<WinsiEvents> {
       })
   }
 
+  /**
+   * Los usuarios de la propia cuenta, por número y por LID, sin dispositivo
+   * ni dominio: lo que la limpieza no puede tocar nunca (ver `es_propio` en
+   * crates/session-api/src/routes.rs).
+   */
+  private propios(): string[] {
+    const u = this.sock?.user as { id?: string; lid?: string } | undefined
+    return [u?.id, u?.lid]
+      .map((j) => (j ?? '').split('@')[0]!.split(':')[0]!)
+      .filter(Boolean)
+  }
+
   private _globalBadMacCheck(): void {
     const now = Date.now()
     if (now - this.globalBadMacClearedAt < GLOBAL_BAD_MAC_COOLDOWN) return
@@ -792,7 +848,7 @@ export class WinsiSocket extends EventEmitter<WinsiEvents> {
       `[socket] ${count} Bad MACs repartidos entre varios grupos en los últimos ${GLOBAL_BAD_MAC_WINDOW_MS / 1000}s — sesión corrupta a nivel global, limpiando Signal + reconectando`,
     )
     import('@lib/session.js')
-      .then(({ sessionClient }) => sessionClient.clearSignalSessions())
+      .then(({ sessionClient }) => sessionClient.clearSignalSessions(undefined, this.propios()))
       .then((res) => {
         logger.info(
           `[socket] ${res.deleted} archivos Signal eliminados (clear global) — reconectando`,
@@ -830,11 +886,12 @@ export class WinsiSocket extends EventEmitter<WinsiEvents> {
 
   private _doClearForGroup(groupJid: string, count: number, source: string): void {
     this.clearingGroups.add(groupJid)
+    this.limpiezas.set(groupJid, (this.limpiezas.get(groupJid) ?? 0) + 1)
     logger.warn(
       `[socket] ${count} Bad MACs en grupo ${groupJid.replace('@g.us', '')} (${source}) — limpiando Signal + reconectando`,
     )
     import('@lib/session.js')
-      .then(({ sessionClient }) => sessionClient.clearSignalSessions(groupJid))
+      .then(({ sessionClient }) => sessionClient.clearSignalSessions(groupJid, this.propios()))
       .then((res) => {
         logger.info(
           `[socket] ${res.deleted} archivos Signal eliminados (scope: grupo) — reconectando`,

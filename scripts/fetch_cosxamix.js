@@ -4,9 +4,10 @@
 // Ollama, así que el bot lo usa con tres líneas del .env (ver .env.example).
 // Esto es lo que faltaba para que tampoco haya que bajarlo a mano.
 //
-// **Solo se baja si se va a usar**: en el postinstall, únicamente si el .env
-// apunta a Cosxamix (puerto 11435). Quien usa Ollama no paga ni un byte. Para
-// bajarlo igual: `npm run cosxamix:fetch`, que lo baja siempre.
+// **Solo se baja si se va a usar**: desde la 9.0.0 Cosxamix es la IA por
+// defecto, así que se baja salvo que el .env apunte a otro lado —Ollama, otra
+// máquina—. Sin .env todavía, también: es lo que va a usar. Quien usa Ollama no
+// paga ni un byte. Para bajarlo igual: `npm run cosxamix:fetch`.
 //
 // La versión va fijada en package.json (`config.cosxamix`): cada versión del
 // bot sabe con qué Cosxamix se probó. `COSXAMIX_VERSION` la cambia, para
@@ -36,16 +37,23 @@ export function version(pkg = JSON.parse(readFileSync(join(ROOT, 'package.json')
 }
 
 /**
- * Si el .env apunta a Cosxamix: un `OLLAMA_URL` sin comentar con el puerto
- * 11435. Se lee a mano y no con un cargador de .env porque esto corre en el
- * postinstall, antes de que haya nada compilado.
+ * Si se va a usar Cosxamix: un `OLLAMA_URL` sin comentar con el puerto 11435,
+ * o ninguno —lo de por defecto desde la 9.0.0—. Se lee a mano y no con un
+ * cargador de .env porque esto corre en el postinstall, antes de que haya nada
+ * compilado.
  */
 export function loUsa(textoEnv) {
   for (const linea of (textoEnv ?? '').split(/\r?\n/)) {
     const m = linea.match(/^\s*OLLAMA_URL\s*=\s*["']?([^"'#\s]+)/)
-    if (m) return new URL(m[1]).port === PUERTO
+    if (m) {
+      try {
+        return new URL(m[1]).port === PUERTO
+      } catch {
+        return false
+      }
+    }
   }
-  return false
+  return true
 }
 
 /** El nombre del archivo en la release, como lo arma su release.yml. */
@@ -57,7 +65,7 @@ async function main() {
   const siempre = process.argv.includes('--siempre')
   if (!siempre) {
     const env = join(ROOT, '.env')
-    if (!existsSync(env) || !loUsa(readFileSync(env, 'utf8'))) return // usa Ollama: nada que bajar
+    if (!loUsa(existsSync(env) ? readFileSync(env, 'utf8') : '')) return // usa Ollama u otro: nada que bajar
   }
 
   const exe = platform() === 'win32' ? 'cosxamix.exe' : 'cosxamix'

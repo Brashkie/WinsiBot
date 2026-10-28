@@ -207,7 +207,7 @@ const D: Record<string, Traduccion> = {
   addowner:    { en: 'Add or remove an owner (runtime)', pt: 'Adiciona ou remove um dono (em execução)' },
   addpremium:  { en: 'Add or remove premium from a user', pt: 'Adiciona ou tira o premium de um usuário' },
   resetuser:   { en: 'Reset all of a user\'s data', pt: 'Reinicia todos os dados de um usuário' },
-  restart:     { en: 'Restart the bot (needs PM2 or nodemon)', pt: 'Reinicia o bot (precisa de PM2 ou nodemon)' },
+  restart:     { en: 'Restart the bot: saves everything and exits, and the npm start supervisor brings it back', pt: 'Reinicia o bot: salva tudo e sai, e o supervisor do npm start o levanta de novo' },
   setbio:      { en: 'Change the bot\'s WhatsApp bio/status', pt: 'Muda o recado do bot no WhatsApp' },
   setname:     { en: 'Change the bot\'s WhatsApp name', pt: 'Muda o nome do bot no WhatsApp' },
   setpp:       { en: 'Change the bot\'s profile picture', pt: 'Muda a foto de perfil do bot' },

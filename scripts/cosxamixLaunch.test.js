@@ -15,12 +15,17 @@ describe('pedido', () => {
     expect(pedido({ ...env, OLLAMA_URL: 'http://localhost:11435/' })).not.toBeNull()
   })
 
-  it('Ollama, otra máquina o nada: no es para arrancar', () => {
+  it('Ollama u otra máquina: no es para arrancar', () => {
     expect(pedido({ ...env, OLLAMA_URL: 'http://localhost:11434' })).toBeNull()
     expect(pedido({ ...env, OLLAMA_URL: 'http://192.168.1.5:11435' })).toBeNull()
     expect(pedido({ ...env, OLLAMA_URL: 'no es una url' })).toBeNull()
-    expect(pedido({ OLLAMA_MODEL: MODELO })).toBeNull()
-    expect(pedido({ OLLAMA_URL: env.OLLAMA_URL })).toBeNull()
+  })
+
+  it('sin nada en el .env, Cosxamix con el 3B: lo de por defecto desde la 9.0.0', () => {
+    expect(pedido({})).toEqual({ puerto: '11435', modelo: MODELO })
+    expect(pedido({ OLLAMA_URL: '' })).toEqual({ puerto: '11435', modelo: MODELO })
+    expect(pedido({ OLLAMA_MODEL: 'qwen2.5-0.5b-instruct-q4_k_m' })?.modelo).toBe('qwen2.5-0.5b-instruct-q4_k_m')
+    expect(pedido({ OLLAMA_URL: env.OLLAMA_URL })?.modelo).toBe(MODELO)
   })
 })
 

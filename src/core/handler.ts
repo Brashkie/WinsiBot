@@ -260,29 +260,33 @@ async function resolveGroupRoles(
   }
 }
 
-// ─── AI triggers — cada palabra dispara un modelo Ollama distinto ────────────
-// 'bot' se sacó del set — es muy genérico y disparaba falsos positivos en
-// conversación normal. Las 4 palabras que quedan son lo bastante específicas
-// para no confundirse con texto normal del chat.
-const AI_MODEL_TRIGGERS: Record<string, string> = {
-  hepein:   'llama3.2:3b',
+// ─── AI triggers ──────────────────────────────────────────────────────────────
+// Las palabras que hacen hablar a la IA. 'bot' se sacó del set — es muy
+// genérico y disparaba falsos positivos en conversación normal.
+//
+// "hepein" usa el modelo del .env (OLLAMA_MODEL). Hasta la 8.18.0 pedía
+// `llama3.2:3b` por nombre, siempre: con cualquier otro modelo —el de
+// Cosxamix, u otro de Ollama— la Session API no lo encontraba, no probaba
+// nada más y contestaba con una plantilla. Las otras palabras piden un modelo
+// concreto de Ollama; si no está instalado, se usa el del .env.
+const AI_TRIGGER_WORDS = new Set(['hepein', 'brashkie', 'winsi', 'winsito'])
+const AI_MODEL_BY_WORD: Record<string, string> = {
   brashkie: 'mistral',
   winsi:    'phi3',
   winsito:  'phi3',
 }
-const DEFAULT_AI_MODEL = AI_MODEL_TRIGGERS.hepein!
 
-function resolveAIModel(text: string): string | null {
-  const words = text.toLowerCase().trim().split(/\s+/)
-  for (const word of words) {
-    const model = AI_MODEL_TRIGGERS[word]
+/** El modelo que pide una palabra del mensaje, o undefined para el del .env. */
+function resolveAIModel(text: string): string | undefined {
+  for (const word of text.toLowerCase().trim().split(/\s+/)) {
+    const model = AI_MODEL_BY_WORD[word]
     if (model) return model
   }
-  return null
+  return undefined
 }
 
 function isAITrigger(text: string, botName: string): boolean {
-  if (resolveAIModel(text) !== null) return true
+  if (text.toLowerCase().trim().split(/\s+/).some(w => AI_TRIGGER_WORDS.has(w))) return true
   if (text.toLowerCase().includes(botName.toLowerCase())) return true
   return false
 }
@@ -327,7 +331,7 @@ async function handleAIResponse(
   ctx:   BotContext,
   sock:  WASocket,
   msg:   WAMessage,
-  model: string = DEFAULT_AI_MODEL,
+  model?: string,
 ): Promise<boolean> {
   try {
     // 1. Intención rápida (Rust → Python)
@@ -373,7 +377,8 @@ async function handleAIResponse(
         groupJid:  ctx.isGroup ? ctx.jid : '',
         senderJid: ctx.sender,
         intent,
-        model,
+        // Sin palabra que pida otro, nada: la Session API usa OLLAMA_MODEL.
+        ...(model ? { model } : {}),
         history,
         force:     true,   // omitir cooldown interno — ya lo controla handler
       }),
@@ -682,7 +687,7 @@ export async function handleMessage(msg: WAMessage, sock: WASocket): Promise<voi
         const botName = sock.user?.name ?? 'hepein'
         const lower   = ctx.text.toLowerCase().trim()
         const words   = lower.split(/\s+/)
-        const aiModel = resolveAIModel(ctx.text) ?? DEFAULT_AI_MODEL
+        const aiModel = resolveAIModel(ctx.text)
 
         // Responder (citar) un mensaje que mandó el propio bot también cuenta
         // como dirigirse a él directamente — antes solo se detectaba mencionar
