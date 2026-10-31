@@ -4,7 +4,7 @@ Todos los cambios notables de WinsiBot se documentan en este archivo, versión p
 
 ---
 
-## [9.2.0] — sin publicar
+## [9.2.0] — 2026-10-30
 
 **El primer módulo en Ada/SPARK: un antirrobo de grupos cuya decisión está demostrada.** Si
 alguien que no es el dueño degrada o saca a un admin protegido —o al bot, que es el primer paso de

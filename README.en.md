@@ -1,6 +1,6 @@
 <div align="center">
 
-<img src="https://capsule-render.vercel.app/api?type=waving&color=0:6C63FF,100:00C9FF&height=180&section=header&text=WinsiBot&fontSize=62&fontColor=ffffff&fontAlignY=38&desc=v9.1.0%20%E2%80%94%20Enterprise%20WhatsApp%20Bot&descAlignY=58&descSize=18" width="100%"/>
+<img src="https://capsule-render.vercel.app/api?type=waving&color=0:6C63FF,100:00C9FF&height=180&section=header&text=WinsiBot&fontSize=62&fontColor=ffffff&fontAlignY=38&desc=v9.2.0%20%E2%80%94%20Enterprise%20WhatsApp%20Bot&descAlignY=58&descSize=18" width="100%"/>
 
 <br/>
 
@@ -9,7 +9,7 @@
 [![Rust](https://img.shields.io/badge/Rust-1.75%2B-CE422B?style=for-the-badge&logo=rust&logoColor=white)](https://rust-lang.org)
 
 [![License](https://img.shields.io/badge/License-GPL--3.0-blue?style=flat-square)](LICENSE)
-[![Version](https://img.shields.io/badge/Version-9.1.0-6C63FF?style=flat-square)](CHANGELOG.md)
+[![Version](https://img.shields.io/badge/Version-9.2.0-6C63FF?style=flat-square)](CHANGELOG.md)
 [![Platform](https://img.shields.io/badge/Platform-Windows%20%7C%20Linux%20%7C%20macOS%20%7C%20Android-lightgrey?style=flat-square)](https://github.com/Brashkie/WinsiBot)
 [![PRs Welcome](https://img.shields.io/badge/PRs-welcome-brightgreen?style=flat-square)](https://github.com/Brashkie/WinsiBot/pulls)
 
@@ -17,7 +17,7 @@
 
 > High-performance WhatsApp bot with a three-layer multi-language architecture.<br/>
 > No artificial group limit, built for thousands of messages per hour and multiple instances.<br/>
-> v9.1.0 — **The AI answers much sooner and the bot weighs less.** From the second message of a chat on, the AI —Cosxamix, our own, included— only reads what's new: 10.2 s → 0.67 s. With Cosxamix 0.7.0, a group's first message drops from 6.0 to 3.5 s. Four dependencies out (from 330 packages to 286), video stickers 2.3x faster, and `#pay 1.000` no longer pays 1.<br/>
+> v9.2.0 — **Group anti-takeover, proven.** If someone demotes or removes a protected admin, or the bot, WinsiBot reverts it, revokes the link and warns. What to do is decided by an Ada/SPARK function whose guarantees GNATprove proves for every input: it never acts against a protected member. And since 9.1.0, the AI only reads what is new in each chat: 10.2 s → 0.67 s.<br/>
 
 <br/>
 
@@ -66,20 +66,17 @@
 | 🛡 **Anti-takeover** | Ada/SPARK | The group anti-takeover decision, its guarantees proven by GNATprove for every input, linked into the Session API |
 | 🧮 **Native kernels** | C + Zig | Anime4K and the JPEG codec, compiled with Zig into the Session API binary. The fastest one is used, measured, and on x86-64 the AVX2 copy if the CPU has it |
 
-### What's new in v9.1.0
+### What's new in v9.2.0
 
-**The AI answers much sooner and the bot weighs less.** The full detail, with every measurement, is in the [CHANGELOG](CHANGELOG.md).
+**Group anti-takeover, with its decision proven in Ada/SPARK.** The full detail is in the [CHANGELOG](CHANGELOG.md).
 
 | Area | Change |
 |------|--------|
-| **The AI no longer rereads the *system* prompt** | From the second message of a chat on, it only reads the new message: **10.2 s → 0.67 s**. And the start of the *system* prompt, the same in every group, is read once for all of them: a group's first message drops from **6.0 to 3.5 s**. The answer is the same |
-| **Cosxamix 0.7.0** | Reads the prompt 1.7x faster and generates each word 3–5% faster, with the same text |
-| **Lighter** | Out go `wa-sticker-formatter`, `qrcode` and `@msgpack/msgpack`, replaced by our own code compared byte by byte against them, and `cheerio`, by the parser it used inside: **from 330 packages to 286**. `dist/` goes from 1,477 files to 370 |
-| **Faster stickers** | A video becomes a sticker in a single ffmpeg pass (2.6 → 1.1 s and the file from 301 to 114 KB), and a large photo comes out at the size WhatsApp shows (326 → 18 ms) |
-| **Fix: `#pay 1.000` paid 1** | The economy commands read amounts with or without a thousands separator, and reject anything that isn't a number |
-| **More fixes** | yt-dlp couldn't find ffmpeg without one of our own in `bin/`; `#ig` waited forever if the API hung; the webhook answered 500 to an unknown event; out goes the scheduler, which never had a job, and its `run_job` event |
+| **`#antirrobo`** | If someone unprotected demotes or removes a protected member —the group creator, the bot owners and up to 10 marked ones— or the bot, the bot takes their admin away, reverts it, revokes the link and warns by private message. Without being admin, it only warns. **Only a protected member can manage it**: if any admin could turn it off, the attacker would do that before the takeover |
+| **Proven with SPARK** | What to do is decided by an Ada/SPARK function, and GNATprove proves for every input that it never acts against a protected member or the bot, never without knowing who did it, and has no runtime errors: 13 of 13. CI proves it again on every push |
+| **Nothing per message** | It only runs when an admin is demoted or removed in a group with the anti-takeover on. Linked into the Session API, the function is 17 instructions. On Termux a Rust copy decides, compared against Ada on all 1,280 possible inputs |
 
-**To update:** `npm install` downloads Cosxamix 0.7.0 and Session API 5.13.0; on Windows, with the bot stopped, because a `.exe` in use can't be replaced. If you called the webhook's `run_job` event, it never ran anything: it now answers 422.
+**To update:** `npm install`, with the bot stopped on Windows. Then, in each group you want to protect: `#antirrobo on` (the group creator or a bot owner can turn it on) and `#antirrobo proteger @user` to add admins.
 
 ---
 
@@ -202,7 +199,7 @@
 
 ```
 ╔════════════════════════════════════════════════╗
-║                WinsiBot v9.1.0                 ║
+║                WinsiBot v9.2.0                 ║
 ╠═════════════════════╦══════════════════════════╣
 ║      TypeScript     ║           Rust           ║
 ║    Node.js :4001    ║                          ║

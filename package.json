@@ -1,7 +1,7 @@
 {
   "name": "winsi-bot",
-  "version": "9.1.0",
-  "description": "WinsiBot v9.1.0 - Ultralight WhatsApp bot with its own local AI: Cosxamix, downloaded and started by the bot itself, answers by default with no API key and no Ollama. TypeScript core, Rust Session API, and C and Zig kernels (AVX2 copy picked at startup). Speaks Spanish, English and Portuguese; RPG economy, group cave exploration, arena with a Monte Carlo simulator, audio effects and image tools. Install is `npm install` and nothing else: the Session API binary is fetched prebuilt for your platform, Termux included, with its SHA-256 verified.",
+  "version": "9.2.0",
+  "description": "WinsiBot v9.2.0 - Ultralight WhatsApp bot with its own local AI: Cosxamix, downloaded and started by the bot itself, answers by default with no API key and no Ollama. TypeScript core, Rust Session API, and C and Zig kernels (AVX2 copy picked at startup). Speaks Spanish, English and Portuguese; RPG economy, group cave exploration, arena with a Monte Carlo simulator, audio effects and image tools. Install is `npm install` and nothing else: the Session API binary is fetched prebuilt for your platform, Termux included, with its SHA-256 verified.",
   "main": "dist/index.js",
   "type": "module",
   "scripts": {
