@@ -27,7 +27,8 @@ fn main() {
 /// que se enlaza dentro del binario.
 ///
 /// `-gnatp` quita los chequeos en tiempo de ejecución: GNATprove ya demostró
-/// que ninguno puede fallar (`alr exec -- gnatprove -P ada/group_guard.gpr`).
+/// que ninguno puede fallar (desde ada/: `alr build`, que genera config/, y
+/// `alr exec -- gnatprove -P group_guard.gpr`).
 /// El paquete es Pure y sin elaboración, así que el objeto no pide el runtime
 /// de Ada: no tiene ni un símbolo sin resolver, y enlaza también con MSVC.
 #[cfg(feature = "ada")]

@@ -111,6 +111,13 @@ jobs:
         with:
           version: "2.1.1"
 
+      # Alire genera config/ —que el .gpr importa y está en .gitignore— al
+      # compilar el crate, no con `alr exec`. Compilar primero, además, pasa el
+      # código por todas las advertencias y el estilo de Ada.
+      - name: Compilar el crate de Ada
+        working-directory: crates/session-api/ada
+        run: alr -n build
+
       - name: Demostrar con GNATprove
         working-directory: crates/session-api/ada
         run: alr -n exec -- gnatprove -P group_guard.gpr --level=4 -j0 --checks-as-errors=on
