@@ -4,7 +4,7 @@
 import { describe, expect, it } from 'vitest'
 import { existsSync, readFileSync } from 'fs'
 import sharp from 'sharp'
-import { Exif, extractMetadata } from 'wa-sticker-formatter'
+import { escribirExif, leerExif } from '../src/lib/webpExif.ts'
 import { leerMeta } from '../src/lib/stickerMeta.ts'
 import { esAnimado } from '../src/lib/mime.ts'
 import { rellenar } from '../src/lib/welcomeTemplate.ts'
@@ -46,8 +46,8 @@ describe('stickers', () => {
   it('#take cambia pack y autor sin tocar la imagen, también en un animado', async () => {
     for (const animado of [false, true]) {
       const original = await webp(animado)
-      const nuevo = await new Exif({ pack: 'Pack de otro', author: 'Yo' }).add(original)
-      const meta = await extractMetadata(nuevo)
+      const nuevo = escribirExif(original, { pack: 'Pack de otro', author: 'Yo' })
+      const meta = leerExif(nuevo)
       expect(meta['sticker-pack-name']).toBe('Pack de otro')
       expect(meta['sticker-pack-publisher']).toBe('Yo')
       // Los mismos píxeles, cuadro por cuadro: no se recodificó.

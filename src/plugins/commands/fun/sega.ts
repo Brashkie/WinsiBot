@@ -31,11 +31,6 @@ const command: Command = {
       } catch {}
     }
 
-    const targetName = args.filter(a => !a.startsWith('@')).join(' ').trim()
-                    || pushName
-                    || targetNum
-                    || 'alguien'
-
     const sent = await sock.sendMessage(jid, {
       text: `Ahora le voy a hacer una paja a @${targetNum}`,
       mentions: [finalJid],

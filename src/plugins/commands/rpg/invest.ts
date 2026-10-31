@@ -3,6 +3,7 @@ import { safeSend, sendCritical } from '@lib/media_sender.js'
 import { logger } from '@core/logger.js'
 import { getUserData, patchUserData, isOnCooldown, setCooldown, getCooldownLeft, fmtCooldown } from '@core/events.js'
 import { market, resolveSymbol, fmtPrice, fmtPct, trendArrow, TIMEFRAMES } from '@lib/market.js'
+import { montoDe } from '@lib/amount.js'
 
 // ─── Apuestas pendientes (una por usuario) ─────────────────────────────────────
 
@@ -140,8 +141,8 @@ const command: Command = {
       return
     }
 
-    const amount = parseInt(amtArg)
-    if (isNaN(amount) || amount < 10) {
+    const amount = montoDe(amtArg)
+    if (Number.isNaN(amount) || amount < 10) {
       await safeSend(() => sock.sendMessage(jid, {
         text: `✗ Monto mínimo: ¥10`,
       }, { quoted: msg }))

@@ -9,6 +9,7 @@ import {
 import { safeSend, sendCritical } from '@lib/media_sender.js'
 import { randomNumber as rand } from '@lib/utils.js'
 import type { Command } from '../../../types/index.js'
+import { montoDe } from '@lib/amount.js'
 
 // Números rojos en la ruleta estándar (0-36)
 const RED_NUMS = new Set([1, 3, 5, 7, 9, 12, 14, 16, 18, 19, 21, 23, 25, 27, 30, 32, 34, 36])
@@ -82,8 +83,8 @@ const command: Command = {
       return
     }
 
-    const amount = parseInt(amtArg)
-    if (isNaN(amount) || amount < 10) {
+    const amount = montoDe(amtArg)
+    if (Number.isNaN(amount) || amount < 10) {
       await safeSend(() =>
         sock.sendMessage(
           jid,
@@ -127,7 +128,7 @@ const command: Command = {
       betColor = 'green'
     } else {
       const n = parseInt(betArg)
-      if (isNaN(n) || n < 0 || n > 36) {
+      if (Number.isNaN(n) || n < 0 || n > 36) {
         await safeSend(() =>
           sock.sendMessage(
             jid,

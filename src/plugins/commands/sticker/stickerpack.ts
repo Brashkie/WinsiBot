@@ -7,6 +7,7 @@ interface StickerPackResponse {
 }
 
 import { sleep } from '@lib/utils.js'
+import { stickerDeImagen } from '@lib/sticker.js'
 
 const command: Command = {
   name:        'stickerpack',
@@ -71,14 +72,7 @@ const command: Command = {
         })
         const buf = Buffer.from(imgRes.data)
 
-        // Cargado al usarlo: ver lib/sticker.ts.
-        const { createSticker, StickerTypes } = await import('wa-sticker-formatter')
-        const webp = await createSticker(buf, {
-          pack:    config.botName,
-          author:  'Hepein',
-          type:    StickerTypes.DEFAULT,
-          quality: 50,
-        })
+        const webp = await stickerDeImagen(buf, { pack: config.botName, author: 'Hepein', calidad: 50 })
 
         await sock.sendMessage(jid, { sticker: webp }, { quoted: msg })
         sent2++

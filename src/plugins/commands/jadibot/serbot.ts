@@ -16,7 +16,7 @@ import { logger } from '@core/logger.js'
 import { config } from '@config'
 import { color, themes } from 'ansimax'
 import pino from 'pino'
-import qrcode from 'qrcode'
+import { qrPng } from '@lib/qr.js'
 import path from 'path'
 import fs from 'fs'
 import { rustRequest } from '@lib/rustHttp.js'
@@ -400,7 +400,7 @@ export async function startSubBot(
     if (qr && method === 'qr' && !qrSent) {
       qrSent = true
       try {
-        const qrBuffer = await qrcode.toBuffer(qr, { scale: 8 })
+        const qrBuffer = await qrPng(qr, 8)
 
         qrMsg = await safeSend(() => sock.sendMessage(chatJid, {
           image:   qrBuffer,

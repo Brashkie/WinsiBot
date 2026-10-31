@@ -150,7 +150,7 @@ const command: Command = {
     const numFrom = getNumber(sender)
     const numTo   = getNumber(targetJid)
 
-    const sent = await sock.sendMessage(jid, {
+    await sock.sendMessage(jid, {
       text: [
         `◆ @${numFrom} te ha enviado una solicitud de intercambio.`,
         ``,

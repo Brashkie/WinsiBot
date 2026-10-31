@@ -2,8 +2,7 @@ import './lib/env.js'
 import readline from 'readline'
 import { spawn, type ChildProcess } from 'child_process'
 import { join, resolve } from 'path'
-import { closeSync, existsSync, mkdirSync, openSync } from 'fs'
-import ffmpegStatic from 'ffmpeg-static'
+import { closeSync, mkdirSync, openSync } from 'fs'
 import { winsiSocket } from '@core/socket.js'
 import { handleMessage, getActiveHandlerCount } from '@core/handler.js'
 import { loadCommands } from '@plugins/commands/index.js'
@@ -18,16 +17,6 @@ import { color, gradient, loader, ascii, themes, configure, components, BG, anim
 import { versionDelBot } from '@lib/version.js'
 import { FALLOS_PARA_COLGADO, planear, reintentar, rutas } from '@lib/cosxamixLaunch.js'
 
-// ffmpeg-static ya era una dependencia del proyecto, pero nada la usaba —
-// fluent-ffmpeg (usado por wa-sticker-formatter para stickers animados desde
-// video/GIF) buscaba "ffmpeg" en el PATH del sistema y fallaba si no estaba
-// instalado ahí. FFMPEG_PATH es la variable que fluent-ffmpeg respeta antes
-// de intentar el PATH — apuntarla acá, bien al inicio, resuelve el problema
-// para cualquier código que use fluent-ffmpeg en el proceso, sin necesidad
-// de tener ffmpeg instalado en la máquina.
-if (ffmpegStatic && existsSync(ffmpegStatic)) {
-  process.env.FFMPEG_PATH = ffmpegStatic
-}
 
 // Tema global — 'matrix' (verde/negro) en vez de 'dracula': recolorea TODO
 // lo que usa themes.success/warning/error/style en toda la consola (no solo
@@ -112,13 +101,6 @@ process.on('uncaughtException', (err) => {
     // sub-bot reconnect failures — isolated per bot, never fatal
     'reconexión falló', 'startSubBot error', 'restore falló',
     'requestPairingCode', 'Cannot read properties of null',
-    // fluent-ffmpeg (vía wa-sticker-formatter) emite 'error' en un
-    // ChildProcess/Stream interno sin listener cuando falla — eso lo hace
-    // un throw genuinamente no capturable con try/catch normal desde el
-    // comando que lo llamó. Con FFMPEG_PATH ya seteado (ver arriba) esto no
-    // debería pasar más, pero si el binario bundleado llega a fallar en
-    // algún entorno, que se pierda solo ese comando, no todo el bot.
-    'Cannot find ffmpeg', 'Cannot find ffprobe',
   ]
   if (NON_FATAL.some(e => msg.includes(e))) {
     logger.warn({ msg }, 'Error de red ignorado (no fatal)')

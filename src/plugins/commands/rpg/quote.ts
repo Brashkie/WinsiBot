@@ -3,6 +3,7 @@ import { safeSend } from '@lib/media_sender.js'
 import { getUserData, patchUserData } from '@core/events.js'
 import { market, resolveSymbol, fmtPrice, fmtPct, trendArrow } from '@lib/market.js'
 import { enData, leerJson, guardarJson, esObjeto } from '@lib/jsonFile.js'
+import { montoDe } from '@lib/amount.js'
 
 // ─── Portafolio spot (comprar y mantener) ────────────────────────────────────
 
@@ -152,8 +153,8 @@ const command: Command = {
         return
       }
 
-      const cost = parseInt(amtArg)
-      if (isNaN(cost) || cost < 50) {
+      const cost = montoDe(amtArg)
+      if (Number.isNaN(cost) || cost < 50) {
         await safeSend(() => sock.sendMessage(jid, {
           text: `✗ Monto mínimo: ¥50`,
         }, { quoted: msg }))
@@ -234,11 +235,10 @@ const command: Command = {
 
       const pos      = positions[idx]!
       const curPrice = asset.price
-      const totalVal = pos.quantity * curPrice
       const sellAll  = !amtArg || amtArg.toLowerCase() === 'todo'
 
-      const sellCost = sellAll ? pos.cost : parseInt(amtArg ?? '0')
-      if (!sellAll && (isNaN(sellCost) || sellCost < 1)) {
+      const sellCost = sellAll ? pos.cost : montoDe(amtArg ?? '0')
+      if (!sellAll && (Number.isNaN(sellCost) || sellCost < 1)) {
         await safeSend(() => sock.sendMessage(jid, {
           text: `✗ Monto inválido`,
         }, { quoted: msg }))

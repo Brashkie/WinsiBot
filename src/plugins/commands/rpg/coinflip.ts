@@ -4,6 +4,7 @@ import {
   isOnCooldown, setCooldown, getCooldownLeft, fmtCooldown,
 } from '@core/events.js'
 import { safeSend, sendCritical } from '@lib/media_sender.js'
+import { montoDe } from '@lib/amount.js'
 
 const CD = 20_000  // 20s entre tiradas
 
@@ -32,17 +33,17 @@ const command: Command = {
 
     if (first === 'cara' || first === 'heads') {
       choice = 'cara'
-      amount = parseInt(second ?? '0')
+      amount = montoDe(second ?? '0')
     } else if (first === 'cruz' || first === 'tails') {
       choice = 'cruz'
-      amount = parseInt(second ?? '0')
+      amount = montoDe(second ?? '0')
     } else {
       // !cf 5000 — sin elección, default cara
       choice = 'cara'
-      amount = parseInt(first)
+      amount = montoDe(first)
     }
 
-    if (isNaN(amount) || amount < 10) {
+    if (Number.isNaN(amount) || amount < 10) {
       await safeSend(() => sock.sendMessage(jid, {
         text: [
           `╭─「 🪙 COINFLIP 」`,

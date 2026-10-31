@@ -37,12 +37,6 @@ export const MODE_DESCRIPTIONS: Record<PersonalityMode, string> = {
   kawaii:     'Estilo anime: uwu, owo, ~nyan 🌸',
 }
 
-interface PersonalityModeResponse {
-  current:     string
-  modes:       string[]
-  group_modes: Record<string, string>
-}
-
 // ─── Bridge a Rust ────────────────────────────────────────────────────────────
 // Los modos los guarda personality.rs en la misma base que el resto, en vez de
 // la tabla `personality_config` que Python creaba en su propio SQLite.

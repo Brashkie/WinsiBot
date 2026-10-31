@@ -7,7 +7,6 @@ import { join }       from 'path'
 import readline       from 'readline'
 import { exeName }    from './_platform.js'
 
-const WIN    = process.platform === 'win32'
 // Termux siempre define $PREFIX apuntando a su propio userland — es la forma
 // estándar de detectarlo (process.platform no alcanza: reporta 'android' o
 // 'linux' según el build de Node, sin garantía).

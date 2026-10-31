@@ -30,7 +30,7 @@ const command: Command = {
 
   async execute({ sock, jid, msg, args, sender, pushName }) {
     const sub = (args[0] ?? '').toLowerCase()
-    const user = getUserData(sender, pushName)
+    getUserData(sender, pushName) // registra al jugador si es nuevo
 
     // ── Responder número directamente cuando hay sesión activa ────────────────
     if (/^[1-4]$/.test(sub)) {

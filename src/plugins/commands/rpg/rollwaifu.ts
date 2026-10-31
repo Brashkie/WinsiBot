@@ -1,6 +1,6 @@
 import type { Command, RollCharacter, RollData } from '../../../types/index.js'
 import axios from 'axios'
-import { decode } from '@msgpack/msgpack'
+import { decodificar as decode } from '@lib/msgpack.js'
 import { downloadBuffer } from '@lib/downloader.js'
 import { createCache, registerCache } from '@lib/cacheManager.js'
 import { userData } from '@core/events/index.js'

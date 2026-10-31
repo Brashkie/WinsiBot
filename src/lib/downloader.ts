@@ -7,7 +7,7 @@ import { existsSync } from 'fs'
 import { join } from 'path'
 import { randomUUID } from 'crypto'
 import axios from 'axios'
-import ffmpegStatic from 'ffmpeg-static'
+import { ffmpegPath } from './ffmpeg.js'
 import { Queue } from './queue.js'
 import { createCache, registerCache } from './cacheManager.js'
 import { binPath, exeName } from './platform.js'
@@ -86,14 +86,15 @@ function getYtdlp(): string {
 }
 
 // ─── Path a FFmpeg ────────────────────────────────────────────────────────────
-// Prioridad: carpeta 'bin' manual (si el owner puso su propio build ahí) →
-// binario bundleado de ffmpeg-static (siempre disponible, sin instalación) →
-// vacío (yt-dlp cae al PATH del sistema).
+// El mismo orden que el resto del bot (ffmpeg.ts): bin/ → ffmpeg-static → PATH.
+// `--ffmpeg-location` acepta el binario o su carpeta. Antes se pasaba la
+// carpeta bin/ si existía, pero desde la 8.15.0 existe siempre —ahí se baja la
+// Session API—, así que sin un ffmpeg propio en bin/ (instalación normal,
+// Termux) yt-dlp buscaba solo ahí y nunca llegaba a ffmpeg-static ni al PATH.
+// Vacío = PATH del sistema.
 function getFfmpegDir(): string {
-  const binDir = join(process.cwd(), 'bin')
-  if (existsSync(binDir)) return binDir
-  if (ffmpegStatic && existsSync(ffmpegStatic)) return ffmpegStatic
-  return ''
+  const ruta = ffmpegPath()
+  return ruta === 'ffmpeg' ? '' : ruta
 }
 
 // ─── Carpeta temporal ─────────────────────────────────────────────────────────

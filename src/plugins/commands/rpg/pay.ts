@@ -1,6 +1,7 @@
 import type { Command } from '../../../types/index.js'
 import { getUserData, patchUserData } from '@core/events.js'
 import { safeSend, sendCritical } from '@lib/media_sender.js'
+import { montoDe } from '@lib/amount.js'
 
 // Transferencia rápida de BrasCoins desde billetera
 // Uso: !pay <monto> @mencionar
@@ -34,8 +35,8 @@ const command: Command = {
       return
     }
 
-    const amount = parseInt(amountArg)
-    if (isNaN(amount) || amount < 1) {
+    const amount = montoDe(amountArg)
+    if (Number.isNaN(amount) || amount < 1) {
       await safeSend(() => sock.sendMessage(jid, {
         text: `> Ingresa una cantidad válida.`,
       }, { quoted: msg }))

@@ -2,6 +2,7 @@ import type { Command } from '../../../types/index.js'
 import type { WASocket } from '@whiskeysockets/baileys'
 import { getUserData, patchUserData } from '@core/events.js'
 import { sendCritical } from '@lib/media_sender.js'
+import { montoDe } from '@lib/amount.js'
 
 type Item = 'money' | 'diamonds' | 'exp'
 
@@ -81,12 +82,12 @@ const command: Command = {
     }
 
     const itemArg   = (args[0] ?? '').toLowerCase() as Item
-    const amountArg = parseInt(args[1] ?? '')
+    const amountArg = montoDe(args[1])
     const target    = (msg.message?.extendedTextMessage?.contextInfo?.mentionedJid ?? [])[0]
 
     const ITEMS: Item[] = ['money', 'diamonds', 'exp']
 
-    if (!ITEMS.includes(itemArg) || isNaN(amountArg) || amountArg <= 0) {
+    if (!ITEMS.includes(itemArg) || Number.isNaN(amountArg) || amountArg <= 0) {
       await sock.sendMessage(jid, {
         text: `*TRANSFERENCIA*
 

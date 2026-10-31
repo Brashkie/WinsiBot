@@ -3,20 +3,6 @@ import { downloadFile, cleanTemp } from '@lib/utils.js'
 import { readFile } from 'fs/promises'
 import axios from 'axios'
 
-async function getInstagramMedia(url: string): Promise<string[]> {
-  const res = await axios.post(
-    'https://instagram-downloader-scraper.p.rapidapi.com/get-info-by-url',
-    { url },
-    {
-      headers: {
-        'Content-Type': 'application/json',
-        'x-rapidapi-host': 'instagram-downloader-scraper.p.rapidapi.com',
-      },
-    }
-  )
-  return res.data?.urls ?? []
-}
-
 const command: Command = {
   name: 'ig',
   aliases: ['instagram', 'insta'],
@@ -32,9 +18,10 @@ const command: Command = {
 
     await sock.sendMessage(jid, { text: '⏳ Obteniendo contenido...' }, { quoted: msg })
 
-    // API publica sin key — alternativa simple
+    // API publica sin key — alternativa simple. Con timeout: sin él, si la API
+    // se colgaba, el comando quedaba esperando para siempre.
     const apiUrl = `https://api.instagramdl.site/api?url=${encodeURIComponent(url)}`
-    const res = await axios.get(apiUrl)
+    const res = await axios.get(apiUrl, { timeout: 20_000 })
     const data = res.data
 
     const mediaUrl: string | undefined =
@@ -51,15 +38,17 @@ const command: Command = {
     const ext = isVideo ? 'mp4' : 'jpg'
 
     const tmpPath = await downloadFile(mediaUrl, ext)
-    const buf = await readFile(tmpPath)
-
-    if (isVideo) {
-      await sock.sendMessage(jid, { video: buf, caption: '📸 Instagram' }, { quoted: msg })
-    } else {
-      await sock.sendMessage(jid, { image: buf, caption: '📸 Instagram' }, { quoted: msg })
+    // El temporal se borra aunque el envío falle: antes quedaba en disco.
+    try {
+      const buf = await readFile(tmpPath)
+      if (isVideo) {
+        await sock.sendMessage(jid, { video: buf, caption: '📸 Instagram' }, { quoted: msg })
+      } else {
+        await sock.sendMessage(jid, { image: buf, caption: '📸 Instagram' }, { quoted: msg })
+      }
+    } finally {
+      await cleanTemp(tmpPath)
     }
-
-    await cleanTemp(tmpPath)
   },
 }
 

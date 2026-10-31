@@ -91,7 +91,6 @@ const command: Command = {
 
     let finalJid  = rawTarget
     let targetNum = (rawTarget.split('@')[0] ?? '').replace(/[^0-9]/g, '')
-    let targetName = pushName || targetNum
 
     if (jid.endsWith('@g.us')) {
       try {

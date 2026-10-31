@@ -1,5 +1,6 @@
 import type { Command } from '../../../types/index.js'
 import { getUserData, patchUserData } from '@core/events.js'
+import { montoDe } from '@lib/amount.js'
 
 const command: Command = {
   name: 'depositar',
@@ -29,9 +30,9 @@ const command: Command = {
     const allFlag = args[0].toLowerCase() === 'all'
     const amount  = allFlag
       ? (isWithdraw ? user.bank : user.money)
-      : parseInt(args[0])
+      : montoDe(args[0])
 
-    if (!allFlag && (isNaN(amount) || amount <= 0)) {
+    if (!allFlag && (Number.isNaN(amount) || amount <= 0)) {
       await sock.sendMessage(jid, { text: '> Ingresa una cantidad valida.' }, { quoted: msg })
       return
     }

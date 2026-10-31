@@ -18,6 +18,7 @@ import { verifyAndReport } from '@lib/authVerifier.js'
 import makeWASocket, {
   DisconnectReason,
   fetchLatestBaileysVersion,
+  isJidStatusBroadcast,
   makeCacheableSignalKeyStore,
   proto,
   type WASocket,
@@ -302,6 +303,13 @@ export class WinsiSocket extends EventEmitter<WinsiEvents> {
       logger: pino({ level: 'silent' }) as any,
       generateHighQualityLinkPreview: true,
       markOnlineOnConnect: false,
+      // Los estados de los contactos (status@broadcast) no los usa nada del
+      // bot: handler.ts los descartaba, pero después de que Baileys los
+      // descifrara, con su sesión Signal y sus claves de media. Con miles de
+      // contactos son decenas por hora de trabajo tirado, y cada uno que no
+      // se descifra es un Bad MAC más en el contador. Así Baileys responde el
+      // ack y los suelta ANTES de descifrar.
+      shouldIgnoreJid: (jid: string) => isJidStatusBroadcast(jid),
       retryRequestDelayMs: 2000,
       connectTimeoutMs: 30_000,
       keepAliveIntervalMs: 25_000,
@@ -466,8 +474,8 @@ export class WinsiSocket extends EventEmitter<WinsiEvents> {
       if (qr) {
         // `qrcode` ya está por los subbots y sabe dibujar en la terminal: no
         // hace falta qrcode-terminal solo para esto.
-        const qrcode = (await import('qrcode')).default
-        console.log(await qrcode.toString(qr, { type: 'terminal', small: true }))
+        const { qrTerminal } = await import('@lib/qr.js')
+        console.log(qrTerminal(qr))
         // Por qué pide QR, que es lo primero que hay que saber cuando pasa
         // sin que nadie haya cerrado la sesión. Con `registered` en true las
         // credenciales existían y algo las invalidó; sin `me`, se crearon

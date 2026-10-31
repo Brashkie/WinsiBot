@@ -1,6 +1,6 @@
 <div align="center">
 
-<img src="https://capsule-render.vercel.app/api?type=waving&color=0:6C63FF,100:00C9FF&height=180&section=header&text=WinsiBot&fontSize=62&fontColor=ffffff&fontAlignY=38&desc=v9.0.0%20%E2%80%94%20Enterprise%20WhatsApp%20Bot&descAlignY=58&descSize=18" width="100%"/>
+<img src="https://capsule-render.vercel.app/api?type=waving&color=0:6C63FF,100:00C9FF&height=180&section=header&text=WinsiBot&fontSize=62&fontColor=ffffff&fontAlignY=38&desc=v9.1.0%20%E2%80%94%20Enterprise%20WhatsApp%20Bot&descAlignY=58&descSize=18" width="100%"/>
 
 <br/>
 
@@ -9,7 +9,7 @@
 [![Rust](https://img.shields.io/badge/Rust-1.75%2B-CE422B?style=for-the-badge&logo=rust&logoColor=white)](https://rust-lang.org)
 
 [![License](https://img.shields.io/badge/License-GPL--3.0-blue?style=flat-square)](LICENSE)
-[![Version](https://img.shields.io/badge/Version-8.17.0-6C63FF?style=flat-square)](CHANGELOG.md)
+[![Version](https://img.shields.io/badge/Version-9.1.0-6C63FF?style=flat-square)](CHANGELOG.md)
 [![Platform](https://img.shields.io/badge/Platform-Windows%20%7C%20Linux%20%7C%20macOS%20%7C%20Android-lightgrey?style=flat-square)](https://github.com/Brashkie/WinsiBot)
 [![PRs Welcome](https://img.shields.io/badge/PRs-welcome-brightgreen?style=flat-square)](https://github.com/Brashkie/WinsiBot/pulls)
 
@@ -17,7 +17,7 @@
 
 > Bot de WhatsApp de alto rendimiento con arquitectura multi-lenguaje de tres capas.<br/>
 > Sin límite artificial de grupos, pensado para miles de mensajes por hora y múltiples instancias.<br/>
-> v9.0.0 — **La IA es propia y viene incluida.** Cosxamix —el runtime de IA de la casa— es la IA por defecto: `npm install` lo baja, `npm run cosxamix:model` baja el modelo según tu RAM, y el bot lo arranca y lo vigila solo. Sin clave de API y sin Ollama, y 1,6–1,9x más rápido por mensaje que con candle. Además, el bucle de Bad MAC y el calentamiento falso del antiban, arreglados.<br/>
+> v9.1.0 — **La IA responde mucho antes y el bot pesa menos.** Desde el segundo mensaje de un chat, la IA —Cosxamix, la de la casa, que viene incluida— lee solo lo nuevo: 10,2 s → 0,67 s. Con Cosxamix 0.7.0, el primer mensaje de un grupo baja de 6,0 a 3,5 s. Cuatro dependencias fuera (de 330 paquetes a 286), stickers de video 2,3x más rápidos, y `#pay 1.000` ya no paga 1.<br/>
 
 <br/>
 
@@ -65,20 +65,20 @@
 | ⚙️ **Session + IA** | Rust / Axum | Creds atómicas y snapshots, tracker Bad MAC, rate limiter, antiban, clasificación de intenciones, personalidad y humor, reputación, perfiles de estilo, Ollama y APIs cloud, imágenes |
 | 🧮 **Kernels nativos** | C + Zig | Anime4K y el códec JPEG, compilados con Zig dentro del binario de la Session API. Se usa el que gana midiendo, y en x86-64 la copia para AVX2 si la CPU la tiene |
 
-### Novedades en v9.0.0
+### Novedades en v9.1.0
 
-**La IA es propia y viene incluida.** El detalle completo, con cada medición, está en el [CHANGELOG](CHANGELOG.md).
+**La IA responde mucho antes y el bot pesa menos.** El detalle completo, con cada medición, está en el [CHANGELOG](CHANGELOG.md).
 
 | Área | Cambio |
 |------|--------|
-| **Cosxamix, la IA por defecto** | El runtime de IA propio reemplaza a Ollama como primera opción: `npm install` baja su binario (7,5 MB, con SHA-256, Termux incluido), `npm run cosxamix:model` baja el modelo preguntando y con el tamaño según tu RAM (3B, 1.5B o 0.5B), y el bot lo arranca en segundo plano, lo relanza si se cae o se cuelga, y no lo lanza sin modelo. Ollama sigue con tres líneas del `.env` |
-| **Más rápida** | Cosxamix 0.6.0 responde con su motor propio y sus kernels: 1,6–1,9x más rápido por mensaje que con candle, usado como lo usa el bot, y 11 de 15 aciertos contra 10 |
-| **Fix: "hepein" ignoraba el `.env`** | Pedía `llama3.2:3b` por nombre en cada mensaje: con cualquier otro modelo contestaba una plantilla. Ahora usa el del `.env` |
-| **Fix: el bucle de Bad MAC** | La limpieza automática borraba la sesión con el propio teléfono, contaba cada reintento como un error nuevo y reconectaba por chats privados donde no había nada que borrar. Ahora un mensaje cuenta una vez, solo los grupos limpian, lo propio no se toca nunca y un grupo que no se arregla con dos limpiezas no se limpia más |
-| **Fix: 40 mensajes por día tras escanear el QR** | El antiban trataba el mismo número vinculado otra vez como un número nuevo y lo ponía en calentamiento. Ahora recuerda el número de cada sesión |
-| **Más fixes** | `npm run manage` y otros cinco scripts no arrancaban (`dotenv`); `#restart` no guardaba antes de salir; la sesión usaba `async-mutex` sin tenerlo en las dependencias; fuera `nodemon` |
+| **La IA ya no relee el *system*** | Desde el segundo mensaje de un chat lee solo el mensaje nuevo: **10,2 s → 0,67 s**. Y el comienzo del *system*, igual en todos los grupos, se lee una vez para todos: el primer mensaje de un grupo baja de **6,0 a 3,5 s**. La respuesta es la misma |
+| **Cosxamix 0.7.0** | Lee el prompt 1,7x más rápido y genera cada palabra 3–5% más rápido, con el mismo texto |
+| **Más liviano** | Fuera `wa-sticker-formatter`, `qrcode` y `@msgpack/msgpack`, reemplazados por código propio comparado contra ellos byte a byte, y `cheerio`, por el parser que usaba por dentro: **de 330 paquetes a 286**. `dist/` pasa de 1.477 archivos a 370 |
+| **Stickers más rápidos** | Un video pasa a sticker en una sola pasada de ffmpeg (2,6 → 1,1 s y el archivo, de 301 a 114 KB) y una foto grande sale con el tamaño que muestra WhatsApp (326 → 18 ms) |
+| **Fix: `#pay 1.000` pagaba 1** | Los comandos de economía leen los montos con o sin separador de miles, y rechazan lo que no es un número |
+| **Más fixes** | yt-dlp no encontraba ffmpeg si no había uno propio en `bin/`; `#ig` esperaba para siempre si la API se colgaba; el webhook respondía 500 a un evento desconocido; fuera el scheduler, que nunca tuvo un job, y su evento `run_job` |
 
-**Para actualizar:** `npm install`, y `npm run cosxamix:model` para el modelo. Si tu `.env` apunta a Ollama, seguís con Ollama: la IA nueva se usa sin `OLLAMA_URL` o con la OPCIÓN A de `.env.example`.
+**Para actualizar:** `npm install` baja Cosxamix 0.7.0 y la Session API 5.13.0; en Windows, con el bot parado, porque no se puede reemplazar un `.exe` en uso. Si llamabas al evento `run_job` del webhook, nunca ejecutó nada: ahora responde 422.
 
 ---
 
@@ -200,7 +200,7 @@
 
 ```
 ╔════════════════════════════════════════════════╗
-║                WinsiBot v9.0.0                 ║
+║                WinsiBot v9.1.0                 ║
 ╠═════════════════════╦══════════════════════════╣
 ║      TypeScript     ║           Rust           ║
 ║    Node.js :4001    ║                          ║
@@ -242,7 +242,7 @@
 | Node.js | 20.12+ | ✅ | `node --version` |
 | npm | 9.x | ✅ | incluido con Node |
 | Rust + Cargo | 1.75+ | ❌ | solo para compilar la Session API vos mismo: `npm install` baja el binario de tu plataforma |
-| [Cosxamix](https://github.com/Brashkie/Cosxamix) **u** Ollama | 0.6.0 | ❌ | IA local, sin clave de API. Cosxamix es la de por defecto y no hay que instalarlo aparte; Ollama sigue con tres líneas del `.env` — ver `.env.example`. Con el `.env` apuntando a Cosxamix, `npm install` baja su binario solo (`npm run cosxamix:fetch` para bajarlo igual), y `npm run cosxamix:model` baja el modelo preguntando, con el tamaño elegido según la RAM. Con los dos, el bot lo arranca solo y lo vigila |
+| [Cosxamix](https://github.com/Brashkie/Cosxamix) **u** Ollama | 0.7.0 | ❌ | IA local, sin clave de API. Cosxamix es la de por defecto y no hay que instalarlo aparte; Ollama sigue con tres líneas del `.env` — ver `.env.example`. Con el `.env` apuntando a Cosxamix, `npm install` baja su binario solo (`npm run cosxamix:fetch` para bajarlo igual), y `npm run cosxamix:model` baja el modelo preguntando, con el tamaño elegido según la RAM. Con los dos, el bot lo arranca solo y lo vigila |
 | FFmpeg | 6.x | ❌ | stickers animados, notas de voz, efectos de audio, videos de los dragones. En Windows, Linux y macOS viene con `npm install` (`ffmpeg-static`); en Termux, `pkg install ffmpeg` |
 | yt-dlp | reciente | ❌ | descargas de YouTube y otros sitios. Ejecutable en `bin/` o en el `PATH`; en Termux, `pkg install yt-dlp` |
 
@@ -584,11 +584,6 @@ const headers = { 'x-webhook-signature': `sha256=${sig}` }
 }
 ```
 
-#### `POST /webhook` — Ejecutar job
-```json
-{ "event": "run_job", "jobId": "nombre_del_job" }
-```
-
 #### `POST /webhook` — Ping
 ```json
 { "event": "ping" }
@@ -803,13 +798,12 @@ WinsiBot/
 │   ├── plugins/
 │   │   ├── commands/                 # 200+ comandos organizados por categoría
 │   │   ├── middlewares/              # Auth, anti-spam, cooldown, rate limit
-│   │   ├── scheduler/                # Jobs programados (parser de cron propio)
 │   │   └── webhooks/                 # Receiver HTTP
 │   └── dashboard/                    # Backend del panel web (Hono + WebSocket)
 │       ├── server.ts                 # API + WS + estático de web/dist
 │       ├── auth.ts                   # Login vinculando WhatsApp (#login <código>)
 │       └── routes/                   # /api/subbots, /api/groups, /api/admin
-├── crates/session-api/               # Session API v5.12.0 (Rust) — workspace en Cargo.toml de la raíz
+├── crates/session-api/               # Session API v5.13.0 (Rust) — workspace en Cargo.toml de la raíz
 │   ├── native/                       # Kernels en C y Zig, compilados con Zig dentro del binario
 │   │   ├── lib.zig                   # Raíz: trae los demás .zig
 │   │   ├── anime4k.c                 # push_color y push_gradient (1,35x sobre Rust)

@@ -7,8 +7,8 @@
 // el caso de Termux: ffmpeg-static no publica binario para Android y ahí se
 // instala con `pkg install ffmpeg`.
 //
-// downloader.ts tiene su propia versión a propósito: yt-dlp pide la CARPETA,
-// no el binario.
+// downloader.ts la usa también para yt-dlp: `--ffmpeg-location` acepta el
+// binario, no hace falta la carpeta.
 
 import { existsSync } from 'fs'
 import { readFile, unlink, writeFile } from 'fs/promises'

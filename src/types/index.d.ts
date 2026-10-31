@@ -112,25 +112,6 @@ export interface BotConfig {
   maxContacts:          number
 }
 
-// ─── Jobs (BullMQ) ────────────────────────────────────────────────────────────
-export interface MLJobData {
-  type:    'predict' | 'analyze' | 'train'
-  payload: Record<string, unknown>
-}
-
-export interface ScraperJobData {
-  type: 'tiktok' | 'instagram' | 'youtube' | 'spotify'
-  url:  string
-  jid:  string
-}
-
-// ─── Respuestas Python API ────────────────────────────────────────────────────
-export interface PythonApiResponse<T = unknown> {
-  success: boolean
-  data?:   T
-  error?:  string
-}
-
 // ─── Roll / Gacha ─────────────────────────────────────────────────────────────
 export interface RollCharacter {
   id:          number

@@ -16,8 +16,8 @@ use axum::{extract::State, response::Json};
 use regex::Regex;
 use serde::Deserialize;
 use std::collections::HashMap;
-use std::sync::OnceLock;
-use std::time::Duration;
+use std::sync::{Mutex, OnceLock};
+use std::time::{Duration, Instant};
 
 use crate::personality::{self, Contexto, EstiloUsuario, RespondRequest, TurnoHistorial};
 use crate::routes::AppState;
@@ -254,6 +254,13 @@ pub fn prompt_sistema(
         format!("Eres {bot_name}, la IA del bot WinsiBot en este grupo de WhatsApp."),
         format!("Tu personalidad es: {}.", descripcion_modo(modo)),
         "Responde siempre en español. Sé breve: máximo 2 frases salvo que pidan algo largo.".into(),
+        // Estas dos líneas son fijas y van ARRIBA, antes del perfil del grupo,
+        // a propósito: Cosxamix copia de otra conversación el tramo inicial
+        // que coincide, así que todo lo fijo que va primero se lee una vez
+        // para todos los grupos en vez de una por grupo. Medido con
+        // `examples/measure_shared_prefix` de Cosxamix.
+        "Responde de forma natural, como lo haría un miembro de este grupo específico.".into(),
+        "Generá una respuesta ORIGINAL y propia al mensaje del usuario — nunca copies, parafrasees ni reutilices los ejemplos de mensajes que aparezcan abajo, son solo guía de tono.".into(),
         String::new(),
     ];
 
@@ -319,8 +326,6 @@ pub fn prompt_sistema(
         }
     }
 
-    p.push("Responde de forma natural, como lo haría un miembro de este grupo específico.".into());
-    p.push("Generá una respuesta ORIGINAL y propia al mensaje del usuario — nunca copies, parafrasees ni reutilices los ejemplos de arriba, son solo guía de tono.".into());
     p.join("\n")
 }
 
@@ -674,6 +679,56 @@ fn si() -> bool {
     true
 }
 
+// ── Fotos de los perfiles ────────────────────────────────────────────────────
+//
+// El *system* lleva el perfil del grupo y el de quien escribe, y los dos traen
+// los últimos mensajes como ejemplo de tono: cambiaban con CADA mensaje del
+// grupo. Cosxamix reaprovecha el caché de atención solo hasta el primer token
+// distinto, así que cada respuesta volvía a leer casi todo el *system*: medido
+// con `examples/measure_response` de Cosxamix, 333 tokens son 11,2 s en el 3B,
+// contra 0,6 s para los 18 del mensaje solo.
+//
+// Con una foto de cada perfil que dura media hora, el *system* queda igual
+// entre un mensaje y el siguiente y solo se lee lo nuevo. El tono de un grupo
+// no cambia en media hora, y de paso se ahorran las consultas a SQLite.
+
+const VIDA_FOTO: Duration = Duration::from_secs(30 * 60);
+/// Tope de fotos guardadas; pasado, se tiran las vencidas.
+const MAX_FOTOS: usize = 512;
+
+struct Fotos<T>(OnceLock<Mutex<HashMap<String, (Instant, T)>>>);
+
+impl<T: Clone> Fotos<T> {
+    const fn nuevas() -> Self {
+        Self(OnceLock::new())
+    }
+
+    fn mapa(&self) -> std::sync::MutexGuard<'_, HashMap<String, (Instant, T)>> {
+        let m = self.0.get_or_init(|| Mutex::new(HashMap::new()));
+        m.lock().unwrap_or_else(|e| e.into_inner())
+    }
+
+    fn leer(&self, clave: &str, ahora: Instant) -> Option<T> {
+        self.mapa()
+            .get(clave)
+            .filter(|(desde, _)| ahora.duration_since(*desde) < VIDA_FOTO)
+            .map(|(_, v)| v.clone())
+    }
+
+    fn guardar(&self, clave: &str, valor: T, ahora: Instant) {
+        let mut m = self.mapa();
+        if m.len() >= MAX_FOTOS {
+            m.retain(|_, (desde, _)| ahora.duration_since(*desde) < VIDA_FOTO);
+        }
+        if m.len() < MAX_FOTOS {
+            m.insert(clave.to_string(), (ahora, valor));
+        }
+    }
+}
+
+static FOTOS_USUARIO: Fotos<crate::conversations::UserStyleProfile> = Fotos::nuevas();
+static FOTOS_GRUPO: Fotos<crate::conversations::GroupStyleProfile> = Fotos::nuevas();
+
 /// POST /ai/chat/respond
 ///
 /// Los perfiles de estilo salen de la misma base, acá mismo: ya no hace falta
@@ -685,11 +740,23 @@ pub async fn respond(
     let db = state.conv_db.clone();
 
     // Perfiles y modo, en el hilo de bloqueo porque son consultas a SQLite.
+    // Los perfiles salen de la foto si está vigente (ver `Fotos`).
     let (sender, gjid) = (req.sender_jid.clone(), req.group_jid.clone());
+    let ahora = Instant::now();
+    let foto_u = FOTOS_USUARIO.leer(&sender, ahora);
+    let foto_g = FOTOS_GRUPO.leer(&gjid, ahora);
     let db2 = db.clone();
     let datos = tokio::task::spawn_blocking(move || {
-        let usuario = crate::conversations::user_profile(&db2, &sender, 45).ok();
-        let grupo = crate::conversations::group_profile(&db2, &gjid, 30).ok();
+        let usuario = foto_u.or_else(|| {
+            let p = crate::conversations::user_profile(&db2, &sender, 45).ok()?;
+            FOTOS_USUARIO.guardar(&sender, p.clone(), ahora);
+            Some(p)
+        });
+        let grupo = foto_g.or_else(|| {
+            let p = crate::conversations::group_profile(&db2, &gjid, 30).ok()?;
+            FOTOS_GRUPO.guardar(&gjid, p.clone(), ahora);
+            Some(p)
+        });
         let modo = personality::modo(&db2, &gjid);
         (usuario, grupo, modo)
     })
@@ -941,6 +1008,52 @@ mod tests {
     use super::*;
 
     #[test]
+    fn la_foto_dura_media_hora_y_despues_se_vuelve_a_leer() {
+        let fotos: Fotos<u32> = Fotos::nuevas();
+        let t0 = Instant::now();
+        assert_eq!(fotos.leer("g", t0), None);
+        fotos.guardar("g", 7, t0);
+        assert_eq!(fotos.leer("g", t0 + Duration::from_secs(29 * 60)), Some(7));
+        assert_eq!(fotos.leer("g", t0 + VIDA_FOTO), None);
+    }
+
+    #[test]
+    fn llenas_las_fotos_se_tiran_las_vencidas() {
+        let fotos: Fotos<u32> = Fotos::nuevas();
+        let t0 = Instant::now();
+        for i in 0..MAX_FOTOS {
+            fotos.guardar(&i.to_string(), 1, t0);
+        }
+        // Lleno y nada vencido: la nueva no entra, y no crece sin tope.
+        fotos.guardar("nueva", 2, t0);
+        assert_eq!(fotos.leer("nueva", t0), None);
+        // Vencidas todas: se limpian y la nueva entra.
+        let despues = t0 + VIDA_FOTO;
+        fotos.guardar("nueva", 2, despues);
+        assert_eq!(fotos.leer("nueva", despues), Some(2));
+        assert_eq!(fotos.mapa().len(), 1);
+    }
+
+    #[test]
+    fn con_la_foto_el_system_no_cambia_entre_mensajes() {
+        // Lo que importa para el caché de Cosxamix: mismo perfil, mismo
+        // system, byte por byte, aunque el grupo haya hablado en el medio.
+        let g = PerfilGrupo {
+            msg_count: 50,
+            common_words: vec!["xd".into()],
+            avg_msg_len: 20.0,
+            emoji_freq: 0.1,
+            vocab_sample: vec!["hola".into()],
+        };
+        let u = PerfilUsuario::default();
+        let a = prompt_sistema(&g, &u, "normal", "Hepein", "hola");
+        // (Una consulta de comandos sí agrega su sección, pero al final: el
+        // prefijo común sigue siendo todo lo anterior.)
+        let b = prompt_sistema(&g, &u, "normal", "Hepein", "jaja buenísimo");
+        assert_eq!(a, b);
+    }
+
+    #[test]
     fn historia_solo_le_pasa_a_la_ia_lo_que_recibe() {
         // El teléfono descompuesto depende de que la IA vea SOLO el fragmento.
         let (s, p) = prompt_historia("seguir", "el gato abrió la puerta").unwrap();
@@ -1108,6 +1221,24 @@ mod tests {
         assert!(s.contains("El usuario que te escribe"));
         assert!(s.contains("Escribe muy corto"));
         assert!(s.contains("jerga"));
+    }
+
+    #[test]
+    fn lo_fijo_del_system_va_antes_que_el_perfil_del_grupo() {
+        // Dos grupos distintos tienen que compartir todo el comienzo, con las
+        // instrucciones fijas incluidas: es el tramo que Cosxamix reaprovecha
+        // entre conversaciones.
+        let grupo = |palabra: &str| PerfilGrupo {
+            msg_count: 100,
+            common_words: vec![palabra.into()],
+            vocab_sample: vec![format!("{palabra} hoy")],
+            ..Default::default()
+        };
+        let a = prompt_sistema(&grupo("partido"), &perfil(0), "natural", "Hepein", "hola");
+        let b = prompt_sistema(&grupo("examen"), &perfil(0), "natural", "Hepein", "hola");
+        let comun = a.chars().zip(b.chars()).take_while(|(x, y)| x == y).count();
+        let hasta = a.chars().count() - a[a.find("ORIGINAL").expect("la instrucción está")..].chars().count();
+        assert!(comun > hasta, "lo fijo no va todo antes del perfil del grupo");
     }
 
     #[test]

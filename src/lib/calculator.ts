@@ -132,8 +132,6 @@ export class UnitConverter {
 const SAFE_EXPR = /^[\d+\-*/^().%, \t]+$/
 
 export class ExpressionEvaluator {
-  private calc = new ScientificCalculator()
-
   evaluate(expr: string): number {
     const cleaned = expr
       .replace(/\s+/g, '')

@@ -1,9 +1,8 @@
 {
   "name": "winsi-bot",
-  "version": "9.0.0",
-  "description": "WinsiBot v9.0.0 - Ultralight WhatsApp bot with its own local AI: Cosxamix, downloaded and started by the bot itself, answers by default with no API key and no Ollama. TypeScript core, Rust Session API, and C and Zig kernels (AVX2 copy picked at startup). Speaks Spanish, English and Portuguese; RPG economy, group cave exploration, arena with a Monte Carlo simulator, audio effects and image tools. Install is `npm install` and nothing else: the Session API binary is fetched prebuilt for your platform, Termux included, with its SHA-256 verified.",
+  "version": "9.1.0",
+  "description": "WinsiBot v9.1.0 - Ultralight WhatsApp bot with its own local AI: Cosxamix, downloaded and started by the bot itself, answers by default with no API key and no Ollama. TypeScript core, Rust Session API, and C and Zig kernels (AVX2 copy picked at startup). Speaks Spanish, English and Portuguese; RPG economy, group cave exploration, arena with a Monte Carlo simulator, audio effects and image tools. Install is `npm install` and nothing else: the Session API binary is fetched prebuilt for your platform, Termux included, with its SHA-256 verified.",
   "main": "dist/index.js",
-  "types": "dist/index.d.ts",
   "type": "module",
   "scripts": {
     "postinstall": "node scripts/fetch_rust.js && node scripts/fetch_cosxamix.js",
@@ -95,31 +94,23 @@
     "url": "https://github.com/Brashkie/WinsiBot/issues"
   },
   "license": "GPL-3.0-or-later",
-  "overrides": {
-    "wa-sticker-formatter": {
-      "sharp": "$sharp"
-    }
-  },
   "dependencies": {
     "@brashkie/signalis-core": "^0.5.1",
     "@hono/node-server": "^2.0.12",
-    "@msgpack/msgpack": "^3.1.3",
     "@whiskeysockets/baileys": "^6.7.18",
     "ansimax": "^1.7.7",
     "axios": "^1.7.3",
     "cbor-x": "^1.6.4",
-    "cheerio": "^1.0.0",
+    "css-select": "^5.2.2",
     "hono": "^4.12.32",
+    "htmlparser2": "^10.1.0",
     "pino": "^9.5.0",
-    "qrcode": "^1.5.4",
     "strenor": "^0.5.3",
-    "wa-sticker-formatter": "^4.3.2",
     "ws": "^8.21.1"
   },
   "devDependencies": {
     "@biomejs/biome": "2.5.4",
     "@types/node": "^20.19.39",
-    "@types/qrcode": "^1.5.6",
     "@types/ws": "^8.18.1",
     "@vitest/coverage-v8": "^2.1.3",
     "tsc-alias": "^1.8.17",
@@ -132,7 +123,7 @@
     "sharp": "^0.34.1"
   },
   "config": {
-    "cosxamix": "0.6.0"
+    "cosxamix": "0.7.0"
   },
   "engines": {
     "node": ">=20.12.0"

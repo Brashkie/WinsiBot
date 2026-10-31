@@ -509,7 +509,7 @@ pub async fn ai_context(
 
 const SAMPLE_MAX_LEN: usize = 120;
 
-#[derive(Debug, Serialize)]
+#[derive(Debug, Clone, Serialize)]
 pub struct UserStyleProfile {
     pub jid: String,
     pub msg_count: i64,
@@ -523,7 +523,7 @@ pub struct UserStyleProfile {
     pub uses_slang: bool,
 }
 
-#[derive(Debug, Serialize)]
+#[derive(Debug, Clone, Serialize)]
 pub struct GroupStyleProfile {
     pub group_jid: String,
     pub msg_count: i64,

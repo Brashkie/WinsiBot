@@ -8,6 +8,7 @@ import {
   type ClanRank,
   TERRITORIES,
 } from '@lib/clan.js'
+import { montoDe } from '@lib/amount.js'
 
 const RANKS: ClanRank[] = ['miembro', 'élite', 'coleader']
 
@@ -221,9 +222,9 @@ const command: Command = {
 
       const action = (args[1] ?? '').toLowerCase()
       if (action === 'donar') {
-        const amount = parseInt(args[2] ?? '0')
+        const amount = montoDe(args[2] ?? '0')
         const user   = getUserData(sender)
-        if (isNaN(amount) || amount <= 0 || user.money < amount) {
+        if (Number.isNaN(amount) || amount <= 0 || user.money < amount) {
           await sock.sendMessage(jid, { text: `_Uso: !clan tesoro donar <cantidad>_` }, { quoted: msg }); return
         }
         ClanManager.addToTreasury(ext, amount)
@@ -313,7 +314,7 @@ const command: Command = {
         const check = ClanManager.canStartWar(ext)
         if (!check.ok) { await sock.sendMessage(jid, { text: `❌ ${check.reason}` }, { quoted: msg }); return }
 
-        const war = ClanManager.startWar(ext, enemyTag)
+        ClanManager.startWar(ext, enemyTag)
         ClanManager.log(ext, `Guerra declarada contra [${enemyTag}]`)
         await sock.sendMessage(jid, {
           text: [`⚔️ *¡GUERRA DECLARADA!*`, `[${myClan.tag}] vs [${enemyTag}]`, `Duración: 24h`, `_!clan guerra ver para ver el estado_`].join('\n'),

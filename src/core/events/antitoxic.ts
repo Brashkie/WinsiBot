@@ -14,10 +14,6 @@ const warnMap = new Map<string, Map<string, number>>()
 const WARN_RESET_MS = 30 * 60_000 // limpia warns pasados 30 min de inactividad
 const resetTimers  = new Map<string, ReturnType<typeof setTimeout>>()
 
-function getWarn(groupJid: string, sender: string): number {
-  return warnMap.get(groupJid)?.get(sender) ?? 0
-}
-
 function addWarn(groupJid: string, sender: string): number {
   if (!warnMap.has(groupJid)) warnMap.set(groupJid, new Map())
   const g     = warnMap.get(groupJid)!

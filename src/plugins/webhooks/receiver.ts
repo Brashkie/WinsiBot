@@ -23,16 +23,11 @@ interface BroadcastEvent {
   text:  string
 }
 
-interface RunJobEvent {
-  event: 'run_job'
-  jobId: string
-}
-
 interface PingEvent {
   event: 'ping'
 }
 
-type WebhookPayload = SendMessageEvent | BroadcastEvent | RunJobEvent | PingEvent
+type WebhookPayload = SendMessageEvent | BroadcastEvent | PingEvent
 
 // ─── Estado del módulo ────────────────────────────────────────────────────────
 let _sock:   WASocket | null  = null
@@ -115,16 +110,10 @@ async function handleEvent(payload: WebhookPayload): Promise<{ ok: boolean; msg?
       return { ok: true, msg: `enviado a ${sent}/${jids.length}` }
     }
 
-    case 'run_job': {
-      const jobId = payload.jobId?.trim()
-      if (!jobId) return { ok: false, msg: '"jobId" requerido' }
-      const { triggerJob } = await import('@plugins/scheduler/cron.js')
-      const p = triggerJob(jobId)
-      if (!p) return { ok: false, msg: `job "${jobId}" no encontrado` }
-      await p
-      logger.info({ jobId }, '[webhook] job ejecutado')
-      return { ok: true }
-    }
+    // Sin esto, un evento desconocido devolvía undefined y el handler HTTP
+    // reventaba en `result.ok`: un 500 en vez de un 422.
+    default:
+      return { ok: false, msg: `evento "${(payload as { event: string }).event}" desconocido` }
   }
 }
 
