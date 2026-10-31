@@ -28,6 +28,7 @@
 | `🔧` | Dev or higher |
 | `👑` | Owner only |
 | `🔑` | WhatsApp group admin |
+| `🔒` | Protected by the anti-takeover: the group creator, the bot owners and the ones marked |
 
 > **Prefixes:** `!` · `.` · `#` · `/`
 > Examples: `!ping`, `.gpt Hello`, `#profile`, `/menu`
@@ -52,7 +53,7 @@
 | 12 | [🔍 Scrapers / Search](#-scrapers--search) | 4 |
 | 13 | [🎵 Music](#-music) | 1 |
 | 14 | [🔞 NSFW](#-nsfw) | 5 |
-| 15 | [🔑 Group Admin](#-group-admin) | 48 |
+| 15 | [🔑 Group Admin](#-group-admin) | 49 |
 | 16 | [🤖 JadiBot](#-jadibot) | 3 |
 | 17 | [ℹ️ Info](#%EF%B8%8F-info) | 2 |
 | 18 | [👑 Owner / System](#-owner--system) | 24 |
@@ -513,6 +514,7 @@
 | `tagone` | `tago`, `mention` | — | 🔑 | Mention a specific person |
 | `delete` | `del`, `borrar`, `eliminar` | — | 🔑 | Delete a quoted message |
 | `antilink` | `antienlace` | — | 🔑 | Toggle link filter |
+| `antirrobo` | `antitheft`, `antirobo` | — | 🔒 | `on` · `off` · `proteger @user` · `quitar @user`. If someone unprotected demotes or removes a protected member —the group creator, the bot owners and the ones marked— or the bot, it takes their admin away, reverts it, revokes the link and warns by private message. **Only a protected member can use it**, not any admin |
 | `mute` | `silenciar` | — | 🔑 | Mute or unmute the bot in the group |
 | `banchat` | `bangrupo`, `unbanchat` | — | 🛡️ | Silence/activate the bot in this group |
 | `groupinfo` | `grupoinfo`, `gcfg` | — | 🔑 | Group info + your profile in the group |

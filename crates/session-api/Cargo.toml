@@ -1,6 +1,6 @@
 [package]
 name = "winsibot-session-api"
-version = "5.13.0"
+version = "5.14.0"
 edition = "2021"
 
 [lib]
@@ -43,6 +43,12 @@ ndarray  = "0.17"
 # binario. Apagada por defecto: sin Zig instalado el crate compila igual, con
 # los kernels de Rust. Los binarios de las releases salen con ella puesta.
 native = []
+# La decisión del antirrobo de grupos en Ada/SPARK (ada/), demostrada con
+# GNATprove y compilada con GNAT. Apagada por defecto: sin ella decide la copia
+# en Rust de src/group_guard.rs, que un test compara contra Ada en toda entrada.
+# Pide `gcc` de GNAT en el PATH (con Alire: `alr exec -- cargo build`), o la
+# ruta en WINSI_GNAT_GCC.
+ada = []
 
 [dev-dependencies]
 criterion = { version = "0.5", features = ["html_reports"] }

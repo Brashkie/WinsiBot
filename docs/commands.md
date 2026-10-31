@@ -28,6 +28,7 @@
 | `🔧` | Dev o superior |
 | `👑` | Solo Owner |
 | `🔑` | Admin del grupo (WhatsApp) |
+| `🔒` | Protegido del antirrobo: el creador del grupo, los dueños del bot y los marcados |
 
 > **Prefijos:** `!` · `.` · `#` · `/`
 > Ejemplos: `!ping`, `.gpt Hola`, `#perfil`, `/menu`
@@ -52,7 +53,7 @@
 | 12 | [🔍 Scrapers / Búsqueda](#-scrapers--búsqueda) | 4 |
 | 13 | [🎵 Música](#-música) | 1 |
 | 14 | [🔞 NSFW](#-nsfw) | 5 |
-| 15 | [🔑 Admin del grupo](#-admin-del-grupo) | 48 |
+| 15 | [🔑 Admin del grupo](#-admin-del-grupo) | 49 |
 | 16 | [🤖 JadiBot](#-jadibot) | 3 |
 | 17 | [ℹ️ Info](#%EF%B8%8F-info) | 2 |
 | 18 | [👑 Owner / Sistema](#-owner--sistema) | 24 |
@@ -513,6 +514,7 @@
 | `tagone` | `tago`, `mention` | — | 🔑 | Menciona a una persona específica |
 | `delete` | `del`, `borrar`, `eliminar` | — | 🔑 | Elimina el mensaje citado |
 | `antilink` | `antienlace` | — | 🔑 | Activa/desactiva filtro de links |
+| `antirrobo` | `antitheft`, `antirobo` | — | 🔒 | `on` · `off` · `proteger @usuario` · `quitar @usuario`. Si alguien no protegido degrada o saca a un protegido —el creador, los dueños del bot y los marcados— o al bot, le quita el admin, lo revierte, revoca el enlace y avisa por privado. **Solo lo usa un protegido**, no cualquier admin |
 | `mute` | `silenciar` | — | 🔑 | Silencia o activa el bot en el grupo |
 | `banchat` | `bangrupo`, `unbanchat` | — | 🛡️ | Silencia/activa el bot en este grupo |
 | `groupinfo` | `grupoinfo`, `gcfg` | — | 🔑 | Información del grupo + tu perfil en él |

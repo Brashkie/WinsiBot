@@ -14,9 +14,67 @@ fn main() {
     println!("cargo:rerun-if-changed=build.rs");
     // Hay kernels de Zig para x86-64-v3 en la librería (ver compilar_nativo).
     println!("cargo:rustc-check-cfg=cfg(winsi_v3)");
+    println!("cargo:rerun-if-changed=ada/src/");
+    println!("cargo:rustc-check-cfg=cfg(winsi_ada)");
 
     #[cfg(feature = "native")]
     compilar_nativo();
+    #[cfg(feature = "ada")]
+    compilar_ada();
+}
+
+/// El antirrobo de grupos en Ada/SPARK (ada/src/group_guard.adb), a un objeto
+/// que se enlaza dentro del binario.
+///
+/// `-gnatp` quita los chequeos en tiempo de ejecución: GNATprove ya demostró
+/// que ninguno puede fallar (`alr exec -- gnatprove -P ada/group_guard.gpr`).
+/// El paquete es Pure y sin elaboración, así que el objeto no pide el runtime
+/// de Ada: no tiene ni un símbolo sin resolver, y enlaza también con MSVC.
+#[cfg(feature = "ada")]
+fn compilar_ada() {
+    use std::path::PathBuf;
+    use std::process::Command;
+
+    let salida = PathBuf::from(std::env::var("OUT_DIR").expect("OUT_DIR"));
+    let gcc = std::env::var("WINSI_GNAT_GCC").unwrap_or_else(|_| "gcc".into());
+    println!("cargo:rerun-if-env-changed=WINSI_GNAT_GCC");
+    let objeto = salida.join("group_guard.o");
+
+    let estado = Command::new(&gcc)
+        .args(["-c", "-O2", "-gnatp", "-gnatn", "-fPIC"])
+        .arg("-Iada/src")
+        .arg("ada/src/group_guard.adb")
+        .arg("-o")
+        .arg(&objeto)
+        // gcc deja el .ali junto al objeto; que no ensucie ada/src.
+        .current_dir(std::env::var("CARGO_MANIFEST_DIR").expect("CARGO_MANIFEST_DIR"))
+        .status();
+    match estado {
+        Ok(s) if s.success() => {}
+        Ok(s) => panic!("GNAT no compiló ada/src/group_guard.adb ({s:?})"),
+        Err(e) => panic!(
+            "no pude ejecutar `{gcc}`: {e}\n\
+             La feature `ada` necesita el gcc de GNAT: con Alire, `alr exec -- cargo build\n\
+             --features ada` desde ada/, o la ruta en WINSI_GNAT_GCC. Sin la feature\n\
+             decide la copia en Rust."
+        ),
+    }
+
+    // Una librería estática de un solo objeto, con el ar de GNAT si está junto
+    // a su gcc. Con MSVC, el nombre es el que busca link.exe.
+    let msvc = std::env::var("CARGO_CFG_TARGET_ENV").as_deref() == Ok("msvc");
+    let lib = salida.join(if msvc { "winsi_ada.lib" } else { "libwinsi_ada.a" });
+    let _ = std::fs::remove_file(&lib);
+    let ar = PathBuf::from(&gcc).with_file_name(if cfg!(windows) { "ar.exe" } else { "ar" });
+    let ar = if ar.exists() { ar } else { PathBuf::from("ar") };
+    match Command::new(&ar).arg("crs").arg(&lib).arg(&objeto).status() {
+        Ok(s) if s.success() => {}
+        otro => panic!("no pude armar {} con {}: {otro:?}", lib.display(), ar.display()),
+    }
+
+    println!("cargo:rustc-link-search=native={}", salida.display());
+    println!("cargo:rustc-link-lib=static=winsi_ada");
+    println!("cargo:rustc-cfg=winsi_ada");
 }
 
 /// Traduce el target de Rust al de Zig.

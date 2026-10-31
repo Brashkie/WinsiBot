@@ -4,6 +4,25 @@ Todos los cambios notables de WinsiBot se documentan en este archivo, versión p
 
 ---
 
+## [9.2.0] — sin publicar
+
+**El primer módulo en Ada/SPARK: un antirrobo de grupos cuya decisión está demostrada.** Si
+alguien que no es el dueño degrada o saca a un admin protegido —o al bot, que es el primer paso de
+un robo—, el bot le quita el admin, lo revierte, revoca el enlace y avisa por privado. Qué hacer
+lo decide una función en SPARK, y GNATprove demuestra para toda entrada posible que nunca actúa
+contra un protegido. Session API 5.14.0.
+
+| Área | Cambio |
+|------|--------|
+| **`#antirrobo`** | `on`, `off`, `proteger @usuario`, `quitar @usuario`, y sin nada, el estado y la lista. Protege al creador del grupo, a los dueños del bot y a los que se marquen (hasta 10). **Solo lo maneja un protegido**: si cualquier admin pudiera apagarlo, el atacante lo apagaría antes de robar. Quien lo activa queda protegido. Ante un ataque, en este orden: le quita el admin al autor, le devuelve el admin al afectado —o lo vuelve a agregar—, revoca el enlace del grupo, lo cuenta en el grupo y avisa por privado a los protegidos. Sin ser admin, el bot solo avisa |
+| **La decisión, en Ada/SPARK** | `crates/session-api/ada/src/group_guard.ads`. GNATprove (`--level=4`) demuestra 13 comprobaciones para **toda** entrada: nunca actúa contra un protegido ni contra el bot, nunca sin un autor identificado ni contra quien se degradó o se fue solo, apagado o ante un ascenso no hace nada, sin ser admin solo avisa, ante un ataque hace todo lo que puede, siempre termina y no hay errores en tiempo de ejecución. Para saber que los contratos exigen algo, se sembraron cuatro errores en el cuerpo —actuar sin ser admin, mirar solo si está activo, revocar sin ser admin, no validar el rango que llega de C—: GNATprove rechazó los cuatro |
+| **Enlazada sin el runtime de Ada** | El paquete es `Pure`, sin elaboración y sin excepciones, y demostrado se compila con `-gnatp`: el objeto no tiene ni un símbolo sin resolver, y la función son 17 instrucciones sin una sola llamada. Por eso enlaza tal cual dentro de la Session API, también con MSVC en Windows, por la ABI de C (`winsi_group_guard_decide`). Feature `ada` |
+| **Termux y Linux ARM, con la copia** | GNAT no compila para Android. Ahí decide una copia en Rust de la misma tabla (`src/group_guard.rs`), y un test la compara contra Ada en las **1.280 entradas** —los tres tipos de evento, uno inválido de cada lado, y las 256 combinaciones—: la copia hereda la demostración. El release lleva Ada en Windows, Linux x86-64 y macOS; si GNAT falla en el CI, ese binario sale igual, con la copia |
+| **CI** | Un job nuevo, *Antirrobo en Ada/SPARK*: vuelve a demostrar con `--checks-as-errors` —una sola comprobación sin demostrar lo hace fallar— y compara Ada contra Rust. El release de GitHub lo espera |
+| **Los @lid** | Lo que la demostración no cubre es que el bot le pase bien el evento, y lo que más se presta a error es que la misma persona llega como `51999@s.whatsapp.net` en un lado y como `123@lid` en otro. `src/lib/groupGuard.ts` compara a cada uno con todos sus alias del grupo. 10 tests |
+| **Cuesta nada por mensaje** | Solo corre cuando un admin es degradado o expulsado en un grupo con el antirrobo activo: un viaje a la Session API por afectado. Un mensaje normal, o un grupo sin él, no paga nada |
+| **Verificado** | GNATprove: 13 de 13 con `--level=4`. 275 tests de vitest en 37 archivos, `tsc` limpio y el build. La Session API con y sin la feature `ada`, con Rust 1.99.1 |
+
 ## [9.1.0] — 2026-10-30
 
 **La IA responde mucho antes y el bot pesa menos.** Desde el segundo mensaje de un chat la IA lee

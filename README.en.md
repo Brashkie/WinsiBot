@@ -63,6 +63,7 @@
 |-------|-----------|----------------|
 | 🟦 **Core** | TypeScript / Node.js | WhatsApp protocol, command dispatcher, RPG, economy, web panel |
 | ⚙️ **Session + AI** | Rust / Axum | Atomic creds and snapshots, Bad MAC tracker, rate limiter, intent classification, personality and humour, reputation, style profiles, Ollama and cloud APIs, images |
+| 🛡 **Anti-takeover** | Ada/SPARK | The group anti-takeover decision, its guarantees proven by GNATprove for every input, linked into the Session API |
 | 🧮 **Native kernels** | C + Zig | Anime4K and the JPEG codec, compiled with Zig into the Session API binary. The fastest one is used, measured, and on x86-64 the AVX2 copy if the CPU has it |
 
 ### What's new in v9.1.0
@@ -173,6 +174,7 @@
 
 ### 🛡️ Moderation
 - Antilink, antispam, antiflood, antitoxic
+- Anti-takeover: if someone demotes or removes a protected admin, it's reverted (decision in Ada/SPARK, proven)
 - Platform block: Telegram, Discord, TikTok
 - Customizable welcome / farewell messages
 - Admin mode: only admins can use commands
@@ -802,7 +804,7 @@ WinsiBot/
 │       ├── server.ts                 # API + WS + web/dist static files
 │       ├── auth.ts                   # WhatsApp-linked login (#login <code>)
 │       └── routes/                   # /api/subbots, /api/groups, /api/admin
-├── crates/session-api/               # Session API v5.13.0 (Rust) — workspace in the root Cargo.toml
+├── crates/session-api/               # Session API v5.14.0 (Rust) — workspace in the root Cargo.toml
 │   ├── native/                       # C and Zig kernels, compiled with Zig into the binary
 │   │   ├── lib.zig                   # Root: pulls in the other .zig files
 │   │   ├── anime4k.c                 # push_color and push_gradient (1.35x over Rust)

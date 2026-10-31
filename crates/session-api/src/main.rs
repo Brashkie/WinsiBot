@@ -296,6 +296,11 @@ async fn principal() {
         .route("/vision/upscale", post(vision::upscale_handler))
         // ─── Bad MAC per-group tracker ────────────────────────────────────────
         .route("/badmac/report", post(bad_mac::report_bad_mac))
+        // ─── Antirrobo de grupos: la decisión, en Ada/SPARK (ver group_guard.rs)
+        .route(
+            "/group/guard/decide",
+            post(winsibot_session_api::group_guard::decide),
+        )
         // ─── Ritmo de salida por cuenta (ver antiban.rs) ──────────────────────
         .route("/antiban/permit", post(antiban::permit))
         .route("/antiban/report", post(antiban::report))

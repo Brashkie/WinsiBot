@@ -16,6 +16,7 @@ pub mod bad_mac;
 pub mod config;
 pub mod conversations;
 pub mod db;
+pub mod group_guard;
 pub mod imagefx;
 pub mod imagesearch;
 pub mod ingest;

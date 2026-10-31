@@ -204,6 +204,9 @@ export interface GroupConfig {
   autoReject: boolean // rechazar solicitudes automáticamente
   // ── Captcha de bienvenida ──────────────────────────────────────────────────
   captcha: boolean // verificación captcha al unirse
+  // ── Antirrobo (#antirrobo, ver events/antitheft.ts) ────────────────────────
+  antirrobo: boolean
+  protegidos: string[] // además del creador y los dueños del bot, con todos sus alias
   // ── Expiración ─────────────────────────────────────────────────────────────
   expired: number // timestamp (0 = sin expiración)
   // ── Idioma (#idioma grupo): el de quien no eligió y no se deduce por su número
@@ -364,6 +367,8 @@ export function defaultGroupConfig(): GroupConfig {
     autoAccept: false,
     autoReject: false,
     captcha: false,
+    antirrobo: false,
+    protegidos: [],
     expired: 0,
   }
 }

@@ -1,0 +1,10 @@
+name = "group_guard"
+description = "Antirrobo de grupos de WinsiBot: la decision, demostrada con SPARK"
+version = "0.1.0"
+
+authors = ["Brashkie"]
+licenses = "GPL-3.0-only"
+tags = []
+
+[[depends-on]]
+gnatprove = "^16.1.0"

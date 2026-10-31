@@ -107,6 +107,7 @@ const D: Record<string, Traduccion> = {
 
   // admin
   antilink:    { en: 'Turn antilink on/off in the group', pt: 'Liga/desliga o antilink no grupo' },
+  antirrobo:   { en: 'Protects the group admins from a takeover  |  !antirrobo on  ·  off  ·  proteger @user  ·  quitar @user', pt: 'Protege os admins do grupo de um roubo  |  !antirrobo on  ·  off  ·  proteger @usuário  ·  quitar @usuário' },
   ban:         { en: 'Ban a user from the bot', pt: 'Bane um usuário do bot' },
   banchat:     { en: 'Mute/unmute the bot in this group', pt: 'Silencia/ativa o bot neste grupo' },
   on:          { en: 'Turn group features on or off', pt: 'Liga ou desliga funções do grupo' },

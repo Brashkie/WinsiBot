@@ -31,10 +31,12 @@ jobs:
           - target: x86_64-pc-windows-msvc
             os: windows-latest
             ext: ".exe"
+            ada: true
 
           - target: x86_64-unknown-linux-gnu
             os: ubuntu-latest
             ext: ""
+            ada: true
 
           - target: aarch64-unknown-linux-gnu
             os: ubuntu-latest
@@ -52,6 +54,7 @@ jobs:
           - target: aarch64-apple-darwin
             os: macos-latest
             ext: ""
+            ada: true
 
           # Mac Intel (`x86_64-apple-darwin`) NO está, y no es un olvido.
           #
@@ -111,8 +114,32 @@ jobs:
       # Con `native`: los kernels de Anime4K en C y Zig, que hacen #upscale
       # 1,22x más rápido (ver src/anime4k.rs). Lo que baja `npm install` es
       # este binario, así que es el que tiene que llevarlos.
+      # El antirrobo en Ada/SPARK (crates/session-api/ada), donde hay GNAT para
+      # el propio runner: Windows, Linux x86-64 y macOS ARM. Android y Linux
+      # ARM se compilan cruzados y llevan la copia en Rust, que el CI compara
+      # contra Ada en toda entrada. Si GNAT no se instala o no enlaza, el
+      # binario sale igual, con la copia: nunca se pierde uno por esto.
+      - name: Instalar GNAT
+        id: gnat
+        if: matrix.ada
+        continue-on-error: true
+        uses: alire-project/setup-alire@v4
+        with:
+          version: "2.1.1"
+
       - name: Compilar
-        run: cargo build --release -p winsibot-session-api --features native --target ${{ matrix.target }}
+        shell: bash
+        run: |
+          set -u
+          SIN_ADA="cargo build --release -p winsibot-session-api --features native --target ${{ matrix.target }}"
+          if [ "${{ steps.gnat.outcome }}" = "success" ]; then
+            if ! (cd crates/session-api/ada && alr -n exec -- bash -c "cd ../../.. && cargo build --release -p winsibot-session-api --features native,ada --target ${{ matrix.target }}"); then
+              echo "::warning::Con Ada no compiló para ${{ matrix.target }}: sale con la copia en Rust"
+              $SIN_ADA
+            fi
+          else
+            $SIN_ADA
+          fi
 
       - name: Renombrar y firmar con SHA-256
         shell: bash

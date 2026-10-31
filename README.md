@@ -63,6 +63,7 @@
 |------|-----------|----------------|
 | 🟦 **Core** | TypeScript / Node.js | Protocolo WhatsApp, dispatcher de comandos, RPG, economía, panel web |
 | ⚙️ **Session + IA** | Rust / Axum | Creds atómicas y snapshots, tracker Bad MAC, rate limiter, antiban, clasificación de intenciones, personalidad y humor, reputación, perfiles de estilo, Ollama y APIs cloud, imágenes |
+| 🛡 **Antirrobo** | Ada/SPARK | La decisión del antirrobo de grupos, con sus garantías demostradas por GNATprove para toda entrada, enlazada dentro de la Session API |
 | 🧮 **Kernels nativos** | C + Zig | Anime4K y el códec JPEG, compilados con Zig dentro del binario de la Session API. Se usa el que gana midiendo, y en x86-64 la copia para AVX2 si la CPU la tiene |
 
 ### Novedades en v9.1.0
@@ -173,6 +174,7 @@
 
 ### 🛡️ Moderación
 - Antilink, antispam, antiflood, antitoxic
+- Antirrobo: si alguien degrada o saca a un admin protegido, se revierte (decisión en Ada/SPARK, demostrada)
 - Bloqueo por plataforma: Telegram, Discord, TikTok
 - Bienvenida / despedida personalizables
 - Modo admin: solo admins usan comandos
@@ -803,7 +805,7 @@ WinsiBot/
 │       ├── server.ts                 # API + WS + estático de web/dist
 │       ├── auth.ts                   # Login vinculando WhatsApp (#login <código>)
 │       └── routes/                   # /api/subbots, /api/groups, /api/admin
-├── crates/session-api/               # Session API v5.13.0 (Rust) — workspace en Cargo.toml de la raíz
+├── crates/session-api/               # Session API v5.14.0 (Rust) — workspace en Cargo.toml de la raíz
 │   ├── native/                       # Kernels en C y Zig, compilados con Zig dentro del binario
 │   │   ├── lib.zig                   # Raíz: trae los demás .zig
 │   │   ├── anime4k.c                 # push_color y push_gradient (1,35x sobre Rust)

@@ -88,13 +88,44 @@ jobs:
       - name: Tests con los kernels nativos
         run: cargo test --release -p winsibot-session-api --features native
 
+  # ─── Antirrobo en Ada/SPARK ──────────────────────────────────────────────────
+  # La decisión del antirrobo de grupos (crates/session-api/ada) está en SPARK:
+  # GNATprove demuestra sus garantías para toda entrada, y con
+  # --checks-as-errors una sola sin demostrar hace fallar el job. Después, la
+  # copia en Rust —la que llevan Android y Linux ARM, sin GNAT— contra Ada en
+  # las 1.280 entradas.
+  ada:
+    name: Antirrobo en Ada/SPARK
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Cache Rust
+        uses: Swatinem/rust-cache@v2
+
+      - name: Instalar Alire y GNAT
+        uses: alire-project/setup-alire@v4
+        with:
+          version: "2.1.1"
+
+      - name: Demostrar con GNATprove
+        working-directory: crates/session-api/ada
+        run: alr -n exec -- gnatprove -P group_guard.gpr --level=4 -j0 --checks-as-errors=on
+
+      - name: Ada contra la copia en Rust, en toda entrada
+        working-directory: crates/session-api/ada
+        run: alr -n exec -- bash -c 'cd ../../.. && cargo test --release -p winsibot-session-api --features ada group_guard'
+
   # ─── Release ─────────────────────────────────────────────────────────────────
   # Solo corre al pushear un tag "vX.Y.Z" — crea el Release en GitHub con notas
-  # autogeneradas, y solo después de que los 3 checks de arriba pasen en verde.
+  # autogeneradas, y solo después de que los 4 checks de arriba pasen en verde.
   release:
     name: Create GitHub Release
     if: startsWith(github.ref, 'refs/tags/v')
-    needs: [typescript, rust, arm]
+    needs: [typescript, rust, arm, ada]
     runs-on: ubuntu-latest
     permissions:
       contents: write

@@ -6,6 +6,7 @@ import { sendWithMedia } from '@lib/media_sender.js'
 import { config as botConfig } from '@config'
 import { getNumber } from '@lib/jid_utils.js'
 import { rellenar } from '@lib/welcomeTemplate.js'
+import { vigilar } from './antitheft.js'
 
 const GITHUB_URL           = 'https://github.com/Brashkie/WinsiBot'
 const DEFAULT_WELCOME_BODY = 'Respeta las reglas, sé amable y diviértete'
@@ -65,10 +66,15 @@ export async function textoDe(
 
 export async function handleParticipantsUpdate(
   sock:   WASocket,
-  update: { id: string; participants: string[]; action: string },
+  update: { id: string; author?: string; participants: string[]; action: string },
 ): Promise<void> {
   const { id, participants, action } = update
   const config = getGroupConfig(id)
+
+  // El antirrobo va antes que los avisos: si es un robo, cada segundo cuenta.
+  if (config.antirrobo && (action === 'demote' || action === 'remove')) {
+    await vigilar(sock, id, update.author || undefined, participants, action).catch(() => {})
+  }
 
   for (const participant of participants) {
     const num = getNumber(participant)
