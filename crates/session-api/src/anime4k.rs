@@ -920,13 +920,21 @@ pub fn pasada_neon() -> bool {
 }
 
 /// Si la pasada de a 8 suma los vecinos en enteros y convierte una vez (ver
-/// `empujar` en native/anime4k_push.zig). Da lo mismo bit a bit; en ARM son
-/// un 20 % menos de instrucciones, y CI mide si eso es más rápido.
-/// `WINSI_A4K_SUMA=entera` la usa.
+/// `empujar` en native/anime4k_push.zig). Da lo mismo bit a bit.
+///
+/// Por defecto en ARM64: medido en el runner ARM64 de CI, `#upscale` de
+/// 3072x2048 baja de 431,0 a 385,6 ms en un núcleo y de 120,2 a 108,6 ms en
+/// cuatro (−10 %). Le ganó también a la pasada en C con NEON (413,7 y 115,9).
+/// En x86 es más lenta (~136 contra ~120 ms por pasada) y no se usa.
+/// `WINSI_A4K_SUMA=entera` o `=flotante` fuerza una, para medir.
 pub fn suma_entera() -> bool {
     use std::sync::OnceLock;
     static E: OnceLock<bool> = OnceLock::new();
-    *E.get_or_init(|| std::env::var("WINSI_A4K_SUMA").as_deref() == Ok("entera"))
+    *E.get_or_init(|| match std::env::var("WINSI_A4K_SUMA").as_deref() {
+        Ok("entera") => true,
+        Ok("flotante") => false,
+        _ => cfg!(target_arch = "aarch64"),
+    })
 }
 
 #[cfg(feature = "native")]
