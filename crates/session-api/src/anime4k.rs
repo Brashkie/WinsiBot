@@ -291,21 +291,6 @@ pub fn push_gradient_rust(img: &image::RgbaImage, fuerza: f32) -> image::RgbaIma
 #[cfg(feature = "native")]
 mod ffi {
     unsafe extern "C" {
-        /// La pasada entera en C con NEON (native/anime4k_neon.c), solo ARM64.
-        #[cfg(target_arch = "aarch64")]
-        pub fn winsi_a4k_pass_neon(
-            src: *const u8,
-            dst: *mut u8,
-            w: u32,
-            h: u32,
-            fc: f32,
-            fg: f32,
-            y0: u32,
-            y1: u32,
-            anillo_c: *mut u8,
-            anillo_g: *mut u8,
-            luma: u32,
-        );
         pub fn winsi_a4k_push_color_c(
             src: *const u8,
             dst: *mut u8,
@@ -404,33 +389,6 @@ mod ffi {
             luma: u32,
         );
         pub fn winsi_a4k_pass_zig(
-            src: *const u8,
-            dst: *mut u8,
-            w: u32,
-            h: u32,
-            fc: f32,
-            fg: f32,
-            y0: u32,
-            y1: u32,
-            anillo_c: *mut u8,
-            anillo_g: *mut u8,
-            luma: u32,
-        );
-        pub fn winsi_a4k_pass_zig_n8(
-            src: *const u8,
-            dst: *mut u8,
-            w: u32,
-            h: u32,
-            fc: f32,
-            fg: f32,
-            y0: u32,
-            y1: u32,
-            anillo_c: *mut u8,
-            anillo_g: *mut u8,
-            luma: u32,
-        );
-        #[cfg(winsi_v3)]
-        pub fn winsi_a4k_pass_zig_n8_v3(
             src: *const u8,
             dst: *mut u8,
             w: u32,
@@ -854,86 +812,40 @@ fn pasada_zig_en(
     );
 }
 
-/// De a cuántos píxeles va la pasada fusionada de Zig: 16 u 8.
+/// Qué kernel hace la pasada fusionada. Las dos dan lo mismo bit a bit; cada
+/// arquitectura usa la que ganó midiendo (`examples/profile_stages`, que CI
+/// corre en ARM con las dos).
 ///
-/// Se eligió midiendo cada arquitectura (`examples/profile_stages`, que CI
-/// corre en ARM con las dos), y las dos dan lo mismo bit a bit:
+/// Lo que se midió en la 9.3.3, `#upscale` de 3072x2048:
 ///
-/// - **x86-64, de a 16**: llena un registro AVX2. ~97 ms por pasada en un
-///   núcleo, contra ~120 de a 8.
-/// - **ARM64, de a 8**: un registro NEON mide la mitad, y el cálculo en f32 de
-///   16 carriles ocupa cuatro por canal. En el runner ARM64 de CI, `#upscale`
-///   de 3072x2048 baja de 480,6 a 429,8 ms en un núcleo y de 133,6 a 119,4 ms
-///   en cuatro (−11 %).
+/// - **x86-64**: de a 16 llena un registro AVX2. ~96 ms por pasada en un
+///   núcleo, contra ~120 de a 8 y ~136 de a 8 con suma entera.
+/// - **ARM64**, un núcleo / cuatro: de a 16, 482 / 134 ms; de a 8, 431 / 120;
+///   de a 8 con suma entera, **385 / 108 (−20 %)**. Un registro NEON mide la
+///   mitad que uno AVX2, y la suma entera usa `uaddl`.
 ///
-/// De a 4 también se midió en ARM y perdió: 660 ms contra 428 de a 8.
-///
-/// `WINSI_A4K_CARRILES=8` o `=16` fuerza una, para medir.
-pub fn carriles() -> usize {
-    use std::sync::OnceLock;
-    static C: OnceLock<usize> = OnceLock::new();
-    *C.get_or_init(|| match std::env::var("WINSI_A4K_CARRILES").as_deref() {
-        Ok("8") => 8,
-        Ok("16") => 16,
-        _ if cfg!(target_arch = "aarch64") => 8,
-        _ => 16,
-    })
-}
-
-/// Qué kernel hace la pasada fusionada. Todas dan lo mismo bit a bit; se
-/// elige la que gane midiendo en cada arquitectura (ver [`variante`]).
+/// Se probaron y no quedaron: de a 4 (660 ms en ARM), y la pasada entera en C
+/// con intrínsecas NEON, que de a 16 dio 411 ms y de a 8 empató con la de Zig
+/// dentro del ruido (377 a 395 contra 383 a 385): no justificaba otro kernel
+/// que mantener igual a mano.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Variante {
-    /// Zig, de a 16 píxeles: la de x86.
+    /// De a 16 píxeles: la de x86.
     Zig16,
-    /// Zig, de a 8: la de ARM desde la 9.3.3.
-    Zig8,
-    /// Zig, de a 8, sumando los vecinos como enteros.
+    /// De a 8, sumando los vecinos como enteros: la de ARM.
     Zig8Entera,
-    /// C con intrínsecas NEON (native/anime4k_neon.c), solo ARM64.
-    CNeon,
 }
 
-/// La variante de esta máquina: la de [`carriles`], salvo que
-/// `WINSI_A4K_PASADA=neon` (solo ARM64) o `WINSI_A4K_SUMA=entera` pidan otra.
+/// La variante de esta máquina. `WINSI_A4K_PASADA=zig16` o `=zig8e` fuerza
+/// una, para medir.
 pub fn variante() -> Variante {
-    if pasada_neon() {
-        Variante::CNeon
-    } else if carriles() == 8 && suma_entera() {
-        Variante::Zig8Entera
-    } else if carriles() == 8 {
-        Variante::Zig8
-    } else {
-        Variante::Zig16
-    }
-}
-
-/// Si la pasada va por el kernel en C con intrínsecas NEON
-/// (native/anime4k_neon.c) en vez del de Zig: solo en ARM64, con
-/// `WINSI_A4K_PASADA=neon`. Da lo mismo bit a bit; CI la mide en ARM.
-pub fn pasada_neon() -> bool {
     use std::sync::OnceLock;
-    static N: OnceLock<bool> = OnceLock::new();
-    *N.get_or_init(|| {
-        cfg!(target_arch = "aarch64") && std::env::var("WINSI_A4K_PASADA").as_deref() == Ok("neon")
-    })
-}
-
-/// Si la pasada de a 8 suma los vecinos en enteros y convierte una vez (ver
-/// `empujar` en native/anime4k_push.zig). Da lo mismo bit a bit.
-///
-/// Por defecto en ARM64: medido en el runner ARM64 de CI, `#upscale` de
-/// 3072x2048 baja de 431,0 a 385,6 ms en un núcleo y de 120,2 a 108,6 ms en
-/// cuatro (−10 %). Le ganó también a la pasada en C con NEON (413,7 y 115,9).
-/// En x86 es más lenta (~136 contra ~120 ms por pasada) y no se usa.
-/// `WINSI_A4K_SUMA=entera` o `=flotante` fuerza una, para medir.
-pub fn suma_entera() -> bool {
-    use std::sync::OnceLock;
-    static E: OnceLock<bool> = OnceLock::new();
-    *E.get_or_init(|| match std::env::var("WINSI_A4K_SUMA").as_deref() {
-        Ok("entera") => true,
-        Ok("flotante") => false,
-        _ => cfg!(target_arch = "aarch64"),
+    static V: OnceLock<Variante> = OnceLock::new();
+    *V.get_or_init(|| match std::env::var("WINSI_A4K_PASADA").as_deref() {
+        Ok("zig16") => Variante::Zig16,
+        Ok("zig8e") => Variante::Zig8Entera,
+        _ if cfg!(target_arch = "aarch64") => Variante::Zig8Entera,
+        _ => Variante::Zig16,
     })
 }
 
@@ -962,33 +874,11 @@ fn pasada_zig_con(
             u32::from(luma),
         );
         let (ac, ag) = (anillo_c.as_mut_ptr(), anillo_g.as_mut_ptr());
-        // La de C con NEON, si se pidió y es ARM64: mismos argumentos.
-        #[cfg(target_arch = "aarch64")]
-        if variante == Variante::CNeon {
-            unsafe { ffi::winsi_a4k_pass_neon(s, d, w, h, fc, fg, y0, y1, ac, ag, l) };
-            return;
-        }
         unsafe {
             if variante == Variante::Zig8Entera {
                 crate::zig!(
                     ffi::winsi_a4k_pass_zig_n8e,
                     ffi::winsi_a4k_pass_zig_n8e_v3,
-                    s,
-                    d,
-                    w,
-                    h,
-                    fc,
-                    fg,
-                    y0,
-                    y1,
-                    ac,
-                    ag,
-                    l
-                )
-            } else if variante == Variante::Zig8 {
-                crate::zig!(
-                    ffi::winsi_a4k_pass_zig_n8,
-                    ffi::winsi_a4k_pass_zig_n8_v3,
                     s,
                     d,
                     w,
@@ -1226,15 +1116,12 @@ mod tests {
                     ref_luma,
                     "pasada fusionada {w}x{h} f={f}"
                 );
-                // La de a 8 carriles (la que puede ganar en ARM), igual.
-                let mut n8 = RgbaImage::new(w, h);
-                pasada_zig_con(&img, &mut n8, f, f, false, Variante::Zig8);
-                assert_eq!(n8, ref_luma, "pasada de a 8 {w}x{h} f={f}");
-                #[cfg(target_arch = "aarch64")]
-                {
-                    let mut neon = RgbaImage::new(w, h);
-                    pasada_zig_con(&img, &mut neon, f, f, false, Variante::CNeon);
-                    assert_eq!(neon, ref_luma, "pasada C NEON {w}x{h} f={f}");
+                // Las dos variantes explícitas, sea cual sea la de esta
+                // máquina: de a 16 (x86) y de a 8 con suma entera (ARM).
+                let mut v = RgbaImage::new(w, h);
+                for variante in [Variante::Zig16, Variante::Zig8Entera] {
+                    pasada_zig_con(&img, &mut v, f, f, false, variante);
+                    assert_eq!(v, ref_luma, "pasada {variante:?} {w}x{h} f={f}");
                 }
                 luminancia_en_alfa(&mut ref_luma);
                 assert_eq!(
@@ -1242,18 +1129,9 @@ mod tests {
                     ref_luma,
                     "pasada fusionada con luma {w}x{h} f={f}"
                 );
-                pasada_zig_con(&img, &mut n8, f, f, true, Variante::Zig8);
-                assert_eq!(n8, ref_luma, "pasada de a 8 con luma {w}x{h} f={f}");
-                // Y la de a 8 con la suma de los vecinos en enteros.
-                let mut n8e = RgbaImage::new(w, h);
-                pasada_zig_con(&img, &mut n8e, f, f, true, Variante::Zig8Entera);
-                assert_eq!(n8e, ref_luma, "pasada de a 8 entera con luma {w}x{h} f={f}");
-                // Y la de C con NEON, en ARM64 (en CI corre en un ARM de verdad).
-                #[cfg(target_arch = "aarch64")]
-                {
-                    let mut neon = RgbaImage::new(w, h);
-                    pasada_zig_con(&img, &mut neon, f, f, true, Variante::CNeon);
-                    assert_eq!(neon, ref_luma, "pasada C NEON con luma {w}x{h} f={f}");
+                for variante in [Variante::Zig16, Variante::Zig8Entera] {
+                    pasada_zig_con(&img, &mut v, f, f, true, variante);
+                    assert_eq!(v, ref_luma, "pasada {variante:?} con luma {w}x{h} f={f}");
                 }
                 // Y con la luminancia de la pasada siguiente escrita en el alfa.
                 let mut referencia = push_gradient_rust(&gradiente_rust(&pc), f);

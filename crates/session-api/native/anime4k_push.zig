@@ -428,17 +428,11 @@ pub fn winsi_a4k_pass_zig(src: [*]const u8, dst: [*]u8, w32: u32, h32: u32, fc: 
     pasadaCon(N, false, src, dst, w32, h32, fc, fg, y0, y1, anillo_c, anillo_g, luma);
 }
 
-/// La misma pasada, de a 8 píxeles. De a 16 ganó en x86 (9.3.0: un registro
-/// AVX2 lleno), pero en ARM un registro NEON mide la mitad y el cálculo en
-/// f32 de 16 carriles ocupa cuatro: la Session API elige con
-/// WINSI_A4K_CARRILES, y CI mide las dos en ARM. El mismo resultado bit a bit:
-/// cada carril es independiente.
-pub fn winsi_a4k_pass_zig_n8(src: [*]const u8, dst: [*]u8, w32: u32, h32: u32, fc: f32, fg: f32, y0: u32, y1: u32, anillo_c: [*]u8, anillo_g: [*]u8, luma: u32) callconv(.C) void {
-    pasadaCon(8, false, src, dst, w32, h32, fc, fg, y0, y1, anillo_c, anillo_g, luma);
-}
-
-/// De a 8 con la suma de los vecinos en enteros (ver `empujar`): para medir
-/// en ARM contra la de a 8 de siempre. Idéntica bit a bit.
+/// La misma pasada, de a 8 píxeles y sumando los vecinos como enteros (ver
+/// `empujar`): la de ARM. De a 16 ganó en x86 (un registro AVX2 lleno); en
+/// ARM un registro NEON mide la mitad, y la suma entera usa `uaddl`. Medido en
+/// el runner ARM64 de CI: −20 % en `#upscale` frente a la de a 16. Idéntica
+/// bit a bit; la Session API elige con `anime4k::variante()`.
 pub fn winsi_a4k_pass_zig_n8e(src: [*]const u8, dst: [*]u8, w32: u32, h32: u32, fc: f32, fg: f32, y0: u32, y1: u32, anillo_c: [*]u8, anillo_g: [*]u8, luma: u32) callconv(.C) void {
     pasadaCon(8, true, src, dst, w32, h32, fc, fg, y0, y1, anillo_c, anillo_g, luma);
 }

@@ -187,8 +187,6 @@ fn compilar_nativo() {
         "-ffp-contract=off",
         "--",
         "native/anime4k.c",
-        // La pasada en C con NEON: en otra arquitectura compila vacía.
-        "native/anime4k_neon.c",
         "native/jpeg.c",
     ]);
     if let Some(obj) = &objeto_v3 {
