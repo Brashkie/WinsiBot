@@ -97,7 +97,7 @@ A small fix: with no session yet —before the first QR or after `npm run manage
 | **Downloads** | `npm run ytdlp:fetch` fetches yt-dlp into `bin/`, verified. If it's missing, `#play` says so instead of staying silent |
 | **Log** | "Bad MAC" only when decryption really fails, with its reason: syncing with the bot's own phone no longer floods the console, and group notices no longer count toward key cleanup |
 
-**To update:** `npm install` and `npm run build`, with the bot stopped on Windows. For downloads, `npm run ytdlp:fetch` (on Termux, `pkg install yt-dlp`).
+**To update:** `git pull`, `npm install` and `npm run build`, with the bot stopped (see [Updating](#updating)). For downloads, `npm run ytdlp:fetch` (on Termux, `pkg install yt-dlp`).
 
 ### What's new in v9.3.0
 
@@ -309,6 +309,20 @@ npm run web:build
 # 5 — Start
 npm start
 ```
+
+### Updating
+
+`git clone` downloads what is on GitHub **at that moment**: a clone you already have doesn't change by itself when a new version comes out. To get it, with the bot stopped:
+
+```bash
+cd WinsiBot
+git pull          # brings in the changes from GitHub
+npm install       # new dependencies and the Session API binary for that version
+npm run build     # builds the bot
+npm start         # on Termux: ./start.sh
+```
+
+If `npm install` failed halfway in an earlier install, delete `node_modules` first (`rm -rf node_modules`) and run it again.
 
 > **No Python needed.** Since 8.15.0 there is nothing of Python left in the
 > project: the maintenance CLI (`npm run manage`) is in Node and the

@@ -97,7 +97,7 @@ Un arreglo chico: sin sesión todavía —antes del primer QR o después de `npm
 | **Descargas** | `npm run ytdlp:fetch` baja yt-dlp a `bin/`, verificado. Si falta, `#play` lo dice en vez de quedarse callado |
 | **Log** | "Bad MAC" solo cuando falla el descifrado de verdad, con su motivo: la sincronización con el teléfono del bot ya no llena la consola, ni los avisos de grupo cuentan para la limpieza de claves |
 
-**Para actualizar:** `npm install` y `npm run build`, con el bot parado si estás en Windows. Para las descargas, `npm run ytdlp:fetch` (en Termux, `pkg install yt-dlp`).
+**Para actualizar:** `git pull`, `npm install` y `npm run build`, con el bot parado (ver [Actualizar](#actualizar)). Para las descargas, `npm run ytdlp:fetch` (en Termux, `pkg install yt-dlp`).
 
 ### Novedades en v9.3.0
 
@@ -309,6 +309,20 @@ npm run web:build
 # 5 — Arrancar
 npm start
 ```
+
+### Actualizar
+
+`git clone` baja lo que hay en GitHub **en ese momento**: un clon que ya tenés no cambia solo cuando sale una versión nueva. Para traerla, con el bot parado:
+
+```bash
+cd WinsiBot
+git pull          # trae los cambios de GitHub
+npm install       # dependencias nuevas y el binario de la Session API de esa versión
+npm run build     # compila el bot
+npm start         # en Termux: ./start.sh
+```
+
+Si `npm install` falló a mitad de camino en una instalación anterior, borrá antes `node_modules` (`rm -rf node_modules`) y volvé a correrlo.
 
 > **No hace falta Python.** Desde la 8.15.0 no queda nada de Python en el
 > proyecto: el CLI de mantenimiento (`npm run manage`) está en Node y el
