@@ -14,12 +14,12 @@
 // Ningún motor se llama con shell, y el texto va por stdin o por archivo,
 // nunca en la línea de comandos: lo escribe cualquiera del grupo.
 
-import { execFile } from 'child_process'
-import { promisify } from 'util'
-import { readFile, unlink, writeFile } from 'fs/promises'
-import { existsSync } from 'fs'
-import { join } from 'path'
-import { randomUUID } from 'crypto'
+import { execFile } from 'node:child_process'
+import { promisify } from 'node:util'
+import { readFile, unlink, writeFile } from 'node:fs/promises'
+import { existsSync } from 'node:fs'
+import { join } from 'node:path'
+import { randomUUID } from 'node:crypto'
 import { IS_WINDOWS, IS_MAC, binPath } from './platform.js'
 import { ffmpegPath } from './ffmpeg.js'
 import { carpetaTmp } from './utils.js'

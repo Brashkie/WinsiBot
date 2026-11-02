@@ -16,7 +16,7 @@ const command: Command = {
   groupOnly:   true,
 
   async execute({ sock, jid, msg, args }) {
-    const cuantas = Math.min(Math.max(parseInt(args[0] ?? '') || 3, 1), 5)
+    const cuantas = Math.min(Math.max(parseInt(args[0] ?? '', 10) || 3, 1), 5)
     const ms = (await miembros(sock, jid).catch(() => [])).filter(m => !esElBot(sock, m))
     if (ms.length < 2) {
       await safeSend(() => sock.sendMessage(jid, { text: `> Hacen falta al menos dos miembros.` }, { quoted: msg }))

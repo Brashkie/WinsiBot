@@ -2,7 +2,7 @@
 // carpeta: spawnear un proceso hijo con stdio heredado, reportar errores de
 // arranque, propagar el código de salida y (opcionalmente) reenviar
 // SIGINT/SIGTERM al hijo — antes repetido casi al carácter en 9 scripts.
-import { spawn } from 'child_process'
+import { spawn } from 'node:child_process'
 
 export function runChild(command, args, {
   cwd,

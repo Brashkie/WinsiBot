@@ -10,6 +10,10 @@ Para la lista completa de comandos (con aliases y permisos) ver [commands.md](co
 
 BrasCoins (¥) es la moneda con la que comprás huevos de dragón, regalos, y con la que apostás en los juegos. Se guarda en tu **billetera** (`money`) o en el **banco** (`bank`) — ver la sección [Banco](#-banco--protegé-tu-dinero) más abajo, es importante.
 
+### Cómo escribir un monto
+
+En `!pay`, `!dep`, `!cf`, `!bj`, `!pujar` y todos los que piden un monto: solo dígitos, con o sin separador de miles. `500`, `1000`, `1.000`, `1,000`, `1 000` y `1_000` valen; `1.000` son **mil**, no uno. El separador tiene que ser el mismo en todo el número y caer cada tres cifras: `1.00`, `1.000,50`, `12abc`, `1e9` o `-5` no son montos, y el bot lo dice en vez de adivinar. El máximo es ¥9.007.199.254.740.991, el último entero exacto. Esta regla está demostrada en Ada/SPARK.
+
 ### Ingreso recurrente (sin riesgo)
 
 | Comando | Cooldown | Requisito | Qué da |

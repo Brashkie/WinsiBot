@@ -83,7 +83,10 @@ pub(crate) struct Wal {
 
 impl Wal {
     pub fn abrir(dir: &Path, seq: u64) -> io::Result<Self> {
-        let archivo = OpenOptions::new().create(true).append(true).open(ruta(dir, seq))?;
+        let archivo = OpenOptions::new()
+            .create(true)
+            .append(true)
+            .open(ruta(dir, seq))?;
         Ok(Self { archivo, seq })
     }
 
@@ -119,7 +122,9 @@ pub(crate) fn reproducir(
         // El CRC ya cuadró: si el contenido no se puede leer igual, es un bug
         // de escritura, no un corte; se trata como corte para no aplicar
         // medio lote.
-        let Some(ops) = decodificar(contenido) else { break };
+        let Some(ops) = decodificar(contenido) else {
+            break;
+        };
         for (k, v) in ops {
             aplicar(k, v);
         }

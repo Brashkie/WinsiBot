@@ -5,6 +5,8 @@ import {
   getUserData, patchUserData,
   isOnCooldown, setCooldown, getCooldownLeft, fmtCooldown,
 } from '@core/events.js'
+import { cobrarReservando } from '@core/economy.js'
+import { textoDeMotivo } from '@lib/ledger.js'
 import {
   elegirCria,
   NIVEL_MIN as CRIA_NIVEL_MIN, COSTO_ORO as CRIA_COSTO_ORO,
@@ -277,7 +279,16 @@ const command: Command = {
         hatchedAt:   Date.now(),
         lastCollect: Date.now(),
       }
-      patchUserData(sender, { money: user.money - HATCH_COST_MONEY, dragons: [...user.dragons, owned] })
+      // El dragón se anota antes de cobrar y se quita si el cobro falla.
+      const cobro = await cobrarReservando([{ cuenta: { jid: sender, campo: 'money' }, delta: -HATCH_COST_MONEY }], () => {
+        const previos = user.dragons
+        patchUserData(sender, { dragons: [...previos, owned] })
+        return () => patchUserData(sender, { dragons: previos })
+      })
+      if (!cobro.ok) {
+        await safeSend(() => sock.sendMessage(jid, { text: `> ${textoDeMotivo(cobro.motivo)}` }, { quoted: msg }))
+        return
+      }
 
       // ── mensaje 2: revelación — video real de la etapa 1, con la info ────
       const newIndex = user.dragons.length + 1
@@ -352,12 +363,22 @@ const command: Command = {
         id: cria.id, slug: cria.slug, name: cria.name,
         level: 1, exp: 0, stage: 1, hatchedAt: Date.now(), lastCollect: Date.now(),
       }
-      setCooldown(sender, 'lastBreed')
-      patchUserData(sender, {
-        oro:     user.oro - CRIA_COSTO_ORO,
-        money:   user.money - CRIA_COSTO_DINERO,
-        dragons: [...user.dragons, owned],
+      // El cooldown, el oro y la cría se apartan antes de cobrar el dinero, y
+      // vuelven si el cobro falla.
+      const cobro = await cobrarReservando([{ cuenta: { jid: sender, campo: 'money' }, delta: -CRIA_COSTO_DINERO }], () => {
+        const previo = { oro: user.oro, dragons: user.dragons, cd: getUserData(sender).cooldowns.lastBreed }
+        setCooldown(sender, 'lastBreed')
+        patchUserData(sender, { oro: user.oro - CRIA_COSTO_ORO, dragons: [...user.dragons, owned] })
+        return () => {
+          patchUserData(sender, { oro: previo.oro, dragons: previo.dragons })
+          const cds = getUserData(sender).cooldowns
+          cds.lastBreed = previo.cd ?? 0
+        }
       })
+      if (!cobro.ok) {
+        await safeSend(() => sock.sendMessage(jid, { text: `> ${textoDeMotivo(cobro.motivo)}` }, { quoted: msg }))
+        return
+      }
 
       await revelar(sock, jid, msg, cria, [
         tx(lang, T.cria, { a: a.dragon.name, b: b.dragon.name }),
@@ -400,7 +421,7 @@ const command: Command = {
 
       // ── evolución final — se muestra el video una sola vez, al momento exacto ─
       if (evolvedToFinal) {
-        let def
+        let def: Awaited<ReturnType<typeof findDragon>> | undefined
         try { def = await findDragon(dragon.id) } catch { def = undefined }
         const vidUrl = def ? videoForStage(def, 3) : undefined
         const caption = [
@@ -481,7 +502,7 @@ const command: Command = {
       }
 
       const owned = resolveOwned(user.dragons, query)
-      let def
+      let def: Awaited<ReturnType<typeof findDragon>> | undefined
       try {
         def = await findDragon(owned ? owned.dragon.slug : query)
       } catch { def = undefined }

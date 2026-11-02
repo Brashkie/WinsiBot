@@ -14,7 +14,7 @@ const command: Command = {
   cooldown:    10,
 
   async execute({ sock, jid, msg, args, prefix, isGroup }) {
-    const page = Math.max(1, parseInt(args[0] ?? '1') || 1)
+    const page = Math.max(1, parseInt(args[0] ?? '1', 10) || 1)
 
     // Acota el top a los miembros del grupo — mismo fix que baltop.ts, ver
     // ese archivo para el detalle de por qué (antes mostraba usuarios de

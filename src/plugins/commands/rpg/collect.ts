@@ -1,6 +1,8 @@
 import type { Command } from '../../../types/index.js'
 import { safeSend } from '@lib/media_sender.js'
 import { getUserData, patchUserData } from '@core/events.js'
+import { cambiarSaldos } from '@core/economy.js'
+import { textoDeMotivo } from '@lib/ledger.js'
 import { findBusiness, pendingIncome } from '@lib/business.js'
 
 const command: Command = {
@@ -43,10 +45,17 @@ const command: Command = {
       return
     }
 
-    patchUserData(sender, {
-      money:      user.money + total,
-      businesses: updated,
-    })
+    // Los negocios se marcan cobrados ANTES de cobrar: con la espera, dos
+    // #collect a la vez habrían cobrado el mismo ingreso. Si el cobro falla,
+    // vuelven como estaban.
+    const previos = user.businesses
+    patchUserData(sender, { businesses: updated })
+    const r = await cambiarSaldos([{ cuenta: { jid: sender, campo: 'money' }, delta: total }])
+    if (!r.ok) {
+      patchUserData(sender, { businesses: previos })
+      await safeSend(() => sock.sendMessage(jid, { text: `✗ ${textoDeMotivo(r.motivo)}` }, { quoted: msg }))
+      return
+    }
 
     await safeSend(() => sock.sendMessage(jid, {
       text: [
@@ -55,7 +64,7 @@ const command: Command = {
         ...rows,
         `│`,
         `> Total  +¥${total.toLocaleString()}`,
-        `> Balance ¥${(user.money + total).toLocaleString()}`,
+        `> Balance ¥${r.saldos[0]!.toLocaleString()}`,
         `╰─`,
       ].join('\n'),
     }, { quoted: msg }))

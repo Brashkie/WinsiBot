@@ -6,6 +6,8 @@
 ///  - cleanup_badmac : cada 30 min libera memoria de grupos Bad MAC inactivos
 ///    sin historial de clears (>1h sin actividad).
 ///  - watchdog_check : cada 60 s registra advertencia si Node.js no responde.
+///  - podar_conversaciones : cada hora borra los mensajes de más de
+///    CONV_RETENCION_DIAS (365 por defecto; ver conversations.rs).
 use std::time::Duration;
 
 use crate::routes::AppState;
@@ -25,6 +27,7 @@ pub fn start(state: AppState) {
     tokio::spawn(cleanup_badmac(state.clone()));
     tokio::spawn(guardar_antiban(state.clone()));
     tokio::spawn(vaciar_conversaciones(state.clone()));
+    tokio::spawn(podar_conversaciones(state.clone()));
     tokio::spawn(watchdog_check(state));
 }
 
@@ -39,6 +42,34 @@ async fn vaciar_conversaciones(state: AppState) {
         if state.conv_db.hay_pendientes() {
             let db = state.conv_db.clone();
             let _ = tokio::task::spawn_blocking(move || db.vaciar_pendientes()).await;
+        }
+    }
+}
+
+/// Borra cada hora los mensajes que pasaron la retención. La primera vez, un
+/// minuto después de arrancar: una base de años puede tener millones de filas
+/// para borrar, y eso no tiene por qué competir con el arranque.
+async fn podar_conversaciones(state: AppState) {
+    let dias = crate::conversations::retencion_dias();
+    if dias == 0 {
+        return;
+    }
+    tokio::time::sleep(Duration::from_secs(60)).await;
+    let mut timer = tokio::time::interval(Duration::from_secs(3_600));
+    loop {
+        timer.tick().await;
+        let db = state.conv_db.clone();
+        let corte = chrono::Utc::now().timestamp_millis() - dias * 86_400_000;
+        if let Ok(n) =
+            tokio::task::spawn_blocking(move || crate::conversations::podar(&db, corte)).await
+        {
+            if n > 0 {
+                tracing::info!(
+                    borrados = n,
+                    dias,
+                    "conversaciones: mensajes vencidos borrados"
+                );
+            }
         }
     }
 }

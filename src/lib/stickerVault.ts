@@ -7,10 +7,10 @@
 // guarda metadata liviana (id, nombre, fecha) — ver SavedSticker en
 // events/index.ts.
 
-import { writeFile, unlink, mkdir, readFile } from 'fs/promises'
-import { existsSync } from 'fs'
-import { join } from 'path'
-import { randomUUID } from 'crypto'
+import { writeFile, unlink, mkdir, readFile } from 'node:fs/promises'
+import { existsSync } from 'node:fs'
+import { join } from 'node:path'
+import { randomUUID } from 'node:crypto'
 
 const VAULT_DIR = join(process.cwd(), 'data', 'stickers')
 

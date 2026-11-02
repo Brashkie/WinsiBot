@@ -1,8 +1,10 @@
 import './lib/env.js'
-import readline from 'readline'
-import { spawn, type ChildProcess } from 'child_process'
-import { join, resolve } from 'path'
-import { closeSync, mkdirSync, openSync } from 'fs'
+// Antes que Baileys: reemplaza las firmas de libsignal (ver lib/fastCurve.ts).
+import './lib/fastCurve.js'
+import readline from 'node:readline'
+import { spawn, type ChildProcess } from 'node:child_process'
+import { join, resolve } from 'node:path'
+import { closeSync, mkdirSync, openSync } from 'node:fs'
 import { winsiSocket } from '@core/socket.js'
 import { handleMessage, getActiveHandlerCount } from '@core/handler.js'
 import { loadCommands } from '@plugins/commands/index.js'
@@ -433,7 +435,7 @@ async function printBanner() {
       perCharColor: true,
     })
   } catch {
-    title = `  ${gradient(config.botName + ' v' + versionDelBot(), MATRIX_GREENS)}`
+    title = `  ${gradient(`${config.botName} v${versionDelBot()}`, MATRIX_GREENS)}`
   }
   // El logo grande mide ~60 columnas: en una terminal más angosta (Termux
   // vertical) se partía renglón por renglón. Ahí va el nombre en texto.
@@ -476,8 +478,8 @@ async function printConnected(jid: string, cmdCount: number) {
 
   console.log()
   const connectedBody = [
-    `${color.dim('numero')}    ${color.cyan('+' + number)}`,
-    `${color.dim('comandos')}  ${themes.warning(String(cmdCount) + ' cargados')}`,
+    `${color.dim('numero')}    ${color.cyan(`+${number}`)}`,
+    `${color.dim('comandos')}  ${themes.warning(`${String(cmdCount)} cargados`)}`,
     `${color.dim('hora')}      ${new Date().toLocaleTimeString('es-PE')}`,
   ].join('\n')
   console.log(ascii.box(connectedBody, {
@@ -531,6 +533,8 @@ async function main() {
   winsi.on('ready', async (sock) => {
     stopConn('WhatsApp conectado', true)
     const jid = sock.user?.id ?? ''
+    // Si la última vez WhatsApp sacó a la sesión, se les avisa a los dueños.
+    void import('@core/sessionAlert.js').then((m) => m.avisarSiHubo(sock)).catch(() => {})
     const { commandRegistry } = await import('@plugins/commands/index.js')
     // El registro tiene una entrada por nombre Y por alias (808 claves para
     // 242 comandos): se cuentan los comandos, no las claves.
@@ -616,6 +620,20 @@ async function main() {
     }
 
     try {
+      const { pagarPendientes } = await import('@core/economy.js')
+      await pagarPendientes()
+    } catch (err) {
+      logger.warn({ err }, 'Economía: no se pudieron pagar los premios pendientes')
+    }
+
+    try {
+      const { devolverManosInterrumpidas } = await import('@plugins/commands/rpg/invest.js')
+      await devolverManosInterrumpidas()
+    } catch (err) {
+      logger.warn({ err }, 'Inversiones: no se pudieron devolver las interrumpidas')
+    }
+
+    try {
       const { devolverManosInterrumpidas } = await import('@plugins/commands/rpg/arena.js')
       devolverManosInterrumpidas()
     } catch (err) {
@@ -629,7 +647,8 @@ async function main() {
     console.log()
     console.log(`  ${themes.error('◆')} ${color.bold(themes.error('Sesión cerrada por WhatsApp'))}`)
     console.log(`  ${color.dim('Si fue un logout: borra /auth y reinicia para escanear QR nuevo')}`)
-    console.log(`  ${color.dim('Si fue un kick por otra instancia: cierra WhatsApp Web y reinicia')}`)
+    console.log(`  ${color.dim('Si otra conexión entró con las mismas credenciales: ¿hay otra copia del bot?')}`)
+    console.log(`  ${color.dim('Si no, alguien puede tener la sesión: cierra los dispositivos vinculados y escanea de nuevo')}`)
     console.log()
     stopAutoSave()
     saveAll().catch(() => {}).finally(() => process.exit(0))

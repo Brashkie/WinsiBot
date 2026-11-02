@@ -14,9 +14,19 @@ fn main() {
             let ms = t0.elapsed().as_secs_f64() * 1000.0;
             let resumen: Vec<String> = r
                 .iter()
-                .map(|c| format!("{:?} {:.1}% ({})", c.estilo, 100.0 * f64::from(c.victorias) / f64::from(c.peleas.max(1)), c.peleas))
+                .map(|c| {
+                    format!(
+                        "{:?} {:.1}% ({})",
+                        c.estilo,
+                        100.0 * f64::from(c.victorias) / f64::from(c.peleas.max(1)),
+                        c.peleas
+                    )
+                })
                 .collect();
-            println!("{nivel:?} con {h:>2} hilos: {ms:>7.0} ms · {}", resumen.join(" · "));
+            println!(
+                "{nivel:?} con {h:>2} hilos: {ms:>7.0} ms · {}",
+                resumen.join(" · ")
+            );
         }
     }
 }

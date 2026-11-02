@@ -16,7 +16,7 @@
 // correcto, pero ningún punto del bot lo llamaba.
 
 import './env.js'
-import { ascii, color, themes } from 'ansimax'
+import { color, themes } from 'ansimax'
 
 const RUST_URL = process.env.SESSION_API_URL ?? process.env.RUST_API_URL ?? 'http://127.0.0.1:18080'
 const RUST_KEY = process.env.SESSION_API_KEY ?? process.env.RUST_API_KEY ?? ''

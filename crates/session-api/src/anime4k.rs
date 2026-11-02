@@ -501,7 +501,16 @@ pub fn gradiente_zig(img: &RgbaImage) -> RgbaImage {
     let (src, dst) = (img.as_ptr() as usize, salida.as_mut_ptr() as usize);
     // SAFETY: como arriba.
     en_franjas(h, |y0, y1| unsafe {
-        crate::zig!(ffi::winsi_a4k_gradient_zig, ffi::winsi_a4k_gradient_zig_v3, src as *const u8, dst as *mut u8, w, h, y0, y1)
+        crate::zig!(
+            ffi::winsi_a4k_gradient_zig,
+            ffi::winsi_a4k_gradient_zig_v3,
+            src as *const u8,
+            dst as *mut u8,
+            w,
+            h,
+            y0,
+            y1
+        )
     });
     salida
 }
@@ -527,7 +536,17 @@ pub fn push_color_zig(img: &RgbaImage, fuerza: f32) -> RgbaImage {
     let (src, dst) = (img.as_ptr() as usize, salida.as_mut_ptr() as usize);
     // SAFETY: como en push_color_c.
     en_franjas(h, |y0, y1| unsafe {
-        crate::zig!(ffi::winsi_a4k_push_color_zig, ffi::winsi_a4k_push_color_zig_v3, src as *const u8, dst as *mut u8, w, h, fuerza, y0, y1)
+        crate::zig!(
+            ffi::winsi_a4k_push_color_zig,
+            ffi::winsi_a4k_push_color_zig_v3,
+            src as *const u8,
+            dst as *mut u8,
+            w,
+            h,
+            fuerza,
+            y0,
+            y1
+        )
     });
     salida
 }
@@ -540,7 +559,17 @@ pub fn push_gradient_zig(img: &RgbaImage, fuerza: f32) -> RgbaImage {
     let (src, dst) = (img.as_ptr() as usize, salida.as_mut_ptr() as usize);
     // SAFETY: como en push_color_c.
     en_franjas(h, |y0, y1| unsafe {
-        crate::zig!(ffi::winsi_a4k_push_gradient_zig, ffi::winsi_a4k_push_gradient_zig_v3, src as *const u8, dst as *mut u8, w, h, fuerza, y0, y1)
+        crate::zig!(
+            ffi::winsi_a4k_push_gradient_zig,
+            ffi::winsi_a4k_push_gradient_zig_v3,
+            src as *const u8,
+            dst as *mut u8,
+            w,
+            h,
+            fuerza,
+            y0,
+            y1
+        )
     });
     salida
 }
@@ -566,7 +595,10 @@ pub fn gradiente_y_push_zig_con(img: &RgbaImage, fuerza: f32, luma: bool) -> Rgb
         // SAFETY: como en push_color_c; el anillo es de este hilo y mide las
         // tres filas que pide el kernel.
         unsafe {
-            crate::zig!(ffi::winsi_a4k_gradient_push_zig, ffi::winsi_a4k_gradient_push_zig_v3, src as *const u8,
+            crate::zig!(
+                ffi::winsi_a4k_gradient_push_zig,
+                ffi::winsi_a4k_gradient_push_zig_v3,
+                src as *const u8,
                 dst as *mut u8,
                 w,
                 h,
@@ -574,7 +606,8 @@ pub fn gradiente_y_push_zig_con(img: &RgbaImage, fuerza: f32, luma: bool) -> Rgb
                 y0,
                 y1,
                 anillo.as_mut_ptr(),
-                u32::from(luma))
+                u32::from(luma)
+            )
         }
     });
     salida
@@ -605,8 +638,8 @@ fn por_filas(datos: &mut [u8], ancho_fila: usize, f: impl Fn(&mut [u8]) + Sync) 
 pub fn luminancia_en_alfa(img: &mut RgbaImage) {
     let ancho = img.width() as usize * 4;
     por_filas(&mut *img, ancho, |trozo| {
-        for p in trozo.chunks_exact_mut(4) {
-            p[3] = luminancia(&image::Rgba([p[0], p[1], p[2], p[3]]));
+        for p in trozo.as_chunks_mut::<4>().0 {
+            p[3] = luminancia(&image::Rgba(*p));
         }
     });
 }
@@ -621,7 +654,7 @@ pub fn sin_alfa(img: &RgbaImage) -> image::RgbImage {
     let base = rgb.as_ptr() as usize;
     por_filas(&mut rgb, ancho, |trozo| {
         let fila0 = (trozo.as_ptr() as usize - base) / ancho.max(1);
-        for (i, p) in trozo.chunks_exact_mut(3).enumerate() {
+        for (i, p) in trozo.as_chunks_mut::<3>().0.iter_mut().enumerate() {
             let o = (fila0 * w as usize + i) * 4;
             p.copy_from_slice(&src[o..o + 3]);
         }
@@ -720,9 +753,30 @@ pub fn gradiente_y_push(img: &RgbaImage, fuerza: f32) -> RgbaImage {
 /// pushGradient y, con `luma`, la luminancia de la pasada siguiente, sin
 /// imágenes intermedias (ver winsi_a4k_pass_zig).
 #[cfg(feature = "native")]
-pub fn pasada_zig(img: &RgbaImage, fuerza_color: f32, fuerza_gradiente: f32, luma: bool) -> RgbaImage {
+pub fn pasada_zig(
+    img: &RgbaImage,
+    fuerza_color: f32,
+    fuerza_gradiente: f32,
+    luma: bool,
+) -> RgbaImage {
+    let mut salida = RgbaImage::new(img.width(), img.height());
+    pasada_zig_en(img, &mut salida, fuerza_color, fuerza_gradiente, luma);
+    salida
+}
+
+/// Como [`pasada_zig`], escribiendo en `salida`, que tiene que medir lo mismo
+/// que `img`. El kernel escribe todos los píxeles y no lee ninguno de
+/// `salida`, así que puede venir con cualquier cosa.
+#[cfg(feature = "native")]
+fn pasada_zig_en(
+    img: &RgbaImage,
+    salida: &mut RgbaImage,
+    fuerza_color: f32,
+    fuerza_gradiente: f32,
+    luma: bool,
+) {
     let (w, h) = (img.width(), img.height());
-    let mut salida = RgbaImage::new(w, h);
+    assert_eq!(salida.dimensions(), (w, h));
     let (src, dst) = (img.as_ptr() as usize, salida.as_mut_ptr() as usize);
     en_franjas(h, |y0, y1| {
         let mut anillo_c = vec![0u8; w as usize * 4 * 5];
@@ -747,7 +801,6 @@ pub fn pasada_zig(img: &RgbaImage, fuerza_color: f32, fuerza_gradiente: f32, lum
             )
         }
     });
-    salida
 }
 
 /// Una pasada de Anime4K sobre una imagen con la luminancia en el alfa:
@@ -762,7 +815,34 @@ pub fn pasada(img: &RgbaImage, fuerza_color: f32, fuerza_gradiente: f32, luma: b
         }
     }
     let pc = push_color(img, fuerza_color);
-    if luma { gradiente_y_push_y_luma(&pc, fuerza_gradiente) } else { gradiente_y_push(&pc, fuerza_gradiente) }
+    if luma {
+        gradiente_y_push_y_luma(&pc, fuerza_gradiente)
+    } else {
+        gradiente_y_push(&pc, fuerza_gradiente)
+    }
+}
+
+/// Como [`pasada`], escribiendo en `salida` (del mismo tamaño que `img`).
+///
+/// Para encadenar pasadas sin pedir una imagen nueva en cada una: con dos
+/// búferes que se turnan, la segunda pasada escribe sobre la entrada de la
+/// primera, que ya no hace falta. Una imagen nueva de 3072x2048 son 25 MB
+/// cuyas páginas el sistema entrega —y pone en cero— recién al escribirlas.
+/// Sin los kernels en Zig no hay ahorro: se calcula como siempre y se copia.
+pub fn pasada_en(
+    img: &RgbaImage,
+    salida: &mut RgbaImage,
+    fuerza_color: f32,
+    fuerza_gradiente: f32,
+    luma: bool,
+) {
+    #[cfg(feature = "native")]
+    {
+        if elegido() == (Backend::Zig, Backend::Zig, Backend::Zig) {
+            return pasada_zig_en(img, salida, fuerza_color, fuerza_gradiente, luma);
+        }
+    }
+    *salida = pasada(img, fuerza_color, fuerza_gradiente, luma);
 }
 
 /// [`gradiente_y_push`] y después [`luminancia_en_alfa`]: el final de una pasada
@@ -877,11 +957,28 @@ mod tests {
         // imagen también pasada por el Sobel, que es lo que push_gradient
         // recibe de verdad: un alfa con otra distribución.
         let mut casos = TAMANOS.to_vec();
-        casos.extend([(9, 4), (10, 4), (11, 5), (16, 3), (17, 4), (18, 5), (25, 6), (33, 33), (130, 70)]);
+        casos.extend([
+            (9, 4),
+            (10, 4),
+            (11, 5),
+            (16, 3),
+            (17, 4),
+            (18, 5),
+            (25, 6),
+            (33, 33),
+            (130, 70),
+        ]);
         for (i, &(w, h)) in casos.iter().enumerate() {
-            for (j, &f) in [A4K_FUERZA_COLOR, A4K_FUERZA_GRADIENTE, 0.0, 1.0, 0.37].iter().enumerate() {
+            for (j, &f) in [A4K_FUERZA_COLOR, A4K_FUERZA_GRADIENTE, 0.0, 1.0, 0.37]
+                .iter()
+                .enumerate()
+            {
                 let img = imagen(w, h, 1000 + (i * 10 + j) as u64);
-                assert_eq!(push_color_zig(&img, f), push_color_rust(&img, f), "push_color {w}x{h} f={f}");
+                assert_eq!(
+                    push_color_zig(&img, f),
+                    push_color_rust(&img, f),
+                    "push_color {w}x{h} f={f}"
+                );
                 let sobel = gradiente_rust(&img);
                 assert_eq!(
                     push_gradient_zig(&sobel, f),
@@ -890,7 +987,11 @@ mod tests {
                 );
                 // Y la cadena entera de una pasada, con la salida de un kernel como entrada del siguiente.
                 let pc = push_color_rust(&img, f);
-                assert_eq!(push_color_zig(&pc, f), push_color_rust(&pc, f), "push_color encadenado {w}x{h}");
+                assert_eq!(
+                    push_color_zig(&pc, f),
+                    push_color_rust(&pc, f),
+                    "push_color encadenado {w}x{h}"
+                );
                 // El Sobel fusionado con push_gradient, contra los dos de referencia por separado.
                 assert_eq!(
                     gradiente_y_push_zig(&pc, f),
@@ -899,10 +1000,19 @@ mod tests {
                 );
                 // La pasada entera en un kernel, contra la cadena de referencia
                 // (con y sin la luminancia de la siguiente).
-                let mut ref_luma = push_gradient_rust(&gradiente_rust(&push_color_rust(&img, f)), f);
-                assert_eq!(pasada_zig(&img, f, f, false), ref_luma, "pasada fusionada {w}x{h} f={f}");
+                let mut ref_luma =
+                    push_gradient_rust(&gradiente_rust(&push_color_rust(&img, f)), f);
+                assert_eq!(
+                    pasada_zig(&img, f, f, false),
+                    ref_luma,
+                    "pasada fusionada {w}x{h} f={f}"
+                );
                 luminancia_en_alfa(&mut ref_luma);
-                assert_eq!(pasada_zig(&img, f, f, true), ref_luma, "pasada fusionada con luma {w}x{h} f={f}");
+                assert_eq!(
+                    pasada_zig(&img, f, f, true),
+                    ref_luma,
+                    "pasada fusionada con luma {w}x{h} f={f}"
+                );
                 // Y con la luminancia de la pasada siguiente escrita en el alfa.
                 let mut referencia = push_gradient_rust(&gradiente_rust(&pc), f);
                 luminancia_en_alfa(&mut referencia);

@@ -8,7 +8,7 @@
 // plataforma en cada script — scripts/_platform.test.js falla si este
 // archivo y src/lib/platform.ts alguna vez quedan desincronizados.
 
-import { join } from 'path'
+import { join } from 'node:path'
 
 export const IS_WINDOWS = process.platform === 'win32'
 export const IS_MAC     = process.platform === 'darwin'

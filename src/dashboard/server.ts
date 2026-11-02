@@ -9,8 +9,8 @@
 import { serve } from '@hono/node-server'
 import { serveStatic } from '@hono/node-server/serve-static'
 import { Hono } from 'hono'
-import { readFileSync, existsSync } from 'fs'
-import { join } from 'path'
+import { readFileSync, existsSync } from 'node:fs'
+import { join } from 'node:path'
 import type { WASocket } from '@whiskeysockets/baileys'
 import { logger } from '@core/logger.js'
 import { authRoutes, meHandler } from './routes/auth.js'
@@ -22,6 +22,10 @@ import { attachWebSocket } from './ws.js'
 import { setMainSock } from './mainSock.js'
 
 const PORT      = Number(process.env.DASHBOARD_PORT ?? 4002)
+// Solo la propia máquina por defecto. Hasta la 9.2 escuchaba en todas las
+// interfaces: en la red local, y en un VPS sin firewall en internet entero.
+// Para abrirlo, DASHBOARD_HOST=0.0.0.0 —mejor detrás de un proxy con HTTPS—.
+const HOST      = process.env.DASHBOARD_HOST ?? '127.0.0.1'
 const WEB_DIST  = join(process.cwd(), 'web', 'dist')
 
 const app = new Hono()
@@ -59,8 +63,8 @@ export function startDashboard(sock: WASocket): void {
   if (started) return
   started = true
 
-  const server = serve({ fetch: app.fetch, port: PORT }, () => {
-    logger.info(`[dashboard] panel web en http://localhost:${PORT}`)
+  const server = serve({ fetch: app.fetch, port: PORT, hostname: HOST }, () => {
+    logger.info(`[dashboard] panel web en http://${HOST === '127.0.0.1' ? 'localhost' : HOST}:${PORT}`)
   })
 
   attachWebSocket(server as unknown as import('node:http').Server)

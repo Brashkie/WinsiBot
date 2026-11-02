@@ -30,7 +30,7 @@
 //  Queda registrado en el log, que es donde sirve.
 // ─────────────────────────────────────────────────────────────────────────────
 
-import { monitorEventLoopDelay } from 'perf_hooks'
+import { monitorEventLoopDelay } from 'node:perf_hooks'
 import { logger } from './logger.js'
 
 export type LoadLevel = 'normal' | 'degraded' | 'critical'
@@ -100,7 +100,7 @@ function lagMax(): number {
 
 // ─── Estado ──────────────────────────────────────────────────────────────────
 let _level: LoadLevel = 'normal'
-let _shed = { low: 0, normal: 0 }
+const _shed = { low: 0, normal: 0 }
 let _lagAtChange = 0
 
 interface SemaphoreSnapshot {

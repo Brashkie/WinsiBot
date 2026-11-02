@@ -1,6 +1,6 @@
 // Idiomas (ver src/lib/i18n.ts, i18nDescriptions.ts y el notfound).
 import { describe, expect, it } from 'vitest'
-import { readFileSync, existsSync } from 'fs'
+import { readFileSync, existsSync } from 'node:fs'
 import { t, idiomaDe, idiomaPorNumero, leerIdioma, aliasesPara, nombreCategoria, ALIAS_IDIOMA } from '../src/lib/i18n.ts'
 import { descripcion, traducidos } from '../src/lib/i18nDescriptions.ts'
 import { parecidos, distancia } from '../src/lib/similar.ts'

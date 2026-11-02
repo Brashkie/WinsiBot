@@ -1,9 +1,11 @@
 import type { Command } from '../../../types/index.js'
 import {
   getUserData, patchUserData,
-  isOnCooldown, setCooldown, getCooldownLeft, fmtCooldown,
+  isOnCooldown, getCooldownLeft, fmtCooldown,
   checkLevelUp, levelUpLine,
 } from '@core/events.js'
+import { cobrarConCooldown } from '@core/economy.js'
+import { textoDeMotivo } from '@lib/ledger.js'
 import { safeSend } from '@lib/media_sender.js'
 import { randomNumber as rand, randomChoice as pick } from '@lib/utils.js'
 
@@ -63,14 +65,17 @@ const command: Command = {
     // BrasEmbers — moneda rara para comandos NSFW, chance chica
     const embers   = Math.random() < 0.04 ? 1 : 0
 
-    patchUserData(sender, {
-      exp:      user.exp + exp,
-      money:    user.money + money,
-      diamonds: user.diamonds + diamonds,
-      embers:   user.embers + embers,
-      items:    { ...user.items, sp: user.items.sp + sp },
-    })
-    setCooldown(sender, 'lastMining')
+    const r = await cobrarConCooldown(sender, 'lastMining', [
+      { cuenta: { jid: sender, campo: 'exp' }, delta: exp },
+      { cuenta: { jid: sender, campo: 'money' }, delta: money },
+      { cuenta: { jid: sender, campo: 'diamonds' }, delta: diamonds },
+    ])
+    if (!r.ok) {
+      await sock.sendMessage(jid, { text: `> ${textoDeMotivo(r.motivo)}` }, { quoted: msg })
+      return
+    }
+    const ahora = getUserData(sender)
+    patchUserData(sender, { embers: ahora.embers + embers, items: { ...ahora.items, sp: ahora.items.sp + sp } })
 
     const leveled = checkLevelUp(sender)
     const lvlLine = levelUpLine(leveled, jid)

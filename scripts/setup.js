@@ -1,16 +1,16 @@
 #!/usr/bin/env node
 // npm run setup — instalación completa de primera vez (cross-platform)
 
-import { spawnSync } from 'child_process'
-import { existsSync } from 'fs'
-import { join }       from 'path'
-import readline       from 'readline'
+import { spawnSync } from 'node:child_process'
+import { existsSync } from 'node:fs'
+import { join }       from 'node:path'
+import readline       from 'node:readline'
 import { exeName }    from './_platform.js'
 
 // Termux siempre define $PREFIX apuntando a su propio userland — es la forma
 // estándar de detectarlo (process.platform no alcanza: reporta 'android' o
 // 'linux' según el build de Node, sin garantía).
-const TERMUX = !!(process.env.PREFIX && process.env.PREFIX.includes('com.termux'))
+const TERMUX = !!(process.env.PREFIX?.includes('com.termux'))
 const ROOT = process.cwd()
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
@@ -38,7 +38,7 @@ async function main() {
 
   // 1. Node.js >= 20
   step('Node.js >= 20 ...')
-  if (parseInt(process.versions.node) < 20)
+  if (parseInt(process.versions.node, 10) < 20)
     fail(`Requiere Node 20+, tienes ${process.version}`)
   ok()
 

@@ -1,4 +1,4 @@
-//! anime4k_push.zig — pushColor y pushGradient de Anime4K, de a 8 píxeles y sin saltos.
+//! anime4k_push.zig — pushColor y pushGradient de Anime4K, de a 16 píxeles y sin saltos.
 //!
 //! Mismo cálculo que `push_color_rust` y `push_gradient_rust` en
 //! src/anime4k.rs, que son la referencia: los tests de Rust exigen que dé lo
@@ -22,12 +22,19 @@
 //! y trunca (nada de @round, que en x86 básico es una llamada a libm).
 //!
 //! El cálculo está escrito UNA vez, genérico en la cantidad de carriles: el
-//! interior va de a 8, cargando los vecinos de memoria contigua; los bordes y
+//! interior va de a N, cargando los vecinos de memoria contigua; los bordes y
 //! la cola van de a 1, con los vecinos acotados a la imagen, que es lo que
 //! "replicar los bordes" quiere decir. Así no hay una versión escalar aparte
 //! que se pueda desincronizar.
 
-const N = 8;
+// 16 y no 8 (9.3.0): los canales son u8, y de a 8 un vector usaba un cuarto
+// de un registro AVX2 y la mitad de uno NEON. Medido sobre 3072x2048 en un
+// hilo, una pasada baja de ~120 a ~95 ms, el mismo resultado bit a bit —cada
+// carril es independiente—. De a 32 no enlaza (pide funciones de compiler-rt
+// que no están). Se probó también sumar los tres vecinos de `empujar` en u16
+// y convertir una sola vez, que da el mismo flotante: sale MÁS lento (13,6 →
+// 16,7 ms en el bench), porque ensanchar a u16 cuesta más que las conversiones.
+const N = 16;
 const sobel = @import("anime4k.zig");
 
 fn Px(comptime n: usize) type {
@@ -257,8 +264,8 @@ inline fn pushGradientLuma(comptime n: usize, v: Vec9(n), f: f32) [4]@Vector(n, 
 
 // ── Recorrer la imagen ────────────────────────────────────────────────────────
 
-/// Los cuatro canales de vuelta a RGBA intercalado. De a 8: los canales
-/// juntos en un vector de 32 bytes, UN @shuffle y UNA escritura; antes eran
+/// Los cuatro canales de vuelta a RGBA intercalado. De a N: los canales
+/// juntos en un vector de 4·N bytes, UN @shuffle y UNA escritura; antes eran
 /// 32 escrituras de un byte, el espejo de lo que `seguidos` ya hacía bien al
 /// cargar. (Con @bitCast a vectores de u16 el LLVM de Zig 0.14 fallaba.)
 inline fn guardar(comptime n: usize, salida: [*]u8, x: usize, out: [4]@Vector(n, u8)) void {
@@ -289,7 +296,7 @@ inline fn unaFila(comptime kernel: anytype, a: [*]const u8, m: [*]const u8, b: [
     if (w >= N + 2) {
         guardar(1, salida, 0, kernel(1, acotado(1, a, m, b, w, 0), f));
         x = 1;
-        // De a 8 mientras el vecino derecho del último (x + 8) siga dentro.
+        // De a N mientras el vecino derecho del último (x + N) siga dentro.
         while (x + N <= w - 1) : (x += N) {
             guardar(N, salida, x, kernel(N, interior(N, a, m, b, x), f));
         }

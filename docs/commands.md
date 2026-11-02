@@ -56,7 +56,7 @@
 | 15 | [🔑 Admin del grupo](#-admin-del-grupo) | 49 |
 | 16 | [🤖 JadiBot](#-jadibot) | 3 |
 | 17 | [ℹ️ Info](#%EF%B8%8F-info) | 2 |
-| 18 | [👑 Owner / Sistema](#-owner--sistema) | 24 |
+| 18 | [👑 Owner / Sistema](#-owner--sistema) | 22 |
 
 ---
 
@@ -514,7 +514,7 @@
 | `tagone` | `tago`, `mention` | — | 🔑 | Menciona a una persona específica |
 | `delete` | `del`, `borrar`, `eliminar` | — | 🔑 | Elimina el mensaje citado |
 | `antilink` | `antienlace` | — | 🔑 | Activa/desactiva filtro de links |
-| `antirrobo` | `antitheft`, `antirobo` | — | 🔒 | `on` · `off` · `proteger @usuario` · `quitar @usuario`. Si alguien no protegido degrada o saca a un protegido —el creador, los dueños del bot y los marcados— o al bot, le quita el admin, lo revierte, revoca el enlace y avisa por privado. **Solo lo usa un protegido**, no cualquier admin |
+| `antirrobo` | `antitheft`, `antirobo` | — | 🔒 | `on` · `off` · `proteger @usuario` · `quitar @usuario`, y `comunidad …` para lo mismo sobre la comunidad del grupo. Si alguien no protegido degrada o saca a un protegido —el creador, los dueños del bot y los marcados— o al bot, le quita el admin, lo revierte, revoca el enlace y avisa por privado. **Solo lo usa un protegido**, no cualquier admin |
 | `mute` | `silenciar` | — | 🔑 | Silencia o activa el bot en el grupo |
 | `banchat` | `bangrupo`, `unbanchat` | — | 🛡️ | Silencia/activa el bot en este grupo |
 | `groupinfo` | `grupoinfo`, `gcfg` | — | 🔑 | Información del grupo + tu perfil en él |
@@ -639,7 +639,6 @@
 | `block` | `unblock`, `bloquear`, `desbloquear` | — | 👑 | Bloquea o desbloquea un número en WhatsApp |
 | `bc` | `bcgroup`, `bcprivate`, `broadcast` | — | 👑 | Envía un mensaje a todos los chats |
 | `boost` | `refresh`, `acelerar` | — | 👑 | Reinicia caché y muestra estado del bot |
-| `backup` | `respaldo` | — | 👑 | Envía `creds.json` al privado del owner |
 | `clearsession` | `clearsess`, `limpiarsesion` | — | 👑 | Elimina archivos de sesión excepto `creds.json` |
 | `cleartmp` | `limpiartmp`, `clearcache` | — | 👑 | Limpia archivos temporales del servidor |
 | `creategroup` | `creargc`, `newgroup`, `nuevogc` | — | 👑 | Crea un nuevo grupo con una lista de JIDs |
@@ -648,9 +647,8 @@
 | `setbio` | `bio`, `estado` | — | 👑 | Cambia la bio/estado del bot en WhatsApp |
 | `setname` | `nombrar`, `nombre` | — | 👑 | Cambia el nombre del bot en WhatsApp |
 | `setpp` | `fotobot`, `cambiafoto` | — | 👑 | Cambia la foto de perfil del bot |
-| `exec` | `eval`, `run` | — | 👑 | Ejecuta código JavaScript en el contexto del bot |
-| `terminal` | `term`, `shell`, `cmd` | — | 👑 | Ejecuta un comando en la terminal del servidor |
-| `fetch` | `get`, `url` | — | 👑 | Obtiene el contenido de una URL |
+| `canal` | `channelguard`, `protegercanal` | — | 👑 | `proteger <link>` · `actualizar <link>` · `quitar <link>`. Si cambian el nombre o la descripción de un canal protegido, los restauro y les aviso a los dueños. WhatsApp no dice quién lo hizo, así que no hay a quién quitarle el admin. Para restaurar, el bot tiene que ser admin del canal |
+| `fetch` | `get`, `url` | — | 👑 | Obtiene el contenido de una URL pública: no de la propia máquina ni de la red local, y no sigue redirecciones |
 | `restart` | `reiniciar`, `reboot`, `reset` | — | 👑 | Reinicia el bot: guarda todo y sale, y el supervisor de `npm start` lo vuelve a levantar |
 
 ```
@@ -659,8 +657,6 @@
 !settier @usuario vip
 !addcoins @usuario 5000
 !bc Hola a todos!
-!exec ctx.userData.size
-!terminal ls -la
 !setbio WinsiBot está en línea 🟢
 !restart
 ```

@@ -31,7 +31,10 @@ describe('generar', () => {
     const tipos = {}
     for (let d = 0; d < 200; d++) {
       const m = generar(diaDe(Date.UTC(2026, 0, 1) + d * 86_400_000))
-      for (const s of m.niveles.flat()) (tipos[s.pista] ??= new Set()).add(s.tipo)
+      for (const s of m.niveles.flat()) {
+      tipos[s.pista] ??= new Set()
+      tipos[s.pista].add(s.tipo)
+    }
     }
     const ambiguas = Object.values(tipos).filter(t => t.size > 1).length
     expect(ambiguas).toBeGreaterThanOrEqual(4)

@@ -7,7 +7,7 @@
 // comentario de ese archivo para el porqué. scripts/_platform.test.js
 // verifica que los dos no se desincronicen.
 
-import { join } from 'path'
+import { join } from 'node:path'
 
 export const IS_WINDOWS = process.platform === 'win32'
 export const IS_MAC     = process.platform === 'darwin'

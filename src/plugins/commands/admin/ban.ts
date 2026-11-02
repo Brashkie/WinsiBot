@@ -16,7 +16,7 @@ const command: Command = {
     // Si no hay mención/cita, el target viene del primer argumento de texto
     // (!ban @usuario razón) — el resto de args, después de ese, es la razón.
     const target =
-      mentioned ?? (args[0]?.startsWith('@') ? args[0].replace('@', '') + '@s.whatsapp.net' : null)
+      mentioned ?? (args[0]?.startsWith('@') ? `${args[0].replace('@', '')}@s.whatsapp.net` : null)
     const reason = (mentioned ? args : args.slice(1)).join(' ').trim()
 
     if (!target) {

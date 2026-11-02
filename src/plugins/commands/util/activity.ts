@@ -18,7 +18,7 @@ const command: Command = {
   groupOnly:   true,
 
   async execute({ sock, jid, msg, args }) {
-    const dias = Math.min(Math.max(parseInt(args[0] ?? '') || 7, 1), 365)
+    const dias = Math.min(Math.max(parseInt(args[0] ?? '', 10) || 7, 1), 365)
     const [r, ms] = await Promise.all([getGroupActivity(jid, dias), miembros(sock, jid).catch(() => [])])
     if (!r) {
       await safeSend(() => sock.sendMessage(jid, { text: `> No pude leer la actividad ahora. Intenta en un rato.` }, { quoted: msg }))

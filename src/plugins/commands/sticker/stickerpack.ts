@@ -19,7 +19,7 @@ const command: Command = {
   async execute({ sock, jid, msg, args, prefix }) {
     const url = args[0]?.trim()
 
-    if (!url || !url.includes('getstickerpack.com')) {
+    if (!url?.includes('getstickerpack.com')) {
       await sock.sendMessage(jid, {
         text: [
           `◈ Uso: ${prefix}stickerpack <url>`,

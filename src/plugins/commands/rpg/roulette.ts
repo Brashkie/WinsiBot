@@ -3,9 +3,10 @@ import {
   getCooldownLeft,
   getUserData,
   isOnCooldown,
-  patchUserData,
   setCooldown,
 } from '@core/events.js'
+import { cambiarSaldos } from '@core/economy.js'
+import { textoDeMotivo } from '@lib/ledger.js'
 import { safeSend, sendCritical } from '@lib/media_sender.js'
 import { randomNumber as rand } from '@lib/utils.js'
 import type { Command } from '../../../types/index.js'
@@ -127,7 +128,7 @@ const command: Command = {
       betType = 'color'
       betColor = 'green'
     } else {
-      const n = parseInt(betArg)
+      const n = /^\d{1,2}$/.test(betArg) ? Number(betArg) : Number.NaN
       if (Number.isNaN(n) || n < 0 || n > 36) {
         await safeSend(() =>
           sock.sendMessage(
@@ -160,10 +161,16 @@ const command: Command = {
       payout = won ? amount * 35 : -amount // 35:1
     }
 
-    // Aplicar
+    // Aplicar, por la operación de Ada/SPARK (ver core/economy.ts). Antes era
+    // Math.max(0, saldo + payout): si el saldo había bajado en el medio, lo
+    // dejaba en 0 en vez de rechazar la apuesta.
+    const r = await cambiarSaldos([{ cuenta: { jid: sender, campo: 'money' }, delta: payout }])
+    if (!r.ok) {
+      await safeSend(() => sock.sendMessage(jid, { text: `> ${textoDeMotivo(r.motivo)}` }, { quoted: msg }))
+      return
+    }
     setCooldown(sender, 'lastRoulette')
-    const newBalance = user.money + payout
-    patchUserData(sender, { money: Math.max(0, newBalance) })
+    const newBalance = r.saldos[0]!
 
     // Formato del resultado
     const resultEmoji = COLOR_EMOJI[resultColor]!

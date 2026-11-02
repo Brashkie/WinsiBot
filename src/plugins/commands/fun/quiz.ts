@@ -17,7 +17,7 @@ function getProfile(jid: string, name: string): QuizProfile {
 
 export const activeQuizSessions = QuizManager['activeSessions' as never] as unknown as Map<string, QuizSession>
 
-export function handleQuizAnswer(jid: string, text: string): QuizSession | undefined {
+export function handleQuizAnswer(jid: string, _text: string): QuizSession | undefined {
   return QuizManager.getSession(jid)
 }
 
@@ -45,7 +45,7 @@ const command: Command = {
       const profile = getProfile(sender, pushName)
       const delta   = QuizManager.updateElo(profile, result.correct, q.difficulty)
 
-      let response = result.correct
+      const response = result.correct
         ? `✅ *¡Correcto!* +${result.pointsGained} pts  (ELO ${delta >= 0 ? '+' : ''}${delta})`
         : `❌ *Incorrecto.* La respuesta era: *${q.options[q.answer]}*${result.explanation ? `\n_${result.explanation}_` : ''}`
 
@@ -123,7 +123,7 @@ const command: Command = {
       const category  = args.find(a => CATEGORIES.has(a as QuizCategory))  as QuizCategory | undefined
       const difficulty= args.find(a => DIFFICULTIES.has(a as QuizDifficulty)) as QuizDifficulty | undefined
       const sizeArg   = args.find(a => /^\d+$/.test(a))
-      const size      = sizeArg ? Math.min(20, Math.max(3, parseInt(sizeArg))) : 10
+      const size      = sizeArg ? Math.min(20, Math.max(3, parseInt(sizeArg, 10))) : 10
 
       const session = QuizManager.startSession(sender, size, category, difficulty)
       const q       = session.questions[0]!

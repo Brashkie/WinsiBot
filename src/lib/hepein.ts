@@ -112,6 +112,7 @@ export const hepein = {
     useHumor?:  boolean
     force?:     boolean  // omitir el cooldown por grupo
     history?:   Array<{ reply: string }>
+    comandos?:  string   // los comandos que sirven, si preguntó por el bot
   }): Promise<HepeinResponse> {
     const { groupJid, force = false } = opts
     if (!force && !_canRespond(groupJid)) {
@@ -133,6 +134,7 @@ export const hepein = {
       ...(opts.useGpt   !== undefined ? { useGpt:   opts.useGpt }   : {}),
       ...(opts.useHumor !== undefined ? { useHumor: opts.useHumor } : {}),
       ...(opts.history  !== undefined ? { history:  opts.history }  : {}),
+      ...(opts.comandos !== undefined ? { comandos: opts.comandos } : {}),
     })
 
     if (!r) {

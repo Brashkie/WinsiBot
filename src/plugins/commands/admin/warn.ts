@@ -20,7 +20,7 @@ const command: Command = {
   async execute({ sock, jid, msg, args }) {
     const quoted = msg.message?.extendedTextMessage?.contextInfo
     const target = quoted?.participant
-      ?? args[0]?.replace('@', '') + '@s.whatsapp.net'
+      ?? `${args[0]?.replace('@', '')}@s.whatsapp.net`
 
     if (!target) {
       await safeSend(() => sock.sendMessage(jid, { text: '❌ Menciona o cita a alguien.' }, { quoted: msg }))

@@ -61,10 +61,10 @@
 
 | Capa | Tecnología | Responsabilidad |
 |------|-----------|----------------|
-| 🟦 **Core** | TypeScript / Node.js | Protocolo WhatsApp, dispatcher de comandos, RPG, economía, panel web |
+| 🟦 **Core** | TypeScript / Node.js | Protocolo WhatsApp, dispatcher de comandos, RPG, economía, panel web. Las firmas de los mensajes de grupo se verifican con el Ed25519 nativo de OpenSSL, 72 veces más rápido que la criptografía en JavaScript puro que traía Baileys |
 | ⚙️ **Session + IA** | Rust / Axum | Creds atómicas y snapshots, tracker Bad MAC, rate limiter, antiban, clasificación de intenciones, personalidad y humor, reputación, perfiles de estilo, Ollama y APIs cloud, imágenes |
-| 🛡 **Antirrobo** | Ada/SPARK | La decisión del antirrobo de grupos, con sus garantías demostradas por GNATprove para toda entrada, enlazada dentro de la Session API |
-| 🧮 **Kernels nativos** | C + Zig | Anime4K y el códec JPEG, compilados con Zig dentro del binario de la Session API. Se usa el que gana midiendo, y en x86-64 la copia para AVX2 si la CPU la tiene |
+| 🛡 **Antirrobo y economía** | Ada/SPARK | La decisión del antirrobo de grupos, cada cambio de saldo de la economía —todo o nada, sin negativos, y en `#pay` y el banco el total de monedas se conserva siempre—, el lector de montos y el turno de cada envío del antiban, con sus garantías demostradas por GNATprove para toda entrada, enlazados dentro de la Session API |
+| 🧮 **Kernels nativos** | C + Zig | Anime4K y el códec JPEG, compilados con Zig dentro del binario de la Session API. Se usa el que gana midiendo, y en x86-64 la copia para AVX2 si la CPU la tiene. |
 
 ### Novedades en v9.2.0
 
@@ -126,7 +126,7 @@
 - Verificación de claves Curve25519 al arrancar
 - Restauración automática de creds sin QR
 - Escritura atómica de `auth/` en Node también, con `creds.cbor.bak` y sin crear credenciales nuevas a escondidas
-- Antiban en Rust: topes por minuto/hora/día, calentamiento de números nuevos, 463 y 429
+- Antiban: topes por minuto/hora/día, calentamiento de números nuevos, 463 y 429; la decisión de cada turno, en Ada/SPARK y demostrada: ningún envío rompe un tope
 - Reconexión infinita con backoff exponencial (máx 64s)
 - Supervisor (`npm start`) que reinicia el bot si el proceso muere o se cuelga sin heartbeat
 
@@ -157,7 +157,8 @@
 
 ### 🤖 Inteligencia Artificial
 - Multi-modelo: **Cosxamix (la IA propia, por defecto) u Ollama** → GPT → Gemini → Claude, **todo desde Rust**
-- **12 modos de personalidad** por grupo, con 489 frases propias
+- **12 modos de personalidad** por grupo, que se notan: medido con el 3B, en 60 de 72 respuestas (antes, 21), sin copiar frases hechas
+- **Ayuda con los comandos**: si le preguntas cómo hacer algo con el bot, busca entre los 250+ comandos los que sirven y te dice cuál usar, sin inventar
 - Aprende el estilo de cada usuario y del grupo, y lo refleja al responder
 - Si ningún modelo contesta, cae a plantillas locales sin repetir las últimas
 - Reputación por usuario: modula el tono según cómo se porta
@@ -404,6 +405,9 @@ RUST_LOG=winsibot_session_api=info
 | `OLLAMA_MODEL` | `qwen2.5-3b-instruct-q3_k_m` | El modelo de la IA local |
 | `OLLAMA_TIMEOUT` | `60` | Segundos de espera de la IA local |
 | `COSXAMIX_MOTOR` | `propio` | `candle` usa el motor anterior de Cosxamix |
+| `DASHBOARD_HOST` | `127.0.0.1` | Dónde escucha el panel web: solo esta máquina por defecto; `0.0.0.0` lo abre a la red (mejor detrás de un proxy con HTTPS) |
+| `CONV_RETENCION_DIAS` | `365` | Días de mensajes de grupo que guarda la base de conversaciones; lo más viejo se borra cada hora. `0` los guarda para siempre |
+| `WINSI_CURVE_JS` | — | `1` vuelve a verificar las firmas de los mensajes de grupo con la criptografía en JavaScript puro, ~70 veces más lenta que OpenSSL |
 
 </details>
 
@@ -455,10 +459,10 @@ npm run dev             # Solo Node.js sin compilar — desarrollo rápido / esc
 | `users:stats` | Cuántos usuarios hay y cuánto ocupa el log |
 | `groups:export` / `groups:import` / `groups:stats` | Lo mismo para la configuración de los grupos (`data/groups.aof`) |
 | `typecheck` | Verificar tipos sin compilar |
-| `lint` / `lint:fix` | Biome — linter de `src/`/`scripts/` (revisa / revisa y corrige lo seguro) |
+| `lint` / `lint:fix` | Biome — linter de `src/`/`scripts/` (revisa / revisa y corrige lo seguro). Una advertencia ya es un fallo, como en CI |
 | `format` / `format:fix` | Biome — formateo de `src/`/`scripts/` (solo mostrar diff / escribir) |
 | `check` / `check:fix` | Biome — lint + formato + orden de imports en un solo paso |
-| `rust:lint` | `cargo clippy` sobre la Session API de Rust |
+| `rust:lint` | `cargo clippy` sobre todo el workspace sin una advertencia, y el formato de `rustfmt`, como en CI |
 | `rust:bench` | Benchmarks de Criterion sobre el camino caliente (informes HTML en `target/criterion/`) |
 | `native:build` | Compila la Session API con los kernels de C y Zig (`--features native`). Necesita [Zig](https://ziglang.org) 0.14 |
 | `native:test` | Tests que comparan los kernels de C y Zig con los de Rust, bit a bit |
@@ -493,7 +497,7 @@ El bot tiene **200+ comandos** en **16 categorías**.
 | 🎮 Juegos | `!arena` `!raid` `!mazmorra` `!bj` `!poker` `!quiz` `!adivinar` `!pet` | PvP Arena (y contra la CPU), jefe de mundo, mazmorra del día, blackjack, Casino Hold'em, Quiz coding, Draw & Guess, dragones |
 | 🎁 Social | `!regalo` | Sistema de regalos, buzón, wishlist, trueques |
 | 🛡️ Admin | `!ban` `!kick` `!promote` `!cerrar` `!fantasmas` `!antilink` `!warn` `!setwelcome` `!testwelcome` | Moderación de grupos, dar admin, cerrar el grupo, inactivos, bienvenida propia |
-| 👑 Owner | `!exec` `!broadcast` `!premium` `!boost` | Control total del bot |
+| 👑 Owner | `!broadcast` `!premium` `!boost` `!restart` | Administrar el bot |
 | ⬇️ Descargas | `!yt` `!ytmp4` `!tiktok` `!ttsearch` `!ig` `!spotify` `!apk` | Descargadores multimedia + búsqueda con carrusel |
 | 🎨 Stickers | `!sticker` `!take` `!setmeta` `!qc` `!texto` `!toimg` `!newpack` `!getpack` `!stickerpack` | Creación, tu pack y autor, mensajes y textos como sticker, de vuelta a imagen, tus paquetes |
 | 🎮 Fun | `!asesino` `!historia` `!ship` `!parejas` `!lista` `!meme` `!sega` `!giphy` `!top` | Asesino en el chat (estilo Mafia), teléfono descompuesto con IA, compatibilidad, listas de partidas, entretenimiento |
@@ -667,6 +671,8 @@ curl -H "x-api-key: TU_CLAVE" http://127.0.0.1:3001/messages/pending
 | | **IA** | |
 | `POST` | `/arena/simular` | #simular: miles de peleas contra la CPU de #arena en todos los núcleos, con las mismas reglas que el bot (un test cruzado lo exige) |
 | `POST` | `/msg/ingest` | Lo que el bot pide por cada mensaje de grupo, en un viaje: clasificarlo, guardarlo para el estilo del grupo y actualizar la memoria del remitente |
+| `POST` | `/msg/ingest/batch` | Lo mismo para varios mensajes en un viaje (`{ items: [...] }`): el bot junta los que llegan en el mismo turno |
+| `POST` | `/economy/move` | Mover un monto de un saldo a otro, decidido por Ada/SPARK: el total se conserva siempre |
 | `POST` | `/nlp/fast` | Clasificación de intenciones por reglas (sub-ms) |
 | `POST` | `/ai/learn` | Guardar un intercambio con la IA |
 | `POST` | `/ai/observe` | Guardar un mensaje suelto de grupo (alimenta el perfil) |

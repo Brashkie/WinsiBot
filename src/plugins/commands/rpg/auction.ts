@@ -1,6 +1,7 @@
 import type { Command } from '../../../types/index.js'
 import { getUserData, patchUserData } from '@core/events.js'
 import { safeSend } from '@lib/media_sender.js'
+import { montoDe } from '@lib/amount.js'
 import { winsiStore } from '@core/store.js'
 import { ITEMS, MIN_MINUTOS, MAX_MINUTOS, pujaMinima } from '@lib/auctionRules.js'
 import {
@@ -38,8 +39,9 @@ const command: Command = {
       const crudo = (resto[0] ?? '').toLowerCase()
       const monto = crudo === 'min' || crudo === 'minima' || crudo === 'mínima'
         ? (actual ? pujaMinima(actual.base, actual.puja?.monto ?? null) : NaN)
-        : parseInt(crudo.replace(/[.,_]/g, ''))
-      const r = pujar(jid, sender, monto)
+        // montoDe: los separadores de miles como en #pay, y "12abc" no es un monto.
+        : montoDe(crudo)
+      const r = await pujar(jid, sender, monto)
       if (!r.ok) {
         const t = {
           'sin-subasta': `> No hay ninguna subasta abierta en este grupo.`,
@@ -47,6 +49,7 @@ const command: Command = {
           'ya-gana':     `> Ya vas ganando. Espera a que alguien te supere.`,
           'baja':        `> La puja mínima es *¥${r.minima?.toLocaleString()}*  (\`${prefix}pujar ${r.minima}\` o \`${prefix}pujar min\`).`,
           'sin-saldo':   `> No tienes ¥${Number.isFinite(monto) ? monto.toLocaleString() : '?'} (tienes ¥${getUserData(sender).money.toLocaleString()}).`,
+          'no-se-pudo':  `> No se pudo pujar ahora, no se movió nada: inténtalo en un momento.`,
         }[r.motivo]
         await responder(t)
         return
@@ -77,7 +80,7 @@ const command: Command = {
       let i = 0
 
       if (tipo === 'dragon' || tipo === 'dragón') {
-        const n = parseInt(resto[1] ?? '')
+        const n = parseInt(resto[1] ?? '', 10)
         const d = Number.isInteger(n) ? u.dragons[n - 1] : undefined
         if (!d) {
           await responder(`> No tienes un dragón con ese número. Mira \`${prefix}pet\`.`)
@@ -87,7 +90,7 @@ const command: Command = {
         i = 2
       } else if (ITEMS[tipo]) {
         const it = ITEMS[tipo]!
-        const cant = parseInt(resto[1] ?? '')
+        const cant = parseInt(resto[1] ?? '', 10)
         if (!Number.isInteger(cant) || cant < 1) {
           await responder(`> Indica la cantidad: \`${prefix}subasta vender ${tipo} <cantidad> <precio base>\``)
           return
@@ -100,8 +103,8 @@ const command: Command = {
         i = 2
       }
 
-      const base = parseInt((resto[i] ?? '').replace(/[.,_]/g, ''))
-      const minutos = Math.min(Math.max(parseInt(resto[i + 1] ?? '') || 30, MIN_MINUTOS), MAX_MINUTOS)
+      const base = parseInt((resto[i] ?? '').replace(/[.,_]/g, ''), 10)
+      const minutos = Math.min(Math.max(parseInt(resto[i + 1] ?? '', 10) || 30, MIN_MINUTOS), MAX_MINUTOS)
       if (!objeto || !Number.isFinite(base)) {
         await responder([
           `╭─「 🔨 SUBASTAS 」`,

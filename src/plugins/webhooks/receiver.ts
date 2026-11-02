@@ -6,7 +6,7 @@ import { safeSend, broadcastSend } from '@lib/media_sender.js'
 
 // ─── Config ───────────────────────────────────────────────────────────────────
 const PORT           = Number(process.env.WEBHOOK_PORT   ?? 4001)
-const SECRET         = process.env.WEBHOOK_SECRET        ?? 'winsibot_secret'
+const SECRET         = process.env.WEBHOOK_SECRET        ?? ''
 const MAX_BODY_BYTES = 64 * 1024     // 64 KB
 const RATE_WINDOW_MS = 1_000        // 1 req/IP/s
 
@@ -189,6 +189,14 @@ async function requestHandler(
 export function startWebhookReceiver(sock: WASocket): void {
   _sock = sock
   if (_server) return
+
+  // Sin un secreto propio no se arranca. Hasta la 9.2 el de por defecto era
+  // `winsibot_secret`, que está en el código público: cualquier programa de la
+  // máquina podía firmar pedidos y mandar mensajes con el bot.
+  if (SECRET.length < 16 || SECRET === 'winsibot_secret') {
+    logger.info('[webhook] sin WEBHOOK_SECRET propio (16 caracteres o más): receiver no iniciado. Genera uno con `openssl rand -hex 32`')
+    return
+  }
 
   _server = http.createServer((req, res) => {
     requestHandler(req, res).catch(err => {

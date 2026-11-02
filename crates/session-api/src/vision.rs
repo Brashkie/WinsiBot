@@ -132,7 +132,16 @@ fn abrir(cache: &'static SesionCacheada, ruta: &Path) -> Result<&'static Mutex<S
     if let Some(s) = cache.get() {
         return Ok(s);
     }
+    // Todos los hilos lógicos, no solo los núcleos físicos que ONNX Runtime
+    // usa por defecto. Medido en una CPU de 6 núcleos y 12 hilos (9.3.0), la
+    // inferencia de isnetis (#removebg) baja de ~1.960 a ~1.280 ms; en
+    // AnimeGANv2 la diferencia queda dentro del ruido. Un kernel propio no
+    // tenía dónde ganar: el modelo es el 85-90 % del comando, y ONNX Runtime
+    // ya trae los suyos con SIMD.
+    let hilos = std::thread::available_parallelism().map_or(1, |n| n.get());
     let sesion = Session::builder()
+        .map_err(|e| e.to_string())?
+        .with_intra_threads(hilos)
         .map_err(|e| e.to_string())?
         .commit_from_file(ruta)
         .map_err(|e| format!("no se pudo cargar {}: {e}", ruta.display()))?;
@@ -327,10 +336,7 @@ pub type Upscale<I> = Result<(I, (u32, u32), (u32, u32)), String>;
 
 /// Anime4K. Devuelve la imagen en crudo, sin codificar: el handler la pasa a
 /// JPEG, y los tests miran píxeles exactos, que con JPEG no podrían.
-pub fn upscale(
-    png_o_jpeg: &[u8],
-    escala: u32,
-) -> Upscale<RgbImage> {
+pub fn upscale(png_o_jpeg: &[u8], escala: u32) -> Upscale<RgbImage> {
     // El alfa se usó de borrador todo el tiempo; sin esto la imagen saldría con
     // transparencias donde quedaron los bordes.
     upscale_rgba(png_o_jpeg, escala).map(|(img, o, r)| (anime4k::sin_alfa(&img), o, r))
@@ -338,10 +344,7 @@ pub fn upscale(
 
 /// El upscale, todavía en RGBA con el alfa de borrador. El handler la codifica
 /// así, directo (ver jpeg::codificar_rgba), sin la copia a RGB del final.
-pub fn upscale_rgba(
-    png_o_jpeg: &[u8],
-    escala: u32,
-) -> Upscale<image::RgbaImage> {
+pub fn upscale_rgba(png_o_jpeg: &[u8], escala: u32) -> Upscale<image::RgbaImage> {
     let escala = escala.clamp(2, 4);
     let img =
         image::load_from_memory(png_o_jpeg).map_err(|e| format!("no se pudo decodificar: {e}"))?;
@@ -364,9 +367,20 @@ pub fn upscale_rgba(
     // además lee la imagen tal como salió del decodificador, sin pasarla antes
     // a RGBA); la de las siguientes, el final de la anterior.
     let mut buf = crate::resize::para_anime4k(&img, w, h);
+    // Dos búferes que se turnan: desde la segunda pasada, cada una escribe
+    // sobre la entrada de la anterior en vez de pedir otra imagen.
+    let mut libre: Option<RgbaImage> = None;
     for i in 0..A4K_PASADAS {
         // La pasada entera en un recorrido cuando los kernels están en Zig.
-        buf = anime4k::pasada(&buf, A4K_FUERZA_COLOR, A4K_FUERZA_GRADIENTE, i + 1 < A4K_PASADAS);
+        let mut salida = libre.take().unwrap_or_else(|| RgbaImage::new(w, h));
+        anime4k::pasada_en(
+            &buf,
+            &mut salida,
+            A4K_FUERZA_COLOR,
+            A4K_FUERZA_GRADIENTE,
+            i + 1 < A4K_PASADAS,
+        );
+        libre = Some(std::mem::replace(&mut buf, salida));
     }
 
     Ok((buf, (w0, h0), (w, h)))
@@ -453,8 +467,13 @@ pub async fn upscale_handler(
     // JPEG y no PNG: WhatsApp recomprime a JPEG lo que se le manda, y el
     // códec propio en C y Zig es además más rápido que el PNG (ver jpeg.rs).
     let codificado = move || {
-        upscale_rgba(&bytes, escala)
-            .map(|(img, o, r)| (crate::jpeg::codificar_rgba(&img, crate::jpeg::CALIDAD), o, r))
+        upscale_rgba(&bytes, escala).map(|(img, o, r)| {
+            (
+                crate::jpeg::codificar_rgba(&img, crate::jpeg::CALIDAD),
+                o,
+                r,
+            )
+        })
     };
     match tokio::task::spawn_blocking(codificado).await {
         Ok(Ok((jpeg, orig, res))) => Json(serde_json::json!({
@@ -514,7 +533,10 @@ mod tests {
         assert_eq!(img, anime4k::sin_alfa(&buf));
 
         let (rgba, _, _) = upscale_rgba(&fuente, 2).unwrap();
-        assert_eq!(crate::jpeg::codificar_rgba(&rgba, crate::jpeg::CALIDAD), crate::jpeg::codificar(&img, crate::jpeg::CALIDAD));
+        assert_eq!(
+            crate::jpeg::codificar_rgba(&rgba, crate::jpeg::CALIDAD),
+            crate::jpeg::codificar(&img, crate::jpeg::CALIDAD)
+        );
     }
 
     fn png_con_linea(w: u32, h: u32) -> Vec<u8> {

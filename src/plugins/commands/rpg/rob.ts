@@ -1,8 +1,10 @@
 import type { Command } from '../../../types/index.js'
 import {
-  getUserData, patchUserData,
+  getUserData,
   isOnCooldown, setCooldown, getCooldownLeft, fmtCooldown,
 } from '@core/events.js'
+import { moverSaldo } from '@core/economy.js'
+import { textoDeMotivo } from '@lib/ledger.js'
 import { randomNumber as rand } from '@lib/utils.js'
 import { sendCritical } from '@lib/media_sender.js'
 
@@ -37,7 +39,7 @@ const command: Command = {
     }
 
     const victim = getUserData(target)
-    const thief  = getUserData(sender, pushName)
+    getUserData(sender, pushName)
 
     if (victim.money < 100) {
       await sock.sendMessage(jid, {
@@ -49,8 +51,19 @@ const command: Command = {
 
     const amount = rand(100, Math.min(MAX_ROB, Math.floor(victim.money * 0.3)))
 
-    patchUserData(sender, { money: thief.money + amount })
-    patchUserData(target, { money: Math.max(0, victim.money - amount) })
+    // De la víctima al ladrón: una transferencia, con el total conservado
+    // (Ada/SPARK, ver core/economy.ts). Antes eran dos escrituras, y la de la
+    // víctima con Math.max(0, …): si alguna vez el monto pasaba su saldo, el
+    // ladrón habría recibido más de lo que ella perdía.
+    const r = await moverSaldo({
+      origen:  { jid: target, campo: 'money' },
+      destino: { jid: sender, campo: 'money' },
+      monto:   amount,
+    })
+    if (!r.ok) {
+      await sock.sendMessage(jid, { text: `> ${textoDeMotivo(r.motivo)}` }, { quoted: msg })
+      return
+    }
     setCooldown(sender, 'lastRob')
 
     // sendCritical: el dinero ya se movió entre las dos cuentas y el cooldown

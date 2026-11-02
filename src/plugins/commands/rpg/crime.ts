@@ -1,9 +1,11 @@
 import type { Command } from '../../../types/index.js'
 import {
   getUserData, patchUserData,
-  isOnCooldown, setCooldown, getCooldownLeft, fmtCooldown,
+  isOnCooldown, getCooldownLeft, fmtCooldown,
   checkLevelUp, levelUpLine,
 } from '@core/events.js'
+import { cobrarConCooldown } from '@core/economy.js'
+import { textoDeMotivo } from '@lib/ledger.js'
 import { randomNumber as rand, randomChoice as pick } from '@lib/utils.js'
 
 const CD = 15 * 60_000
@@ -74,8 +76,9 @@ const command: Command = {
     const user    = getUserData(sender, pushName)
     const isPrem  = user.premium
     const success = Math.random() < (isPrem ? 0.65 : 0.5)
-
-    setCooldown(sender, 'lastCrime')
+    // El cooldown lo reserva cobrarConCooldown, antes de cobrar (ver
+    // core/economy.ts).
+    const yo = (campo: 'money' | 'exp' | 'diamonds', delta: number) => ({ cuenta: { jid: sender, campo }, delta })
 
     if (success) {
       const money    = rand(500, 8000)
@@ -87,30 +90,41 @@ const command: Command = {
       const embers    = Math.random() < 0.04 ? 1 : 0
       const emberLine = embers > 0 ? `\n> +${embers} BrasEmbers (¡raro!)` : ''
 
+      const r = await cobrarConCooldown(sender, 'lastCrime',
+        choice === 0 ? [yo('exp', exp)]
+        : choice === 1 ? [yo('diamonds', diamonds), yo('money', money)]
+        : [yo('money', money)])
+      if (!r.ok) {
+        await sock.sendMessage(jid, { text: `> ${textoDeMotivo(r.motivo)}` }, { quoted: msg })
+        return
+      }
+      if (embers) patchUserData(sender, { embers: getUserData(sender).embers + embers })
+
       if (choice === 0) {
-        patchUserData(sender, { exp: user.exp + exp, embers: user.embers + embers })
         const lvlLine = levelUpLine(checkLevelUp(sender), jid)
         await sock.sendMessage(jid, {
           text: `> ${story(exp)}\n> +${exp} XP${lvlLine}${emberLine}\n\n_Próximo en 15 min_`,
         }, { quoted: msg })
       } else if (choice === 1) {
-        patchUserData(sender, { diamonds: user.diamonds + diamonds, money: user.money + money, embers: user.embers + embers })
         await sock.sendMessage(jid, {
           text: `> ${story(money)}\n> +${diamonds} 💎  ·  +¥${money.toLocaleString()}${emberLine}\n\n_Próximo en 15 min_`,
         }, { quoted: msg })
       } else {
-        patchUserData(sender, { money: user.money + money, embers: user.embers + embers })
         await sock.sendMessage(jid, {
           text: `> ${story(money)}${emberLine}\n\n_Próximo en 15 min_`,
         }, { quoted: msg })
       }
     } else {
-      const loss   = rand(100, Math.min(3000, Math.max(100, user.money)))
-      const xpLoss = rand(50, 400)
-      patchUserData(sender, {
-        money: Math.max(0, user.money - loss),
-        exp:   Math.max(0, user.exp - xpLoss),
-      })
+      // Lo que se pierde, recortado a lo que hay: hasta la 9.2 era
+      // Math.max(0, …) en el saldo, pero el mensaje decía la pérdida entera
+      // aunque no se tuviera tanto.
+      const loss   = Math.min(user.money, rand(100, Math.min(3000, Math.max(100, user.money))))
+      const xpLoss = Math.min(user.exp, rand(50, 400))
+      const r = await cobrarConCooldown(sender, 'lastCrime', [yo('money', -loss), yo('exp', -xpLoss)])
+      if (!r.ok) {
+        await sock.sendMessage(jid, { text: `> ${textoDeMotivo(r.motivo)}` }, { quoted: msg })
+        return
+      }
       await sock.sendMessage(jid, {
         text: `> ${pick(LOSE)(loss, xpLoss)}\n\n_Próximo en 15 min_`,
       }, { quoted: msg })

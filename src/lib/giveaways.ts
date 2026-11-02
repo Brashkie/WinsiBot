@@ -19,14 +19,17 @@ export interface Sorteo {
 }
 
 const ARCHIVO = enData('giveaways.json')
-let sorteos: Record<string, Sorteo> = leerJson(ARCHIVO, {}, esObjeto)
+const sorteos: Record<string, Sorteo> = leerJson(ARCHIVO, {}, esObjeto)
 const despertador = new Despertador(cerrarVencidos)
 let sockRef: WASocket | null = null
 
 const guardar = () => guardarJson(ARCHIVO, sorteos)
 
 function armar(): void {
-  if (!sockRef) return despertador.desarmar()
+  if (!sockRef) {
+    despertador.desarmar()
+    return
+  }
   let proximo = Infinity
   for (const s of Object.values(sorteos)) if (s.termina < proximo) proximo = s.termina
   despertador.armar(proximo)

@@ -1,8 +1,8 @@
 import type { Command } from '../../../types/index.js'
 import { safeSend } from '@lib/media_sender.js'
-import { tmpdir } from 'os'
-import { existsSync, readdirSync, statSync, unlinkSync, rmdirSync } from 'fs'
-import { join } from 'path'
+import { tmpdir } from 'node:os'
+import { existsSync, readdirSync, statSync, unlinkSync, rmdirSync } from 'node:fs'
+import { join } from 'node:path'
 
 const command: Command = {
   name:        'cleartmp',

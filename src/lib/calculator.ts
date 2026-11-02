@@ -12,7 +12,7 @@ class BasicCalculator {
     if (b === 0) throw new Error('División entre cero')
     return a % b
   }
-  power(base: number, exp: number)  { return Math.pow(base, exp) }
+  power(base: number, exp: number)  { return base ** exp }
   sqrt(n: number) {
     if (n < 0) throw new Error('Raíz de número negativo')
     return Math.sqrt(n)
@@ -41,7 +41,7 @@ export class ScientificCalculator extends BasicCalculator {
   log2(n: number)   { return Math.log2(n) }
   exp(n: number)    { return Math.exp(n) }
   cbrt(n: number)   { return Math.cbrt(n) }
-  nthRoot(n: number, r: number) { return Math.pow(n, 1 / r) }
+  nthRoot(n: number, r: number) { return n ** (1 / r) }
   gcd(a: number, b: number): number {
     a = Math.abs(a); b = Math.abs(b)
     while (b) { [a, b] = [b, a % b] }
@@ -145,7 +145,7 @@ export class ExpressionEvaluator {
     try {
       // eslint-disable-next-line no-new-func
       const result = Function(`"use strict"; return (${cleaned})`)() as number
-      if (!isFinite(result)) throw new Error('Resultado infinito o inválido')
+      if (!Number.isFinite(result)) throw new Error('Resultado infinito o inválido')
       return result
     } catch {
       throw new Error('No se pudo evaluar la expresión')

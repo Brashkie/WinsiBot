@@ -1,8 +1,10 @@
 import type { Command } from '../../../types/index.js'
 import {
-  getUserData, patchUserData,
-  isOnCooldown, setCooldown, getCooldownLeft, fmtCooldown,
+  getUserData, 
+  isOnCooldown, getCooldownLeft, fmtCooldown,
 } from '@core/events.js'
+import { cobrarConCooldown } from '@core/economy.js'
+import { textoDeMotivo } from '@lib/ledger.js'
 import { randomNumber as rand, randomChoice as pick } from '@lib/utils.js'
 
 const CD = 10 * 60_000  // 10 min
@@ -56,8 +58,11 @@ const command: Command = {
     const earned  = isPrem ? rand(3000, 10_000) : rand(1000, 6000)
     const story   = pick(SCENARIOS)
 
-    patchUserData(sender, { money: user.money + earned })
-    setCooldown(sender, 'lastHunt')
+    const r = await cobrarConCooldown(sender, 'lastHunt', [{ cuenta: { jid: sender, campo: 'money' }, delta: earned }])
+    if (!r.ok) {
+      await sock.sendMessage(jid, { text: `> ${textoDeMotivo(r.motivo)}` }, { quoted: msg })
+      return
+    }
 
     await sock.sendMessage(jid, {
       text: `> ${story(earned)}\n\n_Próximo en 10 min_`,

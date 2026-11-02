@@ -17,7 +17,7 @@ const command: Command = {
     const ctxInfo = msg.message?.extendedTextMessage?.contextInfo
     const target  = ctxInfo?.mentionedJid?.[0]
       ?? ctxInfo?.participant
-      ?? (args[0]?.startsWith('@') ? args[0].replace('@', '') + '@s.whatsapp.net' : null)
+      ?? (args[0]?.startsWith('@') ? `${args[0].replace('@', '')}@s.whatsapp.net` : null)
 
     const tierArg = args.find(a => (VALID_TIERS as string[]).includes(a.toLowerCase()))?.toLowerCase() as UserTier | undefined
 

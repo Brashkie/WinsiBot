@@ -12,7 +12,7 @@ const command: Command = {
     const ctx_info = msg.message?.extendedTextMessage?.contextInfo
     const target   = ctx_info?.mentionedJid?.[0]
       ?? ctx_info?.participant
-      ?? (args[0]?.replace(/[@+]/g, '') + '@s.whatsapp.net')
+      ?? (`${args[0]?.replace(/[@+]/g, '')}@s.whatsapp.net`)
 
     if (!target || target === '@s.whatsapp.net') {
       await safeSend(() => sock.sendMessage(jid, {

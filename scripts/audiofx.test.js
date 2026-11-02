@@ -2,10 +2,10 @@
 // un audio generado: que cada uno salga como Ogg/Opus válido, con la duración
 // que corresponde a su cambio de velocidad.
 import { describe, expect, it } from 'vitest'
-import { execFileSync } from 'child_process'
-import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'fs'
-import { tmpdir } from 'os'
-import { join } from 'path'
+import { execFileSync } from 'node:child_process'
+import { mkdtempSync, readFileSync, rmSync, } from 'node:fs'
+import { tmpdir } from 'node:os'
+import { join } from 'node:path'
 import { EFECTOS, efectoDe, argumentos, MAX_SEGUNDOS } from '../src/lib/audioFx.ts'
 
 let ffmpeg = null

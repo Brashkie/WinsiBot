@@ -27,6 +27,14 @@ jobs:
       - name: Type check
         run: npx tsc --noEmit
 
+      # Desde 9.3, cero diagnósticos: una advertencia de biome hace fallar el
+      # job, igual que un error de tsc.
+      - name: Lint
+        run: npx biome lint --error-on-warnings
+
+      - name: Tests
+        run: npx vitest run
+
   # ─── Rust ────────────────────────────────────────────────────────────────────
   rust:
     name: Rust check
@@ -36,6 +44,8 @@ jobs:
 
       - name: Setup Rust
         uses: dtolnay/rust-toolchain@stable
+        with:
+          components: clippy, rustfmt
 
       # El workspace está en la raíz desde la 8.15.0 (crates/*). Ya no se
       # escribe un .env de mentira: `cargo check` compila, no ejecuta, y la
@@ -45,6 +55,13 @@ jobs:
 
       - name: Cargo check
         run: cargo check --workspace --all-targets
+
+      # Desde 9.3: el formato de rustfmt y clippy sin una sola advertencia.
+      - name: Formato
+        run: cargo fmt --all -- --check
+
+      - name: Clippy
+        run: cargo clippy --workspace --all-targets --release -- -D warnings
 
       - name: Tests
         run: cargo test --workspace --release
@@ -56,6 +73,9 @@ jobs:
 
       - name: Tests con los kernels nativos
         run: cargo test --release -p winsibot-session-api --features native
+
+      - name: Clippy con los kernels nativos
+        run: cargo clippy -p winsibot-session-api --all-targets --release --features native -- -D warnings
 
       # En x86-64 cada kernel de Zig viene dos veces: baseline y x86-64-v3
       # (AVX2), y se elige según la CPU (src/simd.rs). El paso de arriba usa la
@@ -88,12 +108,23 @@ jobs:
       - name: Tests con los kernels nativos
         run: cargo test --release -p winsibot-session-api --features native
 
+      # Cuánto tarda #upscale en ARM, por etapa, en un núcleo y en todos: el
+      # número que no se puede medir desde un PC con x86. Solo informa, no
+      # falla por lento (un runner compartido no es un teléfono).
+      - name: "Medir #upscale en ARM"
+        run: |
+          cargo build --release -p winsibot-session-api --features native --example profile_stages
+          WINSI_HILOS=1 ./target/release/examples/profile_stages media/WinsiBot.png 2
+          ./target/release/examples/profile_stages media/WinsiBot.png 2
+
   # ─── Antirrobo en Ada/SPARK ──────────────────────────────────────────────────
   # La decisión del antirrobo de grupos (crates/session-api/ada) está en SPARK:
   # GNATprove demuestra sus garantías para toda entrada, y con
-  # --checks-as-errors una sola sin demostrar hace fallar el job. Después, la
-  # copia en Rust —la que llevan Android y Linux ARM, sin GNAT— contra Ada en
-  # las 1.280 entradas.
+  # --checks-as-errors una sola sin demostrar hace fallar el job. Desde 9.3
+  # también el libro de saldos de la economía, el lector de montos y el ritmo
+  # de salida del antiban. Después,
+  # las copias en Rust —las que llevan Android y Linux ARM, sin GNAT— contra
+  # Ada.
   ada:
     name: Antirrobo en Ada/SPARK
     runs-on: ubuntu-latest
@@ -102,6 +133,8 @@ jobs:
 
       - name: Setup Rust
         uses: dtolnay/rust-toolchain@stable
+        with:
+          components: clippy
 
       - name: Cache Rust
         uses: Swatinem/rust-cache@v2
@@ -122,9 +155,18 @@ jobs:
         working-directory: crates/session-api/ada
         run: alr -n exec -- gnatprove -P group_guard.gpr --level=4 -j0 --checks-as-errors=on
 
-      - name: Ada contra la copia en Rust, en toda entrada
+      # El antirrobo, en sus 1.280 entradas; el libro de saldos, en los bordes
+      # y en un millón de entradas al azar; el lector de montos, en las
+      # 2.396.745 tiras cortas (la misma huella que el test de TypeScript) y
+      # en un millón de largas; el ritmo de salida, en un millón de pedidos y
+      # en los bordes de la escalada.
+      - name: Ada contra las copias en Rust
         working-directory: crates/session-api/ada
-        run: alr -n exec -- bash -c 'cd ../../.. && cargo test --release -p winsibot-session-api --features ada group_guard'
+        run: alr -n exec -- bash -c 'cd ../../.. && cargo test --release -p winsibot-session-api --features ada -- group_guard ledger amount send_pacing'
+
+      - name: Clippy con Ada
+        working-directory: crates/session-api/ada
+        run: alr -n exec -- bash -c 'cd ../../.. && cargo clippy -p winsibot-session-api --all-targets --release --features ada -- -D warnings'
 
   # ─── Release ─────────────────────────────────────────────────────────────────
   # Solo corre al pushear un tag "vX.Y.Z" — crea el Release en GitHub con notas

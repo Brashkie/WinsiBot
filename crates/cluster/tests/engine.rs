@@ -7,7 +7,12 @@ use common::{Azar, Carpeta};
 
 /// Opciones chicas para que haya muchas tablas, vaciados y compactaciones.
 fn chicas() -> Opciones {
-    Opciones { memtable_bytes: 8 << 10, compactar_desde: 3, bloque_bytes: 256, ..Opciones::default() }
+    Opciones {
+        memtable_bytes: 8 << 10,
+        compactar_desde: 3,
+        bloque_bytes: 256,
+        ..Opciones::default()
+    }
 }
 
 #[test]
@@ -26,13 +31,24 @@ fn poner_leer_borrar() {
 #[test]
 fn la_lapida_tapa_lo_viejo_en_disco() {
     let c = Carpeta::nueva("lapida");
-    let mut m = Motor::abrir(&c.0, Opciones { compactar_desde: 99, ..Opciones::default() }).unwrap();
+    let mut m = Motor::abrir(
+        &c.0,
+        Opciones {
+            compactar_desde: 99,
+            ..Opciones::default()
+        },
+    )
+    .unwrap();
     m.poner(b"k", b"viejo").unwrap();
     m.vaciar().unwrap();
     m.borrar(b"k").unwrap();
     m.vaciar().unwrap();
     assert_eq!(m.estadisticas().tablas, 2);
-    assert_eq!(m.leer(b"k").unwrap(), None, "la lápida de la tabla nueva tapa la vieja");
+    assert_eq!(
+        m.leer(b"k").unwrap(),
+        None,
+        "la lápida de la tabla nueva tapa la vieja"
+    );
     drop(m);
     let m = Motor::abrir(&c.0, Opciones::default()).unwrap();
     assert_eq!(m.leer(b"k").unwrap(), None);
@@ -41,7 +57,14 @@ fn la_lapida_tapa_lo_viejo_en_disco() {
 #[test]
 fn compactar_tira_lapidas_y_pisados() {
     let c = Carpeta::nueva("compactar");
-    let mut m = Motor::abrir(&c.0, Opciones { compactar_desde: 99, ..Opciones::default() }).unwrap();
+    let mut m = Motor::abrir(
+        &c.0,
+        Opciones {
+            compactar_desde: 99,
+            ..Opciones::default()
+        },
+    )
+    .unwrap();
     for i in 0..100u32 {
         m.poner(format!("k{i:03}").as_bytes(), b"v1").unwrap();
     }
@@ -76,12 +99,23 @@ fn el_lote_entra_entero() {
 fn prefijo_y_rango() {
     let c = Carpeta::nueva("prefijo");
     let mut m = Motor::abrir(&c.0, chicas()).unwrap();
-    for (k, v) in [("u:ana", "1"), ("u:beto", "2"), ("g:x", "3"), ("u:carla", "4"), ("v:z", "5")] {
+    for (k, v) in [
+        ("u:ana", "1"),
+        ("u:beto", "2"),
+        ("g:x", "3"),
+        ("u:carla", "4"),
+        ("v:z", "5"),
+    ] {
         m.poner(k.as_bytes(), v.as_bytes()).unwrap();
     }
     m.vaciar().unwrap();
     m.borrar(b"u:beto").unwrap();
-    let u: Vec<String> = m.prefijo(b"u:").unwrap().into_iter().map(|(k, _)| String::from_utf8(k).unwrap()).collect();
+    let u: Vec<String> = m
+        .prefijo(b"u:")
+        .unwrap()
+        .into_iter()
+        .map(|(k, _)| String::from_utf8(k).unwrap())
+        .collect();
     assert_eq!(u, ["u:ana", "u:carla"]);
     assert_eq!(m.rango(b"g", Some(b"u")).unwrap().len(), 1);
 }
@@ -123,7 +157,11 @@ fn contra_un_modelo() {
                     modelo.remove(&k);
                 }
                 80..=96 => {
-                    assert_eq!(m.leer(&k).unwrap(), modelo.get(&k).cloned(), "semilla {semilla}, paso {paso}");
+                    assert_eq!(
+                        m.leer(&k).unwrap(),
+                        modelo.get(&k).cloned(),
+                        "semilla {semilla}, paso {paso}"
+                    );
                 }
                 97 => m.compactar().unwrap(),
                 _ => {

@@ -21,7 +21,7 @@
 // `delete`, que devuelven `{ status, data }` y lanzan con `err.response` en
 // un 4xx/5xx— para que el cambio no toque ninguna de sus llamadas.
 
-import http from 'http'
+import http from 'node:http'
 import { config } from '@config'
 
 const base = new URL(config.rustApiUrl || 'http://127.0.0.1:3001')

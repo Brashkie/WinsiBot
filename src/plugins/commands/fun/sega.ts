@@ -9,7 +9,7 @@ const command: Command = {
   category: 'fun',
   cooldown: 10,
 
-  async execute({ sock, jid, msg, args, sender, pushName }) {
+  async execute({ sock, jid, msg, sender }) {
     const ctx        = msg.message?.extendedTextMessage?.contextInfo
     const mentionRaw = ctx?.mentionedJid?.[0]
     const quotedRaw  = ctx?.participant

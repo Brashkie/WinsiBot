@@ -1,5 +1,5 @@
 import type { Command } from '../../../types/index.js'
-import { userData, getUserData } from '@core/events/index.js'
+import { userData, } from '@core/events/index.js'
 import { safeSend } from '@lib/media_sender.js'
 
 const command: Command = {
@@ -13,7 +13,7 @@ const command: Command = {
     const ctx    = msg.message?.extendedTextMessage?.contextInfo
     const target = ctx?.mentionedJid?.[0]
       ?? ctx?.participant
-      ?? (args[0]?.replace(/[@+]/g, '') + '@s.whatsapp.net')
+      ?? (`${args[0]?.replace(/[@+]/g, '')}@s.whatsapp.net`)
 
     if (!target || target === '@s.whatsapp.net') {
       await safeSend(() => sock.sendMessage(jid, {

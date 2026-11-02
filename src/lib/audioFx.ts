@@ -10,11 +10,11 @@
 // 48 kHz en Opus a 48 kbps —lo que WhatsApp usa para las notas de voz— y el
 // proceso tiene un tiempo máximo. Un efecto estéreo (8D) sale en estéreo.
 
-import { execFile } from 'child_process'
-import { promisify } from 'util'
-import { readFile, unlink, writeFile } from 'fs/promises'
-import { join } from 'path'
-import { randomUUID } from 'crypto'
+import { execFile } from 'node:child_process'
+import { promisify } from 'node:util'
+import { readFile, unlink, writeFile } from 'node:fs/promises'
+import { join } from 'node:path'
+import { randomUUID } from 'node:crypto'
 import { ffmpegPath } from './ffmpeg.js'
 import { carpetaTmp } from './utils.js'
 

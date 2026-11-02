@@ -162,7 +162,7 @@ async function main() {
   const veces = frio / caliente
 
   console.log()
-  linea('caliente (mediana de ' + VUELTAS_CALIENTE + ')', `${color.green(caliente.toFixed(0).padStart(7))} ms`)
+  linea(`caliente (mediana de ${VUELTAS_CALIENTE})`, `${color.green(caliente.toFixed(0).padStart(7))} ms`)
   linea('frío (modelo descargado)',                        `${color.red(frio.toFixed(0).padStart(7))} ms`)
   console.log(`    ${'-'.repeat(46)}`)
   linea('lo que cuesta la recarga',                        `${color.bold(dif.toFixed(0).padStart(7))} ms   (${veces.toFixed(1)}x)`)

@@ -30,7 +30,7 @@ export function partir(texto: string, ancho: number): string[] {
         p = [...p].slice(ancho).join('')
       }
       if (!actual) actual = p
-      else if ([...actual].length + 1 + [...p].length <= ancho) actual += ' ' + p
+      else if ([...actual].length + 1 + [...p].length <= ancho) actual += ` ${p}`
       else { lineas.push(actual); actual = p }
     }
     lineas.push(actual)
@@ -61,8 +61,8 @@ export async function cita(nombre: string, texto: string, avatar?: Buffer | null
   const porLinea = Math.floor((anchoMax - 40) / (fuente * ANCHO_LETRA))
   let lineas = partir(texto, porLinea)
   const maxLineas = 9
-  if (lineas.length > maxLineas) lineas = [...lineas.slice(0, maxLineas - 1), [...lineas[maxLineas - 1]!].slice(0, porLinea - 1).join('') + '…']
-  const nombreCorto = [...nombre].length > porLinea ? [...nombre].slice(0, porLinea - 1).join('') + '…' : nombre
+  if (lineas.length > maxLineas) lineas = [...lineas.slice(0, maxLineas - 1), `${[...lineas[maxLineas - 1]!].slice(0, porLinea - 1).join('')}…`]
+  const nombreCorto = [...nombre].length > porLinea ? `${[...nombre].slice(0, porLinea - 1).join('')}…` : nombre
   const masLarga = Math.max(...lineas.map(l => [...l].length), [...nombreCorto].length)
   const ancho = Math.min(anchoMax, Math.max(160, Math.ceil(masLarga * fuente * ANCHO_LETRA) + 40))
   const altoBurbuja = 24 + alto + lineas.length * alto + 20

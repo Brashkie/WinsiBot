@@ -30,12 +30,19 @@ fn carpeta(nombre: &str) -> PathBuf {
 }
 
 fn tam_carpeta(p: &Path) -> u64 {
-    std::fs::read_dir(p).unwrap().map(|e| e.unwrap().metadata().unwrap().len()).sum()
+    std::fs::read_dir(p)
+        .unwrap()
+        .map(|e| e.unwrap().metadata().unwrap().len())
+        .sum()
 }
 
 fn clave(i: usize) -> Vec<u8> {
     // Como un id de mensaje de WhatsApp: 20 caracteres hex.
-    format!("3EB0{:016X}", (i as u64).wrapping_mul(0x9e37_79b9_7f4a_7c15)).into_bytes()
+    format!(
+        "3EB0{:016X}",
+        (i as u64).wrapping_mul(0x9e37_79b9_7f4a_7c15)
+    )
+    .into_bytes()
 }
 
 fn valor(i: usize, largo: usize) -> Vec<u8> {
@@ -64,7 +71,10 @@ struct Resultado {
 /// misma que se le da a SQLite.
 fn opciones() -> Opciones {
     let mut o = Opciones::default();
-    if let Some(mb) = std::env::var("CLUSTER_CACHE_MB").ok().and_then(|v| v.parse::<usize>().ok()) {
+    if let Some(mb) = std::env::var("CLUSTER_CACHE_MB")
+        .ok()
+        .and_then(|v| v.parse::<usize>().ok())
+    {
         o.cache_bytes = mb << 20;
     }
     o
@@ -120,7 +130,15 @@ fn medir_cluster(c: &Carga) -> Resultado {
     drop(m);
     let disco_mb = tam_carpeta(&dir) as f64 / 1e6;
     let _ = std::fs::remove_dir_all(&dir);
-    Resultado { suelta, lotes, leer_si, leer_no, prefijo_ms, reabrir_ms, disco_mb }
+    Resultado {
+        suelta,
+        lotes,
+        leer_si,
+        leer_no,
+        prefijo_ms,
+        reabrir_ms,
+        disco_mb,
+    }
 }
 
 fn abrir_sqlite(dir: &Path) -> Connection {
@@ -157,16 +175,20 @@ fn medir_sqlite(c: &Carga) -> Resultado {
     while i < c.n {
         let tx = db.transaction().unwrap();
         {
-            let mut st = tx.prepare_cached("INSERT OR REPLACE INTO kv (k, v) VALUES (?1, ?2)").unwrap();
+            let mut st = tx
+                .prepare_cached("INSERT OR REPLACE INTO kv (k, v) VALUES (?1, ?2)")
+                .unwrap();
             for j in i..(i + c.lote).min(c.n) {
-                st.execute(params![clave(j), valor(j, c.largo_valor)]).unwrap();
+                st.execute(params![clave(j), valor(j, c.largo_valor)])
+                    .unwrap();
             }
         }
         tx.commit().unwrap();
         i += c.lote;
     }
     let lotes = por_op(t, c.n - suelta_n);
-    db.execute_batch("PRAGMA wal_checkpoint(TRUNCATE);").unwrap();
+    db.execute_batch("PRAGMA wal_checkpoint(TRUNCATE);")
+        .unwrap();
 
     let consultas = 50_000;
     let leer = |db: &Connection, k: Vec<u8>| -> Option<Vec<u8>> {
@@ -190,7 +212,9 @@ fn medir_sqlite(c: &Carga) -> Resultado {
     let filas: Vec<(Vec<u8>, Vec<u8>)> = db
         .prepare("SELECT k, v FROM kv WHERE k >= ?1 AND k < ?2 ORDER BY k")
         .unwrap()
-        .query_map(params![b"3EB0A".to_vec(), b"3EB0B".to_vec()], |r| Ok((r.get(0)?, r.get(1)?)))
+        .query_map(params![b"3EB0A".to_vec(), b"3EB0B".to_vec()], |r| {
+            Ok((r.get(0)?, r.get(1)?))
+        })
         .unwrap()
         .map(|r| r.unwrap())
         .collect();
@@ -200,27 +224,52 @@ fn medir_sqlite(c: &Carga) -> Resultado {
     drop(db);
     let t = Instant::now();
     let db = abrir_sqlite(&dir);
-    let _: i64 = db.query_row("SELECT count(*) FROM kv WHERE k = x'00'", [], |r| r.get(0)).unwrap();
+    let _: i64 = db
+        .query_row("SELECT count(*) FROM kv WHERE k = x'00'", [], |r| r.get(0))
+        .unwrap();
     let reabrir_ms = t.elapsed().as_secs_f64() * 1e3;
     drop(db);
     let disco_mb = tam_carpeta(&dir) as f64 / 1e6;
     let _ = std::fs::remove_dir_all(&dir);
-    Resultado { suelta, lotes, leer_si, leer_no, prefijo_ms, reabrir_ms, disco_mb }
+    Resultado {
+        suelta,
+        lotes,
+        leer_si,
+        leer_no,
+        prefijo_ms,
+        reabrir_ms,
+        disco_mb,
+    }
 }
 
 fn main() {
     let cargas = [
-        Carga { nombre: "dedup", n: 200_000, largo_valor: 8, lote: 1000 },
-        Carga { nombre: "usuarios", n: 30_000, largo_valor: 900, lote: 50 },
+        Carga {
+            nombre: "dedup",
+            n: 200_000,
+            largo_valor: 8,
+            lote: 1000,
+        },
+        Carga {
+            nombre: "usuarios",
+            n: 30_000,
+            largo_valor: 900,
+            lote: 50,
+        },
     ];
     for c in &cargas {
         // Una ronda de calentamiento de cada uno, y la segunda es la que vale.
         let _ = (medir_cluster(c), medir_sqlite(c));
         let a = medir_cluster(c);
         let b = medir_sqlite(c);
-        println!("\n== {} — {} claves, valores de {} B, lotes de {} ==", c.nombre, c.n, c.largo_valor, c.lote);
+        println!(
+            "\n== {} — {} claves, valores de {} B, lotes de {} ==",
+            c.nombre, c.n, c.largo_valor, c.lote
+        );
         println!("{:<28}{:>12}{:>12}{:>9}", "", "cluster", "sqlite", "x");
-        let fila = |n: &str, x: f64, y: f64, u: &str| println!("{n:<28}{:>9.2} {u:<2}{:>9.2} {u:<2}{:>8.2}x", x, y, y / x);
+        let fila = |n: &str, x: f64, y: f64, u: &str| {
+            println!("{n:<28}{:>9.2} {u:<2}{:>9.2} {u:<2}{:>8.2}x", x, y, y / x)
+        };
         fila("escribir de a una", a.suelta, b.suelta, "µs");
         fila("escribir en lotes", a.lotes, b.lotes, "µs");
         fila("leer clave que existe", a.leer_si, b.leer_si, "µs");

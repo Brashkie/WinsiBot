@@ -91,7 +91,14 @@ fn kernels(c: &mut Criterion) {
     });
     #[cfg(feature = "native")]
     g.bench_function("zig_fusionada", |b| {
-        b.iter(|| anime4k::pasada_zig(black_box(&img), A4K_FUERZA_COLOR, A4K_FUERZA_GRADIENTE, false))
+        b.iter(|| {
+            anime4k::pasada_zig(
+                black_box(&img),
+                A4K_FUERZA_COLOR,
+                A4K_FUERZA_GRADIENTE,
+                false,
+            )
+        })
     });
     g.finish();
 }

@@ -39,38 +39,58 @@ fn compilar_ada() {
     let salida = PathBuf::from(std::env::var("OUT_DIR").expect("OUT_DIR"));
     let gcc = std::env::var("WINSI_GNAT_GCC").unwrap_or_else(|_| "gcc".into());
     println!("cargo:rerun-if-env-changed=WINSI_GNAT_GCC");
-    let objeto = salida.join("group_guard.o");
 
-    let estado = Command::new(&gcc)
-        .args(["-c", "-O2", "-gnatp", "-gnatn", "-fPIC"])
-        .arg("-Iada/src")
-        .arg("ada/src/group_guard.adb")
-        .arg("-o")
-        .arg(&objeto)
-        // gcc deja el .ali junto al objeto; que no ensucie ada/src.
-        .current_dir(std::env::var("CARGO_MANIFEST_DIR").expect("CARGO_MANIFEST_DIR"))
-        .status();
-    match estado {
-        Ok(s) if s.success() => {}
-        Ok(s) => panic!("GNAT no compiló ada/src/group_guard.adb ({s:?})"),
-        Err(e) => panic!(
-            "no pude ejecutar `{gcc}`: {e}\n\
-             La feature `ada` necesita el gcc de GNAT: con Alire, `alr exec -- cargo build\n\
-             --features ada` desde ada/, o la ruta en WINSI_GNAT_GCC. Sin la feature\n\
-             decide la copia en Rust."
-        ),
+    // Cada unidad de Ada del crate: el antirrobo (9.2), el libro de saldos
+    // de la economía, el lector de montos y el ritmo de salida (9.3). Todas
+    // Pure, sin elaboración y demostradas.
+    let mut objetos = Vec::new();
+    for unidad in ["group_guard", "ledger", "amount_parser", "send_pacing"] {
+        let objeto = salida.join(format!("{unidad}.o"));
+        let estado = Command::new(&gcc)
+            .args(["-c", "-O2", "-gnatp", "-gnatn", "-fPIC"])
+            .arg("-Iada/src")
+            .arg(format!("ada/src/{unidad}.adb"))
+            .arg("-o")
+            .arg(&objeto)
+            // gcc deja el .ali junto al objeto; que no ensucie ada/src.
+            .current_dir(std::env::var("CARGO_MANIFEST_DIR").expect("CARGO_MANIFEST_DIR"))
+            .status();
+        match estado {
+            Ok(s) if s.success() => {}
+            Ok(s) => panic!("GNAT no compiló ada/src/{unidad}.adb ({s:?})"),
+            Err(e) => panic!(
+                "no pude ejecutar `{gcc}`: {e}\n\
+                 La feature `ada` necesita el gcc de GNAT: con Alire, `alr exec -- cargo build\n\
+                 --features ada` desde ada/, o la ruta en WINSI_GNAT_GCC. Sin la feature\n\
+                 deciden las copias en Rust."
+            ),
+        }
+        objetos.push(objeto);
     }
 
-    // Una librería estática de un solo objeto, con el ar de GNAT si está junto
+    // Una librería estática con los objetos, con el ar de GNAT si está junto
     // a su gcc. Con MSVC, el nombre es el que busca link.exe.
     let msvc = std::env::var("CARGO_CFG_TARGET_ENV").as_deref() == Ok("msvc");
-    let lib = salida.join(if msvc { "winsi_ada.lib" } else { "libwinsi_ada.a" });
+    let lib = salida.join(if msvc {
+        "winsi_ada.lib"
+    } else {
+        "libwinsi_ada.a"
+    });
     let _ = std::fs::remove_file(&lib);
     let ar = PathBuf::from(&gcc).with_file_name(if cfg!(windows) { "ar.exe" } else { "ar" });
     let ar = if ar.exists() { ar } else { PathBuf::from("ar") };
-    match Command::new(&ar).arg("crs").arg(&lib).arg(&objeto).status() {
+    match Command::new(&ar)
+        .arg("crs")
+        .arg(&lib)
+        .args(&objetos)
+        .status()
+    {
         Ok(s) if s.success() => {}
-        otro => panic!("no pude armar {} con {}: {otro:?}", lib.display(), ar.display()),
+        otro => panic!(
+            "no pude armar {} con {}: {otro:?}",
+            lib.display(),
+            ar.display()
+        ),
     }
 
     println!("cargo:rustc-link-search=native={}", salida.display());
@@ -129,9 +149,19 @@ fn compilar_nativo() {
     // #upscale en un hilo: 507 → 378 ms, igual bit a bit.
     let arch = std::env::var("CARGO_CFG_TARGET_ARCH").expect("CARGO_CFG_TARGET_ARCH");
     let objeto_v3 = (arch == "x86_64" && std::env::var("WINSI_SIN_V3").is_err()).then(|| {
-        let obj = salida.join(if os == "windows" { "winsi_v3.obj" } else { "winsi_v3.o" });
+        let obj = salida.join(if os == "windows" {
+            "winsi_v3.obj"
+        } else {
+            "winsi_v3.o"
+        });
         let mut c = Command::new("zig");
-        c.args(["build-obj", "native/lib_v3.zig", "-OReleaseFast", "-fPIC", "-mcpu=x86_64_v3"]);
+        c.args([
+            "build-obj",
+            "native/lib_v3.zig",
+            "-OReleaseFast",
+            "-fPIC",
+            "-mcpu=x86_64_v3",
+        ]);
         if target != host {
             c.arg("-target").arg(zig_target(&target));
         }

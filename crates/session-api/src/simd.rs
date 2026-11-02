@@ -34,7 +34,13 @@ pub fn v3() -> bool {
 
 /// El nombre de lo que se está usando, para los logs y los ejemplos.
 pub fn nombre() -> &'static str {
-    if v3() { "x86-64-v3 (AVX2)" } else if cfg!(target_arch = "x86_64") { "baseline (SSE2)" } else { "baseline" }
+    if v3() {
+        "x86-64-v3 (AVX2)"
+    } else if cfg!(target_arch = "x86_64") {
+        "baseline (SSE2)"
+    } else {
+        "baseline"
+    }
 }
 
 /// Llama a un kernel de Zig en su versión `_v3` si la CPU la soporta, o en la

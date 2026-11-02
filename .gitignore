@@ -72,3 +72,5 @@ yarn-error.log*
 # `npm install`. Nada de eso va al repo.
 bin/
 mensaje-commit.txt
+# Perfiles de CPU de Node (node --cpu-prof)
+*.cpuprofile

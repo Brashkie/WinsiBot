@@ -695,6 +695,70 @@ pub struct ObserveRequest {
     pub text: String,
 }
 
+// ── Retención ─────────────────────────────────────────────────────────────────
+//
+// Hasta la 9.3.0 esta tabla guardaba cada mensaje de cada grupo PARA SIEMPRE:
+// ~250 bytes por fila con sus dos índices, unos 9 GB al año en un bot de 100
+// grupos activos, y cada consulta más lenta. Nadie lee más de un año atrás
+// (#ghosts, #activity y los perfiles llegan como mucho a 365 días), así que lo
+// de antes se borra. SQLite no achica el archivo al borrar: reusa las páginas,
+// y con eso el archivo deja de crecer cuando llega a un año de mensajes. Sin
+// VACUUM, que pediría otro tanto de disco libre para copiar la base.
+
+/// Días de mensajes que se guardan: `CONV_RETENCION_DIAS`, 365 por defecto.
+/// 0 es para siempre, como antes.
+pub fn retencion_dias() -> i64 {
+    std::env::var("CONV_RETENCION_DIAS")
+        .ok()
+        .and_then(|v| v.trim().parse::<i64>().ok())
+        .unwrap_or(365)
+        .max(0)
+}
+
+/// Filas por tanda. Medido sobre 300.000 vencidos: de a 5.000, cada tanda
+/// tenía la conexión 58 ms, y en ese tiempo no entra ningún mensaje; de a
+/// 1.000 son ~12 ms. Entre tanda y tanda se suelta un momento, porque el
+/// `Mutex` de std no es justo: sin la pausa, este mismo hilo lo volvería a
+/// tomar antes que los demás.
+const PODA_TANDA: usize = 1_000;
+
+/// Borra los mensajes anteriores a `corte` (ms) y devuelve cuántos.
+///
+/// Ningún índice sirve para buscar por `ts` solo, pero los mensajes entran en
+/// orden: la fila de `id` más bajo es la más vieja. Si esa no venció, no hay
+/// nada que borrar y no se recorre la tabla. Si venció, se borran de a tandas
+/// desde el principio.
+pub fn podar(db: &BaseConv, corte: i64) -> usize {
+    let mut total = 0;
+    loop {
+        let Ok(conn) = db.lock() else { break };
+        let mas_viejo: Option<i64> = conn
+            .query_row(
+                "SELECT ts FROM conversations ORDER BY id LIMIT 1",
+                [],
+                |r| r.get(0),
+            )
+            .ok();
+        if !mas_viejo.is_some_and(|ts| ts < corte) {
+            break;
+        }
+        let n = conn
+            .execute(
+                "DELETE FROM conversations WHERE ts < ?1 AND id IN
+                 (SELECT id FROM conversations ORDER BY id LIMIT ?2)",
+                params![corte, PODA_TANDA as i64],
+            )
+            .unwrap_or(0);
+        drop(conn);
+        total += n;
+        if n == 0 {
+            break;
+        }
+        std::thread::sleep(std::time::Duration::from_millis(2));
+    }
+    total
+}
+
 /// Guarda un mensaje de grupo observado: lo ENCOLA, y se escribe con el
 /// próximo vaciado (ver [`BaseConv`]). Es lo que corre por CADA mensaje de cada
 /// grupo, así que es lo que mide `benches/message.rs`.
@@ -796,7 +860,8 @@ pub async fn ai_group_recent(
     let db = state.conv_db.clone();
     let limite = q.limit.clamp(1, 500);
     let desde = Utc::now().timestamp_millis() - q.hours.clamp(1, 24 * 7) * 3_600_000;
-    let r = tokio::task::spawn_blocking(move || mensajes_recientes(&db, &gjid, limite, desde)).await;
+    let r =
+        tokio::task::spawn_blocking(move || mensajes_recientes(&db, &gjid, limite, desde)).await;
     match r {
         Ok(Ok(msgs)) => {
             let textos: Vec<String> = msgs.iter().map(|m| m.text.clone()).collect();
@@ -859,13 +924,21 @@ pub fn actividad(db: &ConvDb, gjid: &str, desde_ts: i64) -> Result<Actividad, St
         .map_err(|e| e.to_string())?;
     let miembros: Vec<MiembroActivo> = st
         .query_map(params![gjid, desde_ts], |r| {
-            Ok(MiembroActivo { sender: r.get(0)?, mensajes: r.get(1)?, ultimo: r.get(2)? })
+            Ok(MiembroActivo {
+                sender: r.get(0)?,
+                mensajes: r.get(1)?,
+                ultimo: r.get(2)?,
+            })
         })
         .map_err(|e| e.to_string())?
         .filter_map(|r| r.ok())
         .collect();
     let total = miembros.iter().map(|m| m.mensajes).sum();
-    Ok(Actividad { registro_desde, total, miembros })
+    Ok(Actividad {
+        registro_desde,
+        total,
+        miembros,
+    })
 }
 
 /// GET /ai/group/activity/{gjid}?days=7
@@ -1108,6 +1181,40 @@ mod tests {
     }
 
     #[test]
+    fn la_poda_borra_solo_lo_vencido_y_de_a_tandas() {
+        let db = db_memoria();
+        let ahora = ahora();
+        {
+            let conn = db.lock().unwrap();
+            let tx = conn.unchecked_transaction().unwrap();
+            // 12.000 viejos —doce tandas— y 10 nuevos.
+            for i in 0..12_010i64 {
+                let ts = if i < 12_000 {
+                    ahora - 400 * 86_400_000 + i
+                } else {
+                    ahora - i
+                };
+                tx.execute(
+                    "INSERT INTO conversations (sender, gjid, text, ts) VALUES ('a', 'g', 'x', ?1)",
+                    params![ts],
+                )
+                .unwrap();
+            }
+            tx.commit().unwrap();
+        }
+        let corte = ahora - 365 * 86_400_000;
+        assert_eq!(podar(&db, corte), 12_000);
+        let quedan: i64 = db
+            .lock()
+            .unwrap()
+            .query_row("SELECT COUNT(*) FROM conversations", [], |r| r.get(0))
+            .unwrap();
+        assert_eq!(quedan, 10);
+        // Sin nada vencido, no borra nada.
+        assert_eq!(podar(&db, corte), 0);
+    }
+
+    #[test]
     fn perfil_respeta_la_ventana_de_dias() {
         let db = db_memoria();
         let viejo = ahora() - 60 * 86_400_000; // 60 dias
@@ -1230,7 +1337,14 @@ mod tests {
         let db = db_memoria();
         let t = ahora();
         for i in 0..10 {
-            insertar(&db, "a@s", "g@g", &format!("m{i}"), "", t - (10 - i) * 1_000);
+            insertar(
+                &db,
+                "a@s",
+                "g@g",
+                &format!("m{i}"),
+                "",
+                t - (10 - i) * 1_000,
+            );
         }
         let v = mensajes_recientes(&db, "g@g", 3, 0).unwrap();
         let textos: Vec<&str> = v.iter().map(|m| m.text.as_str()).collect();
@@ -1249,10 +1363,22 @@ mod tests {
         insertar(&db, "c@s", "otro@g", "otro grupo", "", t);
 
         let a = actividad(&db, "g@g", t - 7 * 86_400_000).unwrap();
-        assert_eq!(a.registro_desde, Some(t - 10 * 86_400_000), "el registro arranca en el más viejo");
+        assert_eq!(
+            a.registro_desde,
+            Some(t - 10 * 86_400_000),
+            "el registro arranca en el más viejo"
+        );
         assert_eq!(a.total, 3);
-        let v: Vec<(&str, i64)> = a.miembros.iter().map(|m| (m.sender.as_str(), m.mensajes)).collect();
-        assert_eq!(v, [("a@s", 2), ("b@s", 1)], "del que más escribió al que menos, sin otros grupos");
+        let v: Vec<(&str, i64)> = a
+            .miembros
+            .iter()
+            .map(|m| (m.sender.as_str(), m.mensajes))
+            .collect();
+        assert_eq!(
+            v,
+            [("a@s", 2), ("b@s", 1)],
+            "del que más escribió al que menos, sin otros grupos"
+        );
         assert_eq!(a.miembros[0].ultimo, t - 500);
     }
 

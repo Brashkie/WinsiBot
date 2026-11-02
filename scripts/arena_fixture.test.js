@@ -3,7 +3,7 @@
 // su CPU: `npm run build && node scripts/arena_fixture.js`, y después el test
 // de Rust dice si la copia en Rust quedó atrás.
 import { describe, expect, it } from 'vitest'
-import { readFileSync } from 'fs'
+import { readFileSync } from 'node:fs'
 import { generar } from './arena_fixture.js'
 import { Arena, CPU } from '../src/lib/pvp.ts'
 import { mejorAccion } from '../src/lib/arenaAI.ts'

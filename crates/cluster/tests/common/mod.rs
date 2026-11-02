@@ -22,7 +22,12 @@ impl Carpeta {
         let mut v: Vec<PathBuf> = std::fs::read_dir(&self.0)
             .unwrap()
             .map(|e| e.unwrap().path())
-            .filter(|p| p.file_name().unwrap().to_string_lossy().starts_with(prefijo))
+            .filter(|p| {
+                p.file_name()
+                    .unwrap()
+                    .to_string_lossy()
+                    .starts_with(prefijo)
+            })
             .collect();
         v.sort();
         v

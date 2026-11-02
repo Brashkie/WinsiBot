@@ -17,7 +17,7 @@ const command: Command = {
     const ctx_info = msg.message?.extendedTextMessage?.contextInfo
     const target   = ctx_info?.mentionedJid?.[0]
       ?? ctx_info?.participant
-      ?? (args[0]?.startsWith('@') ? args[0].replace('@', '') + '@s.whatsapp.net' : null)
+      ?? (args[0]?.startsWith('@') ? `${args[0].replace('@', '')}@s.whatsapp.net` : null)
 
     if (!target) {
       await safeSend(() => sock.sendMessage(jid, {
@@ -33,7 +33,7 @@ const command: Command = {
 
     if (isAdd) {
       const daysArg = args.find(a => /^\d+$/.test(a))
-      const days    = daysArg ? parseInt(daysArg) : 30
+      const days    = daysArg ? parseInt(daysArg, 10) : 30
 
       if (days < 1 || days > 3650) {
         await safeSend(() => sock.sendMessage(jid, {

@@ -27,12 +27,17 @@ import {
 import { hasPendingCaptcha, verifyCaptchaAnswer } from '@core/events/captcha.js'
 import { handleDrawGuessMessage, handleQuizMessage } from '@core/events/gameHandlers.js'
 import { handleTransferConfirm } from '@plugins/commands/rpg/transfer.js'
-import { sessionClient } from '@lib/session.js'
 import { getGroupParticipants } from '@core/groupCache.js'
 import { winsiSocket } from '@core/socket.js'
 import { getNumber } from '@lib/jid_utils.js'
+import { esDueno } from '@lib/owner.js'
+import { LimitePorRemitente } from '@lib/senderRate.js'
+import { acreditar, cambiarSaldos } from '@core/economy.js'
+
 import { numeroDe } from '@lib/members.js'
 import { idiomaDe, t } from '@lib/i18n.js'
+
+const limitePorRemitente = new LimitePorRemitente()
 
 // handleAIResponse puede tardar 44s+ esperando a Ollama — tiempo de sobra
 // para que una reconexión (Bad MAC, watchdog zombie, corte de red) invalide
@@ -161,21 +166,8 @@ function buildBaseContext(
     : (msg.key.remoteJid  ?? '')
   const text    = extractText(msg).trim()
 
-  const senderNum = sender
-    .replace('@s.whatsapp.net', '')
-    .replace('@lid', '')
-    .replace(/[^0-9]/g, '')
-
-  const ownerCandidate    = getOwnerCandidateId(msg, isGroup)
-  const ownerCandidateNum = ownerCandidate
-    .replace('@s.whatsapp.net', '')
-    .replace(/[^0-9]/g, '')
-
-  const isOwner = config.ownerJid.some(o => {
-    const oNum = o.replace('@s.whatsapp.net', '').replace(/[^0-9]/g, '')
-    return o === sender || oNum === senderNum ||
-      (ownerCandidateNum !== '' && oNum === ownerCandidateNum)
-  })
+  // Solo contra teléfonos, nunca los dígitos de un @lid (ver lib/owner.ts).
+  const isOwner = esDueno(sender, getOwnerCandidateId(msg, isGroup), config.ownerJid)
 
   const usedPrefix = config.prefix.find(p => text.startsWith(p)) ?? ''
   const hasPrefix  = usedPrefix.length > 0
@@ -235,7 +227,7 @@ async function resolveGroupRoles(
     const senderP = participants.find((p: any) =>
       p.id === sender || (p as any).lid === sender
     )
-    const botJid = (sock.user?.id ?? '').split(':')[0] + '@s.whatsapp.net'
+    const botJid = `${(sock.user?.id ?? '').split(':')[0]}@s.whatsapp.net`
     const botP   = participants.find((p: any) =>
       p.id === botJid ||
       p.id === sock.user?.id ||
@@ -322,7 +314,7 @@ const FALLBACK_RESPONSES: Record<string, string[]> = {
 }
 
 function localFallback(intent: string): string {
-  const pool = FALLBACK_RESPONSES[intent] ?? FALLBACK_RESPONSES['neutral']!
+  const pool = FALLBACK_RESPONSES[intent] ?? FALLBACK_RESPONSES.neutral!
   return pool[Math.floor(Math.random() * pool.length)]!
 }
 
@@ -352,15 +344,22 @@ async function handleAIResponse(
     const aiContext = await getAIContext(ctx.sender).catch(() => null)
     const history   = aiContext?.history ?? []
 
+    // Si pregunta cómo hacer algo con el bot, los comandos que sirven, del
+    // registro real (ver lib/commandHelp.ts). En una charla normal no se busca.
+    const { ayudaDeComandos } = await import('@lib/commandHelp.js')
+    const comandos = await ayudaDeComandos(
+      ctx.text, ctx.lang, config.prefix[0] ?? '#',
+      () => new Set(commandRegistry.values()),
+    ).catch(() => '')
+
     // Placeholder inmediato — Ollama en CPU (sin GPU) puede tardar 20-35s+ en
     // responder (medido en real: ~19s para una respuesta corta con
     // llama3.2:3b). Antes no había ningún feedback durante esa espera, así
     // que además de caer casi siempre al fallback (ver nota del timeout
     // abajo), el usuario tampoco tenía forma de saber si el bot seguía "vivo".
-    const thinking = await safeSend(() => liveSocket(sock).sendMessage(ctx.jid, {
+    await safeSend(() => liveSocket(sock).sendMessage(ctx.jid, {
       text: '🤔 Pensando...',
     }, { quoted: msg })).catch(() => null)
-    const thinkingKey = thinking?.key
 
     // 2. Hepein: Ollama (modelo según la palabra que disparó) con perfil
     // aprendido del grupo. El timeout acá (44s) va apenas por debajo del
@@ -380,6 +379,7 @@ async function handleAIResponse(
         // Sin palabra que pida otro, nada: la Session API usa OLLAMA_MODEL.
         ...(model ? { model } : {}),
         history,
+        ...(comandos ? { comandos } : {}),
         force:     true,   // omitir cooldown interno — ya lo controla handler
       }),
       new Promise<null>(r => setTimeout(() => r(null), 44_000)),
@@ -399,14 +399,9 @@ async function handleAIResponse(
       reply = localFallback(intent)
     }
 
-    // Editar el "Pensando..." con la respuesta final en vez de mandar un
-    // mensaje nuevo — si por lo que sea no se pudo mandar el placeholder,
-    // cae a mandar la respuesta como mensaje normal.
-    if (thinkingKey) {
-      await safeSend(() => liveSocket(sock).sendMessage(ctx.jid, { text: reply!, edit: thinkingKey } as any))
-    } else {
-      await safeSend(() => liveSocket(sock).sendMessage(ctx.jid, { text: reply! }, { quoted: msg }))
-    }
+    // La respuesta, en un mensaje propio que cita al del usuario. Hasta la 9.2
+    // editaba el "Pensando...", y en el chat se veía el texto cambiando.
+    await safeSend(() => liveSocket(sock).sendMessage(ctx.jid, { text: reply! }, { quoted: msg }))
 
     // 4. Guardar conversación (fire-and-forget)
     learnConversation({
@@ -471,7 +466,10 @@ export async function handleMessage(msg: WAMessage, sock: WASocket): Promise<voi
     // libre el resto (ver lib/terminal.ts: truncateAnsi costaba ~290 µs).
     const fijo          = anchoTexto(`  ◈ Handler  ${chat} ${id}  ${yo}  ""`)
     const textLabel     = textEarly ? `"${cortar(textEarly, Math.min(50, anchoTerminal() - fijo))}"` : color.dim('(sin texto)')
-    console.log(`  ${themes.success('◈')} ${color.bold('Handler')}  ${isGroupEarly ? color.magenta(chat) : themes.warning(chat)} ${color.dim(id)}  ${msg.key.fromMe ? color.dim(yo) : color.cyan(yo)}  ${textLabel}`)
+    // stdout.write y no console.log: la misma línea, sin el formateo de console
+    // (~1,5 contra ~4 µs por mensaje, medido con la salida a NUL).
+    process.stdout.write(`  ${themes.success('◈')} ${color.bold('Handler')}  ${isGroupEarly ? color.magenta(chat) : themes.warning(chat)} ${color.dim(id)}  ${msg.key.fromMe ? color.dim(yo) : color.cyan(yo)}  ${textLabel}
+`)
 
     if (msg.key.fromMe) return
 
@@ -480,15 +478,13 @@ export async function handleMessage(msg: WAMessage, sock: WASocket): Promise<voi
 
     if (KNOWN_BOTS.has(base.sender)) return
 
-    // ─── Rate limit por Rust (< 1ms, siempre disponible, sin Python) ─────────
-    // Owners y admins no se limitan aquí — el check es solo para usuarios normales.
-    // Falla abierto: si Rust no responde, el mensaje pasa igual.
-    if (!base.isOwner && base.text) {
-      const rate = await sessionClient.checkRate(base.sender).catch(() => ({ allowed: true, remaining: 15 }))
-      if (!rate.allowed) {
-        console.log(`  ${themes.error('◈')} ${color.bold(themes.error('Rate'))}  ${color.dim(base.sender.replace('@s.whatsapp.net','').replace('@lid',''))}  ${color.dim('bloqueado por Rust')}`)
-        return
-      }
+    // ─── Rate limit: 15 por remitente cada 10 s, en memoria ──────────────────
+    // Owners no se limitan. Hasta la 9.2 era un viaje a Rust que se esperaba en
+    // cada mensaje: ~157 µs y ~150 µs de CPU de Node para sumar uno a un
+    // contador (ver lib/senderRate.ts). Misma regla, menos de 1 µs.
+    if (!base.isOwner && base.text && !limitePorRemitente.permitir(base.sender)) {
+      console.log(`  ${themes.error('◈')} ${color.bold(themes.error('Rate'))}  ${color.dim(base.sender.replace('@s.whatsapp.net','').replace('@lid',''))}  ${color.dim('15 mensajes en 10 s')}`)
+      return
     }
 
     // resolveGroupRoles depende de getGroupParticipants → en un cache miss
@@ -854,13 +850,27 @@ export async function handleMessage(msg: WAMessage, sock: WASocket): Promise<voi
     // que el propio comando hizo en money/exp/diamonds.
     const xpGain  = command.exp ?? 10
     const postUser = getUserData(ctx.sender)
-    const postPatch: Partial<import('./events/index.js').UserData> = {
-      exp:          postUser.exp + xpGain,
-      commandsUsed: postUser.commandsUsed + 1,
+    setUserData(ctx.sender, { commandsUsed: postUser.commandsUsed + 1 })
+
+    // La XP del comando y su costo, en una operación de Ada/SPARK (ver
+    // core/economy.ts). El costo, solo a quien lo paga: el chequeo de arriba
+    // exime a premium y owner, pero hasta la 9.2 el cobro de acá les cobraba
+    // igual, y un premium sin diamantes quedaba en negativo.
+    const paga = !postUser.premium && !ctx.isOwner
+    const cuenta = (campo: 'exp' | 'diamonds' | 'money', delta: number) => ({ cuenta: { jid: ctx.sender, campo }, delta })
+    const cobro = await cambiarSaldos([
+      cuenta('exp', xpGain),
+      ...(paga && command.limit ? [cuenta('diamonds', -command.limit)] : []),
+      ...(paga && command.money ? [cuenta('money', -command.money)] : []),
+    ])
+    if (!cobro.ok) {
+      // Gastó lo que tenía durante el comando, o la Session API no respondió:
+      // la XP se acredita igual (o queda anotada) y el costo no cobrado se dice.
+      await acreditar(ctx.sender, { exp: xpGain })
+      if (paga && (command.limit || command.money)) {
+        logger.warn({ cmd: ctx.command, sender: ctx.sender, motivo: cobro.motivo }, 'costo del comando sin cobrar')
+      }
     }
-    if (command.limit) postPatch.diamonds = postUser.diamonds - command.limit
-    if (command.money) postPatch.money    = postUser.money    - command.money
-    setUserData(ctx.sender, postPatch)
 
     // ─── Anuncio de subida de nivel ────────────────────────────────────────────
     // Centralizado aquí (no en cada comando) porque el xpGain de arriba puede

@@ -11,9 +11,9 @@
 // la vez lo corrompen, así que 'import' exige que el bot esté parado. 'export'
 // solo lee, pero con el bot corriendo puede darte una foto a medio escribir.
 
-import { existsSync, statSync } from 'fs'
-import { writeFile, readFile } from 'fs/promises'
-import { createInterface } from 'readline'
+import { existsSync, statSync } from 'node:fs'
+import { writeFile, readFile } from 'node:fs/promises'
+import { createInterface } from 'node:readline'
 import { Strenor } from 'strenor'
 import { color } from 'ansimax'
 

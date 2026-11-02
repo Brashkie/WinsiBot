@@ -1,8 +1,8 @@
 // La versión del bot, de package.json. Se lee una vez: no cambia mientras el
 // proceso corre. Había tres copias que lo leían del disco en cada llamada.
 
-import { readFileSync } from 'fs'
-import { join } from 'path'
+import { readFileSync } from 'node:fs'
+import { join } from 'node:path'
 
 let version: string | null = null
 

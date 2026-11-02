@@ -26,7 +26,7 @@
 //  preguntarle a Rust por HTTP.
 // ─────────────────────────────────────────────────────────────────────────────
 
-import { mkdirSync } from 'fs'
+import { mkdirSync } from 'node:fs'
 import { Strenor } from 'strenor'
 import { logger } from './logger.js'
 

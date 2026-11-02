@@ -1,6 +1,6 @@
 import type { WASocket } from '@whiskeysockets/baileys'
 import { logger } from '@core/logger.js'
-import { getUserData, patchUserData, checkLevelUp } from '@core/events.js'
+import { getUserData, checkLevelUp } from '@core/events.js'
 import { safeSend } from '@lib/media_sender.js'
 import {
   JEFES, VENTANA_REACCION, vidaJefe, danio, repartir, barra, reaccion, contraataque, type Premio, type Reaccion,
@@ -11,6 +11,7 @@ import { herir, saludDe } from '@lib/health.js'
 import { findDragon } from '@lib/dragoncity.js'
 import { enData, leerJson, guardarJson, esObjeto } from '@lib/jsonFile.js'
 import { Despertador } from '@lib/wakeTimer.js'
+import { acreditar } from '@core/economy.js'
 
 /** Los elementos de una especie, del catálogo. Sin catálogo, ninguno: el
  *  golpe pega igual, solo que no puede dar reacción. */
@@ -63,7 +64,7 @@ interface Estado {
   grupos:                string[]    // los que activaron los avisos
 }
 
-let estado: Estado = cargar()
+const estado: Estado = cargar()
 const despertador = new Despertador(despertar)
 let sockRef: WASocket | null = null
 
@@ -83,7 +84,10 @@ const proximaAparicion = () => Date.now() + CADA + Math.round((Math.random() * 2
 export const defJefe = (id: string) => JEFES.find(j => j.id === id) ?? JEFES[0]!
 
 function armar(): void {
-  if (!sockRef) return despertador.desarmar()
+  if (!sockRef) {
+    despertador.desarmar()
+    return
+  }
   despertador.armar(estado.jefe ? estado.jefe.expira : estado.proximo)
 }
 
@@ -136,11 +140,12 @@ export async function aparecer(): Promise<boolean> {
   return true
 }
 
+// Sin esperar: el raid ya se cerró y la tabla del mensaje no depende del
+// pago. Cada premio va por Aplicar y, si no se puede ahora, queda anotado
+// (ver core/economy.ts); el nivel se mira recién después de cobrar.
 function pagar(premios: Premio[]): void {
   for (const p of premios) {
-    const u = getUserData(p.jid)
-    patchUserData(p.jid, { money: u.money + p.dinero, exp: u.exp + p.exp })
-    checkLevelUp(p.jid)
+    void acreditar(p.jid, { money: p.dinero, exp: p.exp }).then(() => checkLevelUp(p.jid))
   }
 }
 

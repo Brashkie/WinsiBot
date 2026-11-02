@@ -13,7 +13,7 @@ export const MAX_TEXTO = 3000
 export interface Nota { texto: string; por: string; en: number }
 
 const ARCHIVO = enData('notes.json')
-let notas: Record<string, Record<string, Nota>> = leerJson(ARCHIVO, {}, esObjeto)
+const notas: Record<string, Record<string, Nota>> = leerJson(ARCHIVO, {}, esObjeto)
 
 /** "Reglas del Grupo" → "reglas-del-grupo"; null si queda vacío o es muy largo. */
 export function nombreDeNota(crudo: string): string | null {
@@ -32,7 +32,8 @@ export type Guardado = 'ok' | 'llenas' | 'larga'
 
 export function guardarNota(gjid: string, nombre: string, texto: string, por: string): Guardado {
   if (texto.length > MAX_TEXTO) return 'larga'
-  const g = (notas[gjid] ??= {})
+  notas[gjid] ??= {}
+  const g = notas[gjid]
   if (!g[nombre] && Object.keys(g).length >= MAX_NOTAS) return 'llenas'
   g[nombre] = { texto, por, en: Date.now() }
   guardarJson(ARCHIVO, notas)

@@ -1,6 +1,9 @@
 import type { WASocket, WAMessage } from '@whiskeysockets/baileys'
 import type { Command } from '../../../types/index.js'
-import { getUserData, patchUserData } from '@core/events.js'
+import { getUserData } from '@core/events.js'
+import { cambiarSaldos } from '@core/economy.js'
+import { textoDeMotivo } from '@lib/ledger.js'
+import { montoDe } from '@lib/amount.js'
 import { logger } from '@core/logger.js'
 import { safeSend, sendCritical } from '@lib/media_sender.js'
 import { ApuestasAbiertas } from '@lib/openBets.js'
@@ -25,6 +28,8 @@ interface Mano {
   crupier: Carta[]
   mesa:    Carta[]          // las 5; se muestran 3 hasta que decide
   timer?:  NodeJS.Timeout
+  /** Mientras se cobra y se paga: la mano no se retira sola. */
+  pagando?: boolean
 }
 
 const mesas = new Map<string, Mano>()   // sender → mano
@@ -70,11 +75,10 @@ async function retirarse(sock: WASocket, sender: string, h: Mano, quoted?: WAMes
   }, quoted ? { quoted } : {})
 }
 
-async function ir(sock: WASocket, sender: string, h: Mano, quoted: WAMessage): Promise<void> {
+/** Cierra la mano ya cobrada y pagada (ver la rama de "ir"). */
+async function ir(sock: WASocket, sender: string, h: Mano, quoted: WAMessage, r: ReturnType<typeof resolver>): Promise<void> {
   clearTimeout(h.timer)
   mesas.delete(sender)
-  const r = resolver(h.jugador, h.crupier, h.mesa, h.ante)
-  if (r.pago > 0) patchUserData(sender, { money: getUserData(sender).money + r.pago })
   anotar()
 
   const neto = r.pago - h.ante * 3
@@ -117,6 +121,12 @@ const command: Command = {
         await responder(`> Tu mano está abierta en otro chat. Termínala allá.`)
         return
       }
+      // Un segundo "ir" o un "retirarse" mientras se paga cobraría o pagaría
+      // dos veces.
+      if (h.pagando) {
+        await responder(`> Esa mano se está resolviendo.`)
+        return
+      }
       if (RETIRARSE.has(sub)) {
         await retirarse(sock, sender, h, msg)
         return
@@ -127,10 +137,18 @@ const command: Command = {
         await responder(`> Para ir necesitas ¥${ida.toLocaleString()} (tienes ¥${u.money.toLocaleString()}). Puedes retirarte con \`${prefix}poker retirarse\`.`)
         return
       }
-      // Cobrar la ida y pagar el resultado pasan en el mismo tick (ir() no
-      // espera nada antes de pagar): no hay un reinicio posible entre medio.
-      patchUserData(sender, { money: u.money - ida })
-      await ir(sock, sender, h, msg)
+      // El resultado ya lo decidieron las cartas: cobrar la ida y pagar es
+      // UNA operación, todo o nada (Ada/SPARK, ver core/economy.ts). Si falla,
+      // la mano sigue abierta y se puede volver a intentar.
+      const res = resolver(h.jugador, h.crupier, h.mesa, h.ante)
+      h.pagando = true
+      const c = await cambiarSaldos([{ cuenta: { jid: sender, campo: 'money' }, delta: res.pago - ida }])
+      h.pagando = false
+      if (!c.ok) {
+        await responder(`> ${textoDeMotivo(c.motivo)}`)
+        return
+      }
+      await ir(sock, sender, h, msg, res)
       return
     }
 
@@ -139,7 +157,8 @@ const command: Command = {
       return
     }
 
-    const ante = parseInt((args[0] ?? '').replace(/[.,_]/g, ''))
+    // montoDe: los separadores de miles como en #pay, y "12abc" no es un monto.
+    const ante = montoDe(args[0] ?? '')
     if (!Number.isFinite(ante) || ante < MIN_ANTE) {
       await responder([
         `╭─「 ♠️ CASINO HOLD'EM 」`,
@@ -169,7 +188,17 @@ const command: Command = {
       return
     }
 
-    patchUserData(sender, { money: u.money - ante })
+    const c = await cambiarSaldos([{ cuenta: { jid: sender, campo: 'money' }, delta: -ante }])
+    if (!c.ok) {
+      await responder(`> ${textoDeMotivo(c.motivo)}`)
+      return
+    }
+    // En la espera pudo abrirse otra mano del mismo jugador.
+    if (mesas.has(sender)) {
+      await abiertas.pagar(sender, ante)
+      await responder(`> Ya tienes una mano abierta.`)
+      return
+    }
     const m = mazo()
     const nueva: Mano = {
       jid, ante,
@@ -180,7 +209,7 @@ const command: Command = {
     mesas.set(sender, nueva)
     anotar()
     nueva.timer = setTimeout(() => {
-      if (mesas.get(sender) !== nueva) return
+      if (mesas.get(sender) !== nueva || nueva.pagando) return
       void retirarse(sock, sender, nueva, undefined, ` @${sender.split('@')[0]} no decidió en 2 min: se retiró solo.`)
         .catch(err => logger.warn({ err }, 'poker: no se pudo cerrar la mano inactiva'))
     }, INACTIVA)

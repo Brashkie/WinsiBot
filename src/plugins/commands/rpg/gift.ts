@@ -1,5 +1,7 @@
 import type { Command } from '../../../types/index.js'
-import { getUserData, patchUserData, isOnCooldown, setCooldown, fmtCooldown } from '@core/events.js'
+import { getUserData, patchUserData, isOnCooldown, fmtCooldown } from '@core/events.js'
+import { cobrarConCooldown } from '@core/economy.js'
+import { textoDeMotivo } from '@lib/ledger.js'
 import {
   GiftManager,
   GIFT_COST,
@@ -71,15 +73,21 @@ const command: Command = {
         return
       }
 
+      // Primero se cobra —con el cooldown reservado— y recién después se
+      // regala: si el cobro falla, no le llega nada a nadie.
+      const cobro = await cobrarConCooldown(sender, 'lastGift', [{ cuenta: { jid: sender, campo: 'money' }, delta: -cost }])
+      if (!cobro.ok) {
+        await sock.sendMessage(jid, { text: `❌ ${textoDeMotivo(cobro.motivo)}` }, { quoted: msg })
+        return
+      }
       const record = GiftManager.send(sender, target, itemId, realMsg, anonymous)!
       const targetInv = inv(target)
       targetInv.inbox.push(record)
       const senderInv = inv(sender)
       senderInv.sent++
 
-      patchUserData(sender, { money: user.money - cost, giftInbox: senderInv })
+      patchUserData(sender, { giftInbox: senderInv })
       patchUserData(target, { giftInbox: targetInv })
-      setCooldown(sender, 'lastGift')
 
       await sock.sendMessage(jid, {
         text: `🎁 *Regalo enviado!*\n${item.emoji} ${item.name} → @${target.split('@')[0]}${realMsg ? `\n_"${realMsg}"_` : ''}`,
@@ -102,10 +110,10 @@ const command: Command = {
     // ── Abrir ─────────────────────────────────────────────────────────────────
     if (sub === 'abrir' || sub === 'open') {
       const userInv = inv(sender)
-      const n       = parseInt(args[1] ?? '') - 1
+      const n       = parseInt(args[1] ?? '', 10) - 1
       const sorted  = [...userInv.inbox].sort((a, b) => b.timestamp - a.timestamp)
 
-      if (isNaN(n) || n < 0 || n >= sorted.length) {
+      if (Number.isNaN(n) || n < 0 || n >= sorted.length) {
         await sock.sendMessage(jid, { text: `_Uso: !regalo abrir <N>\nVe tu buzón: !regalo buzon_` }, { quoted: msg })
         return
       }

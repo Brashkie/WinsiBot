@@ -67,7 +67,7 @@ const command: Command = {
       })
 
       let reply = respuesta?.trim() || '❌ Sin respuesta.'
-      if (reply.length > MAX_REPLY) reply = reply.slice(0, MAX_REPLY) + '…'
+      if (reply.length > MAX_REPLY) reply = `${reply.slice(0, MAX_REPLY)}…`
 
       history.push({ role: 'assistant', content: reply })
       // mantener max 20 mensajes (1 system + 19 pares)

@@ -30,8 +30,8 @@
  *   es igual sin importar de qué formato vino el archivo.
  */
 
-import { readdir, readFile, writeFile, unlink } from 'fs/promises'
-import { join } from 'path'
+import { readdir, readFile, writeFile, unlink } from 'node:fs/promises'
+import { join } from 'node:path'
 import { encode as cborEncode, decode as cborDecode } from 'cbor-x'
 import { logger } from '@core/logger.js'
 import {
@@ -477,7 +477,7 @@ async function _restoreCredsFromRust(credsPath: string): Promise<string | null> 
     // .cbor hay que normalizarlos primero: si no, CBOR guardaría el
     // envoltorio literal en vez de los bytes, y Baileys recibiría un objeto
     // en lugar de un Buffer la próxima vez que arranque.
-    const tmp = credsPath + '.tmp'
+    const tmp = `${credsPath}.tmp`
     if (credsPath.endsWith('.cbor')) {
       await writeFile(tmp, cborEncode(normalizeCredsBuffers(backup.creds)))
     } else {
@@ -486,7 +486,7 @@ async function _restoreCredsFromRust(credsPath: string): Promise<string | null> 
     }
 
     // rename atómico — si falla a mitad no deja creds.json/.cbor vacío
-    const { rename } = await import('fs/promises')
+    const { rename } = await import('node:fs/promises')
     await rename(tmp, credsPath)
 
     return backup.source === 'current'

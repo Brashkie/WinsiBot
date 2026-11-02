@@ -13,7 +13,7 @@
 // Lógica pura: sin sharp ni ffmpeg, no recodifica la imagen. Un sticker
 // animado conserva todos sus cuadros tal cual.
 
-import { randomBytes } from 'crypto'
+import { randomBytes } from 'node:crypto'
 
 export interface MetaSticker {
   pack: string

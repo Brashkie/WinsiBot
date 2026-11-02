@@ -1,8 +1,8 @@
 import type { Command } from '../../../types/index.js'
 import { safeSend } from '@lib/media_sender.js'
 import { subBots, stopSubBot } from './serbot.js'
-import path from 'path'
-import fs from 'fs'
+import path from 'node:path'
+import fs from 'node:fs'
 
 const SUB_DIR = path.join(process.cwd(), 'data', 'subbots')
 

@@ -325,7 +325,7 @@ export class Arena {
   // ─── ELO ───────────────────────────────────────────────────────────────────
 
   static calcElo(winner: PvpProfile, loser: PvpProfile): [number, number] {
-    const expected = 1 / (1 + Math.pow(10, (loser.elo - winner.elo) / 400))
+    const expected = 1 / (1 + 10 ** ((loser.elo - winner.elo) / 400))
     const delta    = Math.max(1, Math.round(ELO_K * (1 - expected)))
     return [winner.elo + delta, Math.max(100, loser.elo - delta)]
   }

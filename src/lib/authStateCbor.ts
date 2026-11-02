@@ -32,9 +32,9 @@
 // ilegible se intenta recuperar del .bak antes de rendirse; si tampoco se
 // puede, el roto se aparta con otro nombre en vez de pisarlo, y se dice.
 import { conCandado } from './fileLock.js'
-import { copyFile, mkdir, open, readFile, readdir, rename, stat, unlink, writeFile } from 'fs/promises'
-import { existsSync } from 'fs'
-import { join } from 'path'
+import { chmod, copyFile, mkdir, open, readFile, readdir, rename, stat, unlink, writeFile } from 'node:fs/promises'
+import { existsSync } from 'node:fs'
+import { join } from 'node:path'
 import { encode as cborEncode, decode as cborDecode } from 'cbor-x'
 import { proto, initAuthCreds, BufferJSON } from '@whiskeysockets/baileys'
 import type { AuthenticationState, AuthenticationCreds } from '@whiskeysockets/baileys'
@@ -56,6 +56,13 @@ function legacyJsonPathFor(folder: string, file: string): string {
 
 const sleep = (ms: number) => new Promise<void>(r => setTimeout(r, ms))
 
+// Con estos archivos se ES el bot: quien los copie entra a WhatsApp como él.
+// En Linux y Termux, solo el usuario que corre el bot puede leerlos: la
+// carpeta en 700 —ningún otro usuario entra— y cada archivo nuevo en 600. En
+// Windows los modos no aplican y no cambian nada.
+const SOLO_YO_ARCHIVO = 0o600
+const SOLO_YO_CARPETA = 0o700
+
 /**
  * Escribe `bytes` en `path` sin dejarlo nunca a medias: primero a `path.tmp`,
  * después rename encima. `durable` agrega fsync antes del rename —para creds,
@@ -69,7 +76,7 @@ const sleep = (ms: number) => new Promise<void>(r => setTimeout(r, ms))
  */
 async function atomicWrite(path: string, bytes: Uint8Array, durable: boolean): Promise<void> {
   const tmp = `${path}.tmp`
-  const fh = await open(tmp, 'w')
+  const fh = await open(tmp, 'w', SOLO_YO_ARCHIVO)
   try {
     await fh.writeFile(bytes)
     if (durable) await fh.sync()
@@ -85,7 +92,7 @@ async function atomicWrite(path: string, bytes: Uint8Array, durable: boolean): P
         await sleep(50 * (intento + 1))
         continue
       }
-      await writeFile(path, bytes)
+      await writeFile(path, bytes, { mode: SOLO_YO_ARCHIVO })
       await unlink(tmp).catch(() => {})
       return
     }
@@ -124,7 +131,7 @@ export const useMultiFileAuthStateCBOR = async (
         try {
           const raw   = await readFile(legacyPath, { encoding: 'utf-8' })
           const value = JSON.parse(raw, BufferJSON.reviver)
-          await writeFile(filePath, cborEncode(value)).catch(() => {})
+          await writeFile(filePath, cborEncode(value), { mode: SOLO_YO_ARCHIVO }).catch(() => {})
           await unlink(legacyPath).catch(() => {})
           return value
         } catch {
@@ -148,8 +155,11 @@ export const useMultiFileAuthStateCBOR = async (
       throw new Error(`Se encontró algo que no es una carpeta en ${folder} — borralo o usá otra ruta`)
     }
   } else {
-    await mkdir(folder, { recursive: true })
+    await mkdir(folder, { recursive: true, mode: SOLO_YO_CARPETA })
   }
+  // También a una carpeta que ya existía: las sesiones de antes de la 9.3
+  // quedaron con los permisos por defecto (755, legible por todos).
+  if (process.platform !== 'win32') await chmod(folder, SOLO_YO_CARPETA).catch(() => {})
 
   // Restos de una escritura cortada a la mitad: el .tmp nunca llegó a
   // renombrarse, así que el archivo bueno es el otro. Se borran para que no se

@@ -1,8 +1,8 @@
 // MapConTocados: el Map de usuarios que anota qué se pidió desde el último
 // guardado, para no serializar a todos cada 30 s (ver events/index.ts).
 import { describe, expect, it } from 'vitest'
-import { existsSync, readFileSync } from 'fs'
-import { createHash } from 'crypto'
+import { existsSync, readFileSync } from 'node:fs'
+import { createHash } from 'node:crypto'
 import { MapConTocados } from '../src/lib/touchedMap.ts'
 
 describe('MapConTocados', () => {

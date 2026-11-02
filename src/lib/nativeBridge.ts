@@ -119,12 +119,17 @@ async function consultarIntent(text: string): Promise<NLPIntent | null | typeof 
  * guardar y la memoria son fire-and-forget.
  */
 export function ingerirMensaje(m: { sender: string; gjid: string; text: string; isCmd: boolean; observar: boolean }): void {
-  const p: Promise<NLPIntent | null | typeof FALLO> = rustClient
-    .post<RustNlpResult>('/msg/ingest', {
-      sender: m.sender, gjid: m.gjid, text: m.text, is_cmd: m.isCmd, observar: m.observar,
-    }, { timeout: 300 })
-    .then((res) => (res.data?.ok ? (res.data.intent !== 'unknown' ? { text: m.text, primary: res.data.intent } : null) : FALLO))
-    .catch(() => FALLO)
+  const p = new Promise<NLPIntent | null | typeof FALLO>((resolver) => {
+    loteIngesta.push({
+      item: { sender: m.sender, gjid: m.gjid, text: m.text, is_cmd: m.isCmd, observar: m.observar },
+      resolver: (intent) => resolver(intent === FALLO ? FALLO : intent !== 'unknown' ? { text: m.text, primary: intent } : null),
+    })
+    if (loteIngesta.length >= MAX_LOTE_INGESTA) mandarLoteIngesta()
+    else if (!loteProgramado) {
+      loteProgramado = true
+      setImmediate(mandarLoteIngesta)
+    }
+  })
   const vigente = nlpCache.get(m.text)
   if (!vigente || vigente.hasta <= Date.now()) {
     nlpStats.viajes++
@@ -132,6 +137,54 @@ export function ingerirMensaje(m: { sender: string; gjid: string; text: string; 
     p.then((r) => { if (r === FALLO) nlpCache.delete(m.text) })
   }
 }
+
+// ─── /msg/ingest en lotes ────────────────────────────────────────────────────
+// Cada mensaje se encola y el lote sale en el siguiente turno del event loop
+// (setImmediate), sin temporizador: con poco tráfico va de a uno, como antes,
+// y no espera nada; en una ráfaga van juntos los que llegaron en el mismo
+// turno, hasta 64. Un viaje por lote en vez de uno por mensaje, y en Rust un
+// solo salto de hilo para las memorias del lote (ver ingest.rs).
+const MAX_LOTE_INGESTA = 64
+interface PendienteIngesta {
+  item: { sender: string; gjid: string; text: string; is_cmd: boolean; observar: boolean }
+  resolver: (intent: string | typeof FALLO) => void
+}
+let loteIngesta: PendienteIngesta[] = []
+let loteProgramado = false
+
+function mandarLoteIngesta(): void {
+  loteProgramado = false
+  const lote = loteIngesta
+  if (!lote.length) return
+  loteIngesta = []
+  ingestaStats.lotes++
+  ingestaStats.mensajes += lote.length
+  if (lote.length === 1) {
+    // De a uno, la ruta de siempre: el mismo cuerpo, sin la lista.
+    const [uno] = lote
+    rustClient
+      .post<RustNlpResult>('/msg/ingest', uno!.item, { timeout: 300 })
+      .then((res) => uno!.resolver(res.data?.ok ? res.data.intent : FALLO))
+      .catch(() => uno!.resolver(FALLO))
+    return
+  }
+  rustClient
+    .post<{ ok: boolean; resultados?: Array<{ intent: string }> }>(
+      '/msg/ingest/batch',
+      { items: lote.map((x) => x.item) },
+      { timeout: 300 },
+    )
+    .then((res) => {
+      const rs = res.data?.ok ? res.data.resultados : undefined
+      for (let i = 0; i < lote.length; i++) lote[i]!.resolver(rs?.[i]?.intent ?? FALLO)
+    })
+    .catch(() => {
+      for (const x of lote) x.resolver(FALLO)
+    })
+}
+
+/** Cuántos lotes y mensajes salieron: mensajes / lotes es el tamaño medio. */
+export const ingestaStats = { lotes: 0, mensajes: 0 }
 
 /** Lo que devuelve POST /arena/simular: peleas y victorias por estilo. */
 export interface CuentaArena { estilo: 'agresivo' | 'arriesgado' | 'defensivo' | 'inteligente'; peleas: number; victorias: number; turnos: number }
@@ -442,6 +495,7 @@ export async function aiRespond(opts: {
   useGpt?:    boolean
   useHumor?:  boolean
   history?:   Array<{ reply: string }>
+  comandos?:  string
   timeoutMs?: number
 }): Promise<ChatResult | null> {
   if (!rustCircuit.canAttempt()) return null
@@ -459,6 +513,7 @@ export async function aiRespond(opts: {
       history:    opts.history  ?? [],
       ...(opts.mode  ? { mode:  opts.mode }  : {}),
       ...(opts.model ? { model: opts.model } : {}),
+      ...(opts.comandos ? { comandos: opts.comandos } : {}),
       // Ollama en CPU tarda ~19 s medidos para una respuesta corta, y más con
       // el prompt cargado de vocabulario del grupo. Rust corta a OLLAMA_TIMEOUT
       // (40 s por defecto) y cae a plantilla, así que acá hay que darle margen

@@ -1,9 +1,11 @@
 import type { Command } from '../../../types/index.js'
 import {
   getUserData, patchUserData,
-  isOnCooldownDaily, setCooldown, getDailyCooldownLeft, fmtCooldown,
+  isOnCooldownDaily, getDailyCooldownLeft, fmtCooldown,
   checkLevelUp, levelUpLine,
 } from '@core/events.js'
+import { cobrarConCooldown } from '@core/economy.js'
+import { textoDeMotivo } from '@lib/ledger.js'
 import { randomNumber as rand } from '@lib/utils.js'
 import { sendCritical } from '@lib/media_sender.js'
 import { LevelingManager } from '@lib/leveling.js'
@@ -39,7 +41,8 @@ const command: Command = {
 
     // Racha de días consecutivos — comparte el mismo sistema que #prestige racha,
     // solo que ahora avanza automáticamente cada vez que reclamas el diario.
-    const meta    = user.levelingMeta ?? LevelingManager.defaultMeta()
+    // Una copia: updateStreak la cambia, y la racha solo se guarda si se cobró.
+    const meta    = structuredClone(user.levelingMeta ?? LevelingManager.defaultMeta())
     const { broken } = LevelingManager.updateStreak(meta)
     const mult    = LevelingManager.getXpMultiplier(meta, isPrem)
 
@@ -53,15 +56,21 @@ const command: Command = {
     // no dependa solo de #ascuas (ver comando dedicado)
     const embers    = Math.random() < 0.04 ? 1 : 0
 
+    const r = await cobrarConCooldown(sender, 'lastClaim', [
+      { cuenta: { jid: sender, campo: 'exp' }, delta: exp },
+      { cuenta: { jid: sender, campo: 'money' }, delta: money },
+      { cuenta: { jid: sender, campo: 'diamonds' }, delta: diamonds },
+    ])
+    if (!r.ok) {
+      await sock.sendMessage(jid, { text: `> ${textoDeMotivo(r.motivo)}` }, { quoted: msg })
+      return
+    }
+    const ahora = getUserData(sender)
     patchUserData(sender, {
-      exp:          user.exp + exp,
-      money:        user.money + money,
-      diamonds:     user.diamonds + diamonds,
-      embers:       user.embers + embers,
-      items:        { ...user.items, pc: user.items.pc + pc },
+      embers:       ahora.embers + embers,
+      items:        { ...ahora.items, pc: ahora.items.pc + pc },
       levelingMeta: meta,
     })
-    setCooldown(sender, 'lastClaim')
 
     const leveled  = checkLevelUp(sender)
     const lvlLine  = levelUpLine(leveled, jid, lang)

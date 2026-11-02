@@ -1,6 +1,6 @@
 import type { Command } from '../../../types/index.js'
 import { downloadFile, cleanTemp } from '@lib/utils.js'
-import { readFile } from 'fs/promises'
+import { readFile } from 'node:fs/promises'
 import axios from 'axios'
 
 const command: Command = {

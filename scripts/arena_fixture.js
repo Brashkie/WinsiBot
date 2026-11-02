@@ -11,9 +11,9 @@
 // test falla y dice que hay que correr esto (y después el de Rust muestra si la
 // copia en Rust quedó atrás).
 
-import { writeFileSync } from 'fs'
-import { pathToFileURL } from 'url'
-import { join } from 'path'
+import { writeFileSync } from 'node:fs'
+import { pathToFileURL } from 'node:url'
+import { join } from 'node:path'
 
 /** xorshift32 con semilla, en [0, 1). */
 function semilla(s) {

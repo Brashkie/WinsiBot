@@ -34,12 +34,12 @@ export class Cache<T = unknown> {
   private missCount = 0
   private readonly defaultTtl: number
   private readonly maxSize:    number
-  private readonly sweepTimer: NodeJS.Timeout
 
   constructor(opts: CacheOptions = {}) {
     this.defaultTtl = opts.ttl     ?? 5 * 60_000
     this.maxSize     = opts.maxSize ?? 1000
-    this.sweepTimer  = setInterval(() => this.sweep(), opts.sweepEvery ?? 60_000).unref()
+    // unref: no mantiene vivo el proceso, y nadie lo apaga, así que no se guarda.
+    setInterval(() => this.sweep(), opts.sweepEvery ?? 60_000).unref()
   }
 
   set(key: string, value: T, opts: { ttl?: number } = {}): void {

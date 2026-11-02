@@ -13,7 +13,7 @@ const command: Command = {
   cooldown:    10,
 
   async execute({ sock, jid, msg, args, prefix, isGroup }) {
-    const page = Math.max(1, parseInt(args[0] ?? '1') || 1)
+    const page = Math.max(1, parseInt(args[0] ?? '1', 10) || 1)
 
     // Acota el top a los miembros del grupo donde se usó el comando — antes
     // recorría TODOS los usuarios que el bot conoce de cualquier grupo/chat

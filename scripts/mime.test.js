@@ -1,10 +1,10 @@
 // El tipo de un archivo por sus primeros bytes (ver src/lib/mime.ts), con
 // archivos de verdad: los arma sharp y, si está, ffmpeg.
 import { describe, expect, it } from 'vitest'
-import { execFileSync } from 'child_process'
-import { mkdtempSync, readFileSync, rmSync } from 'fs'
-import { tmpdir } from 'os'
-import { join } from 'path'
+import { execFileSync } from 'node:child_process'
+import { mkdtempSync, readFileSync, rmSync } from 'node:fs'
+import { tmpdir } from 'node:os'
+import { join } from 'node:path'
 import sharp from 'sharp'
 import { mimeDe } from '../src/lib/mime.ts'
 

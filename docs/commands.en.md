@@ -56,7 +56,7 @@
 | 15 | [🔑 Group Admin](#-group-admin) | 49 |
 | 16 | [🤖 JadiBot](#-jadibot) | 3 |
 | 17 | [ℹ️ Info](#%EF%B8%8F-info) | 2 |
-| 18 | [👑 Owner / System](#-owner--system) | 24 |
+| 18 | [👑 Owner / System](#-owner--system) | 22 |
 
 ---
 
@@ -514,7 +514,7 @@
 | `tagone` | `tago`, `mention` | — | 🔑 | Mention a specific person |
 | `delete` | `del`, `borrar`, `eliminar` | — | 🔑 | Delete a quoted message |
 | `antilink` | `antienlace` | — | 🔑 | Toggle link filter |
-| `antirrobo` | `antitheft`, `antirobo` | — | 🔒 | `on` · `off` · `proteger @user` · `quitar @user`. If someone unprotected demotes or removes a protected member —the group creator, the bot owners and the ones marked— or the bot, it takes their admin away, reverts it, revokes the link and warns by private message. **Only a protected member can use it**, not any admin |
+| `antirrobo` | `antitheft`, `antirobo` | — | 🔒 | `on` · `off` · `proteger @user` · `quitar @user`, and `comunidad …` for the same on the group's community. If someone unprotected demotes or removes a protected member —the group creator, the bot owners and the ones marked— or the bot, it takes their admin away, reverts it, revokes the link and warns by private message. **Only a protected member can use it**, not any admin |
 | `mute` | `silenciar` | — | 🔑 | Mute or unmute the bot in the group |
 | `banchat` | `bangrupo`, `unbanchat` | — | 🛡️ | Silence/activate the bot in this group |
 | `groupinfo` | `grupoinfo`, `gcfg` | — | 🔑 | Group info + your profile in the group |
@@ -639,7 +639,6 @@
 | `block` | `unblock`, `bloquear`, `desbloquear` | — | 👑 | Block or unblock a number on WhatsApp |
 | `bc` | `bcgroup`, `bcprivate`, `broadcast` | — | 👑 | Send a message to all chats |
 | `boost` | `refresh`, `acelerar` | — | 👑 | Restart cache and show bot status |
-| `backup` | `respaldo` | — | 👑 | Send `creds.json` to the owner's DM |
 | `clearsession` | `clearsess`, `limpiarsesion` | — | 👑 | Delete session files except `creds.json` |
 | `cleartmp` | `limpiartmp`, `clearcache` | — | 👑 | Clean temporary files on the server |
 | `creategroup` | `creargc`, `newgroup`, `nuevogc` | — | 👑 | Create a new group with a list of JIDs |
@@ -648,9 +647,8 @@
 | `setbio` | `bio`, `estado` | — | 👑 | Change the bot's bio/status on WhatsApp |
 | `setname` | `nombrar`, `nombre` | — | 👑 | Change the bot's display name on WhatsApp |
 | `setpp` | `fotobot`, `cambiafoto` | — | 👑 | Change the bot's profile picture |
-| `exec` | `eval`, `run` | — | 👑 | Execute JavaScript code in the bot's context |
-| `terminal` | `term`, `shell`, `cmd` | — | 👑 | Execute a command in the server terminal |
-| `fetch` | `get`, `url` | — | 👑 | Fetch the content of a URL |
+| `canal` | `channelguard`, `protegercanal` | — | 👑 | `proteger <link>` · `actualizar <link>` · `quitar <link>`. If the name or description of a protected channel changes, I restore them and warn the owners. WhatsApp doesn't say who did it, so there's no one to take admin from. To restore, the bot must be a channel admin |
+| `fetch` | `get`, `url` | — | 👑 | Fetch the content of a public URL: not the machine itself or the local network, and it doesn't follow redirects |
 | `restart` | `reiniciar`, `reboot`, `reset` | — | 👑 | Restarts the bot: saves everything and exits, and the `npm start` supervisor brings it back |
 
 ```
@@ -659,8 +657,6 @@
 !settier @user vip
 !addcoins @user 5000
 !bc Hello everyone!
-!exec ctx.userData.size
-!terminal ls -la
 !setbio WinsiBot is online 🟢
 !restart
 ```

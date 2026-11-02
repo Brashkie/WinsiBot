@@ -5,7 +5,7 @@ import { hepein }      from '@lib/hepein.js'
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
 function normalizeJid(raw: string): string {
-  return raw.replace(/[^0-9]/g, '') + '@s.whatsapp.net'
+  return `${raw.replace(/[^0-9]/g, '')}@s.whatsapp.net`
 }
 
 function fmtProfile(p: NonNullable<Awaited<ReturnType<typeof hepein.getProfile>>>, prefix: string): string {
@@ -51,7 +51,7 @@ const imitar: Command = {
   category:    'ai',
   cooldown:    10,
 
-  async execute({ sock, jid, msg, args, prefix, sender, isGroup }) {
+  async execute({ sock, jid, msg, args, prefix, isGroup }) {
     if (!isGroup) {
       await safeSend(() => sock.sendMessage(jid, {
         text: '✗ Este comando solo funciona en grupos.',
@@ -196,7 +196,7 @@ const estilode: Command = {
 
     const num = targetJid.split('@')[0]
     await safeSend(() => sock.sendMessage(jid, {
-      text:     `@${num}\n\n` + fmtProfile(profile, prefix),
+      text:     `@${num}\n\n${fmtProfile(profile, prefix)}`,
       mentions: [targetJid],
     }, { quoted: msg }))
   },

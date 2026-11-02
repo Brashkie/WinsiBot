@@ -2,7 +2,7 @@
 // #setmeta), los animados en #toimg, las variables de la bienvenida y los
 // días que faltan para un cumpleaños. Y que ningún alias choque entre comandos.
 import { describe, expect, it } from 'vitest'
-import { existsSync, readFileSync } from 'fs'
+import { existsSync, readFileSync } from 'node:fs'
 import sharp from 'sharp'
 import { escribirExif, leerExif } from '../src/lib/webpExif.ts'
 import { leerMeta } from '../src/lib/stickerMeta.ts'

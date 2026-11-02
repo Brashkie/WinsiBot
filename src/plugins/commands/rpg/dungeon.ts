@@ -102,7 +102,7 @@ const command: Command = {
     }
 
     // ─── !mazmorra <puerta> ────────────────────────────────────────────────
-    const puerta = parseInt(sub === 'puerta' ? (args[1] ?? '') : sub)
+    const puerta = parseInt(sub === 'puerta' ? (args[1] ?? '') : sub, 10)
     if (Number.isInteger(puerta)) {
       const antes = ultimoPaso.get(jid) ?? 0
       if (Date.now() - antes < ESPERA_GRUPO) {

@@ -1,6 +1,8 @@
 import type { Command } from '../../../types/index.js'
 import { safeSend } from '@lib/media_sender.js'
-import { getUserData, patchUserData } from '@core/events.js'
+import { getUserData } from '@core/events.js'
+import { cobrarReservando } from '@core/economy.js'
+import { textoDeMotivo } from '@lib/ledger.js'
 import { market, resolveSymbol, fmtPrice, fmtPct, trendArrow } from '@lib/market.js'
 import { enData, leerJson, guardarJson, esObjeto } from '@lib/jsonFile.js'
 import { montoDe } from '@lib/amount.js'
@@ -189,8 +191,16 @@ const command: Command = {
         positions.push({ symbol: asset.symbol, quantity, buyPrice: asset.price, buyAt: Date.now(), cost })
       }
 
-      setUserPositions(sender, positions)
-      patchUserData(sender, { money: user.money - cost })
+      // Las posiciones se guardan antes de cobrar y vuelven si el cobro falla.
+      const cobro = await cobrarReservando([{ cuenta: { jid: sender, campo: 'money' }, delta: -cost }], () => {
+        const previas = getUserPositions(sender)
+        setUserPositions(sender, positions)
+        return () => setUserPositions(sender, previas)
+      })
+      if (!cobro.ok) {
+        await safeSend(() => sock.sendMessage(jid, { text: `✗ ${textoDeMotivo(cobro.motivo)}` }, { quoted: msg }))
+        return
+      }
 
       await safeSend(() => sock.sendMessage(jid, {
         text: [
@@ -261,9 +271,18 @@ const command: Command = {
         }
       }
 
-      setUserPositions(sender, positions)
-      const user = getUserData(sender, pushName)
-      patchUserData(sender, { money: user.money + sellValue })
+      // Lo vendido sale de las posiciones antes de pagar, y vuelve si el pago
+      // falla: si no, dos ventas a la vez cobrarían lo mismo.
+      getUserData(sender, pushName)
+      const cobro = await cobrarReservando([{ cuenta: { jid: sender, campo: 'money' }, delta: sellValue }], () => {
+        const previas = getUserPositions(sender)
+        setUserPositions(sender, positions)
+        return () => setUserPositions(sender, previas)
+      })
+      if (!cobro.ok) {
+        await safeSend(() => sock.sendMessage(jid, { text: `✗ ${textoDeMotivo(cobro.motivo)}` }, { quoted: msg }))
+        return
+      }
 
       const pnlPct = (sellPnl / (pos.cost * fraction)) * 100
 
@@ -274,7 +293,7 @@ const command: Command = {
           `  ${asset.emoji} *${asset.symbol}*  ¥${fmtPrice(curPrice)}`,
           `  Cobrado:  ¥${sellValue.toLocaleString()}`,
           `  P&L:      ${trendArrow(sellPnl)} *${fmtPct(pnlPct)}* (${sellPnl >= 0 ? '+' : ''}¥${sellPnl})`,
-          `  Balance:  ¥${(user.money + sellValue).toLocaleString()}`,
+          `  Balance:  ¥${cobro.saldos[0]!.toLocaleString()}`,
         ].join('\n'),
       }, { quoted: msg }))
       return

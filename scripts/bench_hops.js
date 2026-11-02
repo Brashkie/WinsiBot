@@ -11,8 +11,8 @@
 // entorno (o en .env).
 
 import './env.js'
-import { pathToFileURL } from 'url'
-import { join } from 'path'
+import { pathToFileURL } from 'node:url'
+import { join } from 'node:path'
 
 const N = Number(process.argv[2] ?? 2000)
 const { analyzeIntent } = await import(pathToFileURL(join(process.cwd(), 'dist/lib/nativeBridge.js')).href)
@@ -45,7 +45,7 @@ await medir('seguidas', async () => {
   const lat = []
   for (let i = 0; i < N; i++) {
     const t = performance.now()
-    await analyzeIntent(textos[i % textos.length] + ' ' + i)
+    await analyzeIntent(`${textos[i % textos.length]} ${i}`)
     lat.push(performance.now() - t)
   }
   return lat
@@ -56,7 +56,7 @@ await medir('de a 8 en paralelo', async () => {
   for (let i = 0; i < N; i += 8) {
     await Promise.all(Array.from({ length: 8 }, async (_, k) => {
       const t = performance.now()
-      await analyzeIntent(textos[k] + ' ' + i)
+      await analyzeIntent(`${textos[k]} ${i}`)
       lat.push(performance.now() - t)
     }))
   }

@@ -20,8 +20,8 @@ export interface Lista {
 export function formatoDe(tok: string): number | null {
   const m = tok.toLowerCase().match(/^(\d{1,2})(?:v(?:s)?(\d{1,2}))?$/)
   if (!m) return null
-  const n = parseInt(m[1]!)
-  if (m[2] && parseInt(m[2]) !== n) return null
+  const n = parseInt(m[1]!, 10)
+  if (m[2] && parseInt(m[2], 10) !== n) return null
   return (FORMATOS as readonly number[]).includes(n) ? n : null
 }
 

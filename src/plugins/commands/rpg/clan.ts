@@ -1,8 +1,10 @@
 import type { Command } from '../../../types/index.js'
 import {
-  getUserData, patchUserData,
-  getUserClan, createClan, joinClan, leaveClan, getClan, userClan, clanData,
+  getUserData, 
+  getUserClan, createClan, joinClan, leaveClan, getClan, clanData,
 } from '@core/events.js'
+import { cambiarSaldos } from '@core/economy.js'
+import { textoDeMotivo } from '@lib/ledger.js'
 import {
   ClanManager,
   type ClanRank,
@@ -227,8 +229,13 @@ const command: Command = {
         if (Number.isNaN(amount) || amount <= 0 || user.money < amount) {
           await sock.sendMessage(jid, { text: `_Uso: !clan tesoro donar <cantidad>_` }, { quoted: msg }); return
         }
+        // Primero sale del bolsillo, después entra al tesoro: si el cobro
+        // falla, el tesoro no recibe nada.
+        const cobro = await cambiarSaldos([{ cuenta: { jid: sender, campo: 'money' }, delta: -amount }])
+        if (!cobro.ok) {
+          await sock.sendMessage(jid, { text: `❌ ${textoDeMotivo(cobro.motivo)}` }, { quoted: msg }); return
+        }
         ClanManager.addToTreasury(ext, amount)
-        patchUserData(sender, { money: user.money - amount })
         ClanManager.log(ext, `${pushName} donó ${amount} monedas`)
         await sock.sendMessage(jid, { text: `✅ Donaste *${amount.toLocaleString()} 💰* al tesoro.\nTesoro actual: *${ext.treasury.toLocaleString()}*` }, { quoted: msg })
         return

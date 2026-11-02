@@ -33,8 +33,8 @@ function todayStr(): string {
 function parseBirth(input: string): string | null {
   const m = input.match(/^(\d{1,2})[/\-.](\d{1,2})$/)
   if (!m) return null
-  const day = parseInt(m[1]!)
-  const mon = parseInt(m[2]!)
+  const day = parseInt(m[1]!, 10)
+  const mon = parseInt(m[2]!, 10)
   if (day < 1 || day > 31 || mon < 1 || mon > 12) return null
   return `${String(day).padStart(2, '0')}/${String(mon).padStart(2, '0')}`
 }

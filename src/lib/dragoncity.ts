@@ -8,12 +8,12 @@
 //   vid:   stage 1 (se muestra una vez, en el momento exacto de nacer), 3
 //          (se muestra una vez, en el momento exacto de la evolución final)
 
-import { exec } from 'child_process'
-import { promisify } from 'util'
-import { readFile, writeFile, unlink } from 'fs/promises'
-import { existsSync } from 'fs'
-import { join } from 'path'
-import { randomUUID } from 'crypto'
+import { exec } from 'node:child_process'
+import { promisify } from 'node:util'
+import { readFile, writeFile, unlink } from 'node:fs/promises'
+import { existsSync } from 'node:fs'
+import { join } from 'node:path'
+import { randomUUID } from 'node:crypto'
 import axios from 'axios'
 import { decodificar as decode } from './msgpack.js'
 import { translate } from '@lib/translate.js'

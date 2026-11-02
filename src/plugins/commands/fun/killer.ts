@@ -1,5 +1,4 @@
 import type { Command } from '../../../types/index.js'
-import { getUserData, patchUserData } from '@core/events.js'
 import { logger } from '@core/logger.js'
 import { safeSend } from '@lib/media_sender.js'
 import { Mesas, nuevoJugador, type JugadorPrivado } from '@lib/privateGame.js'
@@ -7,6 +6,7 @@ import {
   type Rol, MIN_JUGADORES, MAX_JUGADORES, NOMBRE_ROL,
   repartir, resolverNoche, contarVotos, ganador, puedeSalvar,
 } from '@lib/killer.js'
+import { acreditar } from '@core/economy.js'
 
 // "Asesino en el chat": ver killer.ts para las reglas.
 //
@@ -188,9 +188,8 @@ async function final(p: Partida): Promise<boolean> {
   if (!g) return false
   terminar(p)
   const ganadores = p.jugadores.filter(j => (rolDe(p, j.asiento) === 'asesino') === (g === 'asesinos'))
-  for (const j of ganadores) {
-    patchUserData(j.id, { money: getUserData(j.id).money + PREMIO })
-  }
+  // Por Aplicar; si no se puede ahora, queda anotado (ver core/economy.ts).
+  for (const j of ganadores) await acreditar(j.id, { money: PREMIO })
   await enviar(p.gjid, [
     g === 'pueblo' ? `🎉 *¡Gana el pueblo!* Ya no quedan asesinos.` : `🔪 *¡Ganan los asesinos!*`,
     ``,
@@ -228,7 +227,7 @@ const command: Command = {
         return
       }
       const b = mesas.buscar(sender)
-      if (!b || b.p.fase !== 'noche') {
+      if (b?.p.fase !== 'noche') {
         await responder(`> No es de noche en ninguna partida tuya.`)
         return
       }
@@ -237,7 +236,7 @@ const command: Command = {
         await responder(`> No puedes hacer eso.`)
         return
       }
-      const obj = parseInt(arg ?? '')
+      const obj = parseInt(arg ?? '', 10)
       if (!p.vivos.has(obj)) {
         await responder(`> Ese número no es de nadie vivo.`)
         return
@@ -291,7 +290,7 @@ const command: Command = {
 
     // ─── !asesino unirme ───────────────────────────────────────────────────
     if (sub === 'unirme' || sub === 'unir' || sub === 'entrar' || sub === 'join') {
-      if (!p || p.fase !== 'lobby') { await responder(`> No hay una partida esperando jugadores: \`${prefix}asesino crear\``); return }
+      if (p?.fase !== 'lobby') { await responder(`> No hay una partida esperando jugadores: \`${prefix}asesino crear\``); return }
       if (mesas.buscar(sender)) { await responder(`> Ya estás en una partida.`); return }
       if (p.jugadores.length >= MAX_JUGADORES) { await responder(`> La partida está llena (${MAX_JUGADORES}).`); return }
       p.jugadores.push({ asiento: p.jugadores.length + 1, ...await nuevoJugador(sock, sender, jid, pushName) })
@@ -302,7 +301,7 @@ const command: Command = {
 
     // ─── !asesino empezar / cancelar ───────────────────────────────────────
     if (sub === 'empezar' || sub === 'start') {
-      if (!p || p.fase !== 'lobby') { await responder(`> No hay una partida esperando.`); return }
+      if (p?.fase !== 'lobby') { await responder(`> No hay una partida esperando.`); return }
       if (p.creador !== sender && !isAdmin && !isOwner) { await responder(`> La empieza quien la creó, o un admin.`); return }
       if (p.jugadores.length < MIN_JUGADORES) { await responder(`> Faltan ${MIN_JUGADORES - p.jugadores.length} jugador(es).`); return }
       await empezar(p)
@@ -318,10 +317,10 @@ const command: Command = {
 
     // ─── !asesino votar <n> ────────────────────────────────────────────────
     if (sub === 'votar' || sub === 'voto') {
-      if (!p || p.fase !== 'dia') { await responder(`> Ahora no se vota.`); return }
+      if (p?.fase !== 'dia') { await responder(`> Ahora no se vota.`); return }
       const j = p.jugadores.find(x => x.id === sender || x.jid === sender)
       if (!j || !p.vivos.has(j.asiento)) { await responder(`> Solo votan los jugadores vivos.`); return }
-      const obj = parseInt(arg ?? '')
+      const obj = parseInt(arg ?? '', 10)
       if (obj !== 0 && !p.vivos.has(obj)) { await responder(`> Ese número no es de nadie vivo (0 = no expulsar a nadie).`); return }
       p.votos.set(j.asiento, obj)
       await responder(`🗳️ ${j.nombre} vota ${obj === 0 ? 'no expulsar a nadie' : `a *${nombreDe(p, obj)}*`} (${p.votos.size}/${p.vivos.size}).`)

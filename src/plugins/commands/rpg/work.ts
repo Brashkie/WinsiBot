@@ -1,9 +1,11 @@
 import type { Command } from '../../../types/index.js'
 import {
   getUserData, patchUserData,
-  isOnCooldown, setCooldown, getCooldownLeft, fmtCooldown,
+  isOnCooldown, getCooldownLeft, fmtCooldown,
   checkLevelUp, levelUpLine,
 } from '@core/events.js'
+import { cobrarConCooldown } from '@core/economy.js'
+import { textoDeMotivo } from '@lib/ledger.js'
 import { randomNumber as rand, randomChoice as pick } from '@lib/utils.js'
 import { tx, type Idioma } from '@lib/i18n.js'
 
@@ -148,12 +150,14 @@ const command: Command = {
     // BrasEmbers — moneda rara para comandos NSFW, chance chica
     const embers  = Math.random() < 0.04 ? 1 : 0
 
-    patchUserData(sender, {
-      money:  user.money + earned,
-      exp:    user.exp + expGain,
-      embers: user.embers + embers,
-    })
-    setCooldown(sender, 'lastWork')
+    // Saldos por la operación de Ada/SPARK, todo o nada, con el cooldown
+    // reservado antes (ver core/economy.ts). Lo demás, solo si salió.
+    const r = await cobrarConCooldown(sender, 'lastWork', [{ cuenta: { jid: sender, campo: 'money' }, delta: earned }, { cuenta: { jid: sender, campo: 'exp' }, delta: expGain }])
+    if (!r.ok) {
+      await sock.sendMessage(jid, { text: `> ${textoDeMotivo(r.motivo)}` }, { quoted: msg })
+      return
+    }
+    if (embers) patchUserData(sender, { embers: getUserData(sender).embers + embers })
 
     const leveled   = checkLevelUp(sender)
     const lvlLine   = levelUpLine(leveled, jid, lang)

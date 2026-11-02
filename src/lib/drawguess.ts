@@ -169,7 +169,7 @@ export class DrawGuessManager {
     return { correct: true, points }
   }
 
-  static nextRound(game: DrawGame, newDrawer: string, newDrawerName: string): DrawWord | null {
+  static nextRound(game: DrawGame, newDrawer: string, _newDrawerName: string): DrawWord | null {
     if (game.round >= game.maxRounds) return null
     game.round++
     game.drawer = newDrawer
@@ -226,6 +226,6 @@ export class DrawGuessManager {
       shown.add(idx)
       mask[idx] = chars[idx]!
     }
-    return mask.join('') + ` (${word.length} letras)`
+    return `${mask.join('')} (${word.length} letras)`
   }
 }

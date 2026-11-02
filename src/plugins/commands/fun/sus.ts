@@ -1,5 +1,4 @@
 import type { Command } from '../../../types/index.js'
-import { resolveJidFull } from '@core/lid_mapper.js'
 import { downloadBuffer } from '@lib/downloader.js'
 
 const FRASES = [
@@ -36,7 +35,7 @@ const command: Command = {
   groupOnly: true,
   cooldown: 5,
 
-  async execute({ sock, jid, msg, args, sender }) {
+  async execute({ sock, jid, msg, sender }) {
     const ctx        = msg.message?.extendedTextMessage?.contextInfo
     const mentionRaw = ctx?.mentionedJid?.[0]
     const quotedRaw  = ctx?.participant

@@ -6,10 +6,11 @@
 
 pub mod ai_chat;
 pub mod alerts;
+pub mod amount;
 pub mod analytics;
 pub mod anime4k;
-pub mod arena;
 pub mod antiban;
+pub mod arena;
 pub mod atomic;
 pub mod auth;
 pub mod bad_mac;
@@ -21,6 +22,7 @@ pub mod imagefx;
 pub mod imagesearch;
 pub mod ingest;
 pub mod jpeg;
+pub mod ledger;
 pub mod lock_manager;
 pub mod metrics;
 pub mod nlp;
@@ -30,6 +32,7 @@ pub mod rate_limiter;
 pub mod resize;
 pub mod rng;
 pub mod routes;
+pub mod send_pacing;
 pub mod session_id;
 pub mod simd;
 pub mod snapshot;

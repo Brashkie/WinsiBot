@@ -1,5 +1,5 @@
-import { readFile, access, readdir } from 'fs/promises'
-import { join } from 'path'
+import { readFile, access, readdir } from 'node:fs/promises'
+import { join } from 'node:path'
 import { generateMessageID, type WASocket, type WAMessage } from '@whiskeysockets/baileys'
 import { rateLimiter } from './rateLimiter.js'
 import { sessionClient } from './session.js'

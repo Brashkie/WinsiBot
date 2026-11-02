@@ -61,7 +61,7 @@ function buildBar(size: number): string {
   const max    = 35
   const filled = Math.min(Math.round((size / max) * 15), 15)
   const empty  = 15 - filled
-  return '8' + '='.repeat(filled) + '░'.repeat(empty) + 'D'
+  return `8${'='.repeat(filled)}${'░'.repeat(empty)}D`
 }
 
 function getProbText(size: number): string {
@@ -83,7 +83,7 @@ const command: Command = {
   category: 'fun',
   cooldown: 5,
 
-  async execute({ sock, jid, msg, sender, pushName }) {
+  async execute({ sock, jid, msg, sender }) {
     const ctx        = msg.message?.extendedTextMessage?.contextInfo
     const mentionRaw = ctx?.mentionedJid?.[0]
     const quotedRaw  = ctx?.participant

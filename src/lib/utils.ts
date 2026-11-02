@@ -1,10 +1,10 @@
-import { createWriteStream } from 'fs'
-import { pipeline } from 'stream/promises'
+import { createWriteStream } from 'node:fs'
+import { pipeline } from 'node:stream/promises'
 import axios from 'axios'
-import { tmpdir } from 'os'
-import { join } from 'path'
-import { randomUUID } from 'crypto'
-import { mkdir, unlink } from 'fs/promises'
+import { tmpdir } from 'node:os'
+import { join } from 'node:path'
+import { randomUUID } from 'node:crypto'
+import { mkdir, unlink } from 'node:fs/promises'
 
 /** data/tmp, creada si hace falta: los archivos de paso de ffmpeg y del TTS. */
 export async function carpetaTmp(): Promise<string> {
@@ -66,7 +66,7 @@ export function formatCooldown(ms: number): string {
 // ─── Texto ────────────────────────────────────────────────────────────────────
 
 export function extractMentions(text: string): string[] {
-  return (text.match(/@(\d{1,16})/g) ?? []).map(m => m.replace('@', '') + '@s.whatsapp.net')
+  return (text.match(/@(\d{1,16})/g) ?? []).map(m => `${m.replace('@', '')}@s.whatsapp.net`)
 }
 
 // ─── Números ──────────────────────────────────────────────────────────────────

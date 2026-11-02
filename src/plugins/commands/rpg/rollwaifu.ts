@@ -27,7 +27,6 @@ export const SOURCES: Record<string, string> = {
 // ─── Cache — 1h de TTL en vez de "para siempre" (las listas rara vez cambian,
 // pero así una actualización del JSON en GitHub se refleja sin reiniciar) ────
 export const charCache = registerCache('rwCharacters', createCache<RollCharacter[]>({ ttl: 60 * 60_000 }))
-const sleep = (ms: number) => new Promise(r => setTimeout(r, ms))
 
 // ─── Cooldowns ────────────────────────────────────────────────────────────────
 export const RW_COOLDOWN = 20 * 60 * 1000
@@ -234,32 +233,13 @@ const command: Command = {
     rwCooldowns.set(sender, Date.now())
 
     try {
-      // animacion
-      const sent = await sock.sendMessage(jid, {
-        text: '◈ Rodando personaje...',
-      }, { quoted: msg })
-      const key = sent?.key
-
-      const frames = [
-        '◈◈ Buscando personaje...',
-        '◈◈◈ Seleccionando...',
-      ]
-
-      const [chars] = await Promise.all([
-        getCharacters(source).catch(() => [] as RollCharacter[]),
-        (async () => {
-          for (const frame of frames) {
-            await sleep(400)
-            await sock.sendMessage(jid, { text: frame, edit: key } as any)
-          }
-        })(),
-      ])
+      // Sin animación: hasta la 9.2 mandaba "Rodando personaje..." y lo
+      // editaba dos veces, con 800 ms de espera a propósito. Ahora sale
+      // directo la imagen con su texto.
+      const chars = await getCharacters(source).catch(() => [] as RollCharacter[])
 
       if (!chars.length) {
-        await sock.sendMessage(jid, {
-          text: '✗ No se pudieron obtener personajes.',
-          edit: key,
-        } as any)
+        await sock.sendMessage(jid, { text: '✗ No se pudieron obtener personajes.' }, { quoted: msg })
         return
       }
 
@@ -269,8 +249,7 @@ const command: Command = {
       if (!available.length) {
         await sock.sendMessage(jid, {
           text: `✗ Ya no quedan personajes de *${source}* disponibles en este grupo — todos tienen dueño.`,
-          edit: key,
-        } as any)
+        }, { quoted: msg })
         return
       }
 

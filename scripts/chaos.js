@@ -14,11 +14,11 @@
 // El escenario del outbox necesita la API de Rust corriendo; se omite si no
 // se le pasa CHAOS_RUST_URL en vez de fallar (ver el README).
 
-import { mkdtempSync, rmSync, existsSync, appendFileSync } from 'fs'
-import { tmpdir } from 'os'
-import { join } from 'path'
-import { createServer } from 'http'
-import { pathToFileURL } from 'url'
+import { mkdtempSync, rmSync, existsSync, appendFileSync } from 'node:fs'
+import { tmpdir } from 'node:os'
+import { join } from 'node:path'
+import { createServer } from 'node:http'
+import { pathToFileURL } from 'node:url'
 import { color } from 'ansimax'
 
 const ROOT = process.cwd()

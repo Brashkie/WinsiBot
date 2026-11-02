@@ -61,10 +61,10 @@
 
 | Layer | Technology | Responsibility |
 |-------|-----------|----------------|
-| 🟦 **Core** | TypeScript / Node.js | WhatsApp protocol, command dispatcher, RPG, economy, web panel |
+| 🟦 **Core** | TypeScript / Node.js | WhatsApp protocol, command dispatcher, RPG, economy, web panel. Group message signatures are verified with OpenSSL's native Ed25519, 72 times faster than the pure-JavaScript cryptography Baileys shipped with |
 | ⚙️ **Session + AI** | Rust / Axum | Atomic creds and snapshots, Bad MAC tracker, rate limiter, intent classification, personality and humour, reputation, style profiles, Ollama and cloud APIs, images |
-| 🛡 **Anti-takeover** | Ada/SPARK | The group anti-takeover decision, its guarantees proven by GNATprove for every input, linked into the Session API |
-| 🧮 **Native kernels** | C + Zig | Anime4K and the JPEG codec, compiled with Zig into the Session API binary. The fastest one is used, measured, and on x86-64 the AVX2 copy if the CPU has it |
+| 🛡 **Anti-takeover and economy** | Ada/SPARK | The group anti-takeover decision, every balance change in the economy —all or nothing, never negative, and in `#pay` and the bank the total of coins is always conserved—, the amount reader and the antiban's turn for each send, their guarantees proven by GNATprove for every input, linked into the Session API |
+| 🧮 **Native kernels** | C + Zig | Anime4K and the JPEG codec, compiled with Zig into the Session API binary. The fastest one is used, measured, and on x86-64 the AVX2 copy if the CPU has it. |
 
 ### What's new in v9.2.0
 
@@ -126,7 +126,7 @@
 - Curve25519 key integrity check at startup
 - Auto QR-free restore from Rust snapshot
 - Atomic `auth/` writes on the Node side too, with `creds.cbor.bak` and no silently created credentials
-- Antiban in Rust: per-minute/hour/day caps, warm-up for new numbers, 463 and 429
+- Antiban: per-minute/hour/day caps, warm-up for new numbers, 463 and 429; the decision for each turn, in Ada/SPARK and proven: no send ever breaks a cap
 - Infinite reconnect with exponential backoff (max 64s)
 - Supervisor (`npm start`) that restarts the bot if the process dies or hangs without a heartbeat
 
@@ -157,7 +157,8 @@
 
 ### 🤖 Artificial Intelligence
 - Multi-model: **Cosxamix (the in-house AI, by default) or Ollama** → GPT → Gemini → Claude, **all from Rust**
-- **12 personality modes** per group, with 489 phrases of their own
+- **12 personality modes** per group, and they show: measured with the 3B, in 60 of 72 replies (21 before), without copying canned phrases
+- **Helps with the commands**: ask it how to do something with the bot and it looks through the 250+ commands for the ones that fit and tells you which to use, without making any up
 - Learns each user's and the group's style, and mirrors it when replying
 - If no model answers, falls back to local templates without repeating recent ones
 - Per-user reputation: shapes the tone according to how they behave
@@ -404,6 +405,9 @@ RUST_LOG=winsibot_session_api=info
 | `OLLAMA_MODEL` | `qwen2.5-3b-instruct-q3_k_m` | The local AI's model |
 | `OLLAMA_TIMEOUT` | `60` | Seconds to wait for the local AI |
 | `COSXAMIX_MOTOR` | `propio` | `candle` uses Cosxamix's previous engine |
+| `DASHBOARD_HOST` | `127.0.0.1` | Where the web panel listens: this machine only by default; `0.0.0.0` opens it to the network (better behind an HTTPS proxy) |
+| `CONV_RETENCION_DIAS` | `365` | Days of group messages the conversation database keeps; older ones are deleted every hour. `0` keeps them forever |
+| `WINSI_CURVE_JS` | — | `1` goes back to verifying group message signatures with pure-JavaScript cryptography, ~70 times slower than OpenSSL |
 
 </details>
 
@@ -456,10 +460,10 @@ npm run dev             # Node.js only, no build step — fast iteration / QR sc
 | `users:stats` | How many users there are and how big the log is |
 | `groups:export` / `groups:import` / `groups:stats` | The same for the group settings (`data/groups.aof`) |
 | `typecheck` | Type-check without compiling |
-| `lint` / `lint:fix` | Biome — lints `src/`/`scripts/` (check-only / auto-fix what's safe) |
+| `lint` / `lint:fix` | Biome — lints `src/`/`scripts/` (check-only / auto-fix what's safe). A warning is already a failure, as in CI |
 | `format` / `format:fix` | Biome — formats `src/`/`scripts/` (show diff only / write) |
 | `check` / `check:fix` | Biome — lint + format + import sorting in one pass |
-| `rust:lint` | `cargo clippy` on the Rust Session API |
+| `rust:lint` | `cargo clippy` over the whole workspace with zero warnings, plus `rustfmt` formatting, as in CI |
 | `native:build` | Builds the Session API with the C and Zig kernels (`--features native`). Needs [Zig](https://ziglang.org) 0.14 |
 | `native:test` | Tests comparing the C and Zig kernels with the Rust ones, bit for bit |
 | `native:bench` | The Anime4K kernels in Rust, C and Zig, and PNG against both JPEGs, measured with Criterion |
@@ -494,7 +498,7 @@ The bot has **200+ commands** across **16 categories**.
 | 🎮 Games | `!arena` `!raid` `!mazmorra` `!bj` `!poker` `!quiz` `!adivinar` `!pet` | PvP Arena (and vs the CPU), world boss, daily dungeon, blackjack, Casino Hold'em, Coding Quiz, Draw & Guess, dragons |
 | 🎁 Social | `!regalo` | Gift system, mailbox, wishlist, trades |
 | 🛡️ Admin | `!ban` `!kick` `!promote` `!cerrar` `!fantasmas` `!antilink` `!warn` `!setwelcome` `!testwelcome` | Group moderation, promote, close the group, inactive members, custom welcome |
-| 👑 Owner | `!exec` `!broadcast` `!premium` `!boost` | Full bot control |
+| 👑 Owner | `!broadcast` `!premium` `!boost` `!restart` | Manage the bot |
 | ⬇️ Downloads | `!yt` `!ytmp4` `!tiktok` `!ttsearch` `!ig` `!spotify` `!apk` | Media downloaders + carousel search |
 | 🎨 Stickers | `!sticker` `!take` `!setmeta` `!qc` `!texto` `!toimg` `!newpack` `!getpack` `!stickerpack` | Create stickers, your pack and author, messages and text as stickers, back to image, your packs |
 | 🎮 Fun | `!asesino` `!historia` `!ship` `!parejas` `!lista` `!meme` `!sega` `!giphy` `!top` | Killer in the chat (Mafia-style), AI broken telephone, compatibility, match lineups, entertainment |
@@ -668,6 +672,8 @@ curl -H "x-api-key: YOUR_KEY" http://127.0.0.1:3001/messages/pending
 | | **AI** | |
 | `POST` | `/arena/simular` | #simular: thousands of fights against the #arena CPU on every core, with the bot's same rules (a cross-language test enforces it) |
 | `POST` | `/msg/ingest` | What the bot asks for on every group message, in one round trip: classify it, store it for the group's style and update the sender's memory |
+| `POST` | `/msg/ingest/batch` | The same for several messages in one round trip (`{ items: [...] }`): the bot groups the ones that arrive in the same tick |
+| `POST` | `/economy/move` | Move an amount from one balance to another, decided by Ada/SPARK: the total is always conserved |
 | `POST` | `/nlp/fast` | Rule-based intent classification (sub-ms) |
 | `POST` | `/ai/learn` | Store an AI exchange |
 | `POST` | `/ai/observe` | Store a plain group message (feeds the profile) |

@@ -37,7 +37,10 @@ let sockRef: WASocket | null = null
 const guardar = () => guardarJson(ARCHIVO, lista)
 
 function armar(): void {
-  if (!sockRef) return despertador.desarmar()
+  if (!sockRef) {
+    despertador.desarmar()
+    return
+  }
   let proximo = Infinity
   for (const r of lista) if (r.at < proximo) proximo = r.at
   despertador.armar(proximo)

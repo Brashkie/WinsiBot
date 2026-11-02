@@ -1,11 +1,11 @@
 // Hecho por BrashkieBot
 
-import { exec } from 'child_process'
-import { promisify } from 'util'
-import { readFile, unlink } from 'fs/promises'
-import { existsSync } from 'fs'
-import { join } from 'path'
-import { randomUUID } from 'crypto'
+import { execFile } from 'node:child_process'
+import { promisify } from 'node:util'
+import { readFile, unlink } from 'node:fs/promises'
+import { existsSync } from 'node:fs'
+import { join } from 'node:path'
+import { randomUUID } from 'node:crypto'
 import axios from 'axios'
 import { ffmpegPath } from './ffmpeg.js'
 import { Queue } from './queue.js'
@@ -14,7 +14,25 @@ import { binPath, exeName } from './platform.js'
 import { USER_AGENT } from '@config'
 import { carpetaTmp } from './utils.js'
 
-const execAsync = promisify(exec)
+// yt-dlp se lanza con execFile: los argumentos le llegan tal cual, sin pasar
+// por un shell. Hasta la 9.2 se armaba un comando de shell con el texto del
+// usuario entre comillas dobles, y en Linux y Termux las comillas dobles no
+// impiden `$(...)`: `#play $(curl … | sh)` ejecutaba lo que fuera en la
+// máquina, lo mandara quien lo mandara. En Windows bastaba cerrar la comilla.
+const execFileAsync = promisify(execFile)
+
+/**
+ * Los argumentos de yt-dlp para un pedido. El objetivo va después de `--`:
+ * así un texto que empiece con `-` no se lee como opción (yt-dlp tiene
+ * `--exec`, que también ejecuta comandos). Una búsqueda va con `ytsearch1:`.
+ */
+export function argsYtdlp(ffmpeg: string, opciones: readonly string[], objetivo: string): string[] {
+  return [...(ffmpeg ? ['--ffmpeg-location', ffmpeg] : []), ...opciones, '--', objetivo]
+}
+
+export function objetivoDe(query: string): string {
+  return query.startsWith('http') ? query : `ytsearch1:${query}`
+}
 
 // Limita cuántas descargas (yt-dlp/ffmpeg, pesadas en CPU/ancho de banda) corren
 // en simultáneo — sin esto, una ráfaga de comandos de descarga en varios grupos
@@ -123,19 +141,14 @@ export async function downloadYoutubeAudio(query: string): Promise<DownloadResul
     const tmpDir  = await carpetaTmp()
     const outFile = join(tmpDir, `${randomUUID()}.mp3`)
 
-    const isUrl  = query.startsWith('http')
-    const target = isUrl ? query : `ytsearch1:${query}`
-
-    // Flag para usar el FFmpeg local
-    const ffmpegFlag = ffmpeg ? `--ffmpeg-location "${ffmpeg}"` : ''
-
     try {
-      await audioQueue.enqueue(() => execAsync(
+      await audioQueue.enqueue(() => execFileAsync(
+        ytdlp,
         // audio-quality 4 (~165-185kbps VBR) en vez de 0 (~245kbps, la
         // configuración MÁS LENTA de codificar) — para escuchar por
         // WhatsApp la diferencia es imperceptible, y el ffmpeg interno de
         // yt-dlp tarda notablemente menos en transcodificar a esta calidad.
-        `"${ytdlp}" ${ffmpegFlag} -x --audio-format mp3 --audio-quality 4 -o "${outFile}" "${target}" --no-playlist --max-filesize 50m`,
+        argsYtdlp(ffmpeg, ['-x', '--audio-format', 'mp3', '--audio-quality', '4', '-o', outFile, '--no-playlist', '--max-filesize', '50m'], objetivoDe(query)),
         { timeout: 60_000 }
       ), 60_000)
       const buffer = await readFile(outFile)
@@ -164,13 +177,16 @@ export async function downloadYoutubeVideo(query: string, quality = '360'): Prom
     const tmpDir  = await carpetaTmp()
     const outFile = join(tmpDir, `${randomUUID()}.mp4`)
 
-    const isUrl  = query.startsWith('http')
-    const target = isUrl ? query : `ytsearch1:${query}`
-    const ffmpegFlag = ffmpeg ? `--ffmpeg-location "${ffmpeg}"` : ''
+    // La calidad entra en un argumento de yt-dlp: solo dígitos.
+    const alto = /^\d{2,4}$/.test(quality) ? quality : '360'
 
     try {
-      await downloadQueue.enqueue(() => execAsync(
-        `"${ytdlp}" ${ffmpegFlag} -f "bestvideo[height<=${quality}][ext=mp4]+bestaudio[ext=m4a]/best[height<=${quality}][ext=mp4]/best" -o "${outFile}" "${target}" --no-playlist --max-filesize 50m --merge-output-format mp4`,
+      await downloadQueue.enqueue(() => execFileAsync(
+        ytdlp,
+        argsYtdlp(ffmpeg, [
+          '-f', `bestvideo[height<=${alto}][ext=mp4]+bestaudio[ext=m4a]/best[height<=${alto}][ext=mp4]/best`,
+          '-o', outFile, '--no-playlist', '--max-filesize', '50m', '--merge-output-format', 'mp4',
+        ], objetivoDe(query)),
         { timeout: 120_000 }
       ), 120_000)
       const buffer = await readFile(outFile)
@@ -189,11 +205,10 @@ export async function downloadTikTok(url: string): Promise<DownloadResult> {
     const ffmpeg  = getFfmpegDir()
     const tmpDir  = await carpetaTmp()
     const outFile = join(tmpDir, `${randomUUID()}.mp4`)
-    const ffmpegFlag = ffmpeg ? `--ffmpeg-location "${ffmpeg}"` : ''
-
     try {
-      await downloadQueue.enqueue(() => execAsync(
-        `"${ytdlp}" ${ffmpegFlag} -o "${outFile}" "${url}" --no-playlist --max-filesize 50m`,
+      await downloadQueue.enqueue(() => execFileAsync(
+        ytdlp,
+        argsYtdlp(ffmpeg, ['-o', outFile, '--no-playlist', '--max-filesize', '50m'], url),
         { timeout: 60_000 }
       ), 60_000)
       const buffer = await readFile(outFile)
@@ -244,13 +259,10 @@ function formatUploadDate(raw: unknown): string {
 export async function getYoutubeInfo(query: string): Promise<YoutubeInfo> {
   const ytdlp  = getYtdlp()
   const ffmpeg = getFfmpegDir()
-  const isUrl  = query.startsWith('http')
-  const target = isUrl ? query : `ytsearch1:${query}`
-  const ffmpegFlag = ffmpeg ? `--ffmpeg-location "${ffmpeg}"` : ''
-
-  const { stdout } = await execAsync(
-    `"${ytdlp}" ${ffmpegFlag} --dump-json --no-playlist "${target}"`,
-    { timeout: 30_000 }
+  const { stdout } = await execFileAsync(
+    ytdlp,
+    argsYtdlp(ffmpeg, ['--dump-json', '--no-playlist'], objetivoDe(query)),
+    { timeout: 30_000, maxBuffer: 16 * 1024 * 1024 }
   )
 
   const info = JSON.parse(stdout.trim().split('\n')[0] ?? '{}')

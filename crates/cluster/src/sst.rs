@@ -37,7 +37,10 @@ pub(crate) fn ruta(dir: &Path, id: u64) -> PathBuf {
 }
 
 fn corrupto(que: &str) -> io::Error {
-    io::Error::new(io::ErrorKind::InvalidData, format!("sstable corrupta: {que}"))
+    io::Error::new(
+        io::ErrorKind::InvalidData,
+        format!("sstable corrupta: {que}"),
+    )
 }
 
 // ─── Bloom ────────────────────────────────────────────────────────────────────
@@ -86,7 +89,11 @@ pub(crate) fn escribir(
     let mut ultima: Vec<u8> = Vec::new();
     let mut n = 0u64;
 
-    let mut cerrar = |bloque: &mut Vec<u8>, ultima: &[u8], w: &mut BufWriter<File>, desde: &mut u64| -> io::Result<()> {
+    let mut cerrar = |bloque: &mut Vec<u8>,
+                      ultima: &[u8],
+                      w: &mut BufWriter<File>,
+                      desde: &mut u64|
+     -> io::Result<()> {
         if bloque.is_empty() {
             return Ok(());
         }
@@ -104,7 +111,10 @@ pub(crate) fn escribir(
 
     for e in entradas {
         let (k, v) = e?;
-        debug_assert!(n == 0 || k > ultima, "las entradas tienen que venir ordenadas");
+        debug_assert!(
+            n == 0 || k > ultima,
+            "las entradas tienen que venir ordenadas"
+        );
         poner_varint(&mut bloque, k.len() as u64);
         bloque.extend_from_slice(&k);
         match &v {
@@ -171,7 +181,10 @@ struct Adentro {
 
 impl Cache {
     pub fn new(max: usize) -> Arc<Self> {
-        Arc::new(Self { max, adentro: Mutex::new(Adentro::default()) })
+        Arc::new(Self {
+            max,
+            adentro: Mutex::new(Adentro::default()),
+        })
     }
 
     fn buscar(&self, clave: (u64, usize)) -> Option<Arc<Vec<u8>>> {
@@ -191,7 +204,9 @@ impl Cache {
             a.orden.push_back(clave);
         }
         while a.bytes > self.max {
-            let Some(viejo) = a.orden.pop_front() else { break };
+            let Some(viejo) = a.orden.pop_front() else {
+                break;
+            };
             if let Some(b) = a.mapa.remove(&viejo) {
                 a.bytes -= b.len();
             }
@@ -249,7 +264,16 @@ impl Sst {
             let largo = leer_varint(&meta, &mut p).ok_or_else(mal)? as u32;
             indice.push((clave, desde, largo));
         }
-        Ok(Self { id, archivo, indice, bloom, k, entradas: n, bytes, cache })
+        Ok(Self {
+            id,
+            archivo,
+            indice,
+            bloom,
+            k,
+            entradas: n,
+            bytes,
+            cache,
+        })
     }
 
     /// Un bloque para buscar en él: de la caché si está, y si no se lee y se guarda.
@@ -303,7 +327,9 @@ impl Sst {
             return Ok(None);
         }
         // El primer bloque cuya última clave es >= la buscada.
-        let i = self.indice.partition_point(|(ultima, _, _)| ultima.as_slice() < clave);
+        let i = self
+            .indice
+            .partition_point(|(ultima, _, _)| ultima.as_slice() < clave);
         if i == self.indice.len() {
             return Ok(None);
         }
@@ -327,14 +353,22 @@ impl Sst {
     }
 
     fn iterar_desde_bloque(&self, bloque: usize) -> Iterador<'_> {
-        Iterador { sst: self, bloque, leidos: Vec::new().into_iter(), actuales: Vec::new().into_iter() }
+        Iterador {
+            sst: self,
+            bloque,
+            leidos: Vec::new().into_iter(),
+            actuales: Vec::new().into_iter(),
+        }
     }
 
     /// Las entradas desde el bloque que podría tener `desde`: un rango no
     /// recorre la tabla desde el principio. El primer bloque puede traer claves
     /// menores; quien llama las salta.
     pub fn iterar_desde(&self, desde: &[u8]) -> Iterador<'_> {
-        self.iterar_desde_bloque(self.indice.partition_point(|(ultima, _, _)| ultima.as_slice() < desde))
+        self.iterar_desde_bloque(
+            self.indice
+                .partition_point(|(ultima, _, _)| ultima.as_slice() < desde),
+        )
     }
 }
 
@@ -393,7 +427,10 @@ impl Iterator for Iterador<'_> {
 
 /// La entrada que empieza en `*pos`, sin copiar: `None` al final del bloque.
 #[allow(clippy::type_complexity)]
-fn siguiente_en_bloque<'a>(b: &'a [u8], p: &mut usize) -> io::Result<Option<(&'a [u8], Option<&'a [u8]>)>> {
+fn siguiente_en_bloque<'a>(
+    b: &'a [u8],
+    p: &mut usize,
+) -> io::Result<Option<(&'a [u8], Option<&'a [u8]>)>> {
     if *p >= b.len() {
         return Ok(None);
     }
@@ -435,7 +472,10 @@ fn leer_en(f: &File, mut desde: u64, mut buf: &mut [u8]) -> io::Result<()> {
     while !buf.is_empty() {
         let n = f.seek_read(buf, desde)?;
         if n == 0 {
-            return Err(io::Error::new(io::ErrorKind::UnexpectedEof, "fin de archivo"));
+            return Err(io::Error::new(
+                io::ErrorKind::UnexpectedEof,
+                "fin de archivo",
+            ));
         }
         buf = &mut buf[n..];
         desde += n as u64;
@@ -454,7 +494,10 @@ mod tests {
             let hashes: Vec<u64> = (0..n).map(|i| hash64(&i.to_le_bytes())).collect();
             let b = armar_bloom(&hashes);
             for &h in &hashes {
-                assert!(quizas_en_bloom(&b, K_BLOOM, h), "falso negativo con {n} claves");
+                assert!(
+                    quizas_en_bloom(&b, K_BLOOM, h),
+                    "falso negativo con {n} claves"
+                );
             }
         }
     }
@@ -463,7 +506,9 @@ mod tests {
     fn el_bloom_descarta_casi_todo_lo_que_no_esta() {
         let hashes: Vec<u64> = (0..10_000u64).map(|i| hash64(&i.to_le_bytes())).collect();
         let b = armar_bloom(&hashes);
-        let falsos = (10_000..110_000u64).filter(|i| quizas_en_bloom(&b, K_BLOOM, hash64(&i.to_le_bytes()))).count();
+        let falsos = (10_000..110_000u64)
+            .filter(|i| quizas_en_bloom(&b, K_BLOOM, hash64(&i.to_le_bytes())))
+            .count();
         // ~1% esperado con 10 bits por clave y k = 7.
         assert!(falsos < 2_000, "{falsos} falsos positivos de 100.000");
     }

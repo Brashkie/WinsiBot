@@ -1,8 +1,10 @@
 import type { Command } from '../../../types/index.js'
 import {
-  getUserData, patchUserData,
+  getUserData,
   isOnCooldown, setCooldown, getCooldownLeft, fmtCooldown,
 } from '@core/events.js'
+import { cambiarSaldos } from '@core/economy.js'
+import { textoDeMotivo } from '@lib/ledger.js'
 import { safeSend, sendCritical } from '@lib/media_sender.js'
 import { montoDe } from '@lib/amount.js'
 
@@ -69,6 +71,14 @@ const command: Command = {
     const won   = result === choice
     const emoji = result === 'cara' ? '🪙' : '✝️'
 
+    // Ganar o perder, por la operación de Ada/SPARK (ver core/economy.ts). La
+    // pérdida antes era `Math.max(0, saldo - apuesta)`: si en el medio el saldo
+    // bajó, lo dejaba en 0 en vez de rechazar la apuesta.
+    const r = await cambiarSaldos([{ cuenta: { jid: sender, campo: 'money' }, delta: won ? amount : -amount }])
+    if (!r.ok) {
+      await safeSend(() => sock.sendMessage(jid, { text: `> ${textoDeMotivo(r.motivo)}` }, { quoted: msg }))
+      return
+    }
     setCooldown(sender, 'lastFight')
 
     const resultLabel = result.charAt(0).toUpperCase() + result.slice(1)
@@ -78,19 +88,19 @@ const command: Command = {
     // ajustó. Sin el mensaje, el usuario no sabe si ganó o perdió aunque el
     // dinero ya se movió — el outbox lo reenvía si el proceso muere acá.
     if (won) {
-      patchUserData(sender, { money: user.money + amount })
       await sendCritical(sock, jid, {
         text: [
           `╭─「 🪙 COINFLIP 」`,
           `│`,
           `> ${emoji} Cayó en *${resultLabel}* — elegiste *${choiceLabel}*`,
           `│`,
-          `> ¡Ganaste! +¥${(amount * 2).toLocaleString()}`,
+          // La apuesta vuelve y se gana otro tanto: el saldo sube `amount`.
+          // Hasta la 9.2 decía amount * 2, el doble de lo que entraba.
+          `> ¡Ganaste! +¥${amount.toLocaleString()}`,
           `╰─`,
         ].join('\n'),
       }, { quoted: msg })
     } else {
-      patchUserData(sender, { money: Math.max(0, user.money - amount) })
       await sendCritical(sock, jid, {
         text: [
           `╭─「 🪙 COINFLIP 」`,

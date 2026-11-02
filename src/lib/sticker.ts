@@ -12,11 +12,11 @@
 //
 // sharp se carga al hacer el primer sticker, no al arrancar.
 
-import { readFile, unlink, writeFile } from 'fs/promises'
-import { execFile } from 'child_process'
-import { promisify } from 'util'
-import { join } from 'path'
-import { randomUUID } from 'crypto'
+import { readFile, unlink, writeFile } from 'node:fs/promises'
+import { execFile } from 'node:child_process'
+import { promisify } from 'node:util'
+import { join } from 'node:path'
+import { randomUUID } from 'node:crypto'
 import { config } from '@config'
 import { ffmpegPath } from './ffmpeg.js'
 import { esAnimado, mimeDe } from './mime.js'

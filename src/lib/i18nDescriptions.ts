@@ -107,7 +107,7 @@ const D: Record<string, Traduccion> = {
 
   // admin
   antilink:    { en: 'Turn antilink on/off in the group', pt: 'Liga/desliga o antilink no grupo' },
-  antirrobo:   { en: 'Protects the group admins from a takeover  |  !antirrobo on  ·  off  ·  proteger @user  ·  quitar @user', pt: 'Protege os admins do grupo de um roubo  |  !antirrobo on  ·  off  ·  proteger @usuário  ·  quitar @usuário' },
+  antirrobo:   { en: 'Protects the admins of the group —or of its community— from a takeover  |  !antirrobo on  ·  off  ·  proteger @user  ·  quitar @user  ·  comunidad on', pt: 'Protege os admins do grupo —ou da sua comunidade— de um roubo  |  !antirrobo on  ·  off  ·  proteger @usuário  ·  quitar @usuário  ·  comunidad on' },
   ban:         { en: 'Ban a user from the bot', pt: 'Bane um usuário do bot' },
   banchat:     { en: 'Mute/unmute the bot in this group', pt: 'Silencia/ativa o bot neste grupo' },
   on:          { en: 'Turn group features on or off', pt: 'Liga ou desliga funções do grupo' },
@@ -190,7 +190,6 @@ const D: Record<string, Traduccion> = {
   stickerporn: { en: 'Random +18 sticker — needs nsfw on', pt: 'Figurinha +18 aleatória — precisa do nsfw ativado' },
 
   // owner
-  backup:      { en: 'Send the session (creds.json) to your DM', pt: 'Envia a sessão (creds.json) no privado' },
   block:       { en: 'Block or unblock a number', pt: 'Bloqueia ou desbloqueia um número' },
   boost:       { en: 'Reset caches and show the bot status', pt: 'Reinicia os caches e mostra o estado do bot' },
   bc:          { en: 'Send a message to every chat', pt: 'Envia uma mensagem para todos os chats' },
@@ -200,9 +199,9 @@ const D: Record<string, Traduccion> = {
   addcoins:    { en: 'Add or remove coins from a user', pt: 'Adiciona ou tira moedas de um usuário' },
   creategroup: { en: 'Create a new group', pt: 'Cria um grupo novo' },
   adddiamonds: { en: 'Add or remove diamonds from a user', pt: 'Adiciona ou tira diamantes de um usuário' },
-  exec:        { en: 'Run JavaScript inside the bot', pt: 'Executa JavaScript dentro do bot' },
   addexp:      { en: 'Add or remove EXP from a user', pt: 'Adiciona ou tira EXP de um usuário' },
-  fetch:       { en: 'Get the content of a URL', pt: 'Pega o conteúdo de uma URL' },
+  canal:       { en: 'Protects the name and description of a channel: if they change, I restore them and warn you  |  !canal proteger <link>  ·  actualizar <link>  ·  quitar <link>', pt: 'Protege o nome e a descrição de um canal: se mudarem, eu restauro e aviso você  |  !canal proteger <link>  ·  actualizar <link>  ·  quitar <link>' },
+  fetch:       { en: 'Get the content of a public URL (not the machine itself or the local network)', pt: 'Pega o conteúdo de uma URL pública (não da própria máquina nem da rede local)' },
   join:        { en: 'Join the bot to a group by invite link', pt: 'Coloca o bot num grupo pelo link de convite' },
   leave:       { en: 'Make the bot leave this group or one by ID', pt: 'Faz o bot sair deste grupo ou de um pelo ID' },
   addowner:    { en: 'Add or remove an owner (runtime)', pt: 'Adiciona ou remove um dono (em execução)' },
@@ -214,7 +213,6 @@ const D: Record<string, Traduccion> = {
   setpp:       { en: 'Change the bot\'s profile picture', pt: 'Muda a foto de perfil do bot' },
   settier:     { en: 'Set a user\'s account tier (free/vip/premium/pro/promax)', pt: 'Define o nível de conta de um usuário (free/vip/premium/pro/promax)' },
   sysinfo:     { en: 'System info and service status', pt: 'Informações do sistema e estado dos serviços' },
-  terminal:    { en: 'Run a command in the server terminal', pt: 'Executa um comando no terminal do servidor' },
   unban:       { en: 'Unban a user from the database', pt: 'Desbane um usuário do banco de dados' },
 
   // sticker

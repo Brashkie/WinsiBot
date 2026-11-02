@@ -32,7 +32,7 @@ const command: Command = {
   async execute({ sock, jid, msg, args }) {
     const url = args[0]?.trim()
 
-    if (!url || !url.startsWith('http')) {
+    if (!url?.startsWith('http')) {
       await sock.sendMessage(jid, {
         text: 'Uso: #tiktok <url>',
       }, { quoted: msg })

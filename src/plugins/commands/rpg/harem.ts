@@ -35,7 +35,7 @@ const command: Command = {
     const sorted = [...inventory].sort((a, b) => Number(b.value) - Number(a.value))
 
     // El último argumento numérico es la página, si lo hay
-    const pageArg    = parseInt(args[args.length - 1] ?? '') || 1
+    const pageArg    = parseInt(args[args.length - 1] ?? '', 10) || 1
     const totalPages = Math.ceil(sorted.length / PAGE_SIZE)
     const page       = Math.min(Math.max(1, pageArg), totalPages)
     const start      = (page - 1) * PAGE_SIZE

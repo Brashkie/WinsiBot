@@ -42,6 +42,11 @@
 //! El núcleo, [`Motor`], es lógica pura: el tiempo y la aleatoriedad entran por
 //! parámetro, así que los tests lo recorren días enteros en microsegundos. Lo
 //! de alrededor —el `Mutex`, el archivo, las rutas HTTP— es la cáscara.
+//!
+//! Desde 9.3 la decisión de cada turno y la escalada de las esperas están en
+//! Ada/SPARK (ver `send_pacing.rs`), con sus garantías demostradas por
+//! GNATprove: ningún turno rompe un tope ni espera de más. Aquí queda el
+//! estado: el historial, los contactos y el archivo.
 
 use std::collections::{HashMap, VecDeque};
 use std::path::{Path, PathBuf};
@@ -54,6 +59,7 @@ use axum::{
 use serde::{Deserialize, Serialize};
 
 use crate::routes::AppState;
+use crate::send_pacing::{self, ms, Pedido, MAX_DIAS, MAX_HISTORIAL};
 
 const MINUTO: u64 = 60_000;
 const HORA: u64 = 60 * MINUTO;
@@ -156,6 +162,13 @@ impl Politica {
                 .map(str::parse)
                 .collect();
             match lista {
+                Ok(l) if l.len() > MAX_DIAS => {
+                    tracing::warn!(
+                        dias = l.len(),
+                        "ANTIBAN_CALENTAMIENTO tiene más de {MAX_DIAS} días, se usan los primeros"
+                    );
+                    p.calentamiento = l[..MAX_DIAS].to_vec();
+                }
                 Ok(l) => p.calentamiento = l,
                 Err(_) => {
                     tracing::warn!(valor = %v, "ANTIBAN_CALENTAMIENTO no válido, queda el de por defecto")
@@ -181,6 +194,22 @@ pub enum Motivo {
     Calentamiento,
     Enfriamiento,
     Contacto463,
+}
+
+impl Motivo {
+    /// El motivo que devuelve send_pacing, en este mismo orden.
+    fn de_codigo(c: i32) -> Self {
+        match c {
+            send_pacing::M_PAUSA => Self::Pausa,
+            send_pacing::M_MINUTO => Self::Minuto,
+            send_pacing::M_HORA => Self::Hora,
+            send_pacing::M_DIA => Self::Dia,
+            send_pacing::M_CALENTAMIENTO => Self::Calentamiento,
+            send_pacing::M_ENFRIAMIENTO => Self::Enfriamiento,
+            send_pacing::M_CONTACTO => Self::Contacto463,
+            _ => Self::Libre,
+        }
+    }
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -246,19 +275,6 @@ impl Sesion {
         }
     }
 
-    /// El primer instante `>= t` en que la ventana tiene lugar para uno más
-    /// con tope `tope`. Si ya está llena, es cuando sale el más viejo que
-    /// sobra: el `tope`-ésimo más reciente, más la ventana.
-    fn hueco(&self, t: u64, ventana: u64, tope: u32) -> u64 {
-        let tope = tope as usize;
-        if tope == 0 || self.en_ventana(t, ventana) < tope {
-            return t;
-        }
-        // `e` sale de la ventana `(t - ventana, t]` justo en `e + ventana`.
-        let e = self.envios[self.envios.len() - tope];
-        t.max(e + ventana)
-    }
-
     fn tope_dia(&self, p: &Politica, t: u64) -> (u32, Motivo) {
         if let Some(desde) = self.emparejado_ms {
             let dia = (t.saturating_sub(desde) / DIA) as usize;
@@ -307,46 +323,42 @@ impl Motor {
         let s = self.sesiones.entry(sesion.to_owned()).or_default();
         s.podar(ahora);
 
-        if let Some(&(hasta, _)) = s.por_contacto.get(jid) {
-            if hasta > ahora {
-                return Decision::Rechazar {
-                    reintentar_en_ms: hasta - ahora,
-                    motivo: Motivo::Contacto463,
-                };
-            }
-        }
-
         // Cada restricción empuja el turno hacia adelante y nunca hacia atrás,
         // así que basta una pasada: correrlo por una ventana solo puede vaciar
-        // las otras. Se queda como motivo la que más lo empujó.
-        let mut t = ahora;
-        let mut motivo = Motivo::Libre;
-        let mut empujar = |nuevo: u64, m: Motivo, t: &mut u64| {
-            if nuevo > *t {
-                *t = nuevo;
-                motivo = m;
-            }
-        };
-
-        empujar(s.enfriado_hasta, Motivo::Enfriamiento, &mut t);
-        if let Some(&ultimo) = s.envios.back() {
-            empujar(ultimo + pausa(p, u1, u2), Motivo::Pausa, &mut t);
+        // las otras. La regla y sus garantías, en send_pacing.
+        let mut calentamiento = [0i64; MAX_DIAS];
+        for (c, &t) in calentamiento.iter_mut().zip(&p.calentamiento) {
+            *c = i64::from(t);
         }
-        empujar(s.hueco(t, MINUTO, p.por_minuto), Motivo::Minuto, &mut t);
-        empujar(s.hueco(t, HORA, p.por_hora), Motivo::Hora, &mut t);
-        let (tope_dia, m_dia) = s.tope_dia(p, t);
-        empujar(s.hueco(t, DIA, tope_dia), m_dia, &mut t);
-
-        let esperar = t - ahora;
-        if esperar > p.espera_max_ms {
+        let envios = s.envios.make_contiguous();
+        // Solo se leen el último y el T-ésimo desde el final de cada tope.
+        let envios = &envios[envios.len().saturating_sub(MAX_HISTORIAL)..];
+        let pedido = Pedido {
+            ahora: ms(ahora),
+            contacto_hasta: s.por_contacto.get(jid).map_or(0, |&(hasta, _)| ms(hasta)),
+            enfriado_hasta: ms(s.enfriado_hasta),
+            pausa: ms(pausa(p, u1, u2)),
+            espera_max: ms(p.espera_max_ms),
+            por_minuto: i64::from(p.por_minuto),
+            por_hora: i64::from(p.por_hora),
+            por_dia: i64::from(p.por_dia),
+            emparejado: s.emparejado_ms.map_or(-1, ms),
+            calentamiento,
+            dias: p.calentamiento.len().min(MAX_DIAS) as i32,
+            largo: envios.len() as i32,
+        };
+        let r = send_pacing::decidir(&pedido, envios);
+        let motivo = Motivo::de_codigo(r.motivo);
+        let espera = r.espera.max(0) as u64;
+        if r.codigo != 0 {
             return Decision::Rechazar {
-                reintentar_en_ms: esperar,
+                reintentar_en_ms: espera,
                 motivo,
             };
         }
-        s.envios.push_back(t);
+        s.envios.push_back(r.turno as u64);
         Decision::Enviar {
-            esperar_ms: esperar,
+            esperar_ms: espera,
             motivo,
         }
     }
@@ -360,10 +372,14 @@ impl Motor {
         match codigo {
             429 => enfriar_cuenta(s, p, ahora),
             463 => {
-                let nivel = s.por_contacto.get(jid).map_or(0, |&(_, n)| n) + 1;
-                let espera = (p.enfriamiento_463_ms << (nivel - 1).min(10)).min(DIA);
+                let nivel = s
+                    .por_contacto
+                    .get(jid)
+                    .map_or(0, |&(_, n)| n)
+                    .saturating_add(1);
+                let espera = send_pacing::escalada(p.enfriamiento_463_ms, nivel, DIA);
                 s.por_contacto
-                    .insert(jid.to_owned(), (ahora + espera, nivel));
+                    .insert(jid.to_owned(), (ahora.saturating_add(espera), nivel));
                 s.errores_463.push_back(ahora);
                 if p.umbral_463_hora > 0 && s.errores_463.len() >= p.umbral_463_hora as usize {
                     // Ya no es un contacto: es la cuenta.
@@ -434,11 +450,15 @@ fn enfriar_cuenta(s: &mut Sesion, p: &Politica, ahora: u64) -> u64 {
     if ahora.saturating_sub(s.ultimo_429) > HORA {
         s.racha_429 = 0;
     }
-    s.racha_429 += 1;
+    s.racha_429 = s.racha_429.saturating_add(1);
     s.ultimo_429 = ahora;
-    let espera =
-        (p.enfriamiento_429_ms << (s.racha_429 - 1).min(10)).min(p.enfriamiento_429_max_ms);
-    s.enfriado_hasta = s.enfriado_hasta.max(ahora + espera);
+    // Duplicar con techo, en Ada: con `<<`, una base grande daba basura.
+    let espera = send_pacing::escalada(
+        p.enfriamiento_429_ms,
+        s.racha_429,
+        p.enfriamiento_429_max_ms,
+    );
+    s.enfriado_hasta = s.enfriado_hasta.max(ahora.saturating_add(espera));
     espera
 }
 
@@ -855,7 +875,10 @@ mod tests {
         // Se escanea el QR otra vez, con el mismo número: sin tope.
         assert!(!m.emparejado("main", Some("51950270105"), 0));
         for _ in 0..10 {
-            assert!(matches!(m.permiso("main", "x", 0, 0.5, 0.25), Decision::Enviar { .. }));
+            assert!(matches!(
+                m.permiso("main", "x", 0, 0.5, 0.25),
+                Decision::Enviar { .. }
+            ));
         }
         // Con OTRO número sí: ese sí es nuevo.
         assert!(m.emparejado("main", Some("51999999999"), 0));

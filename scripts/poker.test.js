@@ -64,10 +64,10 @@ describe('mejorMano', () => {
       const nm = nombreMano(mejorMano(m.slice(0, 7)).valor)
       cuenta[nm] = (cuenta[nm] ?? 0) + 1
     }
-    expect(cuenta['Par'] / n).toBeGreaterThan(0.41)
-    expect(cuenta['Par'] / n).toBeLessThan(0.47)
-    expect(cuenta['Color'] / n).toBeGreaterThan(0.024)
-    expect(cuenta['Color'] / n).toBeLessThan(0.036)
+    expect(cuenta.Par / n).toBeGreaterThan(0.41)
+    expect(cuenta.Par / n).toBeLessThan(0.47)
+    expect(cuenta.Color / n).toBeGreaterThan(0.024)
+    expect(cuenta.Color / n).toBeLessThan(0.036)
   })
 })
 

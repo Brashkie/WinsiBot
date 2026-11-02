@@ -28,6 +28,7 @@ import { color, components, themes } from 'ansimax'
 import { EventEmitter } from 'node:events'
 import pino from 'pino'
 import { logger } from './logger.js'
+import { anotarExpulsion } from './sessionAlert.js'
 
 function fmtJid(jid: string): string {
   return jid.replace('@s.whatsapp.net', '').replace('@g.us', '').replace('@lid', '')
@@ -207,6 +208,7 @@ export class WinsiSocket extends EventEmitter<WinsiEvents> {
         this.sock.ev.removeAllListeners('chats.upsert')
         this.sock.ev.removeAllListeners('groups.update')
         this.sock.ev.removeAllListeners('group-participants.update')
+        this.sock.ev.removeAllListeners('newsletter-settings.update')
       } catch (err) {
         logger.warn({ err }, 'Error al limpiar listeners')
       }
@@ -386,6 +388,13 @@ export class WinsiSocket extends EventEmitter<WinsiEvents> {
         logger.warn({ err }, '[welcome] handleParticipantsUpdate falló')
       })
     })
+    // #canal: si cambian el nombre o la descripción de un canal protegido.
+    this.sock.ev.on('newsletter-settings.update', ({ id, update }) => {
+      if (!this.sock) return
+      import('./events/channelGuard.js')
+        .then((m) => m.vigilarCanal(this.sock!, id, update))
+        .catch((err) => logger.warn({ err }, '[canal] vigilarCanal falló'))
+    })
     this.sock.ev.on('groups.update', (updates) => {
       if (!this.sock) return
       handleGroupsUpdate(this.sock, updates).catch((err) => {
@@ -514,9 +523,12 @@ export class WinsiSocket extends EventEmitter<WinsiEvents> {
 
         if (code && NO_RETRY_CODES.has(code)) {
           if (code === 440) {
-            logger.warn('Sesion expulsada por otra instancia (440) — cierra WhatsApp Web')
+            // No es WhatsApp Web: es otra conexión con ESTAS credenciales.
+            logger.error('Sesión expulsada (440): otra conexión entró con las mismas credenciales — ¿otra copia del bot, o alguien copió la sesión?')
+            anotarExpulsion(440)
           } else if (code === DisconnectReason.loggedOut) {
             logger.warn('Sesion cerrada (loggedOut) — borra /auth y reconecta')
+            anotarExpulsion(code)
           }
           this.cleanup()
           this.emit('closed')

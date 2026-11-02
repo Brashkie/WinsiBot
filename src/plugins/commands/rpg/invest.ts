@@ -1,8 +1,11 @@
 import type { Command } from '../../../types/index.js'
 import { safeSend, sendCritical } from '@lib/media_sender.js'
 import { logger } from '@core/logger.js'
-import { getUserData, patchUserData, isOnCooldown, setCooldown, getCooldownLeft, fmtCooldown } from '@core/events.js'
-import { market, resolveSymbol, fmtPrice, fmtPct, trendArrow, TIMEFRAMES } from '@lib/market.js'
+import { getUserData, isOnCooldown, setCooldown, getCooldownLeft, fmtCooldown } from '@core/events.js'
+import { cambiarSaldos } from '@core/economy.js'
+import { textoDeMotivo } from '@lib/ledger.js'
+import { ApuestasAbiertas } from '@lib/openBets.js'
+import { resolveSymbol, fmtPrice, fmtPct, trendArrow, TIMEFRAMES } from '@lib/market.js'
 import { montoDe } from '@lib/amount.js'
 
 // ─── Apuestas pendientes (una por usuario) ─────────────────────────────────────
@@ -21,6 +24,14 @@ interface Bet {
 
 const activeBets = new Map<string, Bet>()
 
+// Las inversiones abiertas viven en un temporizador en memoria: se anotan para
+// devolverlas si el bot se reinicia a la mitad (ver openBets.ts).
+const abiertas = new ApuestasAbiertas('invest')
+const anotar = () => abiertas.anotar([...activeBets].map(([s, b]) => [s, b.amount]))
+
+/** Ver openBets.ts. La llama el 'ready' de index.ts. */
+export const devolverManosInterrumpidas = () => abiertas.devolver()
+
 // Payout: 80% de ganancia (1.8x)
 const PAYOUT = 0.80
 
@@ -31,6 +42,7 @@ const BET_CD = 10_000
 
 async function resolveBet(bet: Bet): Promise<void> {
   activeBets.delete(bet.sender)
+  anotar()
 
   const asset    = resolveSymbol(bet.symbol)
   const exitPrice = asset?.price ?? bet.entryPrice
@@ -40,12 +52,13 @@ async function resolveBet(bet: Bet): Promise<void> {
   const pct   = ((exitPrice - bet.entryPrice) / bet.entryPrice) * 100
   const arrow = trendArrow(pct)
 
-  const user   = getUserData(bet.sender)
+  // La apuesta ya se cobró al abrir. Ganar devuelve la apuesta más la
+  // ganancia; perder no cobra nada más. Hasta la 9.2 se cobraba de nuevo al
+  // perder (−200%) y al ganar se pagaba solo la ganancia, sin devolver la
+  // apuesta (−20% aunque se ganara).
   const gain   = Math.round(bet.amount * PAYOUT)
-  const profit = won ? gain : -bet.amount
-  const newBal = Math.max(0, user.money + profit)
-
-  patchUserData(bet.sender, { money: newBal })
+  if (won) await abiertas.pagar(bet.sender, bet.amount + gain)
+  const newBal = getUserData(bet.sender).money
 
   const dirLabel = bet.direction === 'up' ? '📈 SUBE' : '📉 BAJA'
   const result   = won
@@ -173,8 +186,18 @@ const command: Command = {
       return
     }
 
-    // Descontar apuesta inmediatamente
-    patchUserData(sender, { money: user.money - amount })
+    // Descontar apuesta inmediatamente, por la operación de Ada/SPARK.
+    const r = await cambiarSaldos([{ cuenta: { jid: sender, campo: 'money' }, delta: -amount }])
+    if (!r.ok) {
+      await safeSend(() => sock.sendMessage(jid, { text: `✗ ${textoDeMotivo(r.motivo)}` }, { quoted: msg }))
+      return
+    }
+    // En la espera pudo abrirse otra inversión del mismo usuario.
+    if (activeBets.has(sender)) {
+      await abiertas.pagar(sender, amount)
+      await safeSend(() => sock.sendMessage(jid, { text: '✗ Ya tienes una inversión abierta.' }, { quoted: msg }))
+      return
+    }
     setCooldown(sender, 'lastBet')
 
     const entryPrice = asset.price
@@ -186,6 +209,7 @@ const command: Command = {
 
     const bet: Bet = { sender, symbol: asset.symbol, direction, amount, entryPrice, resolveAt, chatJid: jid, sock, timer }
     activeBets.set(sender, bet)
+    anotar()
 
     await safeSend(() => sock.sendMessage(jid, {
       text: [

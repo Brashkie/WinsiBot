@@ -1,5 +1,4 @@
 import type { Command } from '../../../types/index.js'
-import { getUserData, patchUserData } from '@core/events.js'
 import { logger } from '@core/logger.js'
 import { safeSend } from '@lib/media_sender.js'
 import { Mesas, nuevoJugador, type JugadorPrivado } from '@lib/privateGame.js'
@@ -8,6 +7,7 @@ import {
   type Fragmento, MIN_JUGADORES, MAX_JUGADORES, MAX_CARACTERES,
   turnosTotales, turnoDe, loQueVe, limpiar, relato, textoPlano,
 } from '@lib/story.js'
+import { acreditar } from '@core/economy.js'
 
 // El teléfono descompuesto: ver story.ts para por qué se juega por privado.
 //
@@ -100,7 +100,7 @@ async function revelar(p: Partida): Promise<void> {
   terminar(p)
   const titulo = await historiaIA('titulo', textoPlano(p.fragmentos), p.gjid)
   const autores = [...new Set(p.fragmentos.map(f => f.autor).filter((a): a is string => a !== null))]
-  for (const a of autores) patchUserData(a, { exp: getUserData(a).exp + EXP })
+  for (const a of autores) await acreditar(a, { exp: EXP })
   await enviar(p.gjid, [
     `📖 *${titulo ?? 'La historia completa'}*`,
     ``,
@@ -127,7 +127,7 @@ const command: Command = {
     // ─── Por privado: el turno ─────────────────────────────────────────────
     if (!isGroup) {
       const b = mesas.buscar(sender)
-      if (!b || b.p.fase !== 'jugando') {
+      if (b?.p.fase !== 'jugando') {
         await responder(`> No estás en ninguna historia en curso. Se arma en un grupo con \`${prefix}historia nueva <primera frase>\`.`)
         return
       }
@@ -188,7 +188,7 @@ const command: Command = {
     }
 
     if (sub === 'unirme' || sub === 'unir' || sub === 'entrar' || sub === 'join') {
-      if (!p || p.fase !== 'lobby') { await responder(`> No hay una historia esperando jugadores: \`${prefix}historia nueva <primera frase>\``); return }
+      if (p?.fase !== 'lobby') { await responder(`> No hay una historia esperando jugadores: \`${prefix}historia nueva <primera frase>\``); return }
       if (mesas.buscar(sender)) { await responder(`> Ya estás en una historia.`); return }
       if (p.jugadores.length >= MAX_JUGADORES) { await responder(`> Está llena (${MAX_JUGADORES}).`); return }
       p.jugadores.push(await nuevoJugador(sock, sender, jid, pushName))
@@ -198,7 +198,7 @@ const command: Command = {
     }
 
     if (sub === 'empezar' || sub === 'start') {
-      if (!p || p.fase !== 'lobby') { await responder(`> No hay una historia esperando.`); return }
+      if (p?.fase !== 'lobby') { await responder(`> No hay una historia esperando.`); return }
       if (p.creador !== sender && !isAdmin && !isOwner) { await responder(`> La empieza quien la creó, o un admin.`); return }
       if (p.jugadores.length < MIN_JUGADORES) { await responder(`> Faltan ${MIN_JUGADORES - p.jugadores.length} jugador(es).`); return }
       await empezar(p)

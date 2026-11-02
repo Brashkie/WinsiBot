@@ -7,6 +7,8 @@ import { getAdminGroups } from '../groupsInfo.js'
 import type { MeResponse, SubBotSummary } from '../types.js'
 
 export const SESSION_COOKIE = 'winsi_session'
+/** El secreto del navegador que pidió el código: solo él recibe la sesión. */
+const LOGIN_COOKIE = 'winsi_login'
 
 
 export const authRoutes = new Hono()
@@ -17,14 +19,22 @@ authRoutes.post('/start', async (c) => {
   if (crudo === null) return c.json({ error: 'Número inválido' }, 400)
 
   const phone = crudo.replace(/\D/g, '')
-  const code  = startLogin(phone)
+  const { code, nonce } = startLogin(phone)
+  setCookie(c, LOGIN_COOKIE, nonce, {
+    httpOnly: true,
+    sameSite: 'Strict',
+    secure:   process.env.NODE_ENV === 'production',
+    path:     '/api/auth',
+    maxAge:   5 * 60,
+  })
   return c.json({ code })
 })
 
 authRoutes.get('/status/:code', (c) => {
   const code  = c.req.param('code')
-  const token = checkConfirmed(code)
+  const token = checkConfirmed(code, getCookie(c, LOGIN_COOKIE))
   if (!token) return c.json({ confirmed: false })
+  deleteCookie(c, LOGIN_COOKIE, { path: '/api/auth' })
 
   setCookie(c, SESSION_COOKIE, token, {
     httpOnly: true,

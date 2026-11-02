@@ -12,9 +12,9 @@
 // menús, la ayuda y los middlewares leen campos del comando, y una lista fija
 // se quedaría corta el día que un comando agregue uno nuevo.
 
-import { writeFileSync, readdirSync } from 'fs'
-import { join, relative } from 'path'
-import { pathToFileURL } from 'url'
+import { writeFileSync, readdirSync } from 'node:fs'
+import { join, relative } from 'node:path'
+import { pathToFileURL } from 'node:url'
 
 const BASE = join(process.cwd(), 'dist', 'plugins', 'commands')
 const files = readdirSync(BASE, { recursive: true })

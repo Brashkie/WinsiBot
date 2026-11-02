@@ -14,7 +14,7 @@
 import type { Carta } from './blackjack.js'
 export { mazo, mostrar, type Carta } from './blackjack.js'
 
-export const enum Cat {
+export enum Cat {
   Alta, Par, DoblePar, Trio, Escalera, Color, Full, Poker, EscaleraColor,
 }
 

@@ -10,12 +10,12 @@
 // downloader.ts la usa también para yt-dlp: `--ffmpeg-location` acepta el
 // binario, no hace falta la carpeta.
 
-import { existsSync } from 'fs'
-import { readFile, unlink, writeFile } from 'fs/promises'
-import { execFile } from 'child_process'
-import { promisify } from 'util'
-import { join } from 'path'
-import { randomUUID } from 'crypto'
+import { existsSync } from 'node:fs'
+import { readFile, unlink, writeFile } from 'node:fs/promises'
+import { execFile } from 'node:child_process'
+import { promisify } from 'node:util'
+import { join } from 'node:path'
+import { randomUUID } from 'node:crypto'
 import ffmpegStatic from 'ffmpeg-static'
 import { binPath } from './platform.js'
 import { carpetaTmp } from './utils.js'

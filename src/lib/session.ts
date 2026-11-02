@@ -30,8 +30,7 @@ const FETCH_TIMEOUT_MS = 3_000
 async function apiFetch<T>(
   path: string, init?: RequestInit, opts?: { allowNon2xx?: boolean; timeoutMs?: number },
 ): Promise<T> {
-  // Circuito abierto: fallar ya, sin pagar el timeout. Con Rust caído esto se
-  // nota en cada mensaje — checkRate() está en el camino crítico del handler.
+  // Circuito abierto: fallar ya, sin pagar el timeout.
   if (!rustCircuit.canAttempt()) throw new Error('Rust API no disponible (circuito abierto)')
 
 
@@ -322,19 +321,6 @@ export class SessionClient {
    * Límite: 15 mensajes / 10s por sender.
    * Falla abierto: si Rust no responde, siempre permite.
    */
-  async checkRate(sender: string): Promise<{ allowed: boolean; remaining: number }> {
-    try {
-      const res = await apiFetch<{ allowed: boolean; remaining: number }>(
-        '/rate/check',
-        { method: 'POST', body: JSON.stringify({ sender }) },
-        { allowNon2xx: true },
-      )
-      return { allowed: res.allowed, remaining: res.remaining }
-    } catch {
-      return { allowed: true, remaining: 15 }
-    }
-  }
-
   // ─── Message delivery tracking ───────────────────────────────────────────────
 
   /**

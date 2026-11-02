@@ -59,7 +59,7 @@ export async function loggerMiddleware(ctx: BotContext): Promise<boolean> {
   if (isCmd) {
     const body = [
       `${color.dim('❖')} ${color.bold('Hora')}      ${themes.success(time)}`,
-      `${color.dim('❖')} ${color.bold('Usuario')}   ${color.cyan(cortar(ctx.pushName, Math.max(4, ancho - 26 - formatJid(ctx.sender).length)))} ${color.dim('(' + formatJid(ctx.sender) + ')')}`,
+      `${color.dim('❖')} ${color.bold('Usuario')}   ${color.cyan(cortar(ctx.pushName, Math.max(4, ancho - 26 - formatJid(ctx.sender).length)))} ${color.dim(`(${formatJid(ctx.sender)})`)}`,
       `${color.dim('❖')} ${color.bold('Chat')}      ${ctx.isGroup ? color.magenta('Grupo') : themes.warning('Privado')} ${color.dim(formatJid(ctx.jid))}`,
       `${color.dim('❖')} ${color.bold('Texto')}     ${cortar(ctx.text, Math.max(8, Math.min(60, ancho - 22)))}`,
       `${color.dim('❖')} ${color.bold('Tipo')}      ${getTypeColor(type)} ${color.bold(color.magenta(`CMD: ${ctx.command}`))}`,
@@ -76,8 +76,11 @@ export async function loggerMiddleware(ctx: BotContext): Promise<boolean> {
 
     console.log(header)
   } else {
-    console.log(
-      `${color.dim('❖')} ${themes.success(time)} ${color.dim(formatJid(ctx.jid))} ${color.cyan(cortar(ctx.pushName, Math.max(4, ancho - 24 - formatJid(ctx.jid).length)))} ${color.dim('·')} ${getTypeColor(type)}`,
+    // El renglón de cada mensaje que no es comando: stdout.write, sin el
+    // formateo de console.log (ver handler.ts).
+    process.stdout.write(
+      `${color.dim('❖')} ${themes.success(time)} ${color.dim(formatJid(ctx.jid))} ${color.cyan(cortar(ctx.pushName, Math.max(4, ancho - 24 - formatJid(ctx.jid).length)))} ${color.dim('·')} ${getTypeColor(type)}
+`,
     )
   }
 

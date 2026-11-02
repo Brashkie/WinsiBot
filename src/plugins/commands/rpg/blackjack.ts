@@ -1,6 +1,9 @@
 import type { WASocket, WAMessage } from '@whiskeysockets/baileys'
 import type { Command } from '../../../types/index.js'
-import { getUserData, patchUserData } from '@core/events.js'
+import { getUserData } from '@core/events.js'
+import { cambiarSaldos } from '@core/economy.js'
+import { textoDeMotivo } from '@lib/ledger.js'
+import { montoDe } from '@lib/amount.js'
 import { ApuestasAbiertas } from '@lib/openBets.js'
 import { logger } from '@core/logger.js'
 import { safeSend, sendCritical } from '@lib/media_sender.js'
@@ -69,9 +72,10 @@ async function terminar(sock: WASocket, sender: string, h: Mano, quoted?: WAMess
   // Si el jugador se pasó, el crupier no necesita jugar.
   if (valor(h.jugador).total <= 21 && !esBlackjack(h.jugador)) juegaCrupier(h.crupier, h.m)
   const { resultado, pago } = resolver(h.jugador, h.crupier, h.apuesta)
-  const u = getUserData(sender)
-  if (pago > 0) patchUserData(sender, { money: u.money + pago })
   anotar()
+  // Si la Session API no responde, el pago queda anotado y se hace en el
+  // próximo arranque (ver openBets.ts): no se pierde.
+  if (pago > 0) await abiertas.pagar(sender, pago)
 
   const neto = pago - h.apuesta
   // sendCritical: el saldo ya se movió; sin el mensaje el jugador no sabría
@@ -136,7 +140,18 @@ const command: Command = {
           await responder(`> Para doblar necesitas ¥${h.apuesta.toLocaleString()} más (tienes ¥${u.money.toLocaleString()}).`)
           return
         }
-        patchUserData(sender, { money: u.money - h.apuesta })
+        const extra = h.apuesta
+        const r = await cambiarSaldos([{ cuenta: { jid: sender, campo: 'money' }, delta: -extra }])
+        if (!r.ok) {
+          await responder(`> ${textoDeMotivo(r.motivo)}`)
+          return
+        }
+        // En la espera la mano pudo cerrarse (se plantó sola, o con otro
+        // comando): lo cobrado se devuelve.
+        if (mesas.get(sender) !== h) {
+          await abiertas.pagar(sender, extra)
+          return
+        }
         h.apuesta *= 2
         anotar()
         h.jugador.push(h.m.pop()!)
@@ -178,7 +193,8 @@ const command: Command = {
     const crudo = (args[0] ?? '').toLowerCase()
     const apuesta = crudo === 'all' || crudo === 'todo'
       ? Math.min(u.money, MAX_APUESTA)
-      : parseInt(crudo)
+      // montoDe y no parseInt: "1.000" son mil, no 1, y "12abc" no es un monto.
+      : montoDe(crudo)
 
     if (!Number.isFinite(apuesta) || apuesta < MIN_APUESTA) {
       await responder([
@@ -203,7 +219,18 @@ const command: Command = {
       return
     }
 
-    patchUserData(sender, { money: u.money - apuesta })
+    const r = await cambiarSaldos([{ cuenta: { jid: sender, campo: 'money' }, delta: -apuesta }])
+    if (!r.ok) {
+      await responder(`> ${textoDeMotivo(r.motivo)}`)
+      return
+    }
+    // En la espera pudo abrirse otra mano del mismo jugador: esta no se abre
+    // y lo cobrado se devuelve.
+    if (mesas.has(sender)) {
+      await abiertas.pagar(sender, apuesta)
+      await responder(`> Ya tienes una mano abierta.`)
+      return
+    }
     const m = mazo()
     const nueva: Mano = {
       jid, apuesta, m,

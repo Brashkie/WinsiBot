@@ -15,7 +15,7 @@ const command: Command = {
 
     const rawTarget = mentionRaw
       ?? quotedRaw
-      ?? (args[0] ? args[0].replace('@', '') + '@s.whatsapp.net' : null)
+      ?? (args[0] ? `${args[0].replace('@', '')}@s.whatsapp.net` : null)
 
     if (!rawTarget || rawTarget === '@s.whatsapp.net') {
       await sock.sendMessage(jid, {

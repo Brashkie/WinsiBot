@@ -30,7 +30,10 @@ fn mediana<T>(vueltas: u32, mut f: impl FnMut() -> T) -> (f64, T) {
 
 fn main() {
     let args: Vec<String> = std::env::args().collect();
-    let ruta = args.get(1).map(String::as_str).unwrap_or("media/WinsiBot.png");
+    let ruta = args
+        .get(1)
+        .map(String::as_str)
+        .unwrap_or("media/WinsiBot.png");
     let escala: u32 = args.get(2).and_then(|s| s.parse().ok()).unwrap_or(2);
     let bytes = std::fs::read(ruta).expect("no pude leer la imagen");
     let v = 7;
@@ -62,11 +65,18 @@ fn main() {
         b
     });
     let t_lum = (t_lum - t_clon).max(0.0); // sin el clon que hace la medición
-    // …y lo que hace ahora, en uno.
+                                           // …y lo que hace ahora, en uno.
     let (t_para, mut buf) = mediana(v, || resize::para_anime4k(&img, w, h));
     let mut t_pasadas = Vec::new();
     for i in 0..A4K_PASADAS {
-        let (t, b) = mediana(v, || anime4k::pasada(&buf, A4K_FUERZA_COLOR, A4K_FUERZA_GRADIENTE, i + 1 < A4K_PASADAS));
+        let (t, b) = mediana(v, || {
+            anime4k::pasada(
+                &buf,
+                A4K_FUERZA_COLOR,
+                A4K_FUERZA_GRADIENTE,
+                i + 1 < A4K_PASADAS,
+            )
+        });
         t_pasadas.push(t);
         buf = b;
     }
@@ -89,7 +99,10 @@ fn main() {
         "antes de la 1.ª pasada, por etapas (como la 8.17.0): a RGBA {t_rgba:.1} + redimensionar {t_res:.1} + luminancia {t_lum:.1} = {:.1} ms; ahora {t_para:.1} ms",
         t_rgba + t_res + t_lum
     );
-    println!("clonar una imagen de este tamaño: {t_clon:.2} ms · JPEG de salida: {:.0} KB", salida.len() as f64 / 1024.0);
+    println!(
+        "clonar una imagen de este tamaño: {t_clon:.2} ms · JPEG de salida: {:.0} KB",
+        salida.len() as f64 / 1024.0
+    );
     if let Ok(ruta) = std::env::var("GUARDAR") {
         std::fs::write(&ruta, &salida).expect("no pude guardar el JPEG");
         println!("guardado en {ruta}");
@@ -99,7 +112,8 @@ fn main() {
     // hoy, así que mide lo que ganan las fusiones y no la versión entera— contra
     // el de ahora. Tienen que dar el mismo archivo.
     let (t_antes, jpg_antes) = mediana(v, || {
-        let mut b = resize::catmullrom_rgba(&image::load_from_memory(&bytes).unwrap().to_rgba8(), w, h);
+        let mut b =
+            resize::catmullrom_rgba(&image::load_from_memory(&bytes).unwrap().to_rgba8(), w, h);
         for _ in 0..A4K_PASADAS {
             anime4k::luminancia_en_alfa(&mut b);
             b = anime4k::push_color(&b, A4K_FUERZA_COLOR);
@@ -111,6 +125,9 @@ fn main() {
         let (b, _, _) = winsibot_session_api::vision::upscale_rgba(&bytes, escala).unwrap();
         jpeg::codificar_rgba(&b, jpeg::CALIDAD)
     });
-    assert_eq!(jpg_antes, jpg_ahora, "el camino de ahora tiene que dar el mismo JPEG");
+    assert_eq!(
+        jpg_antes, jpg_ahora,
+        "el camino de ahora tiene que dar el mismo JPEG"
+    );
     println!("de punta a punta: por etapas (como la 8.17.0, con los kernels de hoy) {t_antes:.1} ms · ahora {t_ahora:.1} ms (el mismo JPEG, byte a byte)");
 }

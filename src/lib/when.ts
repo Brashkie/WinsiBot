@@ -28,7 +28,7 @@ function compacta(tok: string): number | null {
   for (const [, n, u] of partes) {
     const f = UNIDAD[u!]
     if (!f) return null
-    ms += parseInt(n!) * f
+    ms += parseInt(n!, 10) * f
   }
   return ms
 }
@@ -36,8 +36,8 @@ function compacta(tok: string): number | null {
 function horaMinuto(tok: string): [number, number] | null {
   const m = tok.match(/^(\d{1,2})(?::(\d{2}))?(am|pm)?$/)
   if (!m || (m[2] === undefined && m[3] === undefined)) return null
-  let h = parseInt(m[1]!)
-  const min = m[2] ? parseInt(m[2]) : 0
+  let h = parseInt(m[1]!, 10)
+  const min = m[2] ? parseInt(m[2], 10) : 0
   if (m[3]) {
     if (h < 1 || h > 12) return null
     if (m[3] === 'pm' && h !== 12) h += 12
@@ -68,7 +68,7 @@ export function parsearCuando(texto: string, ahora: Date = new Date()): Cuando |
 
   // Duración en palabras: "10 minutos", "2 horas"
   if (low[i] && /^\d+$/.test(low[i]!) && low[i + 1] && UNIDAD[low[i + 1]!]) {
-    return armar(t0 + parseInt(low[i]!) * UNIDAD[low[i + 1]!]!, toks, i + 2)
+    return armar(t0 + parseInt(low[i]!, 10) * UNIDAD[low[i + 1]!]!, toks, i + 2)
   }
 
   // Hora del día: [hoy|mañana] [a las] HH:MM

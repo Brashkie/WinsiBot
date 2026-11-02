@@ -486,7 +486,7 @@ export class QuizManager {
       '',
     ]
     const letters = ['1️⃣', '2️⃣', '3️⃣', '4️⃣']
-    q.options.forEach((opt, i) => lines.push(`${letters[i]} ${opt}`))
+    for (const [i, opt] of q.options.entries()) lines.push(`${letters[i]} ${opt}`)
     lines.push('', `_Responde con 1, 2, 3 o 4_`)
     return lines.join('\n')
   }
@@ -498,7 +498,7 @@ export class QuizManager {
     over: boolean
   } {
     const q    = session.questions[session.current]!
-    const idx  = parseInt(input.trim()) - 1
+    const idx  = parseInt(input.trim(), 10) - 1
     const correct = idx === q.answer
 
     const pts = correct ? DIFF_SCORE[q.difficulty] - session.hintsUsed * 3 : 0

@@ -47,7 +47,7 @@ export function cortar(s: string, max: number): string {
         out = out.slice(0, out.length - ult.length)
         n -= columnas(ult.codePointAt(0)!)
       }
-      return out + '…'
+      return `${out}…`
     }
     out += c
     n += w

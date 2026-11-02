@@ -2,7 +2,6 @@ import type { Command } from '../../../types/index.js'
 import { config } from '@config'
 import { sendWithMedia } from '@lib/media_sender.js'
 import { commandRegistry } from '../index.js'
-import { join } from 'path'
 import { versionDelBot } from '@lib/version.js'
 
 function formatUptime(seconds: number): string {

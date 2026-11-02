@@ -16,7 +16,7 @@ export async function handleDrawGuessMessage(
   text:      string,
 ): Promise<boolean> {
   const game = DrawGuessManager.getGame(groupJid)
-  if (!game || !game.active) return false
+  if (!game?.active) return false
   if (game.drawer === senderJid) return false
 
   DrawGuessManager.joinGame(game, senderJid, getUserData(senderJid).name || senderJid.split('@')[0]!)
@@ -45,7 +45,7 @@ export async function handleDrawGuessMessage(
       const final = DrawGuessManager.endGame(groupJid)
       const medals = ['🥇', '🥈', '🥉']
       const lines  = ['*🏆 JUEGO TERMINADO — PUNTAJE FINAL*', '']
-      final.forEach((p, i) => lines.push(`${medals[i] ?? `${i + 1}.`} *${p.name}* — ${p.score} pts`))
+      for (const [i, p] of final.entries()) lines.push(`${medals[i] ?? `${i + 1}.`} *${p.name}* — ${p.score} pts`)
       await safeSend(() => sock.sendMessage(groupJid, { text: lines.join('\n') }))
     } else {
       const players   = [...game.players.keys()].filter(p => p !== game.drawer)
@@ -91,7 +91,7 @@ export async function handleQuizMessage(
 
   const eloStr = `(ELO ${delta >= 0 ? '+' : ''}${delta})`
 
-  let response = result.correct
+  const response = result.correct
     ? `✅ *¡Correcto!* +${result.pointsGained} pts ${eloStr}`
     : `❌ *Incorrecto.* La respuesta era: *${q.options[q.answer]}*${result.explanation ? `\n_${result.explanation}_` : ''} ${eloStr}`
 

@@ -26,7 +26,7 @@
 //    kv.del('web_session:abc')
 // ─────────────────────────────────────────────────────────────────────────────
 
-import { mkdirSync } from 'fs'
+import { mkdirSync } from 'node:fs'
 import { Strenor } from 'strenor'
 import { logger } from '../core/logger.js'
 

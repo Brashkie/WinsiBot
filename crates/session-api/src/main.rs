@@ -17,7 +17,7 @@ use axum::{
 use routes::AppState;
 use std::path::Path;
 use std::time::Duration;
-use tower_http::{compression::CompressionLayer, timeout::TimeoutLayer, trace::TraceLayer};
+use tower_http::timeout::TimeoutLayer;
 use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
 
 // Techo global por request — antes no había NINGÚN timeout del lado del
@@ -252,8 +252,16 @@ async fn principal() {
         // Clasificar, observar y la memoria del remitente en UN viaje: lo que el
         // bot pide por cada mensaje de grupo (ver ingest.rs).
         .route("/msg/ingest", post(winsibot_session_api::ingest::ingest))
+        // Lo mismo en lote: los mensajes que llegan en el mismo turno del bot.
+        .route(
+            "/msg/ingest/batch",
+            post(winsibot_session_api::ingest::ingest_lote),
+        )
         // #simular: miles de peleas contra la CPU de #arena, en todos los núcleos (ver arena.rs).
-        .route("/arena/simular", post(winsibot_session_api::arena::simular_handler))
+        .route(
+            "/arena/simular",
+            post(winsibot_session_api::arena::simular_handler),
+        )
         // ─── AI conversations (SQLite) ────────────────────────────────────────
         .route("/ai/learn", post(conversations::ai_learn))
         .route("/ai/context/:sender", get(conversations::ai_context))
@@ -265,9 +273,15 @@ async fn principal() {
         .route("/ai/group-style/:gjid", get(conversations::ai_group_style))
         // "¿Qué me perdí?": lo que se dijo en el grupo, y un resumen sin
         // personalidad (ver conversations.rs y ai_chat.rs).
-        .route("/ai/group/recent/:gjid", get(conversations::ai_group_recent))
+        .route(
+            "/ai/group/recent/:gjid",
+            get(conversations::ai_group_recent),
+        )
         // Quién escribe cuánto en el grupo (#actividad, #fantasmas).
-        .route("/ai/group/activity/:gjid", get(conversations::ai_group_activity))
+        .route(
+            "/ai/group/activity/:gjid",
+            get(conversations::ai_group_activity),
+        )
         .route("/ai/summarize", post(ai_chat::summarize))
         // El teléfono descompuesto: un giro desde UN fragmento, o un título.
         .route("/ai/story", post(ai_chat::story))
@@ -296,6 +310,15 @@ async fn principal() {
         .route("/vision/upscale", post(vision::upscale_handler))
         // ─── Bad MAC per-group tracker ────────────────────────────────────────
         .route("/badmac/report", post(bad_mac::report_bad_mac))
+        // ─── Economía: mover un saldo a otro, en Ada/SPARK (ver ledger.rs) ─────
+        .route(
+            "/economy/move",
+            post(winsibot_session_api::ledger::move_handler),
+        )
+        .route(
+            "/economy/apply",
+            post(winsibot_session_api::ledger::apply_handler),
+        )
         // ─── Antirrobo de grupos: la decisión, en Ada/SPARK (ver group_guard.rs)
         .route(
             "/group/guard/decide",
@@ -357,8 +380,13 @@ async fn principal() {
         .merge(protected)
         .layer(middleware::from_fn_with_state(state.clone(), count_errors))
         .with_state(state)
-        .layer(TraceLayer::new_for_http())
-        .layer(CompressionLayer::new())
+        // Sin compresión ni TraceLayer (9.3). La de gzip nunca comprimía nada:
+        // el API solo escucha en 127.0.0.1 y el bot no manda Accept-Encoding.
+        // TraceLayer armaba un span por pedido para logs de nivel DEBUG que no
+        // se muestran: medido con /msg/ingest —el viaje de cada mensaje de
+        // grupo— contra una API aislada, 7 pares intercalados, la CPU de Rust
+        // por mensaje bajó de ~119 a ~102 µs. Los errores se siguen contando y
+        // registrando en count_errors. Entre los dos, 113 KB menos de binario.
         .layer(TimeoutLayer::new(Duration::from_secs(REQUEST_TIMEOUT_SECS)));
 
     // Solo loopback — el API lo consume Node.js en la misma máquina. Enlazar a

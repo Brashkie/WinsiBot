@@ -17,8 +17,8 @@ import { config } from '@config'
 import { color, themes } from 'ansimax'
 import pino from 'pino'
 import { qrPng } from '@lib/qr.js'
-import path from 'path'
-import fs from 'fs'
+import path from 'node:path'
+import fs from 'node:fs'
 import { rustRequest } from '@lib/rustHttp.js'
 
 // ─── Config ────────────────────────────────────────────────────────────────────
@@ -495,7 +495,7 @@ export async function startSubBot(
         lastMessageAt: prev?.lastMessageAt ?? 0,
       })
 
-      console.log(`  ${themes.success('◈')} ${color.bold('Sub-bot')}  ${color.dim('+' + realPhone)}  ${themes.success('conectado')}`)
+      console.log(`  ${themes.success('◈')} ${color.bold('Sub-bot')}  ${color.dim(`+${realPhone}`)}  ${themes.success('conectado')}`)
       await rustSetState(sessionId, 'Connected').catch(() => {})
       notifySubBotStatus(phone, 'connected')
 

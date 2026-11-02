@@ -63,8 +63,8 @@ const command: Command = {
 
     // ── !avatar equipar <N> ───────────────────────────────────────────────────
     if (sub === 'equipar' || sub === 'equip' || sub === 'usar') {
-      const idx = parseInt(args[1] ?? '') - 1
-      if (isNaN(idx)) {
+      const idx = parseInt(args[1] ?? '', 10) - 1
+      if (Number.isNaN(idx)) {
         await sock.sendMessage(jid, {
           text: `_Uso: !avatar equipar <número>\nEjemplo: !avatar equipar 2_`,
         }, { quoted: msg })

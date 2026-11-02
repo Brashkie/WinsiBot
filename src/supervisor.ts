@@ -1,7 +1,7 @@
 import './lib/env.js'
 import { config } from '@config'
 import { rustRequest } from '@lib/rustHttp.js'
-import { type ChildProcess, spawn } from 'child_process'
+import { type ChildProcess, spawn } from 'node:child_process'
 
 // ─────────────────────────────────────────────────────────────────────────────
 //  supervisor.ts — capa liviana por encima del bot para que sobreviva meses

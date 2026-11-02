@@ -42,7 +42,7 @@ const command: Command = {
 
     // ─── !recordar borrar <n> ──────────────────────────────────────────────
     if (sub === 'borrar' || sub === 'quitar' || sub === 'del') {
-      const n = parseInt(args[1] ?? '')
+      const n = parseInt(args[1] ?? '', 10)
       const r = Number.isFinite(n) ? borrarRecordatorio(sender, n) : null
       await responder(r
         ? `🗑️ Borrado: *${r.text}*`

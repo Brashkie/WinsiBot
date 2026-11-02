@@ -12,13 +12,13 @@ export async function requireAuth(c: Context, next: Next) {
   const session = getSession(token)
   if (!session) return c.json({ error: 'No autenticado' }, 401)
   c.set(SESSION_KEY, session)
-  await next()
+  return next()
 }
 
 export async function requireOwner(c: Context, next: Next) {
   const session = c.get(SESSION_KEY) as Session
   if (session.role !== 'owner') return c.json({ error: 'Solo el owner puede acceder' }, 403)
-  await next()
+  return next()
 }
 
 export function getSessionFrom(c: Context): Session {

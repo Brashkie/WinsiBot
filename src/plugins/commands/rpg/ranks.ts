@@ -1,5 +1,5 @@
-import type { Command } from '../../../types/index.js'
-import { getUserData, expForLevel } from '@core/events.js'
+
+import { getUserData, } from '@core/events.js'
 
 const RANKS: [number, string, string][] = [
   [0,   'Novato',          '·'],

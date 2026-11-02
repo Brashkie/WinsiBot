@@ -1,5 +1,6 @@
 import type { Command } from '../../../types/index.js'
 import { getUserData, checkLevelUp, fmtCooldown } from '@core/events.js'
+import { acreditar } from '@core/economy.js'
 import { safeSend, sendCritical } from '@lib/media_sender.js'
 import { enData, leerJson, guardarJson, esObjeto } from '@lib/jsonFile.js'
 import { saludDe, herir, curar, MIN_PELEAR, MAX } from '@lib/health.js'
@@ -72,7 +73,8 @@ const command: Command = {
 
   async execute({ sock, jid, msg, sender, pushName, args, prefix, lang }) {
     const responder = (text: string) => safeSend(() => sock.sendMessage(jid, { text }, { quoted: msg }))
-    const e = estado[jid] ??= nuevaTemporada(jid, 1)
+    estado[jid] ??= nuevaTemporada(jid, 1)
+    const e = estado[jid]
     const mapa = mapaDe(e.semilla)
     const sub = (args[0] ?? '').toLowerCase()
     const dir = DIRECCION[sub]
@@ -124,15 +126,16 @@ const command: Command = {
     switch (ev.tipo) {
       case 'tesoro':
       case 'secreta':
-        u.money += ev.dinero
+        // Las ganancias, por Aplicar; si no se pueden ahora, quedan anotadas
+        // (ver core/economy.ts). Las heridas y curas siguen en `u`.
+        void acreditar(sender, { money: ev.dinero })
         linea = tx(lang, T[ev.tipo], { d: ev.dinero.toLocaleString('de-DE') })
         break
       case 'trampa':
         linea = tx(lang, T.trampa, { h: ev.danio, r: herir(u, ev.danio, ahora) })
         break
       case 'monstruo':
-        u.money += ev.dinero
-        u.exp += ev.exp
+        void acreditar(sender, { money: ev.dinero, exp: ev.exp })
         linea = tx(lang, T.monstruo, { h: ev.danio, r: herir(u, ev.danio, ahora), d: ev.dinero.toLocaleString('de-DE'), x: ev.exp })
         break
       case 'fuente': {
@@ -144,10 +147,7 @@ const command: Command = {
       case 'reliquia': {
         const reparto = repartoReliquia(e.pasos, sender)
         for (const [j, d] of Object.entries(reparto)) {
-          const v = getUserData(j)
-          v.money += d
-          v.exp += Math.round(d * 0.1)
-          checkLevelUp(j)
+          void acreditar(j, { money: d, exp: Math.round(d * 0.1) }).then(() => checkLevelUp(j))
         }
         const pasos = e.pasos
         estado[jid] = nuevaTemporada(jid, e.temporada + 1)

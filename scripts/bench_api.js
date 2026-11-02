@@ -9,11 +9,11 @@
 //
 //   node scripts/bench_api.js [N]        (por defecto 3000)
 
-import { spawn, execSync } from 'child_process'
-import { mkdtempSync } from 'fs'
-import { tmpdir } from 'os'
-import { join } from 'path'
-import { pathToFileURL } from 'url'
+import { spawn, execSync } from 'node:child_process'
+import { mkdtempSync } from 'node:fs'
+import { tmpdir } from 'node:os'
+import { join } from 'node:path'
+import { pathToFileURL } from 'node:url'
 
 const N = Number(process.argv[2] ?? 3000)
 const ROOT = process.cwd()
@@ -47,12 +47,12 @@ function cpuRust() {
 
 const textos = ['hola bot como estas', 'jajaja que buena', '#menu', 'alguien juega free fire hoy?', 'eres un idiota', 'mira https://x.y', 'buenas noches a todos', 'te quiero mucho bot']
 const casos = [
-  ['/nlp/fast', (i) => ['POST', '/nlp/fast', { text: textos[i % 8] + ' ' + i }]],
+  ['/nlp/fast', (i) => ['POST', '/nlp/fast', { text: `${textos[i % 8]} ${i}` }]],
   ['/rate/check', (i) => ['POST', '/rate/check', { sender: `${i % 500}@s.whatsapp.net` }]],
-  ['/ai/observe', (i) => ['POST', '/ai/observe', { sender: `${i % 500}@s.whatsapp.net`, gjid: `${i % 40}@g.us`, text: textos[i % 8] + ' ' + i }]],
+  ['/ai/observe', (i) => ['POST', '/ai/observe', { sender: `${i % 500}@s.whatsapp.net`, gjid: `${i % 40}@g.us`, text: `${textos[i % 8]} ${i}` }]],
   ['/ai/memory/:jid/update', (i) => ['POST', `/ai/memory/${encodeURIComponent(`${i % 500}@s.whatsapp.net`)}/update`, { text: textos[i % 8], intent: 'neutral', is_cmd: false }]],
   // Lo que el bot hace por mensaje de grupo desde la 8.18.0: las tres de arriba en un viaje.
-  ['/msg/ingest', (i) => ['POST', '/msg/ingest', { sender: `${i % 500}@s.whatsapp.net`, gjid: `${i % 40}@g.us`, text: textos[i % 8] + ' ' + i, is_cmd: false, observar: true }]],
+  ['/msg/ingest', (i) => ['POST', '/msg/ingest', { sender: `${i % 500}@s.whatsapp.net`, gjid: `${i % 40}@g.us`, text: `${textos[i % 8]} ${i}`, is_cmd: false, observar: true }]],
   ['/antiban/permit', (i) => ['POST', '/antiban/permit', { session: 'bench', jid: `${i % 40}@g.us` }]],
   ['/watchdog/ping', () => ['POST', '/watchdog/ping', {}]],
 ]

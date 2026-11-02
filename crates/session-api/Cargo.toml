@@ -17,8 +17,9 @@ axum = "0.7"
 tokio = { version = "1", features = ["full"] }
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
-tower = "0.4"
-tower-http = { version = "0.5", features = ["trace", "compression-gzip", "timeout"] }
+# Solo el timeout: la compresión y el trazado por pedido se fueron en la 9.3
+# (ver la nota en main.rs).
+tower-http = { version = "0.5", features = ["timeout"] }
 tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 uuid = { version = "1", features = ["v4"] }

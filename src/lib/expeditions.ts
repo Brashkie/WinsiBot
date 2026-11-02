@@ -6,6 +6,7 @@ import {
   NIVELES, VIDA_MAX, generar, entrar, poderDe, cobrar, diaDe, OBJETO,
   type Mazmorra, type Sala,
 } from '@lib/dungeon.js'
+import { acreditar } from '@core/economy.js'
 
 // Las expediciones a la mazmorra del día (ver dungeon.ts): una por grupo y
 // por día, guardadas en data/dungeon.json para que un reinicio no se lleve
@@ -33,7 +34,7 @@ export interface Expedicion {
   fin:           Fin | null
 }
 
-let expediciones: Record<string, Expedicion> = leerJson(ARCHIVO, {}, esObjeto)
+const expediciones: Record<string, Expedicion> = leerJson(ARCHIVO, {}, esObjeto)
 let mapa: Mazmorra | null = null
 
 const guardar = () => guardarJson(ARCHIVO, expediciones)
@@ -52,10 +53,10 @@ function pagar(e: Expedicion, como: Fin): Cobro {
   e.fin = como
   const porCabeza = cobrar(e.botin, e.participantes.length, como)
   const exp = Math.round(porCabeza * 0.1)
+  // Sin esperar, como en el raid: el resultado ya está decidido. Cada uno
+  // cobra por Aplicar y, si no se puede ahora, queda anotado.
   for (const j of e.participantes) {
-    const u = getUserData(j)
-    patchUserData(j, { money: u.money + porCabeza, exp: u.exp + exp })
-    checkLevelUp(j)
+    void acreditar(j, { money: porCabeza, exp }).then(() => checkLevelUp(j))
   }
   guardar()
   return { porCabeza, exp, como, participantes: e.participantes }

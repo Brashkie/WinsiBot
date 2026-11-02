@@ -1,6 +1,8 @@
 import type { Command } from '../../../types/index.js'
 import type { WASocket } from '@whiskeysockets/baileys'
-import { getUserData, patchUserData } from '@core/events.js'
+import { getUserData } from '@core/events.js'
+import { moverSaldo } from '@core/economy.js'
+import { textoDeMotivo } from '@lib/ledger.js'
 import { sendCritical } from '@lib/media_sender.js'
 import { montoDe } from '@lib/amount.js'
 
@@ -45,16 +47,18 @@ export async function handleTransferConfirm(
     return true
   }
 
-  const from = getUserData(sender)
-  const to   = getUserData(p.to)
-
-  if ((from[p.item] as number) < p.amount) {
-    await sock.sendMessage(jid, { text: '> Ya no tienes suficiente.' })
+  // La cuenta la decide Ada/SPARK en la Session API (ver lib/ledger.ts).
+  const r = await moverSaldo({
+    origen:  { jid: sender, campo: p.item },
+    destino: { jid: p.to,   campo: p.item },
+    monto:   p.amount,
+  })
+  if (!r.ok) {
+    await sock.sendMessage(jid, {
+      text: r.motivo === 'sin_saldo' ? '> Ya no tienes suficiente.' : `> ${textoDeMotivo(r.motivo)}`,
+    })
     return true
   }
-
-  patchUserData(sender, { [p.item]: (from[p.item] as number) - p.amount } as any)
-  patchUserData(p.to,   { [p.item]: (to[p.item]   as number) + p.amount } as any)
 
   // sendCritical: los recursos ya se movieron entre las dos cuentas.
   await sendCritical(sock, jid, {

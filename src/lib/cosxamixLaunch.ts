@@ -14,8 +14,8 @@
 // cascada (GPT, Gemini, Claude, las plantillas): no hay que hacer nada para
 // eso.
 
-import { existsSync } from 'fs'
-import { join } from 'path'
+import { existsSync } from 'node:fs'
+import { join } from 'node:path'
 
 export const PUERTO_COSXAMIX = '11435'
 /** Lo que se usa si el .env no dice nada: desde la 9.0.0, Cosxamix con el 3B. */

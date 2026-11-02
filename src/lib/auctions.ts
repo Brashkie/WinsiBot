@@ -1,6 +1,7 @@
 import type { WASocket } from '@whiskeysockets/baileys'
 import { logger } from '@core/logger.js'
 import { getUserData, patchUserData, type OwnedDragon, type ItemInventory } from '@core/events.js'
+import { acreditar, cambiarSaldos } from '@core/economy.js'
 import { sendCritical } from '@lib/media_sender.js'
 import { pujaMinima, alargar, neto } from '@lib/auctionRules.js'
 import { enData, leerJson, guardarJson, esObjeto } from '@lib/jsonFile.js'
@@ -32,14 +33,17 @@ export interface Subasta {
   creada:   number
 }
 
-let subastas: Record<string, Subasta> = leerJson(ARCHIVO, {}, esObjeto)
+const subastas: Record<string, Subasta> = leerJson(ARCHIVO, {}, esObjeto)
 const despertador = new Despertador(cerrarVencidas)
 let sockRef: WASocket | null = null
 
 const guardar = () => guardarJson(ARCHIVO, subastas)
 
 function armar(): void {
-  if (!sockRef) return despertador.desarmar()
+  if (!sockRef) {
+    despertador.desarmar()
+    return
+  }
   let proxima = Infinity
   for (const s of Object.values(subastas)) if (s.termina < proxima) proxima = s.termina
   despertador.armar(proxima)
@@ -68,7 +72,8 @@ async function cerrar(s: Subasta): Promise<void> {
   if (s.puja) {
     entregar(s.puja.jid, s.objeto)
     const recibe = neto(s.puja.monto)
-    patchUserData(s.vendedor, { money: getUserData(s.vendedor).money + recibe })
+    // Por Aplicar; si no se puede ahora, queda anotado (ver core/economy.ts).
+    await acreditar(s.vendedor, { money: recibe })
     mentions.push(s.puja.jid)
     texto = [
       `╭─「 🔨 ¡VENDIDO! 」`,
@@ -94,7 +99,7 @@ async function cerrar(s: Subasta): Promise<void> {
 async function cerrarVencidas(): Promise<void> {
   const ahora = Date.now()
   for (const s of Object.values(subastas)) {
-    if (s.termina <= ahora) await cerrar(s)
+    if (s.termina <= ahora) await enCola(s.gjid, () => cerrar(s))
   }
   armar()
 }
@@ -121,9 +126,26 @@ export function publicar(gjid: string, vendedor: string, objeto: Objeto, base: n
 
 export type ResultadoPuja =
   | { ok: true; subasta: Subasta; superado: string | null; alargo: boolean }
-  | { ok: false; motivo: 'sin-subasta' | 'es-vendedor' | 'baja' | 'sin-saldo' | 'ya-gana'; minima?: number }
+  | { ok: false; motivo: 'sin-subasta' | 'es-vendedor' | 'baja' | 'sin-saldo' | 'ya-gana' | 'no-se-pudo'; minima?: number }
 
-export function pujar(gjid: string, jid: string, monto: number): ResultadoPuja {
+// Lo que toca la plata de una subasta —las pujas y el cierre—, de a uno por
+// grupo. Retener la nueva puja y devolver la anterior es un cobro con espera
+// (Aplicar, en la Session API): si dos pujas entraran a la vez, o el cierre
+// en medio de una, se podría devolver o pagar una puja cuyo cobro todavía no
+// se confirmó, y eso crearía monedas.
+const colas = new Map<string, Promise<unknown>>()
+
+function enCola<T>(gjid: string, fn: () => Promise<T>): Promise<T> {
+  const turno = (colas.get(gjid) ?? Promise.resolve()).then(fn)
+  colas.set(gjid, turno.catch(() => {}))
+  return turno
+}
+
+export function pujar(gjid: string, jid: string, monto: number): Promise<ResultadoPuja> {
+  return enCola(gjid, () => pujarAhora(gjid, jid, monto))
+}
+
+async function pujarAhora(gjid: string, jid: string, monto: number): Promise<ResultadoPuja> {
   const s = subastas[gjid]
   if (!s || Date.now() >= s.termina) return { ok: false, motivo: 'sin-subasta' }
   if (s.vendedor === jid) return { ok: false, motivo: 'es-vendedor' }
@@ -133,10 +155,16 @@ export function pujar(gjid: string, jid: string, monto: number): ResultadoPuja {
   const u = getUserData(jid)
   if (u.money < monto) return { ok: false, motivo: 'sin-saldo', minima }
 
-  // Se retiene la nueva y se devuelve la anterior.
-  patchUserData(jid, { money: u.money - monto })
+  // Se retiene la nueva y se devuelve la anterior en UNA operación, todo o
+  // nada (Ada/SPARK, ver core/economy.ts).
   const superado = s.puja?.jid ?? null
-  if (s.puja) patchUserData(s.puja.jid, { money: getUserData(s.puja.jid).money + s.puja.monto })
+  const r = await cambiarSaldos([
+    { cuenta: { jid, campo: 'money' }, delta: -monto },
+    ...(s.puja ? [{ cuenta: { jid: s.puja.jid, campo: 'money' as const }, delta: s.puja.monto }] : []),
+  ])
+  if (!r.ok) return { ok: false, motivo: r.motivo === 'sin_saldo' ? 'sin-saldo' : 'no-se-pudo', minima }
+  // El cierre pasa por la misma cola: mientras esto corre, la subasta no se
+  // puede cerrar, así que no hay nada que deshacer.
 
   s.puja = { jid, monto }
   s.pujas++

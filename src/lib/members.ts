@@ -37,7 +37,7 @@ export async function miembros(sock: WASocket, gjid: string): Promise<Miembro[]>
 /** El bot en este grupo, por cualquiera de sus formas. */
 export function esElBot(sock: WASocket, m: Miembro): boolean {
   const yo = sock.user?.id ?? ''
-  const num = yo.split(':')[0] + '@s.whatsapp.net'
+  const num = `${yo.split(':')[0]}@s.whatsapp.net`
   const lid = (sock.user as any)?.lid as string | undefined
   return m.ids.some(i => i === yo || i === num || (lid && i.split(':')[0] === lid.split(':')[0]))
 }

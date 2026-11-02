@@ -7,7 +7,7 @@
 // huellas de abajo son de QR que la librería confirmó: si algo cambia un solo
 // módulo, este test lo dice.
 import { describe, expect, it } from 'vitest'
-import { createHash } from 'crypto'
+import { createHash } from 'node:crypto'
 import sharp from 'sharp'
 import { qr, qrPng, qrTerminal } from '../src/lib/qr.ts'
 
@@ -19,7 +19,7 @@ describe('qr', () => {
       ['https://github.com/Brashkie/WinsiBot', 3, 1, 'ee74a89b2b60cc961c34999abefeb11f'],
       ['ñandú 🐉 dragón', 2, 2, 'de9a5dc32ed61ed3e91cd113a0865a7c'],
       // Del largo del QR de Baileys: versión 11, varios bloques, largo de 16 bits.
-      ['2@' + 'aB3+/'.repeat(48) + ',xyz=', 11, 3, '0cae7da7e72838dbf22039e843c7f907'],
+      [`2@${'aB3+/'.repeat(48)},xyz=`, 11, 3, '0cae7da7e72838dbf22039e843c7f907'],
       ['x'.repeat(600), 19, 0, 'da2a418f0ae2dc0582ce8fc6ab9f8996'],
     ]
     for (const [texto, version, mascara, h] of casos) {

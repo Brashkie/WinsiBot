@@ -1,6 +1,9 @@
 import type { Command } from '../../../types/index.js'
 import { getUserData } from '@core/events/index.js'
 import { safeSend } from '@lib/media_sender.js'
+import { cambiarSaldos } from '@core/economy.js'
+import { textoDeMotivo } from '@lib/ledger.js'
+import { montoDe } from '@lib/amount.js'
 
 const command: Command = {
   name:        'addexp',
@@ -14,10 +17,11 @@ const command: Command = {
     const ctx_info = msg.message?.extendedTextMessage?.contextInfo
     const target   = ctx_info?.mentionedJid?.[0]
       ?? ctx_info?.participant
-      ?? (args[0]?.startsWith('@') ? args[0].replace('@', '') + '@s.whatsapp.net' : null)
+      ?? (args[0]?.startsWith('@') ? `${args[0].replace('@', '')}@s.whatsapp.net` : null)
 
-    const amountArg = args.find(a => /^\d+$/.test(a))
-    const amount    = amountArg ? parseInt(amountArg) : 0
+    // montoDe: "1.000" son mil, y "12abc" no es un monto.
+    const amountArg = args.find(a => !a.startsWith('@') && !Number.isNaN(montoDe(a)))
+    const amount    = amountArg ? montoDe(amountArg) : 0
 
     if (!target || amount < 1) {
       await safeSend(() => sock.sendMessage(jid, {
@@ -37,14 +41,20 @@ const command: Command = {
       return
     }
 
-    user.exp = isAdd ? user.exp + amount : user.exp - amount
+    // También el owner pasa por la operación de Ada/SPARK: la XP no queda
+    // negativa ni por encima del último entero exacto.
+    const r = await cambiarSaldos([{ cuenta: { jid: target, campo: 'exp' }, delta: isAdd ? amount : -amount }])
+    if (!r.ok) {
+      await safeSend(() => sock.sendMessage(jid, { text: `§ ${textoDeMotivo(r.motivo)}` }, { quoted: msg }))
+      return
+    }
 
     await safeSend(() => sock.sendMessage(jid, {
       text: [
         isAdd ? `✔ *+${amount} EXP añadidos*` : `✔ *-${amount} EXP quitados*`,
         ``,
         `§ Usuario: @${number}`,
-        `§ Total:   ${user.exp} EXP`,
+        `§ Total:   ${r.saldos[0]} EXP`,
       ].join('\n'),
       mentions: [target],
     }, { quoted: msg }))

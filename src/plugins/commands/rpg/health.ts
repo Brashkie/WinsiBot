@@ -1,5 +1,7 @@
 import type { Command } from '../../../types/index.js'
 import { getUserData, fmtCooldown } from '@core/events.js'
+import { cobrarReservando } from '@core/economy.js'
+import { textoDeMotivo } from '@lib/ledger.js'
 import { safeSend, sendCritical } from '@lib/media_sender.js'
 import { saludDe, curar, esperaHasta, costoHospital, MAX, MIN_PELEAR, POCION } from '@lib/health.js'
 import { barra } from '@lib/raid.js'
@@ -53,10 +55,24 @@ const command: Command = {
         ].join('\n'))
         return
       }
-      u.money -= costo
-      curar(u, MAX)
+      // La cura se aplica antes de cobrar y se deshace si el cobro falla: con
+      // la espera, dos #hospital a la vez habrían cobrado dos veces.
+      const cobro = await cobrarReservando([{ cuenta: { jid: sender, campo: 'money' }, delta: -costo }], () => {
+        const previa = { health: u.health, saludAt: u.saludAt }
+        curar(u, MAX)
+        return () => {
+          const yo = getUserData(sender)
+          yo.health = previa.health
+          if (previa.saludAt === undefined) delete yo.saludAt
+          else yo.saludAt = previa.saludAt
+        }
+      })
+      if (!cobro.ok) {
+        await responder(`> ${textoDeMotivo(cobro.motivo)}`)
+        return
+      }
       await sendCritical(sock, jid, {
-        text: `🏥 Te atendieron en el hospital: ❤ ${antes} → *${MAX}*/${MAX}.\n> -¥${costo.toLocaleString()} · te quedan ¥${u.money.toLocaleString()}`,
+        text: `🏥 Te atendieron en el hospital: ❤ ${antes} → *${MAX}*/${MAX}.\n> -¥${costo.toLocaleString()} · te quedan ¥${cobro.saldos[0]!.toLocaleString()}`,
       }, { quoted: msg })
       return
     }

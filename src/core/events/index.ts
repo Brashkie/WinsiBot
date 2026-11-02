@@ -207,6 +207,7 @@ export interface GroupConfig {
   // ── Antirrobo (#antirrobo, ver events/antitheft.ts) ────────────────────────
   antirrobo: boolean
   protegidos: string[] // además del creador y los dueños del bot, con todos sus alias
+  canal?: { nombre: string; descripcion: string } // un canal protegido (#canal): cómo tiene que estar
   // ── Expiración ─────────────────────────────────────────────────────────────
   expired: number // timestamp (0 = sin expiración)
   // ── Idioma (#idioma grupo): el de quien no eligió y no se deduce por su número
@@ -501,7 +502,7 @@ export function leaveClan(jid: string): boolean {
 // HELPERS COOLDOWN
 // ─────────────────────────────────────────────────────────────────────────────
 
-type CooldownKey = keyof Cooldowns
+export type CooldownKey = keyof Cooldowns
 
 export function isOnCooldown(jid: string, key: CooldownKey, ms: number): boolean {
   const u = getUserData(jid)

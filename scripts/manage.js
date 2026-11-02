@@ -16,11 +16,11 @@
 // Comandos: status diagnose repair reset-signal reset-qr backup restore logs
 
 import './env.js'
-import { createHash } from 'crypto'
-import { spawn } from 'child_process'
-import { cpSync, existsSync, mkdirSync, readFileSync, readdirSync, rmSync, statSync, unlinkSync, writeFileSync } from 'fs'
-import { join } from 'path'
-import { createInterface } from 'readline/promises'
+import { createHash } from 'node:crypto'
+import { spawn } from 'node:child_process'
+import { cpSync, existsSync, mkdirSync, readFileSync, readdirSync, rmSync, statSync, unlinkSync, writeFileSync } from 'node:fs'
+import { join } from 'node:path'
+import { createInterface } from 'node:readline/promises'
 import { decode as cborDecode } from 'cbor-x'
 import { color } from 'ansimax'
 

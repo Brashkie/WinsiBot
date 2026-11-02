@@ -1,4 +1,4 @@
-import { EventEmitter } from 'events'
+import { EventEmitter } from 'node:events'
 
 // ─────────────────────────────────────────────────────────────────────────────
 //  WinsiBot — GENERIC QUEUE
@@ -53,7 +53,7 @@ export class Queue<T = unknown> extends EventEmitter {
 
   /** Rechaza y descarta todas las tareas pendientes (las activas terminan). */
   clear(): void {
-    this._pending.forEach(t => t.reject(new Error('Queue cleared')))
+    for (const t of this._pending) t.reject(new Error('Queue cleared'))
     this._pending = []
   }
 

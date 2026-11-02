@@ -10,8 +10,8 @@
 // mazmorra, apuestas abiertas) y otros dos escribían sin protección
 // (cumpleaños y portafolio).
 
-import { readFileSync, writeFileSync, mkdirSync, renameSync } from 'fs'
-import { dirname, join } from 'path'
+import { readFileSync, writeFileSync, mkdirSync, renameSync } from 'node:fs'
+import { dirname, join } from 'node:path'
 import { logger } from '@core/logger.js'
 
 /** La ruta de un archivo de data/. */

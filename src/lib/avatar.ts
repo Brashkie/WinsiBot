@@ -121,7 +121,7 @@ export class Avatar {
   private parts: AvatarRecord
 
   constructor(parts?: Partial<AvatarRecord>) {
-    if (parts && parts.face) {
+    if (parts?.face) {
       this.parts = {
         face:       parts.face!,
         eyes:       parts.eyes!,

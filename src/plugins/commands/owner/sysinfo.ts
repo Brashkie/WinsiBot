@@ -1,7 +1,6 @@
 import type { Command } from '../../../types/index.js'
-import { execSync }   from 'child_process'
-import os            from 'os'
-import { join }      from 'path'
+import { execSync }   from 'node:child_process'
+import os            from 'node:os'
 import { versionDelBot } from '@lib/version.js'
 
 // ─────────────────────────────────────────────────────────────────────────────

@@ -14,7 +14,11 @@ use cluster::{Lote, Motor, Opciones};
 use common::Carpeta;
 
 fn sin_vaciar() -> Opciones {
-    Opciones { memtable_bytes: usize::MAX, compactar_desde: 99, ..Opciones::default() }
+    Opciones {
+        memtable_bytes: usize::MAX,
+        compactar_desde: 99,
+        ..Opciones::default()
+    }
 }
 
 /// Morir sin cerrar: con Durabilidad::Proceso cada lote ya está en el SO.
@@ -23,12 +27,16 @@ fn morir_sin_cerrar_no_pierde_nada() {
     let c = Carpeta::nueva("morir");
     let mut m = Motor::abrir(&c.0, sin_vaciar()).unwrap();
     for i in 0..1000u32 {
-        m.poner(format!("k{i}").as_bytes(), format!("v{i}").as_bytes()).unwrap();
+        m.poner(format!("k{i}").as_bytes(), format!("v{i}").as_bytes())
+            .unwrap();
     }
     std::mem::forget(m); // ni Drop: como un kill
     let m = Motor::abrir(&c.0, sin_vaciar()).unwrap();
     for i in 0..1000u32 {
-        assert_eq!(m.leer(format!("k{i}").as_bytes()).unwrap(), Some(format!("v{i}").into_bytes()));
+        assert_eq!(
+            m.leer(format!("k{i}").as_bytes()).unwrap(),
+            Some(format!("v{i}").into_bytes())
+        );
     }
 }
 
@@ -45,7 +53,9 @@ fn wal_cortado_en_cada_byte() {
             m.poner(format!("k{i}").as_bytes(), b"ok").unwrap();
         }
         let mut l = Lote::new();
-        l.poner(b"lote-a", b"1").poner(b"lote-b", b"2").borrar(b"k0");
+        l.poner(b"lote-a", b"1")
+            .poner(b"lote-b", b"2")
+            .borrar(b"k0");
         m.escribir(&l).unwrap();
     }
     let wal = base.archivos("wal-").pop().unwrap();
@@ -59,14 +69,26 @@ fn wal_cortado_en_cada_byte() {
         fs::write(c.0.join(wal.file_name().unwrap()), &entero[..corte]).unwrap();
 
         let mut m = Motor::abrir(&c.0, sin_vaciar()).unwrap();
-        assert_eq!(m.leer(b"k4").unwrap(), Some(b"ok".to_vec()), "corte en {corte}");
-        assert_eq!(m.leer(b"k0").unwrap(), Some(b"ok".to_vec()), "el borrado del lote cortado no se aplica");
+        assert_eq!(
+            m.leer(b"k4").unwrap(),
+            Some(b"ok".to_vec()),
+            "corte en {corte}"
+        );
+        assert_eq!(
+            m.leer(b"k0").unwrap(),
+            Some(b"ok".to_vec()),
+            "el borrado del lote cortado no se aplica"
+        );
         assert_eq!(m.leer(b"lote-a").unwrap(), None, "ni medio lote");
         m.poner(b"despues", b"si").unwrap();
         drop(m);
 
         let m = Motor::abrir(&c.0, sin_vaciar()).unwrap();
-        assert_eq!(m.leer(b"despues").unwrap(), Some(b"si".to_vec()), "corte en {corte}: lo de después quedó detrás de basura");
+        assert_eq!(
+            m.leer(b"despues").unwrap(),
+            Some(b"si".to_vec()),
+            "corte en {corte}: lo de después quedó detrás de basura"
+        );
     }
 }
 
@@ -88,7 +110,11 @@ fn wal_con_un_byte_corrupto() {
 
     let m = Motor::abrir(&c.0, sin_vaciar()).unwrap();
     assert_eq!(m.leer(b"k000").unwrap(), Some(b"valor".to_vec()));
-    assert_eq!(m.leer(b"k099").unwrap(), None, "después de la corrupción no se confía en nada");
+    assert_eq!(
+        m.leer(b"k099").unwrap(),
+        None,
+        "después de la corrupción no se confía en nada"
+    );
 }
 
 /// Corte durante un vaciado: quedó el .tmp de la tabla a medio escribir.
@@ -138,13 +164,20 @@ fn wal_viejo_que_sobro() {
     {
         let mut m = Motor::abrir(&c.0, sin_vaciar()).unwrap();
         m.poner(b"k", b"v1").unwrap();
-        copia = (c.archivos("wal-").pop().unwrap(), fs::read(c.archivos("wal-").pop().unwrap()).unwrap());
+        copia = (
+            c.archivos("wal-").pop().unwrap(),
+            fs::read(c.archivos("wal-").pop().unwrap()).unwrap(),
+        );
         m.vaciar().unwrap();
         m.poner(b"k", b"v2").unwrap();
     }
     fs::write(&copia.0, &copia.1).unwrap(); // el WAL viejo "no llegó a borrarse"
     let m = Motor::abrir(&c.0, sin_vaciar()).unwrap();
-    assert_eq!(m.leer(b"k").unwrap(), Some(b"v2".to_vec()), "el WAL viejo no pisa lo nuevo");
+    assert_eq!(
+        m.leer(b"k").unwrap(),
+        Some(b"v2".to_vec()),
+        "el WAL viejo no pisa lo nuevo"
+    );
     assert!(!copia.0.exists(), "y se borra");
 }
 
@@ -162,7 +195,10 @@ fn compactacion_cortada() {
     }
     let manifest = fs::read(c.0.join("MANIFEST")).unwrap();
     let antes: Vec<_> = c.archivos("sst-");
-    let copias: Vec<_> = antes.iter().map(|p| (p.clone(), fs::read(p).unwrap())).collect();
+    let copias: Vec<_> = antes
+        .iter()
+        .map(|p| (p.clone(), fs::read(p).unwrap()))
+        .collect();
     {
         let mut m = Motor::abrir(&c.0, sin_vaciar()).unwrap();
         m.compactar().unwrap();
@@ -176,7 +212,10 @@ fn compactacion_cortada() {
     let m = Motor::abrir(&c.0, sin_vaciar()).unwrap();
     assert_eq!(m.leer(b"a").unwrap(), Some(b"1".to_vec()));
     assert_eq!(m.leer(b"b").unwrap(), Some(b"2".to_vec()));
-    assert!(!nueva.exists(), "la tabla de la compactación cortada se descarta");
+    assert!(
+        !nueva.exists(),
+        "la tabla de la compactación cortada se descarta"
+    );
 }
 
 /// Un MANIFEST roto NO se toma como "no hay datos": abrir falla.
@@ -188,7 +227,10 @@ fn manifest_roto_es_error() {
         m.poner(b"k", b"v").unwrap();
         m.vaciar().unwrap();
     }
-    let mut f = OpenOptions::new().append(true).open(c.0.join("MANIFEST")).unwrap();
+    let mut f = OpenOptions::new()
+        .append(true)
+        .open(c.0.join("MANIFEST"))
+        .unwrap();
     f.write_all(b"sst 999\n").unwrap();
     drop(f);
     assert!(Motor::abrir(&c.0, sin_vaciar()).is_err());

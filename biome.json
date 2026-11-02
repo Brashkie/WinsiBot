@@ -10,25 +10,28 @@
       "src/**/*.ts",
       "scripts/**/*.js",
       "!src/**/*.d.ts",
-      "!dist/**",
-      "!node_modules/**",
-      "!rust/**",
-      "!web/**",
-      "!data/**",
-      "!sessions/**",
-      "!auth/**"
+      "!dist",
+      "!node_modules",
+      "!rust",
+      "!web",
+      "!data",
+      "!sessions",
+      "!auth"
     ]
   },
   "linter": {
     "enabled": true,
     "rules": {
-      "recommended": true,
+      "preset": "recommended",
       "suspicious": {
         "noExplicitAny": "off",
         "noControlCharactersInRegex": "off"
       },
       "style": {
         "noNonNullAssertion": "off"
+      },
+      "complexity": {
+        "noStaticOnlyClass": "off"
       }
     }
   },

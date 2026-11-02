@@ -146,7 +146,10 @@ fn catmullrom_nativo_con(img: &RgbaImage, w: u32, h: u32, luma: bool) -> Option<
                 // (left + n <= h0, y lo mismo en x); `dst` mide w·h·4 y cada
                 // hilo escribe solo sus filas [y0, y1); `fila` es de este hilo.
                 unsafe {
-                    crate::zig!(winsi_resize_rgba, winsi_resize_rgba_v3, src as *const u8,
+                    crate::zig!(
+                        winsi_resize_rgba,
+                        winsi_resize_rgba_v3,
+                        src as *const u8,
                         w0,
                         dst as *mut u8,
                         w,
@@ -160,7 +163,8 @@ fn catmullrom_nativo_con(img: &RgbaImage, w: u32, h: u32, luma: bool) -> Option<
                         y0,
                         y1,
                         fila.as_mut_ptr(),
-                        u32::from(luma))
+                        u32::from(luma)
+                    )
                 }
             });
         }
@@ -256,9 +260,14 @@ mod tests {
                 image::DynamicImage::ImageLuma16(image::DynamicImage::ImageRgba8(rgba).to_luma16()),
             ];
             for img in casos {
-                let mut referencia = image::imageops::resize(&img.to_rgba8(), w * 2, h * 2, FilterType::CatmullRom);
+                let mut referencia =
+                    image::imageops::resize(&img.to_rgba8(), w * 2, h * 2, FilterType::CatmullRom);
                 crate::anime4k::luminancia_en_alfa(&mut referencia);
-                assert!(para_anime4k(&img, w * 2, h * 2) == referencia, "{w}x{h} {:?}", img.color());
+                assert!(
+                    para_anime4k(&img, w * 2, h * 2) == referencia,
+                    "{w}x{h} {:?}",
+                    img.color()
+                );
             }
         }
     }

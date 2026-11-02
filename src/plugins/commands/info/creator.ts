@@ -2,7 +2,7 @@ import type { Command } from '../../../types/index.js'
 import { config } from '@config'
 import { sendWithMedia } from '@lib/media_sender.js'
 import { formatBytes } from '@lib/utils.js'
-import os from 'os'
+import os from 'node:os'
 
 function formatUptime(seconds: number): string {
   const d = Math.floor(seconds / 86400)

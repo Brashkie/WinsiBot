@@ -27,7 +27,7 @@ const command: Command = {
       }
 
       const category = args.find(a => CATEGORIES.has(a as DrawCategory)) as DrawCategory | undefined
-      const rounds   = Math.min(10, Math.max(1, parseInt(args.find(a => /^\d+$/.test(a)) ?? '3')))
+      const rounds   = Math.min(10, Math.max(1, parseInt(args.find(a => /^\d+$/.test(a)) ?? '3', 10)))
 
       const game = DrawGuessManager.startGame(jid, sender, pushName, rounds, category)
 

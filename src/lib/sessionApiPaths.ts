@@ -4,8 +4,8 @@
 // conecta a WhatsApp, y con la cuenta de producción eso expulsa a la instancia
 // que esté corriendo en otro lado (440).
 
-import { existsSync, mkdirSync, renameSync, statSync } from 'fs'
-import { join } from 'path'
+import { existsSync, mkdirSync, renameSync, statSync } from 'node:fs'
+import { join } from 'node:path'
 import { logger } from '@core/logger.js'
 import { binPath, exeName } from '@lib/platform.js'
 

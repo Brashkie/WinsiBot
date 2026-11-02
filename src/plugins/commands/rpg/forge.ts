@@ -1,5 +1,7 @@
 import type { Command } from '../../../types/index.js'
 import { getUserData, patchUserData } from '@core/events.js'
+import { cobrarReservando } from '@core/economy.js'
+import { textoDeMotivo } from '@lib/ledger.js'
 import { safeSend } from '@lib/media_sender.js'
 import {
   MAX_NIVEL, NIVEL_RIESGO, COSTO_PROTECCION,
@@ -44,16 +46,26 @@ const command: Command = {
       }
 
       const r = intentar(nivel, u.items.spada > 0)
-      patchUserData(sender, {
-        money: u.money - c.dinero,
-        items: {
-          sword:     u.items.sword - c.espadas,
-          sp:        u.items.sp - c.sp,
-          legendary: u.items.legendary - c.legendarios,
-          spada:     u.items.spada - (r.usoProteccion ? 1 : 0),
-        },
-        arma: { nivel: r.nivel },
+      // Los materiales y el arma se apartan antes de cobrar; si el cobro
+      // falla, vuelven como estaban (ver core/economy.ts).
+      const cobro = await cobrarReservando([{ cuenta: { jid: sender, campo: 'money' }, delta: -c.dinero }], () => {
+        // El arma estaba en `nivel` (sin arma, 0): a eso vuelve.
+        const antes = { items: { ...u.items }, arma: { nivel } }
+        patchUserData(sender, {
+          items: {
+            sword:     u.items.sword - c.espadas,
+            sp:        u.items.sp - c.sp,
+            legendary: u.items.legendary - c.legendarios,
+            spada:     u.items.spada - (r.usoProteccion ? 1 : 0),
+          },
+          arma: { nivel: r.nivel },
+        })
+        return () => patchUserData(sender, antes)
       })
+      if (!cobro.ok) {
+        await responder(`> ${textoDeMotivo(cobro.motivo)}`)
+        return
+      }
 
       const texto = r.exito
         ? `🔨✨ *¡Éxito!* Tu arma ahora es *+${r.nivel}*  (daño en raid ×${bonoArma(r.nivel).toFixed(2)})`
@@ -73,14 +85,21 @@ const command: Command = {
         await responder(`> Para una 🛡️ piedra de protección te falta: ${falta.join(', ')}.`)
         return
       }
-      patchUserData(sender, {
-        money: u.money - COSTO_PROTECCION.dinero,
-        items: {
-          sword:     u.items.sword - COSTO_PROTECCION.espadas,
-          legendary: u.items.legendary - COSTO_PROTECCION.legendarios,
-          spada:     u.items.spada + 1,
-        },
+      const cobro = await cobrarReservando([{ cuenta: { jid: sender, campo: 'money' }, delta: -COSTO_PROTECCION.dinero }], () => {
+        const antes = { items: { ...u.items } }
+        patchUserData(sender, {
+          items: {
+            sword:     u.items.sword - COSTO_PROTECCION.espadas,
+            legendary: u.items.legendary - COSTO_PROTECCION.legendarios,
+            spada:     u.items.spada + 1,
+          },
+        })
+        return () => patchUserData(sender, antes)
       })
+      if (!cobro.ok) {
+        await responder(`> ${textoDeMotivo(cobro.motivo)}`)
+        return
+      }
       await responder(`🛡️ Forjaste una piedra de protección. Tienes *${u.items.spada + 1}*.`)
       return
     }

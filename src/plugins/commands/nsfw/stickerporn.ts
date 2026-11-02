@@ -1,7 +1,7 @@
 import type { Command } from '../../../types/index.js'
 import { getGroupConfig, getUserData, chargeEmbers } from '@core/events.js'
 import { makeStickerFromUrl } from '@lib/sticker.js'
-import { readFile } from 'fs/promises'
+import { readFile } from 'node:fs/promises'
 import { cleanTemp } from '@lib/utils.js'
 import axios from 'axios'
 import { config, USER_AGENT } from '@config'

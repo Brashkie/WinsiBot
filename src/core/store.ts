@@ -1,8 +1,8 @@
 // Creado por Hepein Oficial x HepeinBaileys
 
 import type { WASocket, Contact } from '@whiskeysockets/baileys'
-import { writeFile, readFile, mkdir, rename } from 'fs/promises'
-import { existsSync } from 'fs'
+import { writeFile, readFile, mkdir, rename } from 'node:fs/promises'
+import { existsSync } from 'node:fs'
 import { logger } from './logger.js'
 import { setGroupMetadata } from './groupCache.js'
 import { config } from '@config'

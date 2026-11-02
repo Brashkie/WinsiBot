@@ -217,8 +217,8 @@ export class CaptchaVerification {
     let correct = false
 
     if (captcha.options) {
-      const idx = parseInt(normalized) - 1
-      const byIndex = !isNaN(idx) && captcha.options[idx]?.toLowerCase() === captcha.answer.toLowerCase()
+      const idx = parseInt(normalized, 10) - 1
+      const byIndex = !Number.isNaN(idx) && captcha.options[idx]?.toLowerCase() === captcha.answer.toLowerCase()
       const byText  = normalized === captcha.answer.toLowerCase()
       correct = byIndex || byText
     } else {

@@ -64,7 +64,13 @@ mod ffi {
             out: *mut u8,
             cap: usize,
         ) -> usize;
-        pub fn winsi_jpeg_franja(coefs: *const i16, m0: u32, m1: u32, out: *mut u8, cap: usize) -> usize;
+        pub fn winsi_jpeg_franja(
+            coefs: *const i16,
+            m0: u32,
+            m1: u32,
+            out: *mut u8,
+            cap: usize,
+        ) -> usize;
     }
 }
 
@@ -121,9 +127,14 @@ fn entropia(coefs: &[i16], w: u32, h: u32, hilos: usize) -> Option<(u32, Vec<u8>
                 s.spawn(move || franja(coefs, f0 * cols, f1 * cols, cap(f1 - f0)))
             })
             .collect();
-        hilos.into_iter().map(|h| h.join().unwrap_or(None)).collect()
+        hilos
+            .into_iter()
+            .map(|h| h.join().unwrap_or(None))
+            .collect()
     });
-    let mut datos = Vec::with_capacity(partes.iter().flatten().map(Vec::len).sum::<usize>() + 2 * tramos as usize);
+    let mut datos = Vec::with_capacity(
+        partes.iter().flatten().map(Vec::len).sum::<usize>() + 2 * tramos as usize,
+    );
     for (i, p) in partes.into_iter().enumerate() {
         if i > 0 {
             // RST0..RST7, en rueda: entre un tramo y el siguiente.
@@ -148,7 +159,8 @@ pub fn codificar_nativo_con(img: &RgbImage, calidad: u8, hilos: usize) -> Vec<u8
         // JPEG guarda las dimensiones en 16 bits; lo raro va por el otro.
         return codificar_image(img, calidad);
     }
-    coefs_y_armar(img.as_raw(), 3, w, h, calidad, hilos).unwrap_or_else(|| codificar_image(img, calidad))
+    coefs_y_armar(img.as_raw(), 3, w, h, calidad, hilos)
+        .unwrap_or_else(|| codificar_image(img, calidad))
 }
 
 /// Un JPEG de una imagen RGBA, ignorando el alfa, sin copiarla antes a RGB.
@@ -161,8 +173,15 @@ pub fn codificar_rgba(img: &image::RgbaImage, calidad: u8) -> Vec<u8> {
     #[cfg(feature = "native")]
     {
         let (w, h) = (img.width(), img.height());
-        if std::env::var("WINSI_JPEG").as_deref() != Ok("image") && w > 0 && h > 0 && w <= 65_535 && h <= 65_535 {
-            if let Some(jpg) = coefs_y_armar(img.as_raw(), 4, w, h, calidad, crate::anime4k::hilos()) {
+        if std::env::var("WINSI_JPEG").as_deref() != Ok("image")
+            && w > 0
+            && h > 0
+            && w <= 65_535
+            && h <= 65_535
+        {
+            if let Some(jpg) =
+                coefs_y_armar(img.as_raw(), 4, w, h, calidad, crate::anime4k::hilos())
+            {
                 return jpg;
             }
         }
@@ -173,7 +192,14 @@ pub fn codificar_rgba(img: &image::RgbaImage, calidad: u8) -> Vec<u8> {
 /// Color, DCT y Huffman de `px` (`canales` bytes por píxel). None si el
 /// escritor se quedó sin lugar, cosa que no debería pasar.
 #[cfg(feature = "native")]
-fn coefs_y_armar(px: &[u8], canales: u32, w: u32, h: u32, calidad: u8, hilos: usize) -> Option<Vec<u8>> {
+fn coefs_y_armar(
+    px: &[u8],
+    canales: u32,
+    w: u32,
+    h: u32,
+    calidad: u8,
+    hilos: usize,
+) -> Option<Vec<u8>> {
     debug_assert_eq!(px.len(), w as usize * h as usize * canales as usize);
     let mut qy = [0u8; 64];
     let mut qc = [0u8; 64];
@@ -202,8 +228,18 @@ fn coefs_y_armar(px: &[u8], canales: u32, w: u32, h: u32, calidad: u8, hilos: us
                 // hilo escribe solo los de sus filas de MCU; el `scratch` es de
                 // este hilo y mide lo que pide el propio kernel.
                 unsafe {
-                    let mut scratch = vec![0f32; crate::zig!(ffi::winsi_jpeg_scratch_len, ffi::winsi_jpeg_scratch_len_v3, w)];
-                    crate::zig!(ffi::winsi_jpeg_coefs, ffi::winsi_jpeg_coefs_v3, src as *const u8,
+                    let mut scratch = vec![
+                        0f32;
+                        crate::zig!(
+                            ffi::winsi_jpeg_scratch_len,
+                            ffi::winsi_jpeg_scratch_len_v3,
+                            w
+                        )
+                    ];
+                    crate::zig!(
+                        ffi::winsi_jpeg_coefs,
+                        ffi::winsi_jpeg_coefs_v3,
+                        src as *const u8,
                         w,
                         h,
                         qyp as *const u8,
@@ -212,7 +248,8 @@ fn coefs_y_armar(px: &[u8], canales: u32, w: u32, h: u32, calidad: u8, hilos: us
                         scratch.as_mut_ptr(),
                         my0,
                         my1,
-                        canales);
+                        canales
+                    );
                 }
             });
         }
@@ -222,12 +259,29 @@ fn coefs_y_armar(px: &[u8], canales: u32, w: u32, h: u32, calidad: u8, hilos: us
 
 /// Cabecera + datos + EOI. `hilos` = 1 da un solo tramo, sin marcadores.
 #[cfg(feature = "native")]
-fn armar(coefs: &[i16], w: u32, h: u32, qy: &[u8; 64], qc: &[u8; 64], hilos: usize) -> Option<Vec<u8>> {
+fn armar(
+    coefs: &[i16],
+    w: u32,
+    h: u32,
+    qy: &[u8; 64],
+    qc: &[u8; 64],
+    hilos: usize,
+) -> Option<Vec<u8>> {
     let (reinicio, datos) = entropia(coefs, w, h, hilos)?;
     let mut jpg = vec![0u8; 1024];
     // SAFETY: las tablas miden 64; `jpg` mide 1024, de sobra para la cabecera
     // (~620 bytes), y el escritor no pasa de ahí.
-    let n = unsafe { ffi::winsi_jpeg_cabecera(w, h, qy.as_ptr(), qc.as_ptr(), reinicio, jpg.as_mut_ptr(), jpg.len()) };
+    let n = unsafe {
+        ffi::winsi_jpeg_cabecera(
+            w,
+            h,
+            qy.as_ptr(),
+            qc.as_ptr(),
+            reinicio,
+            jpg.as_mut_ptr(),
+            jpg.len(),
+        )
+    };
     if n == 0 {
         return None;
     }
@@ -280,7 +334,11 @@ mod tests {
                 let p = rgb.get_pixel(x, y);
                 image::Rgba([p[0], p[1], p[2], (x * 7 + y * 13) as u8])
             });
-            assert_eq!(codificar_rgba(&rgba, CALIDAD), codificar(&rgb, CALIDAD), "{w}x{h}");
+            assert_eq!(
+                codificar_rgba(&rgba, CALIDAD),
+                codificar(&rgb, CALIDAD),
+                "{w}x{h}"
+            );
         }
     }
 
@@ -404,17 +462,32 @@ mod tests {
     fn los_tramos_en_paralelo_dan_exactamente_los_mismos_pixeles() {
         // Los marcadores de reinicio cambian cómo se empaquetan los bits, no
         // la imagen: decodificada, tiene que dar lo mismo que en un solo tramo.
-        for &(w, h) in &[(16, 16), (17, 33), (200, 131), (640, 480), (1000, 70), (33, 1000)] {
+        for &(w, h) in &[
+            (16, 16),
+            (17, 33),
+            (200, 131),
+            (640, 480),
+            (1000, 70),
+            (33, 1000),
+        ] {
             let img = imagen(w, h);
             let uno = codificar_nativo_con(&img, 90, 1);
-            assert!(!uno.windows(2).any(|v| v == [0xFF, 0xDD]), "{w}x{h}: un tramo no lleva DRI");
+            assert!(
+                !uno.windows(2).any(|v| v == [0xFF, 0xDD]),
+                "{w}x{h}: un tramo no lleva DRI"
+            );
             let ref_px = decodificar(&uno);
             for hilos in [2, 3, 8, 13] {
                 let jpg = codificar_nativo_con(&img, 90, hilos);
                 assert_eq!(decodificar(&jpg), ref_px, "{w}x{h} con {hilos} tramos");
                 assert_eq!(&jpg[jpg.len() - 2..], &[0xFF, 0xD9], "{w}x{h}: falta EOI");
                 // Lo que cuestan los marcadores: unos pocos bytes por tramo.
-                assert!(jpg.len() <= uno.len() + 64 * hilos, "{w}x{h}: {} contra {}", jpg.len(), uno.len());
+                assert!(
+                    jpg.len() <= uno.len() + 64 * hilos,
+                    "{w}x{h}: {} contra {}",
+                    jpg.len(),
+                    uno.len()
+                );
             }
         }
     }

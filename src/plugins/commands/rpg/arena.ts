@@ -1,5 +1,7 @@
 import type { Command } from '../../../types/index.js'
 import { getUserData, patchUserData, userData } from '@core/events.js'
+import { cambiarSaldos } from '@core/economy.js'
+import { textoDeMotivo } from '@lib/ledger.js'
 import { Arena, CPU, type BattleAction, type BattleState, type NivelCpu, type PvpProfile } from '@lib/pvp.js'
 import { elegirAccion } from '@lib/arenaAI.js'
 import { ApuestasAbiertas } from '@lib/openBets.js'
@@ -48,18 +50,18 @@ function anotar(): void {
 /** Ver openBets.ts. La llama el 'ready' de index.ts. */
 export const devolverManosInterrumpidas = () => abiertas.devolver()
 
-function pagarPozo(winner: string, battle: BattleState): void {
-  if (battle.bet > 0) patchUserData(winner, { money: getUserData(winner).money + battle.bet * 2 })
+// El pozo y las devoluciones pasan por openBets: si la Session API no
+// responde, quedan anotados y se pagan en el próximo arranque.
+async function pagarPozo(winner: string, battle: BattleState): Promise<void> {
   anotar()
+  if (battle.bet > 0) await abiertas.pagar(winner, battle.bet * 2)
 }
 
 // Una pelea abandonada: se devuelve lo retenido a cada uno.
 Arena.alExpirar = (battle) => {
   if (battle.bet <= 0) return
-  for (const j of [battle.p1, battle.p2]) {
-    patchUserData(j, { money: getUserData(j).money + battle.bet })
-  }
   anotar()
+  for (const j of [battle.p1, battle.p2]) void abiertas.pagar(j, battle.bet)
 }
 
 const command: Command = {
@@ -145,7 +147,7 @@ const command: Command = {
         const loserName  = loser === battle.p1 ? n1 : n2
 
         Arena.endBattle(battle)
-        pagarPozo(result.winner, battle)
+        await pagarPozo(result.winner, battle)
         const reward = battle.bet > 0
           ? `\n💰 @${result.winner.split('@')[0]} se lleva el pozo: ${(battle.bet * 2).toLocaleString()} monedas!`
           : ''
@@ -214,7 +216,7 @@ const command: Command = {
         return
       }
 
-      const bet = parseInt(args.find(a => /^\d+$/.test(a)) ?? '0')
+      const bet = parseInt(args.find(a => /^\d+$/.test(a)) ?? '0', 10)
       if (bet > 0) {
         const user = getUserData(sender)
         if (user.money < bet) {
@@ -263,17 +265,27 @@ const command: Command = {
         }
       }
 
+      // La apuesta de los dos en UNA operación, todo o nada (Ada/SPARK): si
+      // uno no puede pagar, no se le cobra a ninguno. Antes eran dos escrituras.
+      if (reto && reto.bet > 0) {
+        const c = await cambiarSaldos([
+          { cuenta: { jid: reto.challenger, campo: 'money' }, delta: -reto.bet },
+          { cuenta: { jid: reto.opponent, campo: 'money' }, delta: -reto.bet },
+        ])
+        if (!c.ok) {
+          Arena.declineChallenge(sender)
+          await sock.sendMessage(jid, { text: `❌ El reto se cancela: ${textoDeMotivo(c.motivo)}` }, { quoted: msg })
+          return
+        }
+      }
       const battle = Arena.acceptChallenge(sender)
       if (!battle) {
+        // El reto expiró mientras se cobraba: se devuelve lo cobrado.
+        if (reto && reto.bet > 0) for (const j of [reto.challenger, reto.opponent]) await abiertas.pagar(j, reto.bet)
         await sock.sendMessage(jid, { text: `_No tienes reto pendiente o ya expiró._` }, { quoted: msg })
         return
       }
-      if (battle.bet > 0) {
-        for (const j of [battle.p1, battle.p2]) {
-          patchUserData(j, { money: getUserData(j).money - battle.bet })
-        }
-        anotar()
-      }
+      if (battle.bet > 0) anotar()
 
       const n1 = getUserData(battle.p1).name || battle.p1.split('@')[0]!
       const n2 = getUserData(battle.p2).name || battle.p2.split('@')[0]!
@@ -338,7 +350,7 @@ const command: Command = {
       Arena.endBattle(battle)
       // Rendirse no devuelve la apuesta: si no, rendirse al ir perdiendo
       // saldría gratis.
-      pagarPozo(winner, battle)
+      await pagarPozo(winner, battle)
 
       await sock.sendMessage(jid, {
         text: `🏳️ @${sender.split('@')[0]} se rindió. @${winner.split('@')[0]} gana la batalla!${battle.bet > 0 ? ` 💰 Se lleva el pozo: ${(battle.bet * 2).toLocaleString()} monedas.` : ''}`,

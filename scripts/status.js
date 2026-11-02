@@ -2,9 +2,9 @@
 // npm run status — estado de todos los servicios del bot
 
 import './env.js'
-import { execSync } from 'child_process'
-import { existsSync } from 'fs'
-import { join }       from 'path'
+import { execSync } from 'node:child_process'
+import { existsSync } from 'node:fs'
+import { join }       from 'node:path'
 import { ascii, color, themes } from 'ansimax'
 
 const WIN  = process.platform === 'win32'

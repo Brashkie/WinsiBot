@@ -66,7 +66,7 @@ _Operadores: + - * / ^ ( ) %_`,
 
       // ── Statistics ────────────────────────────────────────────────────────
       else if (lower.startsWith('stats ')) {
-        const nums = args.slice(1).join('').split(',').map(Number).filter(n => !isNaN(n))
+        const nums = args.slice(1).join('').split(',').map(Number).filter(n => !Number.isNaN(n))
         if (!nums.length) throw new Error('Formato: !calc stats 1,2,3,4,5')
         result = [
           `*Estadísticas de [${nums.join(', ')}]*`,

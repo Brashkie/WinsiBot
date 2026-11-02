@@ -40,13 +40,20 @@ pub struct IngestRequest {
     pub observar: bool,
 }
 
-pub async fn ingest(State(state): State<AppState>, Json(req): Json<IngestRequest>) -> Json<serde_json::Value> {
+/// Clasifica y encola el mensaje observado; devuelve la clasificación y la
+/// actualización de memoria que le toca, para que el llamador la mande a un
+/// hilo bloqueante —una por mensaje, o una por lote—.
+fn procesar(state: &AppState, req: IngestRequest) -> (&'static str, f64, (String, UpdateRequest)) {
     let (intent, confidence) = classify(&req.text);
 
     if req.observar && !req.gjid.is_empty() {
         let pendientes = observar(
             &state.conv_db,
-            ObserveRequest { sender: req.sender.clone(), gjid: req.gjid, text: req.text.clone() },
+            ObserveRequest {
+                sender: req.sender.clone(),
+                gjid: req.gjid,
+                text: req.text.clone(),
+            },
         );
         // Como en /ai/observe: una ráfaga grande se vacía ya.
         if pendientes >= 512 {
@@ -55,21 +62,70 @@ pub async fn ingest(State(state): State<AppState>, Json(req): Json<IngestRequest
         }
     }
 
-    // La memoria puede tener que leer el perfil de SQLite: en un hilo
-    // bloqueante y sin esperarla. Un intent "unknown" cuenta como neutral, que
-    // es lo que el bot mandaba cuando /nlp/fast no reconocía nada.
-    let db = state.conv_db.clone();
+    // Un intent "unknown" cuenta como neutral, que es lo que el bot mandaba
+    // cuando /nlp/fast no reconocía nada.
     let memoria = UpdateRequest {
         text: req.text,
-        intent: if intent == "unknown" { "neutral".into() } else { intent.into() },
+        intent: if intent == "unknown" {
+            "neutral".into()
+        } else {
+            intent.into()
+        },
         is_cmd: req.is_cmd,
     };
-    let jid = req.sender;
-    tokio::task::spawn_blocking(move || {
-        let _ = actualizar(&db, &jid, &memoria);
-    });
+    (intent, confidence, (req.sender, memoria))
+}
 
+/// La memoria puede tener que leer el perfil de SQLite: en un hilo bloqueante
+/// y sin esperarla.
+fn actualizar_memorias(state: &AppState, memorias: Vec<(String, UpdateRequest)>) {
+    let db = state.conv_db.clone();
+    tokio::task::spawn_blocking(move || {
+        for (jid, m) in &memorias {
+            let _ = actualizar(&db, jid, m);
+        }
+    });
+}
+
+pub async fn ingest(
+    State(state): State<AppState>,
+    Json(req): Json<IngestRequest>,
+) -> Json<serde_json::Value> {
+    let (intent, confidence, memoria) = procesar(&state, req);
+    actualizar_memorias(&state, vec![memoria]);
     Json(serde_json::json!({ "ok": true, "intent": intent, "confidence": confidence }))
+}
+
+#[derive(Deserialize)]
+pub struct IngestLote {
+    pub items: Vec<IngestRequest>,
+}
+
+/// Tope de mensajes por lote: el bot manda como mucho 64 (ver
+/// `ingerirMensaje` en nativeBridge.ts); esto es solo un techo.
+const MAX_LOTE: usize = 256;
+
+/// POST /msg/ingest/batch — lo mismo que /msg/ingest para varios mensajes en
+/// un viaje, con las respuestas en el mismo orden. Las memorias del lote van
+/// juntas a un solo hilo bloqueante, en vez de un salto de hilo por mensaje.
+pub async fn ingest_lote(
+    State(state): State<AppState>,
+    Json(lote): Json<IngestLote>,
+) -> Json<serde_json::Value> {
+    if lote.items.len() > MAX_LOTE {
+        return Json(
+            serde_json::json!({ "ok": false, "error": format!("más de {MAX_LOTE} mensajes") }),
+        );
+    }
+    let mut resultados = Vec::with_capacity(lote.items.len());
+    let mut memorias = Vec::with_capacity(lote.items.len());
+    for req in lote.items {
+        let (intent, confidence, memoria) = procesar(&state, req);
+        resultados.push(serde_json::json!({ "intent": intent, "confidence": confidence }));
+        memorias.push(memoria);
+    }
+    actualizar_memorias(&state, memorias);
+    Json(serde_json::json!({ "ok": true, "resultados": resultados }))
 }
 
 #[cfg(test)]
@@ -77,8 +133,19 @@ mod tests {
     use super::*;
 
     #[test]
+    fn un_lote_es_una_lista_de_mensajes() {
+        let l: IngestLote = serde_json::from_str(
+            r#"{"items":[{"sender":"a@s.whatsapp.net","text":"hola"},{"sender":"b@s.whatsapp.net","gjid":"g@g.us","text":"xd","observar":true}]}"#,
+        )
+        .unwrap();
+        assert_eq!(l.items.len(), 2);
+        assert!(l.items[1].observar);
+    }
+
+    #[test]
     fn el_cuerpo_minimo_es_remitente_y_texto() {
-        let r: IngestRequest = serde_json::from_str(r#"{"sender":"a@s.whatsapp.net","text":"hola"}"#).unwrap();
+        let r: IngestRequest =
+            serde_json::from_str(r#"{"sender":"a@s.whatsapp.net","text":"hola"}"#).unwrap();
         assert!(r.gjid.is_empty() && !r.is_cmd && !r.observar);
     }
 }

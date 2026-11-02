@@ -21,6 +21,6 @@ export function elegirGanadores<T>(entre: readonly T[], cuantos: number, azar: (
 export function cuantosGanadores(premio: string, maximo = 10): { cuantos: number; premio: string } {
   const m = premio.match(/(?:^|\s)(?:x(\d{1,2})|(\d{1,2})x)(?=\s|$)/i)
   if (!m) return { cuantos: 1, premio: premio.trim() }
-  const n = Math.min(Math.max(parseInt(m[1] ?? m[2]!), 1), maximo)
+  const n = Math.min(Math.max(parseInt(m[1] ?? m[2]!, 10), 1), maximo)
   return { cuantos: n, premio: premio.replace(m[0], ' ').replace(/\s+/g, ' ').trim() }
 }

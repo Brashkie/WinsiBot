@@ -41,7 +41,12 @@ pub struct Estado {
 
 impl Estado {
     pub fn nuevo() -> Self {
-        Self { hp: [MAX_HP; 2], escudo: [0; 2], ultimate: [false; 2], turno: JUGADOR }
+        Self {
+            hp: [MAX_HP; 2],
+            escudo: [0; 2],
+            ultimate: [false; 2],
+            turno: JUGADOR,
+        }
     }
 }
 
@@ -55,7 +60,13 @@ pub enum Accion {
 }
 
 /// En el mismo orden que ACCIONES en arenaAI.ts: el desempate depende de él.
-pub const ACCIONES: [Accion; 5] = [Accion::Atacar, Accion::Poderoso, Accion::Defender, Accion::Curar, Accion::Ultimate];
+pub const ACCIONES: [Accion; 5] = [
+    Accion::Atacar,
+    Accion::Poderoso,
+    Accion::Defender,
+    Accion::Curar,
+    Accion::Ultimate,
+];
 
 impl Accion {
     pub fn nombre(self) -> &'static str {
@@ -100,7 +111,12 @@ impl Nivel {
 
 /// `Arena.processAction`: `actor` hace `accion`. `tirar(min, max)` da un
 /// entero en [min, max]. Devuelve si la pelea terminó.
-pub fn procesar(s: &mut Estado, actor: usize, accion: Accion, tirar: &mut impl FnMut(i32, i32) -> i32) -> bool {
+pub fn procesar(
+    s: &mut Estado,
+    actor: usize,
+    accion: Accion,
+    tirar: &mut impl FnMut(i32, i32) -> i32,
+) -> bool {
     let rival = 1 - actor;
     match accion {
         Accion::Atacar => {
@@ -148,7 +164,9 @@ fn cuantil(q: f64) -> impl FnMut(i32, i32) -> i32 {
 }
 
 fn legales(s: &Estado, lado: usize) -> impl Iterator<Item = Accion> + '_ {
-    ACCIONES.into_iter().filter(move |a| !(*a == Accion::Ultimate && s.ultimate[lado]))
+    ACCIONES
+        .into_iter()
+        .filter(move |a| !(*a == Accion::Ultimate && s.ultimate[lado]))
 }
 
 /// `evaluar` de arenaAI.ts: lo bien que le va a la CPU, en el mismo orden de sumas.
@@ -159,7 +177,8 @@ pub fn evaluar(s: &Estado) -> f64 {
     if s.hp[0] <= 0 {
         return GANA;
     }
-    f64::from(s.hp[1] - s.hp[0]) + 0.5 * f64::from(s.escudo[1] - s.escudo[0])
+    f64::from(s.hp[1] - s.hp[0])
+        + 0.5 * f64::from(s.escudo[1] - s.escudo[0])
         + (if s.ultimate[1] { 0.0 } else { 12.0 })
         - (if s.ultimate[0] { 0.0 } else { 12.0 })
 }
@@ -178,7 +197,12 @@ impl Busqueda {
             let mut h = *s;
             let fin = procesar(&mut h, actor, accion, &mut cuantil(q));
             total += if fin {
-                evaluar(&h) + if h.hp[0] <= 0 { f64::from(prof) } else { -f64::from(prof) }
+                evaluar(&h)
+                    + if h.hp[0] <= 0 {
+                        f64::from(prof)
+                    } else {
+                        -f64::from(prof)
+                    }
             } else {
                 self.valor(&h, prof - 1)
             };
@@ -194,7 +218,11 @@ impl Busqueda {
             return *v;
         }
         let es_cpu = s.turno == CPU;
-        let mut mejor = if es_cpu { f64::NEG_INFINITY } else { f64::INFINITY };
+        let mut mejor = if es_cpu {
+            f64::NEG_INFINITY
+        } else {
+            f64::INFINITY
+        };
         for a in legales(s, s.turno) {
             let v = self.esperado(s, a, prof);
             if if es_cpu { v > mejor } else { v < mejor } {
@@ -209,7 +237,9 @@ impl Busqueda {
 /// `mejorAccion` de arenaAI.ts: lo que el cálculo elige para la CPU.
 pub fn mejor_accion(s: &Estado, nivel: Nivel) -> Accion {
     let prof = nivel.profundidad();
-    let mut b = Busqueda { memo: HashMap::new() };
+    let mut b = Busqueda {
+        memo: HashMap::new(),
+    };
     let mut mejor = Accion::Atacar;
     let mut mejor_v = f64::NEG_INFINITY;
     let mut primera = true;
@@ -255,11 +285,21 @@ pub enum Estilo {
     Inteligente,
 }
 
-pub const ESTILOS: [Estilo; 4] = [Estilo::Agresivo, Estilo::Arriesgado, Estilo::Defensivo, Estilo::Inteligente];
+pub const ESTILOS: [Estilo; 4] = [
+    Estilo::Agresivo,
+    Estilo::Arriesgado,
+    Estilo::Defensivo,
+    Estilo::Inteligente,
+];
 
 /// La pelea vista desde el jugador, como si fuera la CPU (`espejo` de arenaSim.ts).
 fn espejo(s: &Estado) -> Estado {
-    Estado { hp: [s.hp[1], s.hp[0]], escudo: [s.escudo[1], s.escudo[0]], ultimate: [s.ultimate[1], s.ultimate[0]], turno: CPU }
+    Estado {
+        hp: [s.hp[1], s.hp[0]],
+        escudo: [s.escudo[1], s.escudo[0]],
+        ultimate: [s.ultimate[1], s.ultimate[0]],
+        turno: CPU,
+    }
 }
 
 /// Las decisiones ya pensadas, de una simulación (`cacheDeDecisiones`),
@@ -291,8 +331,20 @@ fn elegir(cache: &Cache, s: &Estado, nivel: Nivel, azar: &mut Azar) -> Accion {
 fn jugada(cache: &Cache, s: &Estado, estilo: Estilo, azar: &mut Azar) -> Accion {
     let ult = !s.ultimate[0];
     match estilo {
-        Estilo::Agresivo => if ult { Accion::Ultimate } else { Accion::Atacar },
-        Estilo::Arriesgado => if ult { Accion::Ultimate } else { Accion::Poderoso },
+        Estilo::Agresivo => {
+            if ult {
+                Accion::Ultimate
+            } else {
+                Accion::Atacar
+            }
+        }
+        Estilo::Arriesgado => {
+            if ult {
+                Accion::Ultimate
+            } else {
+                Accion::Poderoso
+            }
+        }
         Estilo::Defensivo => {
             if ult && s.hp[1] <= 50 {
                 Accion::Ultimate
@@ -315,7 +367,11 @@ fn pelea(cache: &Cache, nivel: Nivel, estilo: Estilo, azar: &mut Azar) -> (Optio
     let mut s = Estado::nuevo();
     for t in 0..MAX_TURNOS {
         let actor = s.turno;
-        let accion = if actor == JUGADOR { jugada(cache, &s, estilo, azar) } else { elegir(cache, &s, nivel, azar) };
+        let accion = if actor == JUGADOR {
+            jugada(cache, &s, estilo, azar)
+        } else {
+            elegir(cache, &s, nivel, azar)
+        };
         if procesar(&mut s, actor, accion, &mut |min, max| azar.entero(min, max)) {
             return (Some(s.hp[1] <= 0), (t + 2) / 2);
         }
@@ -342,9 +398,17 @@ pub fn simular(nivel: Nivel, peleas: u32, max_ms: u64, hilos: usize, semilla: u6
             .map(|h| {
                 let cache = &cache;
                 sc.spawn(move || {
-                    let mut azar = Azar::new(semilla ^ (u64::from(h) + 1).wrapping_mul(0x9E37_79B9_7F4A_7C15));
+                    let mut azar =
+                        Azar::new(semilla ^ (u64::from(h) + 1).wrapping_mul(0x9E37_79B9_7F4A_7C15));
                     let mias = peleas / hilos + u32::from(h < peleas % hilos);
-                    let mut c: Vec<Cuenta> = ESTILOS.map(|estilo| Cuenta { estilo, peleas: 0, victorias: 0, turnos: 0 }).to_vec();
+                    let mut c: Vec<Cuenta> = ESTILOS
+                        .map(|estilo| Cuenta {
+                            estilo,
+                            peleas: 0,
+                            victorias: 0,
+                            turnos: 0,
+                        })
+                        .to_vec();
                     // En rueda: si se corta por tiempo, todos los estilos quedan parejos.
                     'afuera: for _ in 0..mias {
                         for x in c.iter_mut() {
@@ -361,9 +425,19 @@ pub fn simular(nivel: Nivel, peleas: u32, max_ms: u64, hilos: usize, semilla: u6
                 })
             })
             .collect();
-        tareas.into_iter().map(|t| t.join().expect("hilo de simulación")).collect()
+        tareas
+            .into_iter()
+            .map(|t| t.join().expect("hilo de simulación"))
+            .collect()
     });
-    let mut total: Vec<Cuenta> = ESTILOS.map(|estilo| Cuenta { estilo, peleas: 0, victorias: 0, turnos: 0 }).to_vec();
+    let mut total: Vec<Cuenta> = ESTILOS
+        .map(|estilo| Cuenta {
+            estilo,
+            peleas: 0,
+            victorias: 0,
+            turnos: 0,
+        })
+        .to_vec();
     for p in parciales {
         for (t, x) in total.iter_mut().zip(p) {
             t.peleas += x.peleas;
@@ -390,11 +464,20 @@ fn por_defecto_ms() -> u64 {
 }
 
 /// POST /arena/simular — en un hilo bloqueante, con todos los núcleos.
-pub async fn simular_handler(State(_s): State<AppState>, Json(req): Json<SimularRequest>) -> Json<serde_json::Value> {
+pub async fn simular_handler(
+    State(_s): State<AppState>,
+    Json(req): Json<SimularRequest>,
+) -> Json<serde_json::Value> {
     let peleas = req.peleas.min(20_000);
     let max_ms = req.max_ms.min(15_000);
-    let semilla = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map_or(1, |d| d.as_nanos() as u64);
-    match tokio::task::spawn_blocking(move || simular(req.nivel, peleas, max_ms, crate::anime4k::hilos(), semilla)).await {
+    let semilla = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map_or(1, |d| d.as_nanos() as u64);
+    match tokio::task::spawn_blocking(move || {
+        simular(req.nivel, peleas, max_ms, crate::anime4k::hilos(), semilla)
+    })
+    .await
+    {
         Ok(r) => Json(serde_json::json!({ "ok": true, "resultados": r })),
         Err(e) => Json(serde_json::json!({ "ok": false, "error": e.to_string() })),
     }
@@ -418,7 +501,12 @@ mod tests {
     }
     impl EstadoJs {
         fn a(&self) -> Estado {
-            Estado { hp: [self.hp1, self.hp2], escudo: [self.shield1, self.shield2], ultimate: [self.ult1, self.ult2], turno: if self.cpu { CPU } else { JUGADOR } }
+            Estado {
+                hp: [self.hp1, self.hp2],
+                escudo: [self.shield1, self.shield2],
+                ultimate: [self.ult1, self.ult2],
+                turno: if self.cpu { CPU } else { JUGADOR },
+            }
         }
     }
     #[derive(Deserialize)]
@@ -443,17 +531,28 @@ mod tests {
 
     #[test]
     fn la_pelea_y_la_cpu_dan_lo_mismo_que_typescript() {
-        let f: Fixture = serde_json::from_str(include_str!("../tests/fixtures/arena.json")).unwrap();
+        let f: Fixture =
+            serde_json::from_str(include_str!("../tests/fixtures/arena.json")).unwrap();
         assert!(f.acciones.len() >= 1000 && f.decisiones.len() >= 300);
         for (i, c) in f.acciones.iter().enumerate() {
             let mut s = c.antes.a();
             let actor = s.turno;
             let mut t = c.tiradas.iter().copied();
-            let fin = procesar(&mut s, actor, Accion::de(&c.accion).unwrap(), &mut |_, _| t.next().expect("faltan tiradas"));
+            let fin = procesar(
+                &mut s,
+                actor,
+                Accion::de(&c.accion).unwrap(),
+                &mut |_, _| t.next().expect("faltan tiradas"),
+            );
             assert_eq!((s, fin), (c.despues.a(), c.fin), "acción {i}: {}", c.accion);
         }
         for (i, d) in f.decisiones.iter().enumerate() {
-            assert_eq!(mejor_accion(&d.estado.a(), d.nivel).nombre(), d.accion, "decisión {i} ({:?})", d.nivel);
+            assert_eq!(
+                mejor_accion(&d.estado.a(), d.nivel).nombre(),
+                d.accion,
+                "decisión {i} ({:?})",
+                d.nivel
+            );
         }
     }
 

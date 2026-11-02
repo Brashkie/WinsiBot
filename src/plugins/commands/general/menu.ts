@@ -63,7 +63,7 @@ const command: Command = {
 
       const symbol = CATEGORY_SYMBOLS[cat] ?? '·'
       text += `\n${symbol} *${nombreCategoria(cat, lang)}* — ${cmds.length} ${t(lang, 'menu.comandos')}\n`
-      text += cmds.map(c => formatCmdLine(c, prefix, lang)).join('\n') + '\n'
+      text += `${cmds.map(c => formatCmdLine(c, prefix, lang)).join('\n')}\n`
     }
 
     // ── Resto de categorías ──────────────────────────────────────────────────
@@ -71,7 +71,7 @@ const command: Command = {
       for (const [cat, cmds] of byCategory) {
         const symbol = CATEGORY_SYMBOLS[cat] ?? '·'
         text += `\n${symbol} *${nombreCategoria(cat, lang)}* — ${cmds.length} ${t(lang, 'menu.comandos')}\n`
-        text += cmds.map(c => formatCmdLine(c, prefix, lang)).join('\n') + '\n'
+        text += `${cmds.map(c => formatCmdLine(c, prefix, lang)).join('\n')}\n`
       }
     } else {
       text += `\n◆ *${t(lang, 'menu.otras')}*\n`

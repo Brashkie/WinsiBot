@@ -84,7 +84,7 @@ const command: Command = {
     }
 
     const sacar = sub === 'sacar' || sub === 'kick' || sub === 'expulsar'
-    const dias = Math.min(Math.max(parseInt(sacar ? args[1] ?? '' : args[0] ?? '') || 30, 1), 365)
+    const dias = Math.min(Math.max(parseInt(sacar ? args[1] ?? '' : args[0] ?? '', 10) || 30, 1), 365)
     const f = await fantasmas(sock, jid, dias).catch(() => null)
     if (!f) {
       await responder(`> No pude leer la actividad del grupo ahora. Intenta en un rato.`)

@@ -16,7 +16,7 @@ const command: Command = {
   category:    'owner',
   ownerOnly:   true,
 
-  async execute({ sock, jid, msg, command: cmd, text, args }) {
+  async execute({ sock, jid, msg, command: cmd, text }) {
     const content = text.trim()
 
     if (!content) {

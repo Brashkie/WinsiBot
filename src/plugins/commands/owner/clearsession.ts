@@ -1,8 +1,8 @@
 import type { Command } from '../../../types/index.js'
 import { config } from '@config'
 import { safeSend } from '@lib/media_sender.js'
-import { existsSync, readdirSync, unlinkSync } from 'fs'
-import { join } from 'path'
+import { existsSync, readdirSync, unlinkSync } from 'node:fs'
+import { join } from 'node:path'
 
 const command: Command = {
   name:        'clearsession',

@@ -15,8 +15,8 @@
 // Uso: npm run mem:profile            el arranque real del bot
 //      npm run mem:profile -- --deps  lo que pesa cada dependencia sola
 
-import { pathToFileURL } from 'url'
-import { join } from 'path'
+import { pathToFileURL } from 'node:url'
+import { join } from 'node:path'
 
 if (typeof globalThis.gc !== 'function') {
   console.error('Correlo con --expose-gc (npm run mem:profile ya lo pasa).')
@@ -84,11 +84,11 @@ if (!deps) {
 
 console.log()
 console.log('  pieza                                         +RSS MB  +heap MB  +ext MB      ms')
-console.log('  ' + '─'.repeat(84))
+console.log(`  ${'─'.repeat(84)}`)
 for (const [label, now, before, ms] of rows) {
   const d = (k) => mb(now[k] - before[k])
   console.log(`  ${label.slice(0, 44).padEnd(44)} ${d('rss')}    ${d('heap')}   ${d('ext')}  ${ms ? ms.toFixed(0).padStart(6) : '      '}`)
 }
-console.log('  ' + '─'.repeat(84))
+console.log(`  ${'─'.repeat(84)}`)
 console.log(`  ARRANQUE, proceso entero                     ${mb(arranque.rss)}    ${mb(arranque.heap)}   ${mb(arranque.ext)}`)
 process.exit(0)

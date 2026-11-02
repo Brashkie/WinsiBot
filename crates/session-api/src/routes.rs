@@ -1024,10 +1024,16 @@ mod tests_propios {
         assert!(es_propio("session-51950270105.0.cbor", &propios));
         assert!(es_propio("session-161087160889568.7.cbor", &propios));
         // Una clave de grupo que mandó un dispositivo propio.
-        assert!(es_propio("sender-key-120363363621316758@g.us--161087160889568--7.cbor", &propios));
+        assert!(es_propio(
+            "sender-key-120363363621316758@g.us--161087160889568--7.cbor",
+            &propios
+        ));
         // Lo de otros sí se puede borrar.
         assert!(!es_propio("session-160305996898368.0.cbor", &propios));
-        assert!(!es_propio("sender-key-120363363621316758@g.us--160305996898368--0.cbor", &propios));
+        assert!(!es_propio(
+            "sender-key-120363363621316758@g.us--160305996898368--0.cbor",
+            &propios
+        ));
         // Un número que empieza igual no es el mismo usuario.
         assert!(!es_propio("session-519502701050.0.cbor", &propios));
         // Sin lista, nada es propio: el comportamiento de antes.

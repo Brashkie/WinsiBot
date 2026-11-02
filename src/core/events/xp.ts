@@ -1,5 +1,6 @@
 import { getUserData, userData } from './index.js'
 import { porMensaje } from '@lib/companion.js'
+import { sumarAcotado } from '@lib/ledger.js'
 
 const XP_PER_MSG = () => Math.ceil(Math.random() * 10) + 5
 
@@ -18,7 +19,8 @@ const XP_PER_MSG = () => Math.ceil(Math.random() * 10) + 5
  *  apareciendo": esta era la única ruta que de verdad lo ignoraba. */
 export function addXP(sender: string, pushName: string): void {
   const user  = getUserData(sender, pushName)
-  user.exp   += XP_PER_MSG()
+  // Con el tope de los saldos, en local: esto corre en cada mensaje.
+  user.exp    = sumarAcotado(user.exp, XP_PER_MSG())
   user.name   = pushName || user.name
   // El compañero también gana con la actividad, con freno (ver companion.ts).
   porMensaje(user, Date.now())

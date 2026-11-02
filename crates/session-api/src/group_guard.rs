@@ -126,10 +126,16 @@ mod tests {
                 assert_eq!(r, 0, "actuó sin autor o contra quien se fue solo: {ctx}");
             }
             if !b(ACTIVO) || t == ASCENSO || !(0..=2).contains(&t) {
-                assert_eq!(r, 0, "actuó apagado, ante un ascenso o un tipo inválido: {ctx}");
+                assert_eq!(
+                    r, 0,
+                    "actuó apagado, ante un ascenso o un tipo inválido: {ctx}"
+                );
             }
             if !b(BOT_ES_ADMIN) {
-                assert!(r == 0 || r == AVISAR_DUENO, "sin ser admin hizo más que avisar: {ctx}");
+                assert!(
+                    r == 0 || r == AVISAR_DUENO,
+                    "sin ser admin hizo más que avisar: {ctx}"
+                );
             }
             assert_eq!(r & !TODAS, 0, "devolvió un bit que no es una acción: {ctx}");
         }
@@ -152,12 +158,19 @@ mod tests {
     #[test]
     fn rust_y_ada_dan_lo_mismo_en_toda_entrada() {
         for (t, f) in todas_las_entradas() {
-            assert_eq!(decidir(t, f), decidir_rust(t, f), "tipo {t}, banderas {f:08b}");
+            assert_eq!(
+                decidir(t, f),
+                decidir_rust(t, f),
+                "tipo {t}, banderas {f:08b}"
+            );
         }
         // Y valores de C que nunca deberían llegar.
         for t in [i32::MIN, -7, 3, 99, i32::MAX] {
             assert_eq!(decidir(t, u32::MAX), 0);
         }
-        assert_eq!(decidir(1, u32::MAX & !(AUTOR_PROTEGIDO | AUTOR_ES_BOT | AUTOR_ES_AFECTADO)), TODAS);
+        assert_eq!(
+            decidir(1, !(AUTOR_PROTEGIDO | AUTOR_ES_BOT | AUTOR_ES_AFECTADO)),
+            TODAS
+        );
     }
 }

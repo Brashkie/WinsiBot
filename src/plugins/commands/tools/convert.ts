@@ -61,7 +61,7 @@ const command: Command = {
     const [rawVal, from, to] = args as [string, string, string]
     const value = parseFloat(rawVal.replace(',', '.'))
 
-    if (isNaN(value)) {
+    if (Number.isNaN(value)) {
       await sock.sendMessage(jid, { text: '❌ El valor debe ser un número.' }, { quoted: msg })
       return
     }

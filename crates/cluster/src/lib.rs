@@ -106,7 +106,10 @@ struct Manifest {
 
 impl Manifest {
     fn texto(&self) -> String {
-        let mut s = format!("{CABECERA}\nsiguiente {}\nwal_min {}\n", self.siguiente, self.wal_min);
+        let mut s = format!(
+            "{CABECERA}\nsiguiente {}\nwal_min {}\n",
+            self.siguiente, self.wal_min
+        );
         for t in &self.tablas {
             s.push_str(&format!("sst {t}\n"));
         }
@@ -121,12 +124,14 @@ impl Manifest {
             Err(e) if e.kind() == io::ErrorKind::NotFound => return Ok(None),
             Err(e) => return Err(e),
         };
-        let mal = |que: &str| io::Error::new(io::ErrorKind::InvalidData, format!("MANIFEST: {que}"));
+        let mal =
+            |que: &str| io::Error::new(io::ErrorKind::InvalidData, format!("MANIFEST: {que}"));
         // Un MANIFEST roto NO se reemplaza por uno vacío: eso sería decidir en
         // silencio que no hay datos. Se devuelve el error.
         let corte = texto.rfind("crc ").ok_or_else(|| mal("sin crc"))?;
         let (cuerpo, pie) = texto.split_at(corte);
-        let crc = u32::from_str_radix(pie.trim_start_matches("crc ").trim(), 16).map_err(|_| mal("crc ilegible"))?;
+        let crc = u32::from_str_radix(pie.trim_start_matches("crc ").trim(), 16)
+            .map_err(|_| mal("crc ilegible"))?;
         if crc32(cuerpo.as_bytes()) != crc {
             return Err(mal("el crc no cuadra"));
         }
@@ -172,7 +177,11 @@ fn sincronizar_dir(dir: &Path) -> io::Result<()> {
 }
 
 fn numero_de(nombre: &str, prefijo: &str, sufijo: &str) -> Option<u64> {
-    nombre.strip_prefix(prefijo)?.strip_suffix(sufijo)?.parse().ok()
+    nombre
+        .strip_prefix(prefijo)?
+        .strip_suffix(sufijo)?
+        .parse()
+        .ok()
 }
 
 // ─── El motor ─────────────────────────────────────────────────────────────────
@@ -237,7 +246,16 @@ impl Motor {
         let seq = wals.last().copied().unwrap_or(m.wal_min);
         let wal = Wal::abrir(&dir, seq)?;
         let siguiente = m.siguiente.max(m.tablas.iter().max().map_or(0, |x| x + 1));
-        let mut motor = Self { dir, op, mem, mem_bytes, wal, tablas, siguiente, cache };
+        let mut motor = Self {
+            dir,
+            op,
+            mem,
+            mem_bytes,
+            wal,
+            tablas,
+            siguiente,
+            cache,
+        };
         if motor.mem_bytes >= motor.op.memtable_bytes {
             motor.vaciar()?;
         }
@@ -261,7 +279,8 @@ impl Motor {
         if lote.is_empty() {
             return Ok(());
         }
-        self.wal.escribir(lote, self.op.durabilidad == Durabilidad::Disco)?;
+        self.wal
+            .escribir(lote, self.op.durabilidad == Durabilidad::Disco)?;
         for (k, v) in &lote.ops {
             self.mem_bytes += k.len() + v.as_ref().map_or(0, |v| v.len()) + 32;
             self.mem.insert(k.clone(), v.clone());
@@ -296,7 +315,11 @@ impl Motor {
         // devolverlo: perdía contra SQLite por 2–4x (ver examples/compare.rs).
         type Fuente<'a> = Box<dyn Iterator<Item = io::Result<Entrada>> + 'a>;
         let hasta_b = hasta.map_or(Bound::Unbounded, |h| Bound::Excluded(h.to_vec()));
-        let mut fuentes: Vec<Fuente<'_>> = self.tablas.iter().map(|t| Box::new(t.iterar_desde(desde)) as Fuente<'_>).collect();
+        let mut fuentes: Vec<Fuente<'_>> = self
+            .tablas
+            .iter()
+            .map(|t| Box::new(t.iterar_desde(desde)) as Fuente<'_>)
+            .collect();
         fuentes.push(Box::new(
             self.mem
                 .range((Bound::Included(desde.to_vec()), hasta_b))
@@ -349,7 +372,12 @@ impl Motor {
         let viejo = self.wal.seq;
         let mut ids: Vec<u64> = self.tablas.iter().map(|t| t.id).collect();
         ids.push(id);
-        Manifest { siguiente: id + 1, wal_min: viejo + 1, tablas: ids }.guardar(&self.dir)?;
+        Manifest {
+            siguiente: id + 1,
+            wal_min: viejo + 1,
+            tablas: ids,
+        }
+        .guardar(&self.dir)?;
 
         self.tablas.push(tabla);
         self.siguiente = id + 1;
@@ -379,10 +407,18 @@ impl Motor {
         }
         fs::rename(&tmp, sst::ruta(&self.dir, id))?;
         let nueva = Sst::abrir(&self.dir, id, self.cache.clone())?;
-        Manifest { siguiente: id + 1, wal_min: self.wal.seq, tablas: vec![id] }.guardar(&self.dir)?;
+        Manifest {
+            siguiente: id + 1,
+            wal_min: self.wal.seq,
+            tablas: vec![id],
+        }
+        .guardar(&self.dir)?;
 
         // Cerrar las viejas antes de borrarlas: Windows no borra un archivo abierto.
-        let viejas: Vec<u64> = std::mem::replace(&mut self.tablas, vec![nueva]).into_iter().map(|t| t.id).collect();
+        let viejas: Vec<u64> = std::mem::replace(&mut self.tablas, vec![nueva])
+            .into_iter()
+            .map(|t| t.id)
+            .collect();
         self.siguiente = id + 1;
         for v in viejas {
             fs::remove_file(sst::ruta(&self.dir, v))?;
@@ -423,7 +459,9 @@ struct Mezcla<I: Iterator<Item = io::Result<Entrada>>> {
 
 impl<I: Iterator<Item = io::Result<Entrada>>> Mezcla<I> {
     fn new(its: Vec<I>) -> Self {
-        Self { its: its.into_iter().map(|i| i.peekable()).collect() }
+        Self {
+            its: its.into_iter().map(|i| i.peekable()).collect(),
+        }
     }
 }
 

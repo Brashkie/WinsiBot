@@ -27,7 +27,7 @@ function transcript(r: GroupRecent): string {
     const m = r.messages[i]!
     let t = m.text.replace(/\s+/g, ' ').trim()
     if (!t) continue
-    if (t.length > MAX_LINEA) t = t.slice(0, MAX_LINEA) + '…'
+    if (t.length > MAX_LINEA) t = `${t.slice(0, MAX_LINEA)}…`
     const l = `${nombre(m.sender)}: ${t}`
     if (total + l.length + 1 > MAX_TRANSCRIPT) break
     lineas.push(l)
@@ -62,7 +62,7 @@ const command: Command = {
   groupOnly:   true,
 
   async execute({ sock, jid, msg, args }) {
-    const horas = Math.min(Math.max(parseInt(args[0] ?? '') || 12, 1), 72)
+    const horas = Math.min(Math.max(parseInt(args[0] ?? '', 10) || 12, 1), 72)
 
     const r = await getGroupRecent(jid, 150, horas)
     if (!r) {

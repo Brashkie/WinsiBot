@@ -1,9 +1,11 @@
 import type { Command } from '../../../types/index.js'
 import {
   getUserData, patchUserData,
-  isOnCooldownDaily, setCooldown, getDailyCooldownLeft, fmtCooldown,
+  isOnCooldownDaily, getDailyCooldownLeft, fmtCooldown,
   checkLevelUp, levelUpLine,
 } from '@core/events.js'
+import { cobrarConCooldown } from '@core/economy.js'
+import { textoDeMotivo } from '@lib/ledger.js'
 import { safeSend } from '@lib/media_sender.js'
 import { randomNumber as rand, randomChoice as pick } from '@lib/utils.js'
 
@@ -46,13 +48,17 @@ const command: Command = {
     const exp      = isPrem ? rand(1500, 4000) : rand(300, 2000)
     const sp       = isPrem ? rand(3, 8)       : rand(1, 4)
 
-    patchUserData(sender, {
-      exp:      user.exp + exp,
-      money:    user.money + money,
-      diamonds: user.diamonds + diamonds,
-      items:    { ...user.items, sp: user.items.sp + sp },
-    })
-    setCooldown(sender, 'lastCofre')
+    const r = await cobrarConCooldown(sender, 'lastCofre', [
+      { cuenta: { jid: sender, campo: 'exp' }, delta: exp },
+      { cuenta: { jid: sender, campo: 'money' }, delta: money },
+      { cuenta: { jid: sender, campo: 'diamonds' }, delta: diamonds },
+    ])
+    if (!r.ok) {
+      await sock.sendMessage(jid, { text: `> ${textoDeMotivo(r.motivo)}` }, { quoted: msg })
+      return
+    }
+    const ahora = getUserData(sender)
+    patchUserData(sender, { items: { ...ahora.items, sp: ahora.items.sp + sp } })
 
     const leveled = checkLevelUp(sender)
     const lvlLine = levelUpLine(leveled, jid)

@@ -10,6 +10,10 @@ For the full command list (with aliases and permissions) see [commands.en.md](co
 
 BrasCoins (¥) is what you use to buy dragon eggs, gifts, and bet in games. It's kept either in your **wallet** (`money`) or your **bank** (`bank`) — see the [Bank](#-bank--protect-your-money) section below, it matters.
 
+### How to write an amount
+
+In `!pay`, `!dep`, `!cf`, `!bj`, `!pujar` and every command that takes an amount: digits only, with or without a thousands separator. `500`, `1000`, `1.000`, `1,000`, `1 000` and `1_000` all work; `1.000` is **one thousand**, not one. The separator must be the same across the whole number and fall every three digits: `1.00`, `1,000.50`, `12abc`, `1e9` or `-5` are not amounts, and the bot says so instead of guessing. The maximum is ¥9,007,199,254,740,991, the last exact integer. This rule is proven in Ada/SPARK.
+
 ### Recurring income (no risk)
 
 | Command | Cooldown | Requirement | Reward |

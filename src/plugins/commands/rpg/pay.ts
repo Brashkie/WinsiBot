@@ -1,5 +1,7 @@
 import type { Command } from '../../../types/index.js'
-import { getUserData, patchUserData } from '@core/events.js'
+import { getUserData } from '@core/events.js'
+import { moverSaldo } from '@core/economy.js'
+import { textoDeMotivo } from '@lib/ledger.js'
 import { safeSend, sendCritical } from '@lib/media_sender.js'
 import { montoDe } from '@lib/amount.js'
 
@@ -54,12 +56,20 @@ const command: Command = {
       return
     }
 
-    const to = getUserData(target)
+    // La cuenta la decide Ada/SPARK en la Session API: se conserva el total,
+    // nadie queda negativo ni pasa del último entero exacto, y si cambió el
+    // saldo en el medio no se aplica (ver lib/ledger.ts).
+    const r = await moverSaldo({
+      origen:  { jid: sender, campo: 'money' },
+      destino: { jid: target, campo: 'money' },
+      monto:   amount,
+    })
+    if (!r.ok) {
+      await safeSend(() => sock.sendMessage(jid, { text: `> ${textoDeMotivo(r.motivo)}` }, { quoted: msg }))
+      return
+    }
 
-    patchUserData(sender, { money: from.money - amount })
-    patchUserData(target, { money: to.money   + amount })
-
-    const newBalance = from.money - amount
+    const newBalance = r.origen
 
     // sendCritical: el dinero YA cambió de manos en las dos cuentas. Si el
     // proceso muere antes de que salga esta confirmación, el outbox la reenvía

@@ -1,4 +1,4 @@
-import type { Command, RollCharacter, TradeRequest } from '../../../types/index'
+import type { Command, TradeRequest } from '../../../types/index'
 import { getUserInventory } from '../rpg/rollwaifu.js'
 import { getNumber } from '@lib/jid_utils.js'
 

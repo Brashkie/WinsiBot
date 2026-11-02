@@ -250,9 +250,8 @@ export async function sendCarousel(
     return
   }
 
-  const capped = cards.length > CAROUSEL_MAX
-    ? (console.warn(`sendCarousel: ${cards.length} cards → cortado a ${CAROUSEL_MAX}`), cards.slice(0, CAROUSEL_MAX))
-    : cards
+  if (cards.length > CAROUSEL_MAX) console.warn(`sendCarousel: ${cards.length} cards → cortado a ${CAROUSEL_MAX}`)
+  const capped = cards.slice(0, CAROUSEL_MAX)
 
   const builtCards = await Promise.all(capped.map(async (card) => {
     let img: unknown = null
