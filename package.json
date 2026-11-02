@@ -96,7 +96,7 @@
   },
   "license": "GPL-3.0-or-later",
   "overrides": {
-    "libsignal": "https://codeload.github.com/whiskeysockets/libsignal-node/tar.gz/1c30d7d7e76a3b0aa120b04dc6a26f5a12dccf67"
+    "libsignal": "6.0.0"
   },
   "dependencies": {
     "@brashkie/signalis-core": "^0.5.1",
@@ -108,6 +108,7 @@
     "css-select": "^5.2.2",
     "hono": "^4.12.32",
     "htmlparser2": "^10.1.0",
+    "libsignal": "6.0.0",
     "pino": "^9.5.0",
     "strenor": "^0.5.3",
     "ws": "^8.21.1"
