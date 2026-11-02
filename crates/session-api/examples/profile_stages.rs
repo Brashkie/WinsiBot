@@ -105,23 +105,27 @@ fn main() {
         salida.len() as f64 / 1024.0
     );
     // El JPEG por dentro: la mitad en Zig (color y DCT) y la mitad en C
-    // (Huffman y armado), cada una con la mediana de sus vueltas.
-    let mut zig = Vec::new();
-    let mut c = Vec::new();
-    for _ in 0..v {
-        let (z, h) = jpeg::medir_etapas(&buf, jpeg::CALIDAD, anime4k::hilos());
-        zig.push(z);
-        c.push(h);
+    // (Huffman y armado), cada una con la mediana de sus vueltas. Solo con los
+    // kernels nativos: sin la feature `native` el JPEG es el del crate `image`.
+    #[cfg(feature = "native")]
+    {
+        let mut zig = Vec::new();
+        let mut c = Vec::new();
+        for _ in 0..v {
+            let (z, h) = jpeg::medir_etapas(&buf, jpeg::CALIDAD, anime4k::hilos());
+            zig.push(z);
+            c.push(h);
+        }
+        let med = |x: &mut Vec<f64>| {
+            x.sort_by(|a, b| a.partial_cmp(b).unwrap());
+            x[x.len() / 2]
+        };
+        println!(
+            "JPEG por dentro: color y DCT (Zig) {:.1} ms · Huffman y armado (C) {:.1} ms",
+            med(&mut zig),
+            med(&mut c)
+        );
     }
-    let med = |x: &mut Vec<f64>| {
-        x.sort_by(|a, b| a.partial_cmp(b).unwrap());
-        x[x.len() / 2]
-    };
-    println!(
-        "JPEG por dentro: color y DCT (Zig) {:.1} ms · Huffman y armado (C) {:.1} ms",
-        med(&mut zig),
-        med(&mut c)
-    );
     if let Ok(ruta) = std::env::var("GUARDAR") {
         std::fs::write(&ruta, &salida).expect("no pude guardar el JPEG");
         println!("guardado en {ruta}");
