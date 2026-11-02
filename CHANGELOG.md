@@ -4,6 +4,12 @@ Todos los cambios notables de WinsiBot se documentan en este archivo, versión p
 
 ---
 
+## [9.3.4] — sin publicar
+
+| Área | Cambio |
+|------|--------|
+| **Fix: `npm install` fallaba en Termux (`EALLOWGIT`)** | Baileys trae `libsignal` desde un repositorio git (`git+ssh://git@github.com/whiskeysockets/libsignal-node.git`), y las versiones nuevas de npm rechazan las dependencias de git: "Fetching packages of type git have been disabled". Aunque las permitiera, la URL es por SSH y pide claves de GitHub configuradas en el teléfono. Ahora `package.json` fija **el mismo commit** (`1c30d7d`) como un `.tar.gz` por HTTPS (`overrides`), que npm baja como cualquier paquete y verifica con su `sha512` en el `package-lock.json`: el mismo código, sin git. Probado con una instalación desde cero y git prohibido (`npm ci --allow-git=none`): con los archivos de antes da el mismo `EALLOWGIT`, y con los de ahora instala las 285 dependencias. No se pasó a `libsignal` 6.0.0 del registro: es otra versión, y el bot reemplaza su `curve.js` al arrancar (ver `lib/fastCurve.ts`) |
+
 ## [9.3.3] — 2026-11-02
 
 **`#upscale` un 20 % más rápido en ARM, medido en un ARM de verdad.** En ARM las pasadas de

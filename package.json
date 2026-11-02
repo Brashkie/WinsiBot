@@ -95,6 +95,9 @@
     "url": "https://github.com/Brashkie/WinsiBot/issues"
   },
   "license": "GPL-3.0-or-later",
+  "overrides": {
+    "libsignal": "https://codeload.github.com/whiskeysockets/libsignal-node/tar.gz/1c30d7d7e76a3b0aa120b04dc6a26f5a12dccf67"
+  },
   "dependencies": {
     "@brashkie/signalis-core": "^0.5.1",
     "@hono/node-server": "^2.0.12",
