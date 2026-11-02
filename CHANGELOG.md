@@ -4,7 +4,12 @@ Todos los cambios notables de WinsiBot se documentan en este archivo, versión p
 
 ---
 
-## [9.3.4] — sin publicar
+## [9.3.4] — 2026-11-02
+
+**`npm install` vuelve a funcionar en Termux.** El npm nuevo de Termux solo acepta paquetes del
+registro y Baileys traía `libsignal` desde git: ahora sale del registro, con el mismo código byte a
+byte, y son 5 paquetes menos. El README explica cómo actualizar un clon con `git pull`. Session API
+5.17.0, sin cambios.
 
 | Área | Cambio |
 |------|--------|

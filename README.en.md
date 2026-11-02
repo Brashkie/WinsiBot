@@ -1,6 +1,6 @@
 <div align="center">
 
-<img src="https://capsule-render.vercel.app/api?type=waving&color=0:6C63FF,100:00C9FF&height=180&section=header&text=WinsiBot&fontSize=62&fontColor=ffffff&fontAlignY=38&desc=v9.3.3%20%E2%80%94%20Enterprise%20WhatsApp%20Bot&descAlignY=58&descSize=18" width="100%"/>
+<img src="https://capsule-render.vercel.app/api?type=waving&color=0:6C63FF,100:00C9FF&height=180&section=header&text=WinsiBot&fontSize=62&fontColor=ffffff&fontAlignY=38&desc=v9.3.4%20%E2%80%94%20Enterprise%20WhatsApp%20Bot&descAlignY=58&descSize=18" width="100%"/>
 
 <br/>
 
@@ -9,7 +9,7 @@
 [![Rust](https://img.shields.io/badge/Rust-1.75%2B-CE422B?style=for-the-badge&logo=rust&logoColor=white)](https://rust-lang.org)
 
 [![License](https://img.shields.io/badge/License-GPL--3.0-blue?style=flat-square)](LICENSE)
-[![Version](https://img.shields.io/badge/Version-9.3.3-6C63FF?style=flat-square)](CHANGELOG.md)
+[![Version](https://img.shields.io/badge/Version-9.3.4-6C63FF?style=flat-square)](CHANGELOG.md)
 [![Platform](https://img.shields.io/badge/Platform-Windows%20%7C%20Linux%20%7C%20macOS%20%7C%20Android-lightgrey?style=flat-square)](https://github.com/Brashkie/WinsiBot)
 [![PRs Welcome](https://img.shields.io/badge/PRs-welcome-brightgreen?style=flat-square)](https://github.com/Brashkie/WinsiBot/pulls)
 
@@ -17,7 +17,7 @@
 
 > High-performance WhatsApp bot with a three-layer multi-language architecture.<br/>
 > No artificial group limit, built for thousands of messages per hour and multiple instances.<br/>
-> v9.3.3 — **`#upscale` 20% faster on ARM (Termux), measured.** Every alternative was tried on a real ARM64 —16, 8 and 4 pixels at a time, integer sums, a C kernel with NEON— and the winner stayed, with the same bit-for-bit result. Since 9.3.0, the whole economy goes through Ada/SPARK.<br/>
+> v9.3.4 — **`npm install` works on Termux again.** Every dependency comes from the npm registry, with no git or URL downloads, which Termux's newer npm rejects. Since 9.3.3, `#upscale` is 20% faster on ARM, and since 9.3.0 the whole economy goes through Ada/SPARK.<br/>
 
 <br/>
 
@@ -65,6 +65,12 @@
 | ⚙️ **Session + AI** | Rust / Axum | Atomic creds and snapshots, Bad MAC tracker, rate limiter, intent classification, personality and humour, reputation, style profiles, Ollama and cloud APIs, images |
 | 🛡 **Anti-takeover and economy** | Ada/SPARK | The group anti-takeover decision, every balance change in the economy —all or nothing, never negative, and in `#pay` and the bank the total of coins is always conserved—, the amount reader and the antiban's turn for each send, their guarantees proven by GNATprove for every input, linked into the Session API |
 | 🧮 **Native kernels** | C + Zig | Anime4K and the JPEG codec, compiled with Zig into the Session API binary. The fastest one is used, measured, and on x86-64 the AVX2 copy if the CPU has it. |
+
+### What's new in v9.3.4
+
+**`npm install` works on Termux again.** Termux's newer npm only accepts packages from the official registry: it rejects those coming from a git repository (`EALLOWGIT`) and those downloaded by URL (`EALLOWREMOTE`). Baileys pulled `libsignal` from git, so the install stopped there. The bot now uses `libsignal` 6.0.0 from the registry, from the same repository: **the same code, byte for byte**, tested with a full encrypted conversation and with already-saved sessions. That's 5 fewer packages. And the README explains how to [update](#updating) a clone you already have: `git clone` doesn't change by itself when a new version comes out.
+
+**To update on Termux:** `git pull`, `rm -rf node_modules` and `npm install`.
 
 ### What's new in v9.3.3
 
@@ -225,7 +231,7 @@ A small fix: with no session yet —before the first QR or after `npm run manage
 
 ```
 ╔════════════════════════════════════════════════╗
-║                WinsiBot v9.3.3                 ║
+║                WinsiBot v9.3.4                 ║
 ╠═════════════════════╦══════════════════════════╣
 ║      TypeScript     ║           Rust           ║
 ║    Node.js :4001    ║                          ║
