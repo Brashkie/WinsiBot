@@ -428,6 +428,12 @@ pub fn winsi_a4k_pass_zig_n8(src: [*]const u8, dst: [*]u8, w32: u32, h32: u32, f
     pasadaCon(8, src, dst, w32, h32, fc, fg, y0, y1, anillo_c, anillo_g, luma);
 }
 
+/// De a 4: en NEON, los canales u8 ocupan medio registro y el cálculo en f32
+/// de cada canal entra justo en uno. Para medir en ARM contra la de a 8.
+pub fn winsi_a4k_pass_zig_n4(src: [*]const u8, dst: [*]u8, w32: u32, h32: u32, fc: f32, fg: f32, y0: u32, y1: u32, anillo_c: [*]u8, anillo_g: [*]u8, luma: u32) callconv(.C) void {
+    pasadaCon(4, src, dst, w32, h32, fc, fg, y0, y1, anillo_c, anillo_g, luma);
+}
+
 fn pasadaCon(comptime ancho: usize, src: [*]const u8, dst: [*]u8, w32: u32, h32: u32, fc: f32, fg: f32, y0: u32, y1: u32, anillo_c: [*]u8, anillo_g: [*]u8, luma: u32) void {
     @setEvalBranchQuota(100_000);
     const w: usize = w32;

@@ -23,6 +23,7 @@ pub fn exportar(comptime sufijo: []const u8) void {
     @export(&anime4k_push.winsi_a4k_gradient_push_zig, .{ .name = "winsi_a4k_gradient_push_zig" ++ sufijo });
     @export(&anime4k_push.winsi_a4k_pass_zig, .{ .name = "winsi_a4k_pass_zig" ++ sufijo });
     @export(&anime4k_push.winsi_a4k_pass_zig_n8, .{ .name = "winsi_a4k_pass_zig_n8" ++ sufijo });
+    @export(&anime4k_push.winsi_a4k_pass_zig_n4, .{ .name = "winsi_a4k_pass_zig_n4" ++ sufijo });
     @export(&jpeg.winsi_jpeg_scratch_len, .{ .name = "winsi_jpeg_scratch_len" ++ sufijo });
     @export(&jpeg.winsi_jpeg_coefs, .{ .name = "winsi_jpeg_coefs" ++ sufijo });
     @export(&resize.winsi_resize_rgba, .{ .name = "winsi_resize_rgba" ++ sufijo });

@@ -428,6 +428,33 @@ mod ffi {
             anillo_g: *mut u8,
             luma: u32,
         );
+        pub fn winsi_a4k_pass_zig_n4(
+            src: *const u8,
+            dst: *mut u8,
+            w: u32,
+            h: u32,
+            fc: f32,
+            fg: f32,
+            y0: u32,
+            y1: u32,
+            anillo_c: *mut u8,
+            anillo_g: *mut u8,
+            luma: u32,
+        );
+        #[cfg(winsi_v3)]
+        pub fn winsi_a4k_pass_zig_n4_v3(
+            src: *const u8,
+            dst: *mut u8,
+            w: u32,
+            h: u32,
+            fc: f32,
+            fg: f32,
+            y0: u32,
+            y1: u32,
+            anillo_c: *mut u8,
+            anillo_g: *mut u8,
+            luma: u32,
+        );
         #[cfg(winsi_v3)]
         pub fn winsi_a4k_pass_zig_v3(
             src: *const u8,
@@ -812,16 +839,27 @@ fn pasada_zig_en(
     );
 }
 
-/// De a cuántos píxeles va la pasada fusionada de Zig: 16 o 8.
+/// De a cuántos píxeles va la pasada fusionada de Zig: 16, 8 o 4.
 ///
-/// De a 16 ganó en x86 (9.3.0); en ARM un registro NEON mide la mitad, y hay
-/// que medir. `WINSI_A4K_CARRILES=8` usa la de a 8; CI mide las dos en ARM
-/// (`examples/profile_stages`). Las dos dan lo mismo bit a bit.
+/// Se eligió midiendo cada arquitectura (`examples/profile_stages`, que CI
+/// corre en ARM con las dos), y las dos dan lo mismo bit a bit:
+///
+/// - **x86-64, de a 16**: llena un registro AVX2. ~97 ms por pasada en un
+///   núcleo, contra ~120 de a 8.
+/// - **ARM64, de a 8**: un registro NEON mide la mitad, y el cálculo en f32 de
+///   16 carriles ocupa cuatro por canal. En el runner ARM64 de CI, `#upscale`
+///   de 3072x2048 baja de 480,6 a 429,8 ms en un núcleo y de 133,6 a 119,4 ms
+///   en cuatro (−11 %).
+///
+/// `WINSI_A4K_CARRILES=4`, `=8` o `=16` fuerza una, para medir.
 pub fn carriles() -> usize {
     use std::sync::OnceLock;
     static C: OnceLock<usize> = OnceLock::new();
     *C.get_or_init(|| match std::env::var("WINSI_A4K_CARRILES").as_deref() {
+        Ok("4") => 4,
         Ok("8") => 8,
+        Ok("16") => 16,
+        _ if cfg!(target_arch = "aarch64") => 8,
         _ => 16,
     })
 }
@@ -852,7 +890,23 @@ fn pasada_zig_con(
         );
         let (ac, ag) = (anillo_c.as_mut_ptr(), anillo_g.as_mut_ptr());
         unsafe {
-            if carriles == 8 {
+            if carriles == 4 {
+                crate::zig!(
+                    ffi::winsi_a4k_pass_zig_n4,
+                    ffi::winsi_a4k_pass_zig_n4_v3,
+                    s,
+                    d,
+                    w,
+                    h,
+                    fc,
+                    fg,
+                    y0,
+                    y1,
+                    ac,
+                    ag,
+                    l
+                )
+            } else if carriles == 8 {
                 crate::zig!(
                     ffi::winsi_a4k_pass_zig_n8,
                     ffi::winsi_a4k_pass_zig_n8_v3,
@@ -1105,6 +1159,9 @@ mod tests {
                 );
                 pasada_zig_con(&img, &mut n8, f, f, true, 8);
                 assert_eq!(n8, ref_luma, "pasada de a 8 con luma {w}x{h} f={f}");
+                let mut n4 = RgbaImage::new(w, h);
+                pasada_zig_con(&img, &mut n4, f, f, true, 4);
+                assert_eq!(n4, ref_luma, "pasada de a 4 con luma {w}x{h} f={f}");
                 // Y con la luminancia de la pasada siguiente escrita en el alfa.
                 let mut referencia = push_gradient_rust(&gradiente_rust(&pc), f);
                 luminancia_en_alfa(&mut referencia);
