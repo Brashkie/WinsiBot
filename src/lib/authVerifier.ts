@@ -315,8 +315,15 @@ async function verifyAuthDir(authDir: string): Promise<VerifyReport> {
   let files: string[]
   try {
     files = (await readdir(authDir)).filter(f => f.endsWith('.json') || f.endsWith('.cbor'))
-  } catch {
-    logger.warn(`[authVerifier] ${authDir} no existe o no es accesible`)
+  } catch (err: any) {
+    // Que no exista es lo normal antes del primer QR, o justo después de
+    // `npm run manage:reset-qr`, que la borra: no es un error. Solo avisa si
+    // existe y no se puede leer.
+    if (err?.code === 'ENOENT') {
+      logger.info(`[authVerifier] todavía no hay sesión en ${authDir}: se va a pedir el QR`)
+    } else {
+      logger.warn({ code: err?.code }, `[authVerifier] ${authDir} no se puede leer`)
+    }
     return report
   }
 

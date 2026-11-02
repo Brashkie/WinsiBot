@@ -4,6 +4,12 @@ Todos los cambios notables de WinsiBot se documentan en este archivo, versión p
 
 ---
 
+## [9.3.2] — sin publicar
+
+| Área | Cambio |
+|------|--------|
+| **Un aviso menos alarmante sin sesión** | Antes del primer QR —o justo después de `npm run manage:reset-qr`, que borra `auth/`— el arranque decía "./auth no existe o no es accesible" como advertencia, y parecía que algo se había roto. Ahora dice "todavía no hay sesión: se va a pedir el QR", y solo avisa si la carpeta existe y no se puede leer |
+
 ## [9.3.1] — 2026-11-01
 
 **Lo que apareció al usar la 9.3.0 en grupos de verdad.** Un número recién vinculado entra en
