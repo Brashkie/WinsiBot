@@ -11,9 +11,9 @@
  * 80 % de `#upscale`, y en el ensamblador que genera Zig se ve dónde se va el
  * tiempo. Acá cada paso es una instrucción elegida:
  *
- *   - `vld4q_u8`: 16 píxeles RGBA, ya separados en cuatro registros de canal.
+ *   - `vld4_u8`: 8 píxeles RGBA, ya separados en cuatro registros de canal.
  *   - Las condiciones de dirección (min, max, mayor que) sobre el alfa, en u8:
- *     16 carriles por instrucción, sin pasar a flotante.
+ *     8 carriles por instrucción, sin pasar a flotante.
  *   - La media de tres vecinos: `vaddl_u8` + `vaddw_u8` los suma como enteros
  *     de 16 bits y se convierte a f32 una sola vez. Da el mismo flotante que
  *     ((a + b) + c) en f32: la suma va de 0 a 765, exacta en f32.
@@ -116,170 +116,169 @@ static void gradiente1(vec9 v, uint8_t *d, float f, int luma) {
     }
 }
 
-/* ── NEON: de a 16 píxeles ───────────────────────────────────────────────── */
+/* ── NEON: de a 8 píxeles ────────────────────────────────────────────────── */
+/*
+ * De a 8 y no de a 16: la primera versión iba de a 16 y en el runner ARM64
+ * de CI perdió contra la de Zig de a 8 con suma entera (411,5 contra 384,6
+ * ms en un núcleo). De a 16, cada canal en f32 son cuatro registros, y con
+ * los cuatro canales más los vecinos no entran en los 32 de NEON. De a 8 son
+ * dos por canal.
+ */
 
-/* 16 flotantes: cuatro registros de 4. */
-typedef struct { float32x4_t v[4]; } f16;
+/* 8 flotantes: dos registros de 4. */
+typedef struct { float32x4_t v[2]; } f8;
 
-static inline f16 de_u8(uint8x16_t x) {
-    uint16x8_t lo = vmovl_u8(vget_low_u8(x)), hi = vmovl_high_u8(x);
-    f16 r = {{vcvtq_f32_u32(vmovl_u16(vget_low_u16(lo))), vcvtq_f32_u32(vmovl_high_u16(lo)),
-              vcvtq_f32_u32(vmovl_u16(vget_low_u16(hi))), vcvtq_f32_u32(vmovl_high_u16(hi))}};
+static inline f8 de_u8(uint8x8_t x) {
+    uint16x8_t a = vmovl_u8(x);
+    f8 r = {{vcvtq_f32_u32(vmovl_u16(vget_low_u16(a))), vcvtq_f32_u32(vmovl_high_u16(a))}};
     return r;
 }
 
 /* Como `redondear`: suma 0,5, acota a [0, 255] y trunca. */
-static inline uint8x16_t a_u8(f16 n) {
+static inline uint8x8_t a_u8(f8 n) {
     const float32x4_t medio = vdupq_n_f32(0.5f), cero = vdupq_n_f32(0.0f), techo = vdupq_n_f32(255.0f);
-    uint32x4_t q[4];
-    for (int k = 0; k < 4; k++)
-        q[k] = vcvtq_u32_f32(vminq_f32(vmaxq_f32(vaddq_f32(n.v[k], medio), cero), techo));
-    uint16x8_t lo = vcombine_u16(vmovn_u32(q[0]), vmovn_u32(q[1]));
-    uint16x8_t hi = vcombine_u16(vmovn_u32(q[2]), vmovn_u32(q[3]));
-    return vcombine_u8(vmovn_u16(lo), vmovn_u16(hi));
+    uint32x4_t q0 = vcvtq_u32_f32(vminq_f32(vmaxq_f32(vaddq_f32(n.v[0], medio), cero), techo));
+    uint32x4_t q1 = vcvtq_u32_f32(vminq_f32(vmaxq_f32(vaddq_f32(n.v[1], medio), cero), techo));
+    return vmovn_u16(vcombine_u16(vmovn_u32(q0), vmovn_u32(q1)));
 }
 
-/* Una máscara de bytes (0 o 0xFF) como cuatro máscaras de 32 bits. */
-static inline void mascara(uint8x16_t m, uint32x4_t out[4]) {
-    int8x16_t s = vreinterpretq_s8_u8(m);
-    int16x8_t lo = vmovl_s8(vget_low_s8(s)), hi = vmovl_high_s8(s);
-    out[0] = vreinterpretq_u32_s32(vmovl_s16(vget_low_s16(lo)));
-    out[1] = vreinterpretq_u32_s32(vmovl_high_s16(lo));
-    out[2] = vreinterpretq_u32_s32(vmovl_s16(vget_low_s16(hi)));
-    out[3] = vreinterpretq_u32_s32(vmovl_high_s16(hi));
+/* Una máscara de bytes (0 o 0xFF) como dos máscaras de 32 bits. */
+static inline void mascara(uint8x8_t m, uint32x4_t out[2]) {
+    int16x8_t s = vmovl_s8(vreinterpret_s8_u8(m));
+    out[0] = vreinterpretq_u32_s32(vmovl_s16(vget_low_s16(s)));
+    out[1] = vreinterpretq_u32_s32(vmovl_high_s16(s));
 }
 
 /* Empuja `mc` hacia la media de a, b, c en los carriles de `m`. */
-static inline void empujar16(f16 mc[4], uint8x16x4_t a, uint8x16x4_t b, uint8x16x4_t c,
-                             float f, int alfa_fija, uint8x16_t m) {
-    if (vmaxvq_u8(m) == 0) return;
-    uint32x4_t mk[4];
+static inline void empujar8(f8 mc[4], uint8x8x4_t a, uint8x8x4_t b, uint8x8x4_t c,
+                            float f, int alfa_fija, uint8x8_t m) {
+    if (vmaxv_u8(m) == 0) return;
+    uint32x4_t mk[2];
     mascara(m, mk);
     const float32x4_t resto = vdupq_n_f32(1.0f - f), fv = vdupq_n_f32(f), tres = vdupq_n_f32(3.0f);
     const int canales = alfa_fija ? 3 : 4;
     for (int i = 0; i < canales; i++) {
-        uint16x8_t slo = vaddw_u8(vaddl_u8(vget_low_u8(a.val[i]), vget_low_u8(b.val[i])), vget_low_u8(c.val[i]));
-        uint16x8_t shi = vaddw_high_u8(vaddl_high_u8(a.val[i], b.val[i]), c.val[i]);
-        float32x4_t s[4] = {vcvtq_f32_u32(vmovl_u16(vget_low_u16(slo))), vcvtq_f32_u32(vmovl_high_u16(slo)),
-                            vcvtq_f32_u32(vmovl_u16(vget_low_u16(shi))), vcvtq_f32_u32(vmovl_high_u16(shi))};
-        for (int k = 0; k < 4; k++) {
+        /* La suma de los tres como enteros de 16 bits, y una sola conversión. */
+        uint16x8_t suma = vaddw_u8(vaddl_u8(a.val[i], b.val[i]), c.val[i]);
+        float32x4_t s[2] = {vcvtq_f32_u32(vmovl_u16(vget_low_u16(suma))), vcvtq_f32_u32(vmovl_high_u16(suma))};
+        for (int k = 0; k < 2; k++) {
             float32x4_t media = vdivq_f32(s[k], tres);
             float32x4_t nuevo = vaddq_f32(vmulq_f32(mc[i].v[k], resto), vmulq_f32(media, fv));
             mc[i].v[k] = vbslq_f32(mk[k], nuevo, mc[i].v[k]);
         }
     }
     if (alfa_fija)
-        for (int k = 0; k < 4; k++) mc[3].v[k] = vbslq_f32(mk[k], vdupq_n_f32(255.0f), mc[3].v[k]);
+        for (int k = 0; k < 2; k++) mc[3].v[k] = vbslq_f32(mk[k], vdupq_n_f32(255.0f), mc[3].v[k]);
 }
 
-#define MIN3(a, b, c) vminq_u8(vminq_u8(a, b), c)
-#define MAX3(a, b, c) vmaxq_u8(vmaxq_u8(a, b), c)
+#define MIN3(a, b, c) vmin_u8(vmin_u8(a, b), c)
+#define MAX3(a, b, c) vmax_u8(vmax_u8(a, b), c)
 /* "Uno arriba y el otro abajo": lo > a y a > hi. */
-#define ENTRE(lo, a, hi) vandq_u8(vcgtq_u8(lo, a), vcgtq_u8(a, hi))
+#define ENTRE(lo, a, hi) vand_u8(vcgt_u8(lo, a), vcgt_u8(a, hi))
 
-typedef struct { uint8x16x4_t tl, tc, tr, ml, mm, mr, bl, bc, br; } v16;
-static inline v16 cargar(const uint8_t *a, const uint8_t *m, const uint8_t *b, uint32_t x) {
-    v16 v;
-    v.tl = vld4q_u8(a + (x - 1) * 4); v.tc = vld4q_u8(a + x * 4); v.tr = vld4q_u8(a + (x + 1) * 4);
-    v.ml = vld4q_u8(m + (x - 1) * 4); v.mm = vld4q_u8(m + x * 4); v.mr = vld4q_u8(m + (x + 1) * 4);
-    v.bl = vld4q_u8(b + (x - 1) * 4); v.bc = vld4q_u8(b + x * 4); v.br = vld4q_u8(b + (x + 1) * 4);
+typedef struct { uint8x8x4_t tl, tc, tr, ml, mm, mr, bl, bc, br; } v8;
+static inline v8 cargar(const uint8_t *a, const uint8_t *m, const uint8_t *b, uint32_t x) {
+    v8 v;
+    v.tl = vld4_u8(a + (x - 1) * 4); v.tc = vld4_u8(a + x * 4); v.tr = vld4_u8(a + (x + 1) * 4);
+    v.ml = vld4_u8(m + (x - 1) * 4); v.mm = vld4_u8(m + x * 4); v.mr = vld4_u8(m + (x + 1) * 4);
+    v.bl = vld4_u8(b + (x - 1) * 4); v.bc = vld4_u8(b + x * 4); v.br = vld4_u8(b + (x + 1) * 4);
     return v;
 }
 
-static inline void color16(v16 v, uint8_t *d, float f) {
-    f16 mc[4];
+static inline void color8(v8 v, uint8_t *d, float f) {
+    f8 mc[4];
     for (int k = 0; k < 4; k++) mc[k] = de_u8(v.mm.val[k]);
-    uint8x16_t TL = v.tl.val[3], TC = v.tc.val[3], TR = v.tr.val[3], ML = v.ml.val[3];
-    uint8x16_t MR = v.mr.val[3], BL = v.bl.val[3], BC = v.bc.val[3], BR = v.br.val[3];
-    uint8x16_t A, c1, c2;
+    uint8x8_t TL = v.tl.val[3], TC = v.tc.val[3], TR = v.tr.val[3], ML = v.ml.val[3];
+    uint8x8_t MR = v.mr.val[3], BL = v.bl.val[3], BC = v.bc.val[3], BR = v.br.val[3];
+    uint8x8_t A, c1, c2;
     /* arriba y abajo */
     A = a_u8(mc[3]);
     c1 = ENTRE(MIN3(TL, TC, TR), A, MAX3(BL, BC, BR));
-    c2 = vbicq_u8(ENTRE(MIN3(BL, BC, BR), A, MAX3(TL, TC, TR)), c1);
-    empujar16(mc, v.tl, v.tc, v.tr, f, 0, c1);
-    empujar16(mc, v.bl, v.bc, v.br, f, 0, c2);
+    c2 = vbic_u8(ENTRE(MIN3(BL, BC, BR), A, MAX3(TL, TC, TR)), c1);
+    empujar8(mc, v.tl, v.tc, v.tr, f, 0, c1);
+    empujar8(mc, v.bl, v.bc, v.br, f, 0, c2);
     /* subdiagonal */
     A = a_u8(mc[3]);
-    c1 = vcgtq_u8(MIN3(TC, TR, MR), MAX3(ML, A, BC));
-    c2 = vbicq_u8(vcgtq_u8(MIN3(ML, BL, BC), MAX3(TC, A, MR)), c1);
-    empujar16(mc, v.tc, v.tr, v.mr, f, 0, c1);
-    empujar16(mc, v.ml, v.bl, v.bc, f, 0, c2);
+    c1 = vcgt_u8(MIN3(TC, TR, MR), MAX3(ML, A, BC));
+    c2 = vbic_u8(vcgt_u8(MIN3(ML, BL, BC), MAX3(TC, A, MR)), c1);
+    empujar8(mc, v.tc, v.tr, v.mr, f, 0, c1);
+    empujar8(mc, v.ml, v.bl, v.bc, f, 0, c2);
     /* izquierda y derecha */
     A = a_u8(mc[3]);
     c1 = ENTRE(MIN3(TR, MR, BR), A, MAX3(TL, ML, BL));
-    c2 = vbicq_u8(ENTRE(MIN3(TL, ML, BL), A, MAX3(TR, MR, BR)), c1);
-    empujar16(mc, v.tr, v.mr, v.br, f, 0, c1);
-    empujar16(mc, v.tl, v.ml, v.bl, f, 0, c2);
+    c2 = vbic_u8(ENTRE(MIN3(TL, ML, BL), A, MAX3(TR, MR, BR)), c1);
+    empujar8(mc, v.tr, v.mr, v.br, f, 0, c1);
+    empujar8(mc, v.tl, v.ml, v.bl, f, 0, c2);
     /* diagonal */
     A = a_u8(mc[3]);
-    c1 = vcgtq_u8(MIN3(MR, BR, BC), MAX3(TC, A, ML));
-    c2 = vbicq_u8(vcgtq_u8(MIN3(ML, TL, TC), MAX3(BC, A, MR)), c1);
-    empujar16(mc, v.mr, v.br, v.bc, f, 0, c1);
-    empujar16(mc, v.ml, v.tl, v.tc, f, 0, c2);
+    c1 = vcgt_u8(MIN3(MR, BR, BC), MAX3(TC, A, ML));
+    c2 = vbic_u8(vcgt_u8(MIN3(ML, TL, TC), MAX3(BC, A, MR)), c1);
+    empujar8(mc, v.mr, v.br, v.bc, f, 0, c1);
+    empujar8(mc, v.ml, v.tl, v.tc, f, 0, c2);
 
-    uint8x16x4_t out;
+    uint8x8x4_t out;
     for (int k = 0; k < 4; k++) out.val[k] = a_u8(mc[k]);
-    vst4q_u8(d, out);
+    vst4_u8(d, out);
 }
 
-static inline void gradiente16(v16 v, uint8_t *d, float f, int luma) {
-    f16 mc[4];
+static inline void gradiente8(v8 v, uint8_t *d, float f, int luma) {
+    f8 mc[4];
     for (int k = 0; k < 4; k++) mc[k] = de_u8(v.mm.val[k]);
-    uint8x16_t MA = v.mm.val[3];
-    uint8x16_t TL = v.tl.val[3], TC = v.tc.val[3], TR = v.tr.val[3], ML = v.ml.val[3];
-    uint8x16_t MR = v.mr.val[3], BL = v.bl.val[3], BC = v.bc.val[3], BR = v.br.val[3];
-    const uint8x16_t conds[8] = {
+    uint8x8_t MA = v.mm.val[3];
+    uint8x8_t TL = v.tl.val[3], TC = v.tc.val[3], TR = v.tr.val[3], ML = v.ml.val[3];
+    uint8x8_t MR = v.mr.val[3], BL = v.bl.val[3], BC = v.bc.val[3], BR = v.br.val[3];
+    const uint8x8_t conds[8] = {
         ENTRE(MIN3(TL, TC, TR), MA, MAX3(BL, BC, BR)),
         ENTRE(MIN3(BL, BC, BR), MA, MAX3(TL, TC, TR)),
-        vcgtq_u8(MIN3(TC, TR, MR), MAX3(ML, MA, BC)),
-        vcgtq_u8(MIN3(ML, BL, BC), MAX3(TC, MA, MR)),
+        vcgt_u8(MIN3(TC, TR, MR), MAX3(ML, MA, BC)),
+        vcgt_u8(MIN3(ML, BL, BC), MAX3(TC, MA, MR)),
         ENTRE(MIN3(TR, MR, BR), MA, MAX3(TL, ML, BL)),
         ENTRE(MIN3(TL, ML, BL), MA, MAX3(TR, MR, BR)),
-        vcgtq_u8(MIN3(MR, BR, BC), MAX3(TC, MA, ML)),
-        vcgtq_u8(MIN3(ML, TL, TC), MAX3(BC, MA, MR)),
+        vcgt_u8(MIN3(MR, BR, BC), MAX3(TC, MA, ML)),
+        vcgt_u8(MIN3(ML, TL, TC), MAX3(BC, MA, MR)),
     };
-    const uint8x16x4_t *trios[8][3] = {
+    const uint8x8x4_t *trios[8][3] = {
         {&v.tl, &v.tc, &v.tr}, {&v.bl, &v.bc, &v.br}, {&v.tc, &v.tr, &v.mr}, {&v.ml, &v.bl, &v.bc},
         {&v.tr, &v.mr, &v.br}, {&v.tl, &v.ml, &v.bl}, {&v.mr, &v.br, &v.bc}, {&v.ml, &v.tl, &v.tc},
     };
     /* Cada carril toma la PRIMERA dirección que le coincide. */
-    uint8x16_t tomado = vdupq_n_u8(0);
+    uint8x8_t tomado = vdup_n_u8(0);
     for (int i = 0; i < 8; i++) {
-        uint8x16_t m = vbicq_u8(conds[i], tomado);
-        empujar16(mc, *trios[i][0], *trios[i][1], *trios[i][2], f, 1, m);
-        tomado = vorrq_u8(tomado, conds[i]);
+        uint8x8_t m = vbic_u8(conds[i], tomado);
+        empujar8(mc, *trios[i][0], *trios[i][1], *trios[i][2], f, 1, m);
+        tomado = vorr_u8(tomado, conds[i]);
     }
-    uint8x16x4_t out;
+    uint8x8x4_t out;
     for (int k = 0; k < 3; k++) out.val[k] = a_u8(mc[k]);
     if (luma) {
         /* La luminancia del resultado, como `luminancia` en Rust. */
-        f16 r = de_u8(out.val[0]), g = de_u8(out.val[1]), b = de_u8(out.val[2]), l;
-        for (int k = 0; k < 4; k++)
+        f8 r = de_u8(out.val[0]), g = de_u8(out.val[1]), b = de_u8(out.val[2]), l;
+        for (int k = 0; k < 2; k++)
             l.v[k] = vaddq_f32(vaddq_f32(vmulq_n_f32(r.v[k], 0.299f), vmulq_n_f32(g.v[k], 0.587f)),
                                vmulq_n_f32(b.v[k], 0.114f));
         out.val[3] = a_u8(l);
     } else {
-        out.val[3] = vdupq_n_u8(255);
+        out.val[3] = vdup_n_u8(255);
     }
-    vst4q_u8(d, out);
+    vst4_u8(d, out);
 }
 
 /* ── Filas ───────────────────────────────────────────────────────────────── */
 
 static void fila_color(const uint8_t *a, const uint8_t *m, const uint8_t *b, uint8_t *out, uint32_t w, float f) {
     uint32_t x = 0;
-    if (w >= 16 + 2) {
+    if (w >= 8 + 2) {
         color1(vecinos(a, m, b, w, 0), out, f);
-        for (x = 1; x + 16 <= w - 1; x += 16) color16(cargar(a, m, b, x), out + x * 4, f);
+        for (x = 1; x + 8 <= w - 1; x += 8) color8(cargar(a, m, b, x), out + x * 4, f);
     }
     for (; x < w; x++) color1(vecinos(a, m, b, w, x), out + x * 4, f);
 }
 
 static void fila_gradiente(const uint8_t *a, const uint8_t *m, const uint8_t *b, uint8_t *out, uint32_t w, float f, int luma) {
     uint32_t x = 0;
-    if (w >= 16 + 2) {
+    if (w >= 8 + 2) {
         gradiente1(vecinos(a, m, b, w, 0), out, f, luma);
-        for (x = 1; x + 16 <= w - 1; x += 16) gradiente16(cargar(a, m, b, x), out + x * 4, f, luma);
+        for (x = 1; x + 8 <= w - 1; x += 8) gradiente8(cargar(a, m, b, x), out + x * 4, f, luma);
     }
     for (; x < w; x++) gradiente1(vecinos(a, m, b, w, x), out + x * 4, f, luma);
 }
@@ -293,23 +292,22 @@ static void fila_sobel(const uint8_t *arriba, const uint8_t *medio, const uint8_
     if (!interior || w < 3) return;
     uint32_t x = 1;
     const float32x4_t dos = vdupq_n_f32(2.0f), medio_ = vdupq_n_f32(0.5f), techo = vdupq_n_f32(255.0f);
-    for (; x + 16 <= w - 1; x += 16) {
-        f16 tl = de_u8(vld4q_u8(arriba + (x - 1) * 4).val[3]), tc = de_u8(vld4q_u8(arriba + x * 4).val[3]);
-        f16 tr = de_u8(vld4q_u8(arriba + (x + 1) * 4).val[3]), ml = de_u8(vld4q_u8(medio + (x - 1) * 4).val[3]);
-        f16 mr = de_u8(vld4q_u8(medio + (x + 1) * 4).val[3]), bl = de_u8(vld4q_u8(abajo + (x - 1) * 4).val[3]);
-        f16 bc = de_u8(vld4q_u8(abajo + x * 4).val[3]), br = de_u8(vld4q_u8(abajo + (x + 1) * 4).val[3]);
-        uint32x4_t q[4];
-        for (int k = 0; k < 4; k++) {
+    for (; x + 8 <= w - 1; x += 8) {
+        f8 tl = de_u8(vld4_u8(arriba + (x - 1) * 4).val[3]), tc = de_u8(vld4_u8(arriba + x * 4).val[3]);
+        f8 tr = de_u8(vld4_u8(arriba + (x + 1) * 4).val[3]), ml = de_u8(vld4_u8(medio + (x - 1) * 4).val[3]);
+        f8 mr = de_u8(vld4_u8(medio + (x + 1) * 4).val[3]), bl = de_u8(vld4_u8(abajo + (x - 1) * 4).val[3]);
+        f8 bc = de_u8(vld4_u8(abajo + x * 4).val[3]), br = de_u8(vld4_u8(abajo + (x + 1) * 4).val[3]);
+        uint32x4_t q[2];
+        for (int k = 0; k < 2; k++) {
             float32x4_t gy = vsubq_f32(vsubq_f32(vsubq_f32(vaddq_f32(vaddq_f32(bl.v[k], vmulq_f32(dos, bc.v[k])), br.v[k]), tl.v[k]), vmulq_f32(dos, tc.v[k])), tr.v[k]);
             float32x4_t gx = vsubq_f32(vsubq_f32(vsubq_f32(vaddq_f32(vaddq_f32(tl.v[k], vmulq_f32(dos, ml.v[k])), bl.v[k]), tr.v[k]), vmulq_f32(dos, mr.v[k])), br.v[k]);
             float32x4_t g = vsqrtq_f32(vaddq_f32(vmulq_f32(gx, gx), vmulq_f32(gy, gy)));
             q[k] = vcvtq_u32_f32(vminq_f32(vaddq_f32(g, medio_), techo));
         }
-        uint16x8_t lo = vcombine_u16(vmovn_u32(q[0]), vmovn_u32(q[1]));
-        uint16x8_t hi = vcombine_u16(vmovn_u32(q[2]), vmovn_u32(q[3]));
-        uint8x16x4_t px = vld4q_u8(out + x * 4);
-        px.val[3] = vsubq_u8(vdupq_n_u8(255), vcombine_u8(vmovn_u16(lo), vmovn_u16(hi)));
-        vst4q_u8(out + x * 4, px);
+        uint8x8_t r = vmovn_u16(vcombine_u16(vmovn_u32(q[0]), vmovn_u32(q[1])));
+        uint8x8x4_t px = vld4_u8(out + x * 4);
+        px.val[3] = vsub_u8(vdup_n_u8(255), r);
+        vst4_u8(out + x * 4, px);
     }
     for (; x < w - 1; x++) {
 #define AL(fila, dx) ((float)(fila)[((x) + (dx)) * 4 + 3])
