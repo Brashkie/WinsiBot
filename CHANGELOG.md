@@ -4,7 +4,18 @@ Todos los cambios notables de WinsiBot se documentan en este archivo, versión p
 
 ---
 
-## [9.3.0] — sin publicar
+## [9.3.0] — 2026-11-01
+
+**Más seguro, más demostrado y más liviano.** Seguridad: `#play` podía ejecutar comandos en la
+máquina (arreglado), el dueño se reconoce solo por su teléfono, fuera `#terminal`, `#exec` y
+`#backup`, el panel web solo en esta máquina y con un login que no se puede robar, y antirrobo
+también para comunidades y canales. **Toda la economía pasa por Ada/SPARK**: cada cambio de saldo
+es todo o nada y sin negativos, y el lector de montos y el turno de cada envío del antiban también
+están demostrados por GNATprove (198 checks). Las firmas de los mensajes de grupo se verifican 72
+veces más rápido, con el Ed25519 de OpenSSL; `#upscale`, `#removebg` y `#toanime` bajan entre un
+7 y un 38 %; la base de conversaciones deja de crecer para siempre. La IA ayuda con los comandos y
+sus personalidades se notan. Código estricto: biome en cero y CI que corre los 326 tests. Session
+API 5.15.0.
 
 | Área | Cambio |
 |------|--------|

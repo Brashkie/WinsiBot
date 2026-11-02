@@ -1,6 +1,6 @@
 <div align="center">
 
-<img src="https://capsule-render.vercel.app/api?type=waving&color=0:6C63FF,100:00C9FF&height=180&section=header&text=WinsiBot&fontSize=62&fontColor=ffffff&fontAlignY=38&desc=v9.2.0%20%E2%80%94%20Enterprise%20WhatsApp%20Bot&descAlignY=58&descSize=18" width="100%"/>
+<img src="https://capsule-render.vercel.app/api?type=waving&color=0:6C63FF,100:00C9FF&height=180&section=header&text=WinsiBot&fontSize=62&fontColor=ffffff&fontAlignY=38&desc=v9.3.0%20%E2%80%94%20Enterprise%20WhatsApp%20Bot&descAlignY=58&descSize=18" width="100%"/>
 
 <br/>
 
@@ -9,7 +9,7 @@
 [![Rust](https://img.shields.io/badge/Rust-1.75%2B-CE422B?style=for-the-badge&logo=rust&logoColor=white)](https://rust-lang.org)
 
 [![License](https://img.shields.io/badge/License-GPL--3.0-blue?style=flat-square)](LICENSE)
-[![Version](https://img.shields.io/badge/Version-9.2.0-6C63FF?style=flat-square)](CHANGELOG.md)
+[![Version](https://img.shields.io/badge/Version-9.3.0-6C63FF?style=flat-square)](CHANGELOG.md)
 [![Platform](https://img.shields.io/badge/Platform-Windows%20%7C%20Linux%20%7C%20macOS%20%7C%20Android-lightgrey?style=flat-square)](https://github.com/Brashkie/WinsiBot)
 [![PRs Welcome](https://img.shields.io/badge/PRs-welcome-brightgreen?style=flat-square)](https://github.com/Brashkie/WinsiBot/pulls)
 
@@ -17,7 +17,7 @@
 
 > High-performance WhatsApp bot with a three-layer multi-language architecture.<br/>
 > No artificial group limit, built for thousands of messages per hour and multiple instances.<br/>
-> v9.2.0 — **Group anti-takeover, proven.** If someone demotes or removes a protected admin, or the bot, WinsiBot reverts it, revokes the link and warns. What to do is decided by an Ada/SPARK function whose guarantees GNATprove proves for every input: it never acts against a protected member. And since 9.1.0, the AI only reads what is new in each chat: 10.2 s → 0.67 s.<br/>
+> v9.3.0 — **Safer, more proven and lighter.** The whole economy goes through Ada/SPARK —every balance change, all or nothing and never negative—, and so do the amount reader and the antiban's turn for each send, proven by GNATprove. Group message signatures, 72 times faster; `#removebg` and `#toanime`, a third. And `#play` can no longer run commands on the machine.<br/>
 
 <br/>
 
@@ -66,17 +66,21 @@
 | 🛡 **Anti-takeover and economy** | Ada/SPARK | The group anti-takeover decision, every balance change in the economy —all or nothing, never negative, and in `#pay` and the bank the total of coins is always conserved—, the amount reader and the antiban's turn for each send, their guarantees proven by GNATprove for every input, linked into the Session API |
 | 🧮 **Native kernels** | C + Zig | Anime4K and the JPEG codec, compiled with Zig into the Session API binary. The fastest one is used, measured, and on x86-64 the AVX2 copy if the CPU has it. |
 
-### What's new in v9.2.0
+### What's new in v9.3.0
 
-**Group anti-takeover, with its decision proven in Ada/SPARK.** The full detail is in the [CHANGELOG](CHANGELOG.md).
+**Safer, more proven and lighter.** The full detail is in the [CHANGELOG](CHANGELOG.md).
 
 | Area | Change |
 |------|--------|
-| **`#antirrobo`** | If someone unprotected demotes or removes a protected member —the group creator, the bot owners and up to 10 marked ones— or the bot, the bot takes their admin away, reverts it, revokes the link and warns by private message. Without being admin, it only warns. **Only a protected member can manage it**: if any admin could turn it off, the attacker would do that before the takeover |
-| **Proven with SPARK** | What to do is decided by an Ada/SPARK function, and GNATprove proves for every input that it never acts against a protected member or the bot, never without knowing who did it, and has no runtime errors: 13 of 13. CI proves it again on every push |
-| **Nothing per message** | It only runs when an admin is demoted or removed in a group with the anti-takeover on. Linked into the Session API, the function is 17 instructions. On Termux a Rust copy decides, compared against Ada on all 1,280 possible inputs |
+| **Security** | `#play` could run commands on the machine with a crafted link: yt-dlp is now called without a shell. The owner is recognised by their phone only; `#terminal`, `#exec` and `#backup` are gone; `#fetch` only reaches the internet; the web panel listens on this machine only and its login can't be stolen; the webhook won't start with the example secret; a warning if the session is copied elsewhere |
+| **Anti-takeover** | Also for communities (`#antirrobo comunidad`) and channels (`#canal`), with the same decision proven in Ada/SPARK |
+| **Proven economy** | Every balance change —bets, earnings, spending, auctions, group rewards, the XP of each command— goes through an Ada/SPARK operation: all or nothing, never negative, and in `#pay` and the bank the total is conserved. The amount reader (`1.000` is a thousand) is proven too. Along the way, several bugs: `#invest` always lost, premium users went negative, `#cf` overstated winnings, among others |
+| **Faster** | Group message signatures are verified with OpenSSL's Ed25519: from 9.3 to 0.13 ms per message (72×). `#removebg` and `#toanime`, a third faster; `#upscale`, −12% on one core and −7% on all. In bursts, half the Node CPU per message |
+| **Lighter** | The conversation database keeps 365 days instead of forever (`CONV_RETENCION_DIAS`): up to ~9 GB a year less on a big bot |
+| **The AI** | It helps with the bot's commands, its personalities show (from 21 to 60 answers out of 72) and it replies in its own message after "Thinking…". `#rw` comes out straight, no animation |
+| **Strict code** | Biome at zero, four more TypeScript flags, clean clippy and rustfmt, and CI that runs the 326 vitest tests on every push |
 
-**To update:** `npm install`, with the bot stopped on Windows. Then, in each group you want to protect: `#antirrobo on` (the group creator or a bot owner can turn it on) and `#antirrobo proteger @user` to add admins.
+**To update:** `npm install`, with the bot stopped on Windows. If you opened the web panel from another machine, you now need `DASHBOARD_HOST=0.0.0.0` (better behind an HTTPS proxy). And if you used the webhook with the secret from `.env.example`, set your own: `openssl rand -hex 32`.
 
 ---
 
@@ -200,7 +204,7 @@
 
 ```
 ╔════════════════════════════════════════════════╗
-║                WinsiBot v9.2.0                 ║
+║                WinsiBot v9.3.0                 ║
 ╠═════════════════════╦══════════════════════════╣
 ║      TypeScript     ║           Rust           ║
 ║    Node.js :4001    ║                          ║

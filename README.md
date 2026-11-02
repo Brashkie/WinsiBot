@@ -1,6 +1,6 @@
 <div align="center">
 
-<img src="https://capsule-render.vercel.app/api?type=waving&color=0:6C63FF,100:00C9FF&height=180&section=header&text=WinsiBot&fontSize=62&fontColor=ffffff&fontAlignY=38&desc=v9.2.0%20%E2%80%94%20Enterprise%20WhatsApp%20Bot&descAlignY=58&descSize=18" width="100%"/>
+<img src="https://capsule-render.vercel.app/api?type=waving&color=0:6C63FF,100:00C9FF&height=180&section=header&text=WinsiBot&fontSize=62&fontColor=ffffff&fontAlignY=38&desc=v9.3.0%20%E2%80%94%20Enterprise%20WhatsApp%20Bot&descAlignY=58&descSize=18" width="100%"/>
 
 <br/>
 
@@ -9,7 +9,7 @@
 [![Rust](https://img.shields.io/badge/Rust-1.75%2B-CE422B?style=for-the-badge&logo=rust&logoColor=white)](https://rust-lang.org)
 
 [![License](https://img.shields.io/badge/License-GPL--3.0-blue?style=flat-square)](LICENSE)
-[![Version](https://img.shields.io/badge/Version-9.2.0-6C63FF?style=flat-square)](CHANGELOG.md)
+[![Version](https://img.shields.io/badge/Version-9.3.0-6C63FF?style=flat-square)](CHANGELOG.md)
 [![Platform](https://img.shields.io/badge/Platform-Windows%20%7C%20Linux%20%7C%20macOS%20%7C%20Android-lightgrey?style=flat-square)](https://github.com/Brashkie/WinsiBot)
 [![PRs Welcome](https://img.shields.io/badge/PRs-welcome-brightgreen?style=flat-square)](https://github.com/Brashkie/WinsiBot/pulls)
 
@@ -17,7 +17,7 @@
 
 > Bot de WhatsApp de alto rendimiento con arquitectura multi-lenguaje de tres capas.<br/>
 > Sin límite artificial de grupos, pensado para miles de mensajes por hora y múltiples instancias.<br/>
-> v9.2.0 — **El antirrobo de grupos, demostrado.** Si alguien degrada o saca a un admin protegido, o al bot, WinsiBot lo revierte, revoca el enlace y avisa. Qué hacer lo decide una función en Ada/SPARK cuyas garantías demuestra GNATprove para toda entrada: nunca actúa contra un protegido. Y desde la 9.1.0, la IA lee solo lo nuevo de cada chat: 10,2 s → 0,67 s.<br/>
+> v9.3.0 — **Más seguro, más demostrado y más liviano.** Toda la economía pasa por Ada/SPARK —cada cambio de saldo, todo o nada y sin negativos—, y también el lector de montos y el turno de cada envío del antiban, demostrados por GNATprove. Las firmas de los mensajes de grupo, 72 veces más rápido; `#removebg` y `#toanime`, un tercio. Y `#play` ya no puede ejecutar comandos en la máquina.<br/>
 
 <br/>
 
@@ -66,17 +66,21 @@
 | 🛡 **Antirrobo y economía** | Ada/SPARK | La decisión del antirrobo de grupos, cada cambio de saldo de la economía —todo o nada, sin negativos, y en `#pay` y el banco el total de monedas se conserva siempre—, el lector de montos y el turno de cada envío del antiban, con sus garantías demostradas por GNATprove para toda entrada, enlazados dentro de la Session API |
 | 🧮 **Kernels nativos** | C + Zig | Anime4K y el códec JPEG, compilados con Zig dentro del binario de la Session API. Se usa el que gana midiendo, y en x86-64 la copia para AVX2 si la CPU la tiene. |
 
-### Novedades en v9.2.0
+### Novedades en v9.3.0
 
-**El antirrobo de grupos, con su decisión demostrada en Ada/SPARK.** El detalle completo está en el [CHANGELOG](CHANGELOG.md).
+**Más seguro, más demostrado y más liviano.** El detalle completo está en el [CHANGELOG](CHANGELOG.md).
 
 | Área | Cambio |
 |------|--------|
-| **`#antirrobo`** | Si alguien que no está protegido degrada o saca a un protegido —el creador del grupo, los dueños del bot y hasta 10 marcados— o al bot, el bot le quita el admin, lo revierte, revoca el enlace y avisa por privado. Sin ser admin, solo avisa. **Solo lo maneja un protegido**: si cualquier admin pudiera apagarlo, el atacante lo apagaría antes de robar |
-| **Demostrado con SPARK** | Qué hacer lo decide una función en Ada/SPARK, y GNATprove demuestra para toda entrada que nunca actúa contra un protegido ni contra el bot, nunca sin saber quién fue, y que no tiene errores en tiempo de ejecución: 13 de 13. El CI lo vuelve a demostrar en cada push |
-| **Nada por mensaje** | Solo corre cuando un admin es degradado o expulsado en un grupo con el antirrobo activo. Enlazada dentro de la Session API, la función son 17 instrucciones. En Termux decide una copia en Rust, comparada contra Ada en las 1.280 entradas posibles |
+| **Seguridad** | `#play` podía ejecutar comandos en la máquina con un enlace armado a propósito: ahora yt-dlp se llama sin shell. El dueño se reconoce solo por su teléfono; fuera `#terminal`, `#exec` y `#backup`; `#fetch` solo sale a internet; el panel web escucha solo en esta máquina y su login no se puede robar; el webhook no arranca con el secreto de ejemplo; aviso si la sesión se copia a otro lado |
+| **Antirrobo** | También para comunidades (`#antirrobo comunidad`) y canales (`#canal`), con la misma decisión demostrada en Ada/SPARK |
+| **Economía demostrada** | Cada cambio de saldo —apuestas, ganancias, gastos, subastas, premios de grupo, la XP de cada comando— pasa por una operación en Ada/SPARK: todo o nada, sin negativos, y en `#pay` y el banco el total se conserva. El lector de montos (`1.000` son mil) también está demostrado. De paso, varios bugs: `#invest` hacía perder siempre, los premium quedaban en negativo, `#cf` exageraba lo ganado, entre otros |
+| **Más rápido** | Las firmas de los mensajes de grupo se verifican con el Ed25519 de OpenSSL: de 9,3 a 0,13 ms por mensaje (72×). `#removebg` y `#toanime`, un tercio más rápido; `#upscale`, −12 % en un núcleo y −7 % con todos. En ráfagas, la mitad de CPU de Node por mensaje |
+| **Más liviano** | La base de conversaciones guarda 365 días en vez de para siempre (`CONV_RETENCION_DIAS`): hasta ~9 GB al año menos en un bot grande |
+| **La IA** | Ayuda con los comandos del bot, sus personalidades se notan (de 21 a 60 respuestas de 72) y responde en un mensaje propio después de "Pensando…". `#rw` sale directo, sin animación |
+| **Código estricto** | Biome en cero, cuatro flags más de TypeScript, clippy y rustfmt limpios, y CI que corre los 326 tests de vitest en cada push |
 
-**Para actualizar:** `npm install`, con el bot parado si estás en Windows. Después, en cada grupo que quieras proteger: `#antirrobo on` (lo puede activar el creador del grupo o un dueño del bot) y `#antirrobo proteger @usuario` para sumar admins.
+**Para actualizar:** `npm install`, con el bot parado si estás en Windows. Si abrías el panel web desde otra máquina, ahora hace falta `DASHBOARD_HOST=0.0.0.0` (mejor detrás de un proxy con HTTPS). Y si usabas el webhook con el secreto de `.env.example`, poné uno propio: `openssl rand -hex 32`.
 
 ---
 
@@ -200,7 +204,7 @@
 
 ```
 ╔════════════════════════════════════════════════╗
-║                WinsiBot v9.2.0                 ║
+║                WinsiBot v9.3.0                 ║
 ╠═════════════════════╦══════════════════════════╣
 ║      TypeScript     ║           Rust           ║
 ║    Node.js :4001    ║                          ║
