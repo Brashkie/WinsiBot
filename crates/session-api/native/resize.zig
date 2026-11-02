@@ -20,6 +20,7 @@
 //! búfer de una fila por hilo. Y se procesa en franjas de filas, una por hilo.
 
 const V4 = @Vector(4, f32);
+const V16 = @Vector(16, f32);
 inline fn pixel(p: [*]const u8) V4 {
     return .{ @floatFromInt(p[0]), @floatFromInt(p[1]), @floatFromInt(p[2]), @floatFromInt(p[3]) };
 }
@@ -123,6 +124,19 @@ pub fn winsi_resize_rgba(
         const n: usize = vy_n[y];
         const ws = vy_w + y * mt;
         var x: usize = 0;
+        // De a 4 píxeles (16 valores): el peso de la fila es el mismo para
+        // todos, así que una carga de 16 bytes, una conversión ancha y una
+        // multiplicación hacen lo que antes cuatro vueltas. Cada carril suma
+        // en el mismo orden que antes: el mismo resultado, bit a bit.
+        while (x + 4 <= ancho_in) : (x += 4) {
+            var t: V16 = @splat(0.0);
+            var i: usize = 0;
+            while (i < n) : (i += 1) {
+                const bytes: @Vector(16, u8) = (src + ((left + i) * ancho_in + x) * 4)[0..16].*;
+                t += @as(V16, @floatFromInt(bytes)) * @as(V16, @splat(ws[i]));
+            }
+            (fila + x * 4)[0..16].* = t;
+        }
         while (x < ancho_in) : (x += 1) {
             var t: V4 = @splat(0.0);
             var i: usize = 0;
