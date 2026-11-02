@@ -4,7 +4,11 @@ Todos los cambios notables de WinsiBot se documentan en este archivo, versión p
 
 ---
 
-## [9.3.2] — sin publicar
+## [9.3.2] — 2026-11-02
+
+**Un arreglo chico de la 9.3.1.** Sin sesión todavía —antes del primer QR, o justo después de
+`npm run manage:reset-qr`— el arranque lo dice como algo normal y no como una advertencia, que
+hacía parecer que algo se había roto. Session API 5.16.0, sin cambios.
 
 | Área | Cambio |
 |------|--------|

@@ -1,6 +1,6 @@
 <div align="center">
 
-<img src="https://capsule-render.vercel.app/api?type=waving&color=0:6C63FF,100:00C9FF&height=180&section=header&text=WinsiBot&fontSize=62&fontColor=ffffff&fontAlignY=38&desc=v9.3.1%20%E2%80%94%20Enterprise%20WhatsApp%20Bot&descAlignY=58&descSize=18" width="100%"/>
+<img src="https://capsule-render.vercel.app/api?type=waving&color=0:6C63FF,100:00C9FF&height=180&section=header&text=WinsiBot&fontSize=62&fontColor=ffffff&fontAlignY=38&desc=v9.3.2%20%E2%80%94%20Enterprise%20WhatsApp%20Bot&descAlignY=58&descSize=18" width="100%"/>
 
 <br/>
 
@@ -9,7 +9,7 @@
 [![Rust](https://img.shields.io/badge/Rust-1.75%2B-CE422B?style=for-the-badge&logo=rust&logoColor=white)](https://rust-lang.org)
 
 [![License](https://img.shields.io/badge/License-GPL--3.0-blue?style=flat-square)](LICENSE)
-[![Version](https://img.shields.io/badge/Version-9.3.1-6C63FF?style=flat-square)](CHANGELOG.md)
+[![Version](https://img.shields.io/badge/Version-9.3.2-6C63FF?style=flat-square)](CHANGELOG.md)
 [![Platform](https://img.shields.io/badge/Platform-Windows%20%7C%20Linux%20%7C%20macOS%20%7C%20Android-lightgrey?style=flat-square)](https://github.com/Brashkie/WinsiBot)
 [![PRs Welcome](https://img.shields.io/badge/PRs-welcome-brightgreen?style=flat-square)](https://github.com/Brashkie/WinsiBot/pulls)
 
@@ -17,7 +17,7 @@
 
 > Bot de WhatsApp de alto rendimiento con arquitectura multi-lenguaje de tres capas.<br/>
 > Sin límite artificial de grupos, pensado para miles de mensajes por hora y múltiples instancias.<br/>
-> v9.3.1 — **Lo que apareció al usarla en grupos de verdad.** Si el antiban pone un número nuevo en calentamiento, el bot le avisa al dueño y dice a qué hora vuelve a enviar; `#antiban madurar` lo termina para un número con uso. El dueño vuelve a ser dueño en grupos con @lid, la IA ya no le contesta a otros bots, y las menciones muestran nombres. Desde la 9.3.0, toda la economía pasa por Ada/SPARK.<br/>
+> v9.3.2 — **Lo que apareció al usarla en grupos de verdad.** Si el antiban pone un número nuevo en calentamiento, el bot le avisa al dueño y dice a qué hora vuelve a enviar; `#antiban madurar` lo termina para un número con uso. El dueño vuelve a ser dueño en grupos con @lid, la IA ya no le contesta a otros bots, y las menciones muestran nombres. Desde la 9.3.0, toda la economía pasa por Ada/SPARK.<br/>
 
 <br/>
 
@@ -65,6 +65,10 @@
 | ⚙️ **Session + IA** | Rust / Axum | Creds atómicas y snapshots, tracker Bad MAC, rate limiter, antiban, clasificación de intenciones, personalidad y humor, reputación, perfiles de estilo, Ollama y APIs cloud, imágenes |
 | 🛡 **Antirrobo y economía** | Ada/SPARK | La decisión del antirrobo de grupos, cada cambio de saldo de la economía —todo o nada, sin negativos, y en `#pay` y el banco el total de monedas se conserva siempre—, el lector de montos y el turno de cada envío del antiban, con sus garantías demostradas por GNATprove para toda entrada, enlazados dentro de la Session API |
 | 🧮 **Kernels nativos** | C + Zig | Anime4K y el códec JPEG, compilados con Zig dentro del binario de la Session API. Se usa el que gana midiendo, y en x86-64 la copia para AVX2 si la CPU la tiene. |
+
+### Novedades en v9.3.2
+
+Un arreglo chico: sin sesión todavía —antes del primer QR o después de `npm run manage:reset-qr`, que borra `auth/`— el arranque lo dice como algo normal ("se va a pedir el QR") y no como una advertencia. Para reiniciar el bot, `npm run start`: `manage:reset-qr` es solo para vincular el número otra vez. Lo demás, en la 9.3.1:
 
 ### Novedades en v9.3.1
 
@@ -207,7 +211,7 @@
 
 ```
 ╔════════════════════════════════════════════════╗
-║                WinsiBot v9.3.1                 ║
+║                WinsiBot v9.3.2                 ║
 ╠═════════════════════╦══════════════════════════╣
 ║      TypeScript     ║           Rust           ║
 ║    Node.js :4001    ║                          ║
