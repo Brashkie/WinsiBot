@@ -38,10 +38,11 @@ fn main() {
     let bytes = std::fs::read(ruta).expect("no pude leer la imagen");
     let v = 7;
     println!(
-        "hilos: {} · backends {:?} · Zig en {}",
+        "hilos: {} · backends {:?} · Zig en {} · pasada de a {}",
         anime4k::hilos(),
         anime4k::elegido(),
-        winsibot_session_api::simd::nombre()
+        winsibot_session_api::simd::nombre(),
+        anime4k::carriles()
     );
 
     let (t_dec, img) = mediana(v, || image::load_from_memory(&bytes).unwrap());

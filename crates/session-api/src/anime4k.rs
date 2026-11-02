@@ -401,6 +401,33 @@ mod ffi {
             anillo_g: *mut u8,
             luma: u32,
         );
+        pub fn winsi_a4k_pass_zig_n8(
+            src: *const u8,
+            dst: *mut u8,
+            w: u32,
+            h: u32,
+            fc: f32,
+            fg: f32,
+            y0: u32,
+            y1: u32,
+            anillo_c: *mut u8,
+            anillo_g: *mut u8,
+            luma: u32,
+        );
+        #[cfg(winsi_v3)]
+        pub fn winsi_a4k_pass_zig_n8_v3(
+            src: *const u8,
+            dst: *mut u8,
+            w: u32,
+            h: u32,
+            fc: f32,
+            fg: f32,
+            y0: u32,
+            y1: u32,
+            anillo_c: *mut u8,
+            anillo_g: *mut u8,
+            luma: u32,
+        );
         #[cfg(winsi_v3)]
         pub fn winsi_a4k_pass_zig_v3(
             src: *const u8,
@@ -775,6 +802,39 @@ fn pasada_zig_en(
     fuerza_gradiente: f32,
     luma: bool,
 ) {
+    pasada_zig_con(
+        img,
+        salida,
+        fuerza_color,
+        fuerza_gradiente,
+        luma,
+        carriles(),
+    );
+}
+
+/// De a cuántos píxeles va la pasada fusionada de Zig: 16 o 8.
+///
+/// De a 16 ganó en x86 (9.3.0); en ARM un registro NEON mide la mitad, y hay
+/// que medir. `WINSI_A4K_CARRILES=8` usa la de a 8; CI mide las dos en ARM
+/// (`examples/profile_stages`). Las dos dan lo mismo bit a bit.
+pub fn carriles() -> usize {
+    use std::sync::OnceLock;
+    static C: OnceLock<usize> = OnceLock::new();
+    *C.get_or_init(|| match std::env::var("WINSI_A4K_CARRILES").as_deref() {
+        Ok("8") => 8,
+        _ => 16,
+    })
+}
+
+#[cfg(feature = "native")]
+fn pasada_zig_con(
+    img: &RgbaImage,
+    salida: &mut RgbaImage,
+    fuerza_color: f32,
+    fuerza_gradiente: f32,
+    luma: bool,
+    carriles: usize,
+) {
     let (w, h) = (img.width(), img.height());
     assert_eq!(salida.dimensions(), (w, h));
     let (src, dst) = (img.as_ptr() as usize, salida.as_mut_ptr() as usize);
@@ -783,22 +843,48 @@ fn pasada_zig_en(
         let mut anillo_g = vec![0u8; w as usize * 4 * 3];
         // SAFETY: como en push_color_c; los anillos son de este hilo y miden
         // las cinco y tres filas que pide el kernel.
+        let (s, d, fc, fg, l) = (
+            src as *const u8,
+            dst as *mut u8,
+            fuerza_color,
+            fuerza_gradiente,
+            u32::from(luma),
+        );
+        let (ac, ag) = (anillo_c.as_mut_ptr(), anillo_g.as_mut_ptr());
         unsafe {
-            crate::zig!(
-                ffi::winsi_a4k_pass_zig,
-                ffi::winsi_a4k_pass_zig_v3,
-                src as *const u8,
-                dst as *mut u8,
-                w,
-                h,
-                fuerza_color,
-                fuerza_gradiente,
-                y0,
-                y1,
-                anillo_c.as_mut_ptr(),
-                anillo_g.as_mut_ptr(),
-                u32::from(luma)
-            )
+            if carriles == 8 {
+                crate::zig!(
+                    ffi::winsi_a4k_pass_zig_n8,
+                    ffi::winsi_a4k_pass_zig_n8_v3,
+                    s,
+                    d,
+                    w,
+                    h,
+                    fc,
+                    fg,
+                    y0,
+                    y1,
+                    ac,
+                    ag,
+                    l
+                )
+            } else {
+                crate::zig!(
+                    ffi::winsi_a4k_pass_zig,
+                    ffi::winsi_a4k_pass_zig_v3,
+                    s,
+                    d,
+                    w,
+                    h,
+                    fc,
+                    fg,
+                    y0,
+                    y1,
+                    ac,
+                    ag,
+                    l
+                )
+            }
         }
     });
 }
@@ -1007,12 +1093,18 @@ mod tests {
                     ref_luma,
                     "pasada fusionada {w}x{h} f={f}"
                 );
+                // La de a 8 carriles (la que puede ganar en ARM), igual.
+                let mut n8 = RgbaImage::new(w, h);
+                pasada_zig_con(&img, &mut n8, f, f, false, 8);
+                assert_eq!(n8, ref_luma, "pasada de a 8 {w}x{h} f={f}");
                 luminancia_en_alfa(&mut ref_luma);
                 assert_eq!(
                     pasada_zig(&img, f, f, true),
                     ref_luma,
                     "pasada fusionada con luma {w}x{h} f={f}"
                 );
+                pasada_zig_con(&img, &mut n8, f, f, true, 8);
+                assert_eq!(n8, ref_luma, "pasada de a 8 con luma {w}x{h} f={f}");
                 // Y con la luminancia de la pasada siguiente escrita en el alfa.
                 let mut referencia = push_gradient_rust(&gradiente_rust(&pc), f);
                 luminancia_en_alfa(&mut referencia);

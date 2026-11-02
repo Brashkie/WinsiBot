@@ -4,6 +4,12 @@ Todos los cambios notables de WinsiBot se documentan en este archivo, versión p
 
 ---
 
+## [9.3.3] — sin publicar
+
+| Área | Cambio |
+|------|--------|
+| **Anime4K en ARM: medir antes de elegir** | Los primeros números de ARM (el runner ARM64 de CI) dicen que las dos pasadas de Anime4K son el **80 % de `#upscale`** —191 ms cada una en un núcleo, el doble que en x86—, y que escala casi perfecto con los núcleos (3,85× con 4). La pasada va de a 16 píxeles desde la 9.3.0 porque ganó en x86, pero en ARM un registro NEON mide la mitad, y el cálculo en f32 de 16 carriles ocupa cuatro: no se sabía si ahí gana. Ahora el binario trae **las dos** —de a 16 y de a 8, el mismo código instanciado dos veces, idénticas bit a bit (los tests comparan la de a 8 contra la referencia, también en SSE2)—, `WINSI_A4K_CARRILES=8` elige la de a 8, y el paso de ARM de CI mide las dos. En x86 la de a 16 sigue ganando (~97 contra ~120 ms por pasada en un núcleo), así que nada cambia por defecto; con los números de ARM se elige la de ARM |
+
 ## [9.3.2] — 2026-11-02
 
 **Un arreglo chico de la 9.3.1.** Sin sesión todavía —antes del primer QR, o justo después de

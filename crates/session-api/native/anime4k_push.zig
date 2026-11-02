@@ -290,15 +290,16 @@ fn intercalarRgba(comptime n: usize) [4 * n]i32 {
     return m;
 }
 
-/// Una fila de salida a partir de sus tres filas de entrada.
-inline fn unaFila(comptime kernel: anytype, a: [*]const u8, m: [*]const u8, b: [*]const u8, salida: [*]u8, w: usize, f: f32) void {
+/// Una fila de salida a partir de sus tres filas de entrada, de a `ancho`
+/// píxeles (N, salvo en la pasada de a 8: ver pasadaCon).
+inline fn unaFila(comptime ancho: usize, comptime kernel: anytype, a: [*]const u8, m: [*]const u8, b: [*]const u8, salida: [*]u8, w: usize, f: f32) void {
     var x: usize = 0;
-    if (w >= N + 2) {
+    if (w >= ancho + 2) {
         guardar(1, salida, 0, kernel(1, acotado(1, a, m, b, w, 0), f));
         x = 1;
-        // De a N mientras el vecino derecho del último (x + N) siga dentro.
-        while (x + N <= w - 1) : (x += N) {
-            guardar(N, salida, x, kernel(N, interior(N, a, m, b, x), f));
+        // De a `ancho` mientras el vecino derecho del último siga dentro.
+        while (x + ancho <= w - 1) : (x += ancho) {
+            guardar(ancho, salida, x, kernel(ancho, interior(ancho, a, m, b, x), f));
         }
     }
     while (x < w) : (x += 1) {
@@ -317,7 +318,7 @@ fn recorrer(comptime kernel: anytype, src: [*]const u8, dst: [*]u8, w32: u32, h3
     while (y < @min(y1, h32)) : (y += 1) {
         const yn = if (y == 0) 0 else y - 1;
         const yp = if (y == h - 1) y else y + 1;
-        unaFila(kernel, src + yn * w * 4, src + y * w * 4, src + yp * w * 4, dst + y * w * 4, w, f);
+        unaFila(N, kernel, src + yn * w * 4, src + y * w * 4, src + yp * w * 4, dst + y * w * 4, w, f);
     }
 }
 
@@ -374,9 +375,9 @@ pub fn winsi_a4k_gradient_push_zig(src: [*]const u8, dst: [*]u8, w32: u32, h32: 
         const m = G.fila_(y, src, w, h, anillo, &en);
         const b = G.fila_(yp, src, w, h, anillo, &en);
         if (luma != 0) {
-            unaFila(pushGradientLuma, a, m, b, dst + y * largo, w, f);
+            unaFila(N, pushGradientLuma, a, m, b, dst + y * largo, w, f);
         } else {
-            unaFila(pushGradient, a, m, b, dst + y * largo, w, f);
+            unaFila(N, pushGradient, a, m, b, dst + y * largo, w, f);
         }
     }
 }
@@ -415,6 +416,19 @@ fn Anillo(comptime n: usize) type {
 ///
 /// `anillo_c` mide 5·w·4 bytes y `anillo_g`, 3·w·4.
 pub fn winsi_a4k_pass_zig(src: [*]const u8, dst: [*]u8, w32: u32, h32: u32, fc: f32, fg: f32, y0: u32, y1: u32, anillo_c: [*]u8, anillo_g: [*]u8, luma: u32) callconv(.C) void {
+    pasadaCon(N, src, dst, w32, h32, fc, fg, y0, y1, anillo_c, anillo_g, luma);
+}
+
+/// La misma pasada, de a 8 píxeles. De a 16 ganó en x86 (9.3.0: un registro
+/// AVX2 lleno), pero en ARM un registro NEON mide la mitad y el cálculo en
+/// f32 de 16 carriles ocupa cuatro: la Session API elige con
+/// WINSI_A4K_CARRILES, y CI mide las dos en ARM. El mismo resultado bit a bit:
+/// cada carril es independiente.
+pub fn winsi_a4k_pass_zig_n8(src: [*]const u8, dst: [*]u8, w32: u32, h32: u32, fc: f32, fg: f32, y0: u32, y1: u32, anillo_c: [*]u8, anillo_g: [*]u8, luma: u32) callconv(.C) void {
+    pasadaCon(8, src, dst, w32, h32, fc, fg, y0, y1, anillo_c, anillo_g, luma);
+}
+
+fn pasadaCon(comptime ancho: usize, src: [*]const u8, dst: [*]u8, w32: u32, h32: u32, fc: f32, fg: f32, y0: u32, y1: u32, anillo_c: [*]u8, anillo_g: [*]u8, luma: u32) void {
     @setEvalBranchQuota(100_000);
     const w: usize = w32;
     const h: usize = h32;
@@ -430,7 +444,7 @@ pub fn winsi_a4k_pass_zig(src: [*]const u8, dst: [*]u8, w32: u32, h32: u32, fc: 
             if (!l.lista) {
                 const rn = if (r == 0) 0 else r - 1;
                 const rp = if (r == hh - 1) r else r + 1;
-                unaFila(pushColor, s + rn * ww * 4, s + r * ww * 4, s + rp * ww * 4, l.p, ww, f);
+                unaFila(ancho, pushColor, s + rn * ww * 4, s + r * ww * 4, s + rp * ww * 4, l.p, ww, f);
             }
             return l.p;
         }
@@ -456,9 +470,9 @@ pub fn winsi_a4k_pass_zig(src: [*]const u8, dst: [*]u8, w32: u32, h32: u32, fc: 
         const m = F.deSobel(y, src, w, h, fc, &color, &grad);
         const b = F.deSobel(yp, src, w, h, fc, &color, &grad);
         if (luma != 0) {
-            unaFila(pushGradientLuma, a, m, b, dst + y * largo, w, fg);
+            unaFila(ancho, pushGradientLuma, a, m, b, dst + y * largo, w, fg);
         } else {
-            unaFila(pushGradient, a, m, b, dst + y * largo, w, fg);
+            unaFila(ancho, pushGradient, a, m, b, dst + y * largo, w, fg);
         }
     }
 }

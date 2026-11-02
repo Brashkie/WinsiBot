@@ -111,11 +111,15 @@ jobs:
       # Cuánto tarda #upscale en ARM, por etapa, en un núcleo y en todos: el
       # número que no se puede medir desde un PC con x86. Solo informa, no
       # falla por lento (un runner compartido no es un teléfono).
+      # La pasada de a 16 (la que ganó en x86) y de a 8, en un núcleo y en
+      # todos: con estos números se elige la de ARM (ver anime4k::carriles).
       - name: "Medir #upscale en ARM"
         run: |
           cargo build --release -p winsibot-session-api --features native --example profile_stages
-          WINSI_HILOS=1 ./target/release/examples/profile_stages media/WinsiBot.png 2
-          ./target/release/examples/profile_stages media/WinsiBot.png 2
+          for c in 16 8; do
+            WINSI_A4K_CARRILES=$c WINSI_HILOS=1 ./target/release/examples/profile_stages media/WinsiBot.png 2
+            WINSI_A4K_CARRILES=$c ./target/release/examples/profile_stages media/WinsiBot.png 2
+          done
 
   # ─── Antirrobo en Ada/SPARK ──────────────────────────────────────────────────
   # La decisión del antirrobo de grupos (crates/session-api/ada) está en SPARK:
