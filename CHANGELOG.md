@@ -4,6 +4,16 @@ Todos los cambios notables de WinsiBot se documentan en este archivo, versión p
 
 ---
 
+## [9.4.0] — sin publicar
+
+| Área | Cambio |
+|------|--------|
+| **Seguridad: el nombre de una sesión, demostrado en Ada/SPARK** | El nombre de una sesión llega por HTTP y termina siendo una carpeta: `sessions/<nombre>/creds.json`. Se validaba en Rust con `is_alphanumeric()`, que acepta **cualquier letra Unicode** —é, cirílico, dígitos de ancho completo— aunque el error dijera "solo a-z, 0-9", y no miraba los **nombres que Windows reserva para dispositivos**: una sesión `con`, `nul` o `com1` no es una carpeta. Ahora decide `Session_Name` en SPARK, y GNATprove demuestra para todo texto que acepta EXACTAMENTE de 1 a 64 bytes de `[A-Za-z0-9_-]` que no sean CON, PRN, AUX, NUL, COM0-9 ni LPT0-9, sin importar mayúsculas: 23 checks, 230 en total. Cinco errores puestos a propósito en el cuerpo (aceptar el vacío, aceptar 65 bytes, no mirar el último, olvidar los reservados, devolver otro código) los atrapa todos. La copia en Rust —la de Android y Linux ARM— da lo mismo que Ada en **las 16,7 millones de cadenas de hasta 3 bytes**, en las de 4 que importan y en largos fuera de rango; también en CI |
+| **Seguridad: la API key ya no filtra su largo** | La comparación era de tiempo constante, pero salía antes si los largos eran distintos: midiendo cuánto tardaba, se podía averiguar el largo de la clave. Ahora siempre recorre la clave real entera, y la diferencia de largos entra en la misma cuenta, sin un `if` |
+| **`#upscale`: el tamaño de salida no puede dar la vuelta** | Ancho × escala se calculaba con `*`, que en release da la vuelta en silencio: un ancho enorme quedaría chico y pasaría el tope de píxeles. Hoy el decodificador ya rechaza esas imágenes (no reserva más de 512 MB), pero ahora con `checked_mul` esto no depende de un límite de otra librería |
+| **JPEG: el Huffman en C, −44 %** | El códec JPEG está partido: color y DCT en Zig, Huffman en C. Medido por dentro por primera vez (`profile_stages` ahora lo muestra): sobre 3072x2048 en un hilo, 20 ms de Zig y **14,2 ms de C**. El C recorría los 63 coeficientes de cada bloque de 8x8 uno por uno, con un `if` cada vez, y la mayoría son cero. Ahora arma con **SIMD** una máscara de 64 bits de los que no son cero —SSE2 en x86 (`pcmpeqw`, `packsswb`, `pmovmskb`), NEON en ARM— y salta de uno al siguiente con `ctz`, como libjpeg-turbo. En la 8.18.0 se había probado la máscara armada en escalar y salió más lenta; armada con SIMD, **el Huffman baja de 14,2 a 7,9 ms** (medido alternando los dos binarios). El flujo de bits es **el mismo, byte a byte**: la versión anterior queda como referencia, y un test lo compara en 40 rondas de bloques al azar con lo que lo pone a prueba —rachas de más de 16 ceros, el último coeficiente distinto de cero, negativos—, también en un ARM64 de verdad en CI. Sin libc, como siempre: los vectores y las intrínsecas internas de clang en vez de `<emmintrin.h>`, que trae `<stdlib.h>` |
+| **Limpieza** | Fuera de `data/` cuatro archivos que nada en el código lee ni escribe, de la época de Python: `health_log.json` (1,4 MB), `code_analysis.json`, `alert_log.json` y `break_log.json` |
+
 ## [9.3.4] — 2026-11-02
 
 **`npm install` vuelve a funcionar en Termux.** El npm nuevo de Termux solo acepta paquetes del

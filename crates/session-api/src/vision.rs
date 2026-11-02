@@ -349,7 +349,13 @@ pub fn upscale_rgba(png_o_jpeg: &[u8], escala: u32) -> Upscale<image::RgbaImage>
     let img =
         image::load_from_memory(png_o_jpeg).map_err(|e| format!("no se pudo decodificar: {e}"))?;
     let (w0, h0) = (img.width(), img.height());
-    let (w, h) = (w0 * escala, h0 * escala);
+    // Con `checked_mul`: en release `*` da la vuelta en silencio, y un ancho
+    // enorme multiplicado por la escala quedaría chico y pasaría el tope. Hoy
+    // el decodificador ya rechaza esas imágenes (no reserva más de 512 MB),
+    // pero esto no depende de un límite de otra librería.
+    let (Some(w), Some(h)) = (w0.checked_mul(escala), h0.checked_mul(escala)) else {
+        return Err(format!("la imagen es de {w0}x{h0}, demasiado grande"));
+    };
 
     if u64::from(w) * u64::from(h) > A4K_MAX_PIXELES_SALIDA {
         return Err(format!(

@@ -165,10 +165,11 @@ jobs:
       # y en un millón de entradas al azar; el lector de montos, en las
       # 2.396.745 tiras cortas (la misma huella que el test de TypeScript) y
       # en un millón de largas; el ritmo de salida, en un millón de pedidos y
-      # en los bordes de la escalada.
+      # en los bordes de la escalada; el nombre de una sesión, en todas las
+      # cadenas de hasta 3 bytes.
       - name: Ada contra las copias en Rust
         working-directory: crates/session-api/ada
-        run: alr -n exec -- bash -c 'cd ../../.. && cargo test --release -p winsibot-session-api --features ada -- group_guard ledger amount send_pacing'
+        run: alr -n exec -- bash -c 'cd ../../.. && cargo test --release -p winsibot-session-api --features ada -- group_guard ledger amount send_pacing session_id'
 
       - name: Clippy con Ada
         working-directory: crates/session-api/ada

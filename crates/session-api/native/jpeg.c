@@ -20,6 +20,14 @@
 
 #include <stddef.h>
 #include <stdint.h>
+#if defined(__aarch64__)
+#include <arm_neon.h>
+#elif defined(__SSE2__)
+/* Sin <emmintrin.h>: trae <stdlib.h>, y esto se compila sin libc. Los
+ * vectores de clang y sus intrínsecas internas dan las mismas instrucciones. */
+typedef short v8hi __attribute__((vector_size(16)));
+typedef char v16qi __attribute__((vector_size(16)));
+#endif
 
 /* Orden zigzag: la posición k del flujo es el índice natural zz[k]. */
 static const uint8_t ZZ[64] = {
@@ -185,8 +193,10 @@ static inline int categoria(int v) {
     return a ? 32 - __builtin_clz(a) : 0;
 }
 
-static void bloque(escritor *e, const int16_t c[64], int *dc_prev,
-                   const tabla *dc, const tabla *ac) {
+/* El bloque coeficiente por coeficiente: la referencia de `bloque`, que
+ * tiene que dar el mismo flujo de bits (ver winsi_jpeg_franja_ref). */
+static void bloque_ref(escritor *e, const int16_t c[64], int *dc_prev,
+                       const tabla *dc, const tabla *ac) {
     int diff = c[0] - *dc_prev;
     *dc_prev = c[0];
     int n = categoria(diff);
@@ -195,13 +205,10 @@ static void bloque(escritor *e, const int16_t c[64], int *dc_prev,
     uint32_t val = (uint32_t)(diff < 0 ? diff - 1 : diff) & ((1u << n) - 1);
     bits(e, ((uint32_t)dc->codigo[n] << n) | val, dc->largo[n] + n);
 
-    /* Se probó (8.18.0) armar primero una máscara de 64 bits con los AC
-     * distintos de cero y saltar entre ellos con ctz, como libjpeg-turbo: el
-     * mismo flujo de bits, pero MÁS LENTO (11,7 → 13,1 ms en un hilo sobre
-     * 3072x2048), porque el bucle que arma la máscara cuesta más que lo que
-     * ahorra saltar los ceros. Se quedó este. Compilado para x86-64-v3
-     * (BMI2, LZCNT) gana un 8% (11,8 → 10,9 ms), que con todos los núcleos son
-     * décimas de ms: no justifica compilar el C dos veces. */
+    /* Así se codificó hasta la 9.3. En la 8.18.0 se probó la máscara de no-
+     * ceros armada en escalar y salió más lenta (11,7 → 13,1 ms); armada con
+     * SIMD, que es lo que hace `bloque` desde la 9.4, el Huffman de 3072x2048
+     * en un hilo baja de 14,2 a 7,9 ms. Queda como referencia de los tests. */
     int ceros = 0;
     for (int k = 1; k < 64; k++) {
         int v = c[k];
@@ -217,6 +224,73 @@ static void bloque(escritor *e, const int16_t c[64], int *dc_prev,
         ceros = 0;
     }
     if (ceros) bits(e, ac->codigo[0x00], ac->largo[0x00]);  /* EOB */
+}
+
+/* Qué coeficientes del bloque no son cero: el bit k es c[k] != 0.
+ *
+ * Con SIMD son unas pocas instrucciones: comparar 8 coeficientes con cero de
+ * una vez, juntar los resultados en bytes y sacar un bit por cada uno (SSE2:
+ * pcmpeqw, packsswb, pmovmskb; NEON: cmeq, xtn y una suma de bits pesados).
+ * En la 8.18.0 se probó la máscara armada coeficiente por coeficiente y salió
+ * más lenta que el bucle de abajo: el costo estaba en armarla, no en usarla. */
+static inline uint64_t no_ceros(const int16_t c[64]) {
+#if defined(__aarch64__)
+    static const uint8_t pesos_[8] = {1, 2, 4, 8, 16, 32, 64, 128};
+    const uint8x8_t pesos = vld1_u8(pesos_);
+    uint64_t ceros = 0;
+    for (int i = 0; i < 8; i++) {
+        uint16x8_t z = vceqq_s16(vld1q_s16(c + 8 * i), vdupq_n_s16(0));
+        uint8x8_t bytes = vmovn_u16(z);                   /* 0xFF donde es cero */
+        ceros |= (uint64_t)vaddv_u8(vand_u8(bytes, pesos)) << (8 * i);
+    }
+    return ~ceros;
+#elif defined(__SSE2__)
+    uint64_t ceros = 0;
+    for (int i = 0; i < 4; i++) {
+        v8hi a, b;
+        __builtin_memcpy(&a, c + 16 * i, 16);
+        __builtin_memcpy(&b, c + 16 * i + 8, 16);
+        /* -1 donde es cero (pcmpeqw), a bytes (packsswb), un bit por byte (pmovmskb). */
+        v16qi z = __builtin_ia32_packsswb128((v8hi)(a == 0), (v8hi)(b == 0));
+        ceros |= (uint64_t)(uint16_t)__builtin_ia32_pmovmskb128(z) << (16 * i);
+    }
+    return ~ceros;
+#else
+    uint64_t m = 0;
+    for (int k = 0; k < 64; k++) m |= (uint64_t)(c[k] != 0) << k;
+    return m;
+#endif
+}
+
+/* Un bloque: el DC como diferencia con el anterior, y los AC saltando de un
+ * no-cero al siguiente con ctz, en vez de mirar los 63 de a uno —la mayoría
+ * son cero—. Lo mismo, bit a bit, que bloque_ref. */
+static void bloque(escritor *e, const int16_t c[64], int *dc_prev,
+                   const tabla *dc, const tabla *ac) {
+    int diff = c[0] - *dc_prev;
+    *dc_prev = c[0];
+    int n = categoria(diff);
+    uint32_t val = (uint32_t)(diff < 0 ? diff - 1 : diff) & ((1u << n) - 1);
+    bits(e, ((uint32_t)dc->codigo[n] << n) | val, dc->largo[n] + n);
+
+    uint64_t m = no_ceros(c) & ~1ull;   /* sin el DC */
+    int anterior = 0;                   /* el último que se escribió */
+    while (m) {
+        int k = __builtin_ctzll(m);
+        m &= m - 1;
+        int ceros = k - anterior - 1;
+        while (ceros > 15) {  /* ZRL: dieciséis ceros seguidos */
+            bits(e, ac->codigo[0xF0], ac->largo[0xF0]);
+            ceros -= 16;
+        }
+        int v = c[k];
+        n = categoria(v);
+        int s = (ceros << 4) | n;
+        val = (uint32_t)(v < 0 ? v - 1 : v) & ((1u << n) - 1);
+        bits(e, ((uint32_t)ac->codigo[s] << n) | val, ac->largo[s] + n);
+        anterior = k;
+    }
+    if (anterior != 63) bits(e, ac->codigo[0x00], ac->largo[0x00]);  /* EOB */
 }
 
 static void dht(escritor *e, uint8_t clase_id, const uint8_t b[16], const uint8_t *vals, int n) {
@@ -311,6 +385,21 @@ size_t winsi_jpeg_franja(const int16_t *coefs, uint32_t m0, uint32_t m1, uint8_t
         bloque(&e, b + 5 * 64, &pcr, &dcc, &acc);
     }
     /* Completar el último byte con unos, como pide la norma. */
+    cerrar(&e);
+    return e.desborde ? 0 : (size_t)(e.p - out);
+}
+
+/* Lo mismo con bloque_ref, coeficiente por coeficiente: para que los tests de
+ * Rust comprueben que `bloque` da el mismo flujo, byte a byte. */
+size_t winsi_jpeg_franja_ref(const int16_t *coefs, uint32_t m0, uint32_t m1, uint8_t *out, size_t cap) {
+    escritor e = {out, out + cap, 0, 0, 0};
+    int py = 0, pcb = 0, pcr = 0;
+    for (uint32_t m = m0; m < m1 && !e.desborde; m++) {
+        const int16_t *b = coefs + (size_t)m * 6 * 64;
+        for (int i = 0; i < 4; i++) bloque_ref(&e, b + i * 64, &py, &dcl, &acl);
+        bloque_ref(&e, b + 4 * 64, &pcb, &dcc, &acc);
+        bloque_ref(&e, b + 5 * 64, &pcr, &dcc, &acc);
+    }
     cerrar(&e);
     return e.desborde ? 0 : (size_t)(e.p - out);
 }

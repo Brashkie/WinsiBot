@@ -71,6 +71,15 @@ mod ffi {
             out: *mut u8,
             cap: usize,
         ) -> usize;
+        /// Lo mismo, coeficiente por coeficiente: la referencia de los tests.
+        #[cfg(test)]
+        pub fn winsi_jpeg_franja_ref(
+            coefs: *const i16,
+            m0: u32,
+            m1: u32,
+            out: *mut u8,
+            cap: usize,
+        ) -> usize;
     }
 }
 
@@ -200,6 +209,35 @@ fn coefs_y_armar(
     calidad: u8,
     hilos: usize,
 ) -> Option<Vec<u8>> {
+    let (coefs, qy, qc) = calcular_coefs(px, canales, w, h, calidad);
+    armar(&coefs, w, h, &qy, &qc, hilos)
+}
+
+/// Cuánto tarda cada mitad del códec, en ms: (color y DCT en Zig, Huffman y
+/// armado en C). El mismo código que [`codificar_rgba`], partido para medir
+/// (ver `examples/profile_stages.rs`).
+#[cfg(feature = "native")]
+#[doc(hidden)]
+pub fn medir_etapas(img: &image::RgbaImage, calidad: u8, hilos: usize) -> (f64, f64) {
+    let (w, h) = img.dimensions();
+    let t0 = std::time::Instant::now();
+    let (coefs, qy, qc) = calcular_coefs(img.as_raw(), 4, w, h, calidad);
+    let t1 = std::time::Instant::now();
+    std::hint::black_box(armar(&coefs, w, h, &qy, &qc, hilos));
+    let ms = |d: std::time::Duration| d.as_secs_f64() * 1000.0;
+    (ms(t1 - t0), ms(t1.elapsed()))
+}
+
+/// Color, submuestreo y DCT (Zig), en franjas de filas de MCU sobre todos los
+/// núcleos. Devuelve los coeficientes y las tablas de cuantización.
+#[cfg(feature = "native")]
+fn calcular_coefs(
+    px: &[u8],
+    canales: u32,
+    w: u32,
+    h: u32,
+    calidad: u8,
+) -> (Vec<i16>, [u8; 64], [u8; 64]) {
     debug_assert_eq!(px.len(), w as usize * h as usize * canales as usize);
     let mut qy = [0u8; 64];
     let mut qc = [0u8; 64];
@@ -254,7 +292,7 @@ fn coefs_y_armar(
             });
         }
     });
-    armar(&coefs, w, h, &qy, &qc, hilos)
+    (coefs, qy, qc)
 }
 
 /// Cabecera + datos + EOI. `hilos` = 1 da un solo tramo, sin marcadores.
@@ -321,6 +359,62 @@ pub fn codificar(img: &RgbImage, calidad: u8) -> Vec<u8> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// El Huffman salta de un coeficiente no-cero al siguiente con una máscara
+    /// armada con SIMD (jpeg.c, `bloque`): tiene que dar el mismo flujo, byte a
+    /// byte, que la referencia coeficiente por coeficiente. Con lo que lo pone
+    /// a prueba: casi todo cero, rachas de más de 16 ceros, el último distinto
+    /// de cero, negativos y valores grandes.
+    #[cfg(feature = "native")]
+    #[test]
+    fn el_huffman_con_mascara_da_los_mismos_bytes() {
+        iniciar();
+        let mut s = 0x9E37_79B9_7F4A_7C15u64;
+        let mut azar = || {
+            s ^= s << 13;
+            s ^= s >> 7;
+            s ^= s << 17;
+            s
+        };
+        for ronda in 0..40 {
+            let mcus = 1 + (azar() % 300) as usize;
+            let mut coefs = vec![0i16; mcus * 6 * 64];
+            for (i, c) in coefs.iter_mut().enumerate() {
+                let r = azar();
+                // Más denso en algunas rondas, casi vacío en otras.
+                let densidad = 2 + ronda % 9;
+                *c = if i % 64 == 0 || r % densidad as u64 == 0 {
+                    let v = (r >> 8) % 2048;
+                    let v = if (r >> 20) % 7 == 0 { v } else { v % 40 };
+                    if (r >> 30) % 2 == 0 {
+                        v as i16
+                    } else {
+                        -(v as i16)
+                    }
+                } else {
+                    0
+                };
+            }
+            // Bloques extremos: solo el último AC, todo cero, todo lleno.
+            coefs[63] = 5;
+            coefs[64..128].fill(0);
+            for (k, c) in coefs[128..192].iter_mut().enumerate() {
+                *c = (k as i16 % 7) - 3 + if k % 3 == 0 { 1 } else { 0 };
+            }
+            let cap = mcus * 6 * 64 * 4 + 1024;
+            let (mut a, mut b) = (vec![0u8; cap], vec![0u8; cap]);
+            // SAFETY: `coefs` tiene 6·64 por MCU y m1 = mcus; `a` y `b` miden
+            // `cap`, de sobra, y el escritor no pasa de ahí.
+            let (na, nb) = unsafe {
+                (
+                    ffi::winsi_jpeg_franja(coefs.as_ptr(), 0, mcus as u32, a.as_mut_ptr(), cap),
+                    ffi::winsi_jpeg_franja_ref(coefs.as_ptr(), 0, mcus as u32, b.as_mut_ptr(), cap),
+                )
+            };
+            assert!(na > 0 && nb > 0);
+            assert_eq!(a[..na], b[..nb], "ronda {ronda}: los flujos difieren");
+        }
+    }
 
     #[cfg(feature = "native")]
     #[test]

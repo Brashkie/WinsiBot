@@ -41,10 +41,16 @@ fn compilar_ada() {
     println!("cargo:rerun-if-env-changed=WINSI_GNAT_GCC");
 
     // Cada unidad de Ada del crate: el antirrobo (9.2), el libro de saldos
-    // de la economía, el lector de montos y el ritmo de salida (9.3). Todas
-    // Pure, sin elaboración y demostradas.
+    // de la economía, el lector de montos y el ritmo de salida (9.3), y el
+    // nombre de una sesión (9.4). Todas Pure, sin elaboración y demostradas.
     let mut objetos = Vec::new();
-    for unidad in ["group_guard", "ledger", "amount_parser", "send_pacing"] {
+    for unidad in [
+        "group_guard",
+        "ledger",
+        "amount_parser",
+        "send_pacing",
+        "session_name",
+    ] {
         let objeto = salida.join(format!("{unidad}.o"));
         let estado = Command::new(&gcc)
             .args(["-c", "-O2", "-gnatp", "-gnatn", "-fPIC"])
