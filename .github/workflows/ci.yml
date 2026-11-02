@@ -111,16 +111,19 @@ jobs:
       # Cuánto tarda #upscale en ARM, por etapa, en un núcleo y en todos: el
       # número que no se puede medir desde un PC con x86. Solo informa, no
       # falla por lento (un runner compartido no es un teléfono).
-      # La pasada de a 16 (la de x86), de a 8 (la de ARM desde la 9.3.3) y de
-      # a 4, en un núcleo y en todos: con estos números se elige la de ARM
-      # (ver anime4k::carriles).
+      # Las variantes de la pasada (anime4k::Variante), en un núcleo y en
+      # todos: Zig de a 16 (la de x86), de a 8 (la de ARM desde la 9.3.3), de a
+      # 8 sumando los vecinos en enteros, y C con intrínsecas NEON. Si un
+      # cambio invierte quién gana en ARM, se ve acá.
       - name: "Medir #upscale en ARM"
         run: |
           cargo build --release -p winsibot-session-api --features native --example profile_stages
-          for c in 16 8 4; do
-            WINSI_A4K_CARRILES=$c WINSI_HILOS=1 ./target/release/examples/profile_stages media/WinsiBot.png 2
-            WINSI_A4K_CARRILES=$c ./target/release/examples/profile_stages media/WinsiBot.png 2
-          done
+          medir() { env "$@" WINSI_HILOS=1 ./target/release/examples/profile_stages media/WinsiBot.png 2
+                    env "$@" ./target/release/examples/profile_stages media/WinsiBot.png 2; }
+          medir WINSI_A4K_CARRILES=16
+          medir WINSI_A4K_CARRILES=8
+          medir WINSI_A4K_CARRILES=8 WINSI_A4K_SUMA=entera
+          medir WINSI_A4K_PASADA=neon
 
   # ─── Antirrobo en Ada/SPARK ──────────────────────────────────────────────────
   # La decisión del antirrobo de grupos (crates/session-api/ada) está en SPARK:

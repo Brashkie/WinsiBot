@@ -133,14 +133,23 @@ inline fn redondear(comptime n: usize, v: @Vector(n, f32)) @Vector(n, u8) {
 
 /// Empuja `mc` hacia el promedio de a, b, c en los carriles de `m`. Si ningún
 /// carril lo pide, no se calcula.
-inline fn empujar(comptime n: usize, mc: *[4]@Vector(n, f32), a: Px(n), b: Px(n), c: Px(n), f: f32, comptime alfa_fija: bool, m: @Vector(n, bool)) void {
+/// Con `entera`, los tres vecinos se suman como enteros (u16) y se convierte
+/// la suma una sola vez. Da el mismo flotante, bit a bit: la suma de tres u8
+/// es un entero de 0 a 765, exacto en f32, igual que ((a + b) + c) en f32. Son
+/// un tercio de las conversiones u8 → f32. En x86 salió más lento (9.3.0:
+/// ensanchar a u16 cuesta reordenar bytes); en ARM hay `uaddl`, que suma dos
+/// u8 y da u16 en una instrucción. Se elige por arquitectura, midiendo.
+inline fn empujar(comptime n: usize, comptime entera: bool, mc: *[4]@Vector(n, f32), a: Px(n), b: Px(n), c: Px(n), f: f32, comptime alfa_fija: bool, m: @Vector(n, bool)) void {
     if (!@reduce(.Or, m)) return;
     const resto: @Vector(n, f32) = @splat(1.0 - f);
     const fv: @Vector(n, f32) = @splat(f);
     const tres: @Vector(n, f32) = @splat(3.0);
     const canales = if (alfa_fija) 3 else 4;
     inline for (0..canales) |i| {
-        const media = (aF(n, a.c[i]) + aF(n, b.c[i]) + aF(n, c.c[i])) / tres;
+        const media = if (entera) blk: {
+            const suma = @as(@Vector(n, u16), a.c[i]) + @as(@Vector(n, u16), b.c[i]) + @as(@Vector(n, u16), c.c[i]);
+            break :blk @as(@Vector(n, f32), @floatFromInt(suma)) / tres;
+        } else (aF(n, a.c[i]) + aF(n, b.c[i]) + aF(n, c.c[i])) / tres;
         mc[i] = @select(f32, m, mc[i] * resto + media * fv, mc[i]);
     }
     if (alfa_fija) mc[3] = @select(f32, m, @as(@Vector(n, f32), @splat(255.0)), mc[3]);
@@ -155,7 +164,7 @@ inline fn entre(comptime n: usize, lo: @Vector(n, u8), a: @Vector(n, u8), hi: @V
 
 /// Los cuatro bloques EN CADENA sobre el mismo `mc`: cada uno ve el alfa que
 /// dejó el anterior, como en la referencia.
-inline fn pushColor(comptime n: usize, v: Vec9(n), f: f32) [4]@Vector(n, u8) {
+inline fn pushColor(comptime n: usize, comptime entera: bool, v: Vec9(n), f: f32) [4]@Vector(n, u8) {
     var mc: [4]@Vector(n, f32) = undefined;
     inline for (0..4) |k| mc[k] = aF(n, v.mm.c[k]);
     const tl = v.tl.c[3];
@@ -171,26 +180,26 @@ inline fn pushColor(comptime n: usize, v: Vec9(n), f: f32) [4]@Vector(n, u8) {
     var a = redondear(n, mc[3]);
     var c1 = entre(n, min3(tl, tc, tr), a, max3(bl, bc, br));
     var c2 = y_(n, no(n, c1), entre(n, min3(bl, bc, br), a, max3(tl, tc, tr)));
-    empujar(n, &mc, v.tl, v.tc, v.tr, f, false, c1);
-    empujar(n, &mc, v.bl, v.bc, v.br, f, false, c2);
+    empujar(n, entera, &mc, v.tl, v.tc, v.tr, f, false, c1);
+    empujar(n, entera, &mc, v.bl, v.bc, v.br, f, false, c2);
     // subdiagonal
     a = redondear(n, mc[3]);
     c1 = min3(tc, tr, mr) > max3(ml, a, bc);
     c2 = y_(n, no(n, c1), min3(ml, bl, bc) > max3(tc, a, mr));
-    empujar(n, &mc, v.tc, v.tr, v.mr, f, false, c1);
-    empujar(n, &mc, v.ml, v.bl, v.bc, f, false, c2);
+    empujar(n, entera, &mc, v.tc, v.tr, v.mr, f, false, c1);
+    empujar(n, entera, &mc, v.ml, v.bl, v.bc, f, false, c2);
     // izquierda y derecha
     a = redondear(n, mc[3]);
     c1 = entre(n, min3(tr, mr, br), a, max3(tl, ml, bl));
     c2 = y_(n, no(n, c1), entre(n, min3(tl, ml, bl), a, max3(tr, mr, br)));
-    empujar(n, &mc, v.tr, v.mr, v.br, f, false, c1);
-    empujar(n, &mc, v.tl, v.ml, v.bl, f, false, c2);
+    empujar(n, entera, &mc, v.tr, v.mr, v.br, f, false, c1);
+    empujar(n, entera, &mc, v.tl, v.ml, v.bl, f, false, c2);
     // diagonal
     a = redondear(n, mc[3]);
     c1 = min3(mr, br, bc) > max3(tc, a, ml);
     c2 = y_(n, no(n, c1), min3(ml, tl, tc) > max3(bc, a, mr));
-    empujar(n, &mc, v.mr, v.br, v.bc, f, false, c1);
-    empujar(n, &mc, v.ml, v.tl, v.tc, f, false, c2);
+    empujar(n, entera, &mc, v.mr, v.br, v.bc, f, false, c1);
+    empujar(n, entera, &mc, v.ml, v.tl, v.tc, f, false, c2);
 
     var out: [4]@Vector(n, u8) = undefined;
     inline for (0..4) |k| out[k] = redondear(n, mc[k]);
@@ -201,7 +210,7 @@ inline fn pushColor(comptime n: usize, v: Vec9(n), f: f32) [4]@Vector(n, u8) {
 
 /// Sale en la PRIMERA dirección que coincide (una cadena de else-if). El alfa
 /// de salida es siempre 255: con dirección lo fija el empuje, sin ella también.
-inline fn pushGradient(comptime n: usize, v: Vec9(n), f: f32) [4]@Vector(n, u8) {
+inline fn pushGradient(comptime n: usize, comptime entera: bool, v: Vec9(n), f: f32) [4]@Vector(n, u8) {
     var mc: [4]@Vector(n, f32) = undefined;
     inline for (0..4) |k| mc[k] = aF(n, v.mm.c[k]);
     const ma = v.mm.c[3];
@@ -238,7 +247,7 @@ inline fn pushGradient(comptime n: usize, v: Vec9(n), f: f32) [4]@Vector(n, u8) 
     var tomado = falso(n);
     inline for (0..8) |i| {
         const m = y_(n, conds[i], no(n, tomado));
-        empujar(n, &mc, trios[i][0], trios[i][1], trios[i][2], f, true, m);
+        empujar(n, entera, &mc, trios[i][0], trios[i][1], trios[i][2], f, true, m);
         tomado = @select(bool, conds[i], @as(@Vector(n, bool), @splat(true)), tomado);
     }
 
@@ -253,8 +262,8 @@ inline fn pushGradient(comptime n: usize, v: Vec9(n), f: f32) [4]@Vector(n, u8) 
 /// Rust), hecho acá mientras los píxeles todavía están en registros. Las mismas
 /// operaciones en el mismo orden que `luminancia` en Rust —sin FMA, Zig no las
 /// contrae—, así que da lo mismo bit a bit.
-inline fn pushGradientLuma(comptime n: usize, v: Vec9(n), f: f32) [4]@Vector(n, u8) {
-    var out = pushGradient(n, v, f);
+inline fn pushGradientLuma(comptime n: usize, comptime entera: bool, v: Vec9(n), f: f32) [4]@Vector(n, u8) {
+    var out = pushGradient(n, entera, v, f);
     const l = aF(n, out[0]) * @as(@Vector(n, f32), @splat(0.299)) +
         aF(n, out[1]) * @as(@Vector(n, f32), @splat(0.587)) +
         aF(n, out[2]) * @as(@Vector(n, f32), @splat(0.114));
@@ -292,18 +301,18 @@ fn intercalarRgba(comptime n: usize) [4 * n]i32 {
 
 /// Una fila de salida a partir de sus tres filas de entrada, de a `ancho`
 /// píxeles (N, salvo en la pasada de a 8: ver pasadaCon).
-inline fn unaFila(comptime ancho: usize, comptime kernel: anytype, a: [*]const u8, m: [*]const u8, b: [*]const u8, salida: [*]u8, w: usize, f: f32) void {
+inline fn unaFila(comptime ancho: usize, comptime entera: bool, comptime kernel: anytype, a: [*]const u8, m: [*]const u8, b: [*]const u8, salida: [*]u8, w: usize, f: f32) void {
     var x: usize = 0;
     if (w >= ancho + 2) {
-        guardar(1, salida, 0, kernel(1, acotado(1, a, m, b, w, 0), f));
+        guardar(1, salida, 0, kernel(1, entera, acotado(1, a, m, b, w, 0), f));
         x = 1;
         // De a `ancho` mientras el vecino derecho del último siga dentro.
         while (x + ancho <= w - 1) : (x += ancho) {
-            guardar(ancho, salida, x, kernel(ancho, interior(ancho, a, m, b, x), f));
+            guardar(ancho, salida, x, kernel(ancho, entera, interior(ancho, a, m, b, x), f));
         }
     }
     while (x < w) : (x += 1) {
-        guardar(1, salida, x, kernel(1, acotado(1, a, m, b, w, x), f));
+        guardar(1, salida, x, kernel(1, entera, acotado(1, a, m, b, w, x), f));
     }
 }
 
@@ -318,7 +327,7 @@ fn recorrer(comptime kernel: anytype, src: [*]const u8, dst: [*]u8, w32: u32, h3
     while (y < @min(y1, h32)) : (y += 1) {
         const yn = if (y == 0) 0 else y - 1;
         const yp = if (y == h - 1) y else y + 1;
-        unaFila(N, kernel, src + yn * w * 4, src + y * w * 4, src + yp * w * 4, dst + y * w * 4, w, f);
+        unaFila(N, false, kernel, src + yn * w * 4, src + y * w * 4, src + yp * w * 4, dst + y * w * 4, w, f);
     }
 }
 
@@ -375,9 +384,9 @@ pub fn winsi_a4k_gradient_push_zig(src: [*]const u8, dst: [*]u8, w32: u32, h32: 
         const m = G.fila_(y, src, w, h, anillo, &en);
         const b = G.fila_(yp, src, w, h, anillo, &en);
         if (luma != 0) {
-            unaFila(N, pushGradientLuma, a, m, b, dst + y * largo, w, f);
+            unaFila(N, false, pushGradientLuma, a, m, b, dst + y * largo, w, f);
         } else {
-            unaFila(N, pushGradient, a, m, b, dst + y * largo, w, f);
+            unaFila(N, false, pushGradient, a, m, b, dst + y * largo, w, f);
         }
     }
 }
@@ -416,7 +425,7 @@ fn Anillo(comptime n: usize) type {
 ///
 /// `anillo_c` mide 5·w·4 bytes y `anillo_g`, 3·w·4.
 pub fn winsi_a4k_pass_zig(src: [*]const u8, dst: [*]u8, w32: u32, h32: u32, fc: f32, fg: f32, y0: u32, y1: u32, anillo_c: [*]u8, anillo_g: [*]u8, luma: u32) callconv(.C) void {
-    pasadaCon(N, src, dst, w32, h32, fc, fg, y0, y1, anillo_c, anillo_g, luma);
+    pasadaCon(N, false, src, dst, w32, h32, fc, fg, y0, y1, anillo_c, anillo_g, luma);
 }
 
 /// La misma pasada, de a 8 píxeles. De a 16 ganó en x86 (9.3.0: un registro
@@ -425,16 +434,20 @@ pub fn winsi_a4k_pass_zig(src: [*]const u8, dst: [*]u8, w32: u32, h32: u32, fc: 
 /// WINSI_A4K_CARRILES, y CI mide las dos en ARM. El mismo resultado bit a bit:
 /// cada carril es independiente.
 pub fn winsi_a4k_pass_zig_n8(src: [*]const u8, dst: [*]u8, w32: u32, h32: u32, fc: f32, fg: f32, y0: u32, y1: u32, anillo_c: [*]u8, anillo_g: [*]u8, luma: u32) callconv(.C) void {
-    pasadaCon(8, src, dst, w32, h32, fc, fg, y0, y1, anillo_c, anillo_g, luma);
+    pasadaCon(8, false, src, dst, w32, h32, fc, fg, y0, y1, anillo_c, anillo_g, luma);
 }
 
-/// De a 4: en NEON, los canales u8 ocupan medio registro y el cálculo en f32
-/// de cada canal entra justo en uno. Para medir en ARM contra la de a 8.
-pub fn winsi_a4k_pass_zig_n4(src: [*]const u8, dst: [*]u8, w32: u32, h32: u32, fc: f32, fg: f32, y0: u32, y1: u32, anillo_c: [*]u8, anillo_g: [*]u8, luma: u32) callconv(.C) void {
-    pasadaCon(4, src, dst, w32, h32, fc, fg, y0, y1, anillo_c, anillo_g, luma);
+/// De a 8 con la suma de los vecinos en enteros (ver `empujar`): para medir
+/// en ARM contra la de a 8 de siempre. Idéntica bit a bit.
+pub fn winsi_a4k_pass_zig_n8e(src: [*]const u8, dst: [*]u8, w32: u32, h32: u32, fc: f32, fg: f32, y0: u32, y1: u32, anillo_c: [*]u8, anillo_g: [*]u8, luma: u32) callconv(.C) void {
+    pasadaCon(8, true, src, dst, w32, h32, fc, fg, y0, y1, anillo_c, anillo_g, luma);
 }
 
-fn pasadaCon(comptime ancho: usize, src: [*]const u8, dst: [*]u8, w32: u32, h32: u32, fc: f32, fg: f32, y0: u32, y1: u32, anillo_c: [*]u8, anillo_g: [*]u8, luma: u32) void {
+// De a 4 se midió en ARM (9.3.3) y perdió feo: 660 ms contra 428 de a 8 en
+// un núcleo. Con 4 carriles, cargar y reordenar los vecinos pesa más que lo
+// que se ahorra en registros. No quedó.
+
+fn pasadaCon(comptime ancho: usize, comptime entera: bool, src: [*]const u8, dst: [*]u8, w32: u32, h32: u32, fc: f32, fg: f32, y0: u32, y1: u32, anillo_c: [*]u8, anillo_g: [*]u8, luma: u32) void {
     @setEvalBranchQuota(100_000);
     const w: usize = w32;
     const h: usize = h32;
@@ -450,7 +463,7 @@ fn pasadaCon(comptime ancho: usize, src: [*]const u8, dst: [*]u8, w32: u32, h32:
             if (!l.lista) {
                 const rn = if (r == 0) 0 else r - 1;
                 const rp = if (r == hh - 1) r else r + 1;
-                unaFila(ancho, pushColor, s + rn * ww * 4, s + r * ww * 4, s + rp * ww * 4, l.p, ww, f);
+                unaFila(ancho, entera, pushColor, s + rn * ww * 4, s + r * ww * 4, s + rp * ww * 4, l.p, ww, f);
             }
             return l.p;
         }
@@ -476,9 +489,9 @@ fn pasadaCon(comptime ancho: usize, src: [*]const u8, dst: [*]u8, w32: u32, h32:
         const m = F.deSobel(y, src, w, h, fc, &color, &grad);
         const b = F.deSobel(yp, src, w, h, fc, &color, &grad);
         if (luma != 0) {
-            unaFila(ancho, pushGradientLuma, a, m, b, dst + y * largo, w, fg);
+            unaFila(ancho, entera, pushGradientLuma, a, m, b, dst + y * largo, w, fg);
         } else {
-            unaFila(ancho, pushGradient, a, m, b, dst + y * largo, w, fg);
+            unaFila(ancho, entera, pushGradient, a, m, b, dst + y * largo, w, fg);
         }
     }
 }
