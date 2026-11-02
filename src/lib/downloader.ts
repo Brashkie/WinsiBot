@@ -4,7 +4,7 @@ import { execFile } from 'node:child_process'
 import { promisify } from 'node:util'
 import { readFile, unlink } from 'node:fs/promises'
 import { existsSync } from 'node:fs'
-import { join } from 'node:path'
+import { basename, join } from 'node:path'
 import { randomUUID } from 'node:crypto'
 import axios from 'axios'
 import { ffmpegPath } from './ffmpeg.js'
@@ -13,13 +13,33 @@ import { createCache, registerCache } from './cacheManager.js'
 import { binPath, exeName } from './platform.js'
 import { USER_AGENT } from '@config'
 import { carpetaTmp } from './utils.js'
+import { AvisoAlUsuario } from './userNotice.js'
 
 // yt-dlp se lanza con execFile: los argumentos le llegan tal cual, sin pasar
 // por un shell. Hasta la 9.2 se armaba un comando de shell con el texto del
 // usuario entre comillas dobles, y en Linux y Termux las comillas dobles no
 // impiden `$(...)`: `#play $(curl … | sh)` ejecutaba lo que fuera en la
 // máquina, lo mandara quien lo mandara. En Windows bastaba cerrar la comilla.
-const execFileAsync = promisify(execFile)
+const execFileCrudo = promisify(execFile)
+
+/**
+ * execFile, con un aviso claro si el programa no está instalado. Hasta la 9.3.0
+ * `#play` sin yt-dlp dejaba "spawn yt-dlp ENOENT" en el log y al usuario sin
+ * respuesta.
+ */
+const execFileAsync = (async (programa: string, args: string[], opciones: object) => {
+  try {
+    return await execFileCrudo(programa, args, opciones)
+  } catch (err: any) {
+    if (err?.code !== 'ENOENT') throw err
+    const nombre = basename(programa).replace(/\.exe$/i, '')
+    const comoInstalar = nombre === 'yt-dlp' ? 'npm run ytdlp:fetch (en Termux: pkg install yt-dlp)' : `instalar ${nombre}`
+    throw new AvisoAlUsuario(
+      `> No puedo descargar ahora: al bot le falta *${nombre}*. Ya quedó avisado el dueño.`,
+      `${nombre} no está instalado — ${comoInstalar}`,
+    )
+  }
+}) as typeof execFileCrudo
 
 /**
  * Los argumentos de yt-dlp para un pedido. El objetivo va después de `--`:

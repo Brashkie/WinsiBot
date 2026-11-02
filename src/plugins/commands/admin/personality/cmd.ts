@@ -48,9 +48,19 @@ const command: Command = {
       return
     }
 
-    const sub = args[0]?.toLowerCase()   // bot, status, modes
-    const action = args[1]?.toLowerCase() // mode, status
-    const value  = args[2]?.toLowerCase() // sarcastico, alegre, etc
+    // La forma corta también vale: "#hepein toxico", "#hepein mode toxico",
+    // "#hepein modo toxico" y "#hepein status" son "#hepein bot mode toxico",
+    // etc. Antes daban "Subcomando no reconocido", y "#hepein peruano" era
+    // justo lo que dice docs/commands.md.
+    const SINONIMOS: Record<string, string> = { modo: 'mode', estado: 'status', modos: 'modes' }
+    const normal = args.map((a, i) => (i <= 1 ? SINONIMOS[a.toLowerCase()] ?? a.toLowerCase() : a.toLowerCase()))
+    const conBot = normal[0] === 'bot' ? normal : ['bot', ...normal]
+    const esModo = (m: string | undefined) => m === 'reset' || (MODES as readonly string[]).includes(m ?? '')
+    const completo = esModo(conBot[1]) ? ['bot', 'mode', ...conBot.slice(1)] : conBot
+
+    const sub = completo[0]    // bot
+    const action = completo[1] // mode, status, modes
+    const value  = completo[2] // sarcastico, alegre, etc
 
     // ─── #hepein bot status ───────────────────────────────────────────────
     if (sub === 'bot' && action === 'status') {

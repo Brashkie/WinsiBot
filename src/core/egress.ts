@@ -23,6 +23,7 @@
 
 import type { WASocket } from '@whiskeysockets/baileys'
 import { rateLimiter } from '@lib/rateLimiter.js'
+import { completar } from '@lib/mentions.js'
 import { sessionClient } from '@lib/session.js'
 import { logger } from './logger.js'
 
@@ -46,7 +47,10 @@ export function wrapEgress(sock: WASocket, label = 'main'): WASocket {
   const limited: WASocket['sendMessage'] = (async (jid: any, content: any, options: any) => {
     const to = String(jid ?? '')
     await antibanTurn(label, to)
-    return rateLimiter.directForJid(to, () => original(jid, content, options))
+    // Un "@<número>" del texto que alguien mencionó, como mención de verdad:
+    // si no, WhatsApp muestra el número crudo (ver lib/mentions.ts).
+    const conMenciones = completar(content)
+    return rateLimiter.directForJid(to, () => original(jid, conMenciones, options))
   }) as WASocket['sendMessage']
 
   sock.sendMessage = limited
@@ -54,6 +58,16 @@ export function wrapEgress(sock: WASocket, label = 'main'): WASocket {
 
   logger.debug({ label }, 'embudo de salida activo — sendMessage pasa por el rate limiter')
   return sock
+}
+
+/** Los motivos del antiban (antiban.rs, `Motivo`), para el log. */
+const MOTIVOS: Record<string, string> = {
+  calentamiento: 'número nuevo en calentamiento, ya mandó lo de hoy (#antiban)',
+  dia: 'llegó al tope de 24 h',
+  hora: 'llegó al tope por hora',
+  minuto: 'llegó al tope por minuto',
+  enfriamiento: 'WhatsApp pidió bajar el ritmo (429)',
+  contacto463: 'WhatsApp no entrega a este contacto por ahora (463)',
 }
 
 /** Error de un envío que el antiban no dejó salir. Lleva cuándo reintentar. */
@@ -84,7 +98,11 @@ async function antibanTurn(account: string, jid: string): Promise<void> {
   const turn = await sessionClient.antibanPermit(account, jid)
   if (!turn) return
   if (!turn.send) {
-    logger.warn({ account, jid, reason: turn.reason, retryInMs: turn.retryInMs }, 'antiban: envío rechazado')
+    // Qué lo frena y a qué hora vuelve, en palabras: "retryInMs: 82264044" no
+    // le decía nada a nadie, y el bot parecía roto.
+    const vuelve = new Date(Date.now() + turn.retryInMs).toLocaleTimeString('es', { hour: '2-digit', minute: '2-digit' })
+    const porque = MOTIVOS[turn.reason] ?? turn.reason
+    logger.warn({ account, jid, reason: turn.reason }, `antiban: no sale — ${porque}; vuelve a enviar a las ${vuelve}`)
     throw new AntibanRejected(turn.reason, turn.retryInMs)
   }
   if (turn.waitMs > 0) {

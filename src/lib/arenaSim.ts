@@ -12,7 +12,7 @@
 //
 // Lógica pura salvo eso: se prueba desde scripts/arenaSim.test.js.
 
-import { Arena, CPU, type BattleAction, type BattleState, type NivelCpu } from './pvp.js'
+import { Arena, CPU, type BattleAction, type BattleState, type NivelCpu, type Tirada } from './pvp.js'
 import { elegirAccion, cacheDeDecisiones, type mejorAccion } from './arenaAI.js'
 
 type Decidir = typeof mejorAccion
@@ -77,10 +77,14 @@ type Final = { gano: boolean | null; turnos: number }
  */
 function* turnos(nivel: NivelCpu, estilo: Estilo, azar: () => number, decidir?: Decidir): Generator<void, Final> {
   const s = nueva(nivel)
+  // El daño también sale de `azar`: hasta la 9.3.0 cada golpe tiraba con
+  // Math.random (la tirada por defecto de processAction), y una pelea con
+  // semilla no se repetía —el test de la arena fallaba de vez en cuando—.
+  const tirada: Tirada = (min, max) => Math.floor(azar() * (max - min + 1)) + min
   for (let t = 0; t < MAX_TURNOS; t++) {
     const actor = s.turn
     const accion = actor === JUGADOR ? jugada(s, estilo, azar, decidir) : elegirAccion(s, nivel, azar, decidir)
-    const r = Arena.processAction(s, actor, accion)
+    const r = Arena.processAction(s, actor, accion, tirada)
     if (r.over) return { gano: r.winner === JUGADOR, turnos: Math.ceil((t + 1) / 2) }
     yield
   }

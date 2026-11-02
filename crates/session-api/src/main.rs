@@ -329,6 +329,7 @@ async fn principal() {
         .route("/antiban/report", post(antiban::report))
         .route("/antiban/paired", post(antiban::paired))
         .route("/antiban/numero", post(antiban::numero))
+        .route("/antiban/mature", post(antiban::mature))
         .route("/antiban/status", get(antiban::status))
         // ─── Rate limiter per-sender ──────────────────────────────────────────
         .route("/rate/check", post(rate_limiter::rate_check))

@@ -27,6 +27,18 @@ const FETCH_TIMEOUT_MS = 3_000
 // más de 3s de verdad (confirmado en vivo: "AbortError: This operation was
 // aborted" en ambos endpoints), abortando una operación que Rust sí iba a
 // terminar bien.
+/** Lo que devuelve GET /antiban/status (ver `Estado` en antiban.rs). */
+export interface AntibanEstado {
+  ultimoMinuto: number
+  ultimaHora: number
+  ultimas24h: number
+  /** 1 el día que se vinculó; null fuera del calentamiento. */
+  diaCalentamiento: number | null
+  tope24h: number | null
+  enfriadaMs: number
+  contactosEnEspera: number
+}
+
 async function apiFetch<T>(
   path: string, init?: RequestInit, opts?: { allowNon2xx?: boolean; timeoutMs?: number },
 ): Promise<T> {
@@ -301,11 +313,32 @@ export class SessionClient {
    * Se escaneó un QR para `account`. Si `numero` es el que esa sesión ya
    * tenía, no empieza calentamiento: es el mismo número vinculado otra vez.
    */
-  async antibanPaired(account: string, numero?: string): Promise<void> {
-    await apiFetch('/antiban/paired', {
+  async antibanPaired(account: string, numero?: string): Promise<boolean> {
+    const r = await apiFetch<{ calentamiento?: boolean }>('/antiban/paired', {
       method: 'POST',
       body:   JSON.stringify({ session: account, ...(numero ? { numero } : {}) }),
-    }).catch(() => {})
+    }).catch(() => null)
+    return r?.calentamiento === true
+  }
+
+  /**
+   * Termina el calentamiento de `account`: el dueño dice que el número ya es
+   * maduro. true si estaba en uno; null si la Session API no respondió.
+   */
+  async antibanMature(account: string): Promise<boolean | null> {
+    const r = await apiFetch<{ estaba?: boolean }>('/antiban/mature', {
+      method: 'POST',
+      body:   JSON.stringify({ session: account }),
+    }).catch(() => null)
+    return r ? r.estaba === true : null
+  }
+
+  /** Cuánto envió `account` y qué lo limita ahora (GET /antiban/status). */
+  async antibanStatus(account: string): Promise<AntibanEstado | null> {
+    const r = await apiFetch<{ status?: AntibanEstado }>(
+      `/antiban/status?session=${encodeURIComponent(account)}`,
+    ).catch(() => null)
+    return r?.status ?? null
   }
 
   /** Qué número tiene `account`: se avisa en cada conexión (ver antiban.rs). */

@@ -95,6 +95,12 @@ export interface UserProfile {
   description: string
   afk: number // timestamp (-1 si no está AFK)
   afkReason: string
+  /**
+   * A quiénes menciona la razón. WhatsApp guarda una mención como "@<lid>" en
+   * el texto y muestra el nombre solo si el mensaje trae la lista de
+   * mencionados: sin esto, al repetir la razón salía "@160305996898368".
+   */
+  afkMenciones?: string[]
   role: string // 'Novato' | 'Guerrero' | 'Héroe' | 'Leyenda' ...
 }
 

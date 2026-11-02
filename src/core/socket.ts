@@ -29,6 +29,8 @@ import { EventEmitter } from 'node:events'
 import pino from 'pino'
 import { logger } from './logger.js'
 import { anotarExpulsion } from './sessionAlert.js'
+import { esLaCuentaDelBot } from '@lib/owner.js'
+import { anotar as anotarMenciones } from '@lib/mentions.js'
 
 function fmtJid(jid: string): string {
   return jid.replace('@s.whatsapp.net', '').replace('@g.us', '').replace('@lid', '')
@@ -81,8 +83,35 @@ export class WinsiSocket extends EventEmitter<WinsiEvents> {
     this._startMemoryTrim()
   }
 
+  /**
+   * Avisa al dueño que el número entró en calentamiento, una vez y con
+   * conexión. Hasta la 9.3.0 no se avisaba: el bot mandaba sus 40 mensajes del
+   * primer día y se quedaba mudo casi 24 h sin que nadie supiera por qué.
+   */
+  private async avisarCalentamiento(): Promise<void> {
+    if (!this.calentamientoPorAvisar || !this.conectado || !this.sock) return
+    this.calentamientoPorAvisar = false
+    const p = config.prefix[0] ?? '#'
+    const texto = [
+      '◈ *Antiban: número en calentamiento*',
+      '',
+      '§ El antiban no conocía este número, así que lo trata como nuevo: hoy salen como mucho 40 mensajes, y el tope sube día a día durante una semana.',
+      '§ Es lo que protege a un número recién creado. Si este ya tiene tiempo de uso, escribe:',
+      `  *${p}antiban madurar*`,
+    ].join('\n')
+    logger.warn('antiban: el número entró en calentamiento — se avisa al dueño')
+    for (const o of config.ownerJid) {
+      const destino = o.includes('@') ? o : `${o.replace(/\D/g, '')}@s.whatsapp.net`
+      await this.sock.sendMessage(destino, { text: texto }).catch(() => null)
+    }
+  }
+
   private sock: WASocket | null = null
   private retryCount: number = 0
+  // El antiban puso el número en calentamiento al escanear el QR: se le
+  // avisa al dueño por privado en cuanto haya conexión (ver avisarCalentamiento).
+  private calentamientoPorAvisar = false
+  private conectado = false
   private retryTimer: ReturnType<typeof setTimeout> | null = null
   private isReconnecting = false
   // El barrido completo de verifyAndReport() (lee TODOS los session-*.json,
@@ -503,7 +532,11 @@ export class WinsiSocket extends EventEmitter<WinsiEvents> {
       if (isNewLogin) {
         const numero = (state.creds.me?.id ?? '').split('@')[0]!.split(':')[0]!
         logger.info('QR escaneado — el antiban decide si el número es nuevo')
-        sessionClient.antibanPaired('main', numero || undefined)
+        void sessionClient.antibanPaired('main', numero || undefined).then((empezo) => {
+          if (!empezo) return
+          this.calentamientoPorAvisar = true
+          void this.avisarCalentamiento()
+        })
       }
 
       if (receivedPendingNotifications && !this.backlogDone) {
@@ -511,6 +544,7 @@ export class WinsiSocket extends EventEmitter<WinsiEvents> {
       }
 
       if (connection === 'close') {
+        this.conectado = false
         const code = (lastDisconnect?.error as Boom)?.output?.statusCode
         // El motivo completo, no solo el código: un 401 de "device_removed" y
         // uno de credenciales rotas piden cosas distintas.
@@ -560,6 +594,8 @@ export class WinsiSocket extends EventEmitter<WinsiEvents> {
         if (numero) void sessionClient.antibanNumero('main', numero)
         logger.info(`${config.botName} conectado`)
         this.emit('ready', this.sock!)
+        this.conectado = true
+        void this.avisarCalentamiento()
 
         // precargar grupos en background — no bloquea la conexión ni el handler de mensajes
         // timeout de 30s para evitar colgar en grupos grandes (10k+)
@@ -630,13 +666,38 @@ export class WinsiSocket extends EventEmitter<WinsiEvents> {
         const meLabel = msg.key.fromMe ? color.dim('fromMe') : color.cyan('entrante')
 
         if (!msg.message) {
+          // Sin contenido no es lo mismo que sin descifrar. Baileys marca una
+          // falla de descifrado como CIPHERTEXT con el motivo; lo demás —un
+          // aviso del sistema, o "Message absent from node", la sincronización
+          // entre los dispositivos de la propia cuenta, que no trae nada
+          // cifrado para este— no es un error. Hasta la 9.3.0 todo salía como
+          // "Bad MAC", y en un grupo cualquier aviso sumaba para el umbral de
+          // limpieza, que borra claves y reconecta.
+          const motivo = msg.messageStubType === proto.WebMessageInfo.StubType.CIPHERTEXT
+            ? String(msg.messageStubParameters?.[0] ?? '')
+            : ''
+          // Lo que no se descifra en el chat de la PROPIA cuenta son las copias
+          // que el teléfono del bot le manda de lo que se escribe desde él:
+          // al bot no le sirven —los mensajes de grupo llegan por su clave de
+          // grupo—, y tras vincular otra vez fallan hasta que el teléfono
+          // rehace la sesión. Con una línea por mensaje llenaban la consola.
+          const propio = esLaCuentaDelBot(
+            msg.key.remoteJid ?? '',
+            this.sock?.user?.id ?? '',
+            (this.sock?.user as { lid?: string } | undefined)?.lid ?? '',
+          )
+          if (!motivo || motivo === 'Message absent from node' || propio) {
+            logger.debug({ id: msg.key.id, jid: msg.key.remoteJid, stub: msg.messageStubType, motivo }, 'mensaje sin contenido')
+            continue
+          }
           // Un mensaje que no se descifra vuelve a llegar con cada reintento
           // que Baileys pide al remitente: se cuenta y se muestra UNA vez. Antes
           // contaba cada llegada, y dos o tres mensajes rotos llenaban solos el
           // umbral de limpieza.
           if (!badMacVisto(msg.key.id)) continue
+          const rotulo = motivo.includes('Bad MAC') ? 'Bad MAC' : 'No se descifró'
           console.log(
-            `  ${color.red('◈')} ${color.bold(color.red('Bad MAC'))}  ${chatLabel} ${color.dim(jidShort)}  ${meLabel}`,
+            `  ${color.red('◈')} ${color.bold(color.red(rotulo))}  ${chatLabel} ${color.dim(jidShort)}  ${meLabel}  ${color.dim(motivo.slice(0, 60))}`,
           )
           // Solo un grupo tiene algo propio que limpiar: sus claves de grupo.
           // Un privado no —borrar ahí daba 0 archivos y reconectaba igual, y
@@ -654,6 +715,11 @@ export class WinsiSocket extends EventEmitter<WinsiEvents> {
           logger.debug({ id: msg.key.id, type }, 'mensaje duplicado descartado')
           continue
         }
+
+        // Qué jid es cada mención, para que lo que el bot repita de este texto
+        // muestre nombres y no números (ver lib/mentions.ts).
+        const info = (msg.message.extendedTextMessage ?? msg.message.imageMessage ?? msg.message.videoMessage)?.contextInfo
+        anotarMenciones([...(info?.mentionedJid ?? []), info?.participant, msg.key.participant])
 
         // Acá había otra línea de consola por mensaje ("Mensaje"), con los
         // mismos datos que la de "Handler" que escribe handler.ts un momento

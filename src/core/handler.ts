@@ -30,7 +30,9 @@ import { handleTransferConfirm } from '@plugins/commands/rpg/transfer.js'
 import { getGroupParticipants } from '@core/groupCache.js'
 import { winsiSocket } from '@core/socket.js'
 import { getNumber } from '@lib/jid_utils.js'
-import { esDueno } from '@lib/owner.js'
+import { esDueno, esLaCuentaDelBot } from '@lib/owner.js'
+import { nombraAlBot } from '@lib/aiTrigger.js'
+import { AvisoAlUsuario } from '@lib/userNotice.js'
 import { LimitePorRemitente } from '@lib/senderRate.js'
 import { acreditar, cambiarSaldos } from '@core/economy.js'
 
@@ -150,6 +152,26 @@ function extractText(msg: WAMessage): string {
 // cómo se normalice el string — son identificadores distintos, no el mismo
 // número en otro formato. Baileys sí manda el número real en paralelo vía
 // senderPn/participantPn — hay que preferirlo para el check de owner.
+/** Quién es el remitente en el grupo; `senderPn`, su teléfono si el grupo lo da. */
+type Roles = { isAdmin: boolean; isBotAdmin: boolean; botAliases: string[]; senderPn?: string }
+
+/**
+ * Si avisar que `quien` está AFK en el grupo `gjid`. No en su primer minuto
+ * AFK —acaba de escribir—: otro bot que contestaba citando su `#afk` hacía
+ * salir "está AFK · Hace: 0 min" pegado al "AFK activado". Y una vez cada 5
+ * minutos por persona y grupo: una ráfaga de respuestas no llena el chat.
+ */
+const ultimoAvisoAfk = new Map<string, number>()
+function avisarAfk(gjid: string, quien: string, desde: number): boolean {
+  const ahora = Date.now()
+  if (ahora - desde < 60_000) return false
+  const clave = `${gjid}|${quien}`
+  if (ahora - (ultimoAvisoAfk.get(clave) ?? 0) < 5 * 60_000) return false
+  if (ultimoAvisoAfk.size > 2_000) ultimoAvisoAfk.clear()
+  ultimoAvisoAfk.set(clave, ahora)
+  return true
+}
+
 function getOwnerCandidateId(msg: WAMessage, isGroup: boolean): string {
   return (isGroup ? msg.key.participantPn : msg.key.senderPn) ?? ''
 }
@@ -166,8 +188,10 @@ function buildBaseContext(
     : (msg.key.remoteJid  ?? '')
   const text    = extractText(msg).trim()
 
-  // Solo contra teléfonos, nunca los dígitos de un @lid (ver lib/owner.ts).
-  const isOwner = esDueno(sender, getOwnerCandidateId(msg, isGroup), config.ownerJid)
+  // Solo contra teléfonos, nunca los dígitos de un @lid (ver lib/owner.ts);
+  // y la propia cuenta del bot, escribiendo desde su teléfono, también.
+  const isOwner = esDueno(sender, getOwnerCandidateId(msg, isGroup), config.ownerJid) ||
+    esLaCuentaDelBot(sender, sock.user?.id ?? '', (sock.user as { lid?: string } | undefined)?.lid ?? '')
 
   const usedPrefix = config.prefix.find(p => text.startsWith(p)) ?? ''
   const hasPrefix  = usedPrefix.length > 0
@@ -220,7 +244,7 @@ async function resolveGroupRoles(
   sock:   WASocket,
   jid:    string,
   sender: string,
-): Promise<{ isAdmin: boolean; isBotAdmin: boolean; botAliases: string[] }> {
+): Promise<Roles> {
   try {
     const participants = await getGroupParticipants(sock, jid)
 
@@ -242,10 +266,16 @@ async function resolveGroupRoles(
     const botAliases = [botJid, sock.user?.id, botP?.id, (botP as any)?.lid]
       .filter((v): v is string => typeof v === 'string' && v.length > 0)
 
+    // El teléfono del remitente, si el grupo lo da: en grupos con @lid es lo
+    // único que dice quién es el dueño cuando el mensaje no trae
+    // participantPn (ver lib/owner.ts). Lo pone el servidor de WhatsApp en la
+    // lista de participantes (`phone_number`), no quien manda el mensaje.
+    const tel = senderP?.jid
     return {
       isAdmin:    senderP?.admin === 'admin' || senderP?.admin === 'superadmin',
       isBotAdmin: botP?.admin   === 'admin' || botP?.admin   === 'superadmin',
       botAliases,
+      ...(tel?.endsWith('@s.whatsapp.net') ? { senderPn: tel } : {}),
     }
   } catch {
     return { isAdmin: false, isBotAdmin: false, botAliases: [] }
@@ -279,8 +309,8 @@ function resolveAIModel(text: string): string | undefined {
 
 function isAITrigger(text: string, botName: string): boolean {
   if (text.toLowerCase().trim().split(/\s+/).some(w => AI_TRIGGER_WORDS.has(w))) return true
-  if (text.toLowerCase().includes(botName.toLowerCase())) return true
-  return false
+  // Como palabra suelta y no "en cualquier parte" (ver lib/aiTrigger.ts).
+  return nombraAlBot(text, [botName])
 }
 
 // ─── Fallback local (cuando Python está offline) ──────────────────────────────
@@ -499,13 +529,13 @@ export async function handleMessage(msg: WAMessage, sock: WASocket): Promise<voi
       base.isGroup
         ? Promise.race([
             resolveGroupRoles(sock, base.jid, base.sender),
-            new Promise<{ isAdmin: boolean; isBotAdmin: boolean; botAliases: string[] }>(r =>
+            new Promise<Roles>(r =>
               setTimeout(() => r({ isAdmin: false, isBotAdmin: false, botAliases: [] }), 2_000)),
           ])
-        : Promise.resolve({ isAdmin: false, isBotAdmin: false, botAliases: [] }),
+        : Promise.resolve<Roles>({ isAdmin: false, isBotAdmin: false, botAliases: [] }),
     ]).then(([r]) => r)
 
-    const roles = rolesResult.status === 'fulfilled'
+    const roles: Roles = rolesResult.status === 'fulfilled'
       ? rolesResult.value
       : { isAdmin: false, isBotAdmin: false, botAliases: [] as string[] }
 
@@ -523,8 +553,14 @@ export async function handleMessage(msg: WAMessage, sock: WASocket): Promise<voi
     // A cambio costaba un round-trip HTTP a Python en CADA mensaje (no solo
     // comandos) con hasta 500ms de espera en el camino crítico, y ya había
     // causado un bug real pisando el isOwner correcto.
+    // En un grupo con @lid, si el mensaje no trajo el teléfono del
+    // remitente, el de la lista de participantes. Sin esto el dueño no era
+    // dueño en esos grupos: el log decía "Owner ✗ No" (9.3.0).
+    const isOwner = base.isOwner ||
+      (!!roles.senderPn && esDueno(base.sender, roles.senderPn, config.ownerJid))
     const ctx = conIdiomaPerezoso({
       ...base,
+      isOwner,
       isAdmin:    roles.isAdmin,
       isBotAdmin: roles.isBotAdmin,
     }, msg)
@@ -573,11 +609,13 @@ export async function handleMessage(msg: WAMessage, sock: WASocket): Promise<voi
     // ─── AFK check ────────────────────────────────────────────────────────────
     if (user.profile.afk > -1) {
       const reason = user.profile.afkReason
+      const menciones = user.profile.afkMenciones ?? []
       user.profile.afk       = -1
       user.profile.afkReason = ''
+      delete user.profile.afkMenciones
       await safeSend(() => sock.sendMessage(ctx.jid, {
         text:     `ⴰ️ @${ctx.sender.split('@')[0]} ya no está AFK${reason ? `\n§ Estaba: _${reason}_` : ''}`,
-        mentions: [ctx.sender],
+        mentions: [ctx.sender, ...menciones],
       })).catch(() => {})
     }
 
@@ -591,11 +629,11 @@ export async function handleMessage(msg: WAMessage, sock: WASocket): Promise<voi
       for (const j of jids) {
         if (j === ctx.sender) continue
         const target = getUserData(j, '')
-        if (target.profile.afk > -1) {
+        if (target.profile.afk > -1 && avisarAfk(ctx.jid, j, target.profile.afk)) {
           const elapsed = Math.floor((Date.now() - target.profile.afk) / 60_000)
           await safeSend(() => sock.sendMessage(ctx.jid, {
             text:     `ⴰ️ @${j.split('@')[0]} está AFK${target.profile.afkReason ? `\n§ Razón: _${target.profile.afkReason}_` : ''}\n§ Hace: ${elapsed} min`,
-            mentions: [j],
+            mentions: [j, ...(target.profile.afkMenciones ?? [])],
           })).catch(() => {})
         }
       }
@@ -681,8 +719,6 @@ export async function handleMessage(msg: WAMessage, sock: WASocket): Promise<voi
         }
 
         const botName = sock.user?.name ?? 'hepein'
-        const lower   = ctx.text.toLowerCase().trim()
-        const words   = lower.split(/\s+/)
         const aiModel = resolveAIModel(ctx.text)
 
         // Responder (citar) un mensaje que mandó el propio bot también cuenta
@@ -706,7 +742,9 @@ export async function handleMessage(msg: WAMessage, sock: WASocket): Promise<voi
         )
 
         // Mencionar "hepein" o el nombre del bot, o responderle directamente, activa la IA (directo)
-        const isDirect = words.includes('hepein') || lower.includes(botName.toLowerCase()) || isReplyToBot
+        // El nombre como palabra suelta: "El comando *hepein* no existe", de
+        // otro bot del grupo, ya no dispara la IA (ver lib/aiTrigger.ts).
+        const isDirect = nombraAlBot(ctx.text, ['hepein', botName]) || isReplyToBot
 
         if (ctx.isGroup) {
           const groupCfg = getGroupConfig(ctx.jid)
@@ -843,7 +881,16 @@ export async function handleMessage(msg: WAMessage, sock: WASocket): Promise<voi
 
     // ─── Ejecutar comando ─────────────────────────────────────────────────────
     logger.info({ cmd: ctx.command, sender: ctx.sender, jid: ctx.jid }, 'Comando ejecutado')
-    await command.execute(ctx)
+    try {
+      await command.execute(ctx)
+    } catch (err) {
+      // Un fallo con arreglo (falta un programa, un servicio no responde): se le
+      // dice al usuario, y al log una línea con qué hacer, no una traza.
+      if (!(err instanceof AvisoAlUsuario)) throw err
+      logger.warn({ cmd: ctx.command }, err.message)
+      await safeSend(() => sock.sendMessage(ctx.jid, { text: err.paraElUsuario }, { quoted: msg })).catch(() => {})
+      return
+    }
 
     // ─── Post-ejecucion ───────────────────────────────────────────────────────
     // IMPORTANTE: leer DESPUÉS de que el comando ejecutó para no pisar cambios
@@ -907,6 +954,10 @@ export async function handleMessage(msg: WAMessage, sock: WASocket): Promise<voi
       logger.warn({ msg: msg_ }, 'Conexion caida durante mensaje — Baileys reconectara')
       return
     }
+    // El antiban no dejó salir la respuesta: egress.ts ya lo avisó con el
+    // motivo y cuándo reintentar. Una traza de error por cada mensaje no dice
+    // nada más, y llenaba el log mientras el número estaba en calentamiento.
+    if (err?.name === 'AntibanRejected') return
     logger.error({ err }, 'Error en handleMessage')
   } finally {
     releaseSlot()

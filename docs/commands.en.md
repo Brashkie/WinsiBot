@@ -1,10 +1,10 @@
 <div align="center">
 
-# 📖 Command Reference — WinsiBot v9.3.0
+# 📖 Command Reference — WinsiBot v9.3.1
 
 [![Commands](https://img.shields.io/badge/Commands-190%2B-6C63FF?style=for-the-badge)](.)
 [![Categories](https://img.shields.io/badge/Categories-19-00C9FF?style=for-the-badge)](.)
-[![Version](https://img.shields.io/badge/Version-9.3.0-brightgreen?style=flat-square)](../README.en.md)
+[![Version](https://img.shields.io/badge/Version-9.3.1-brightgreen?style=flat-square)](../README.en.md)
 
 [🇪🇸 Versión en español →](commands.md) &nbsp;·&nbsp; [💰 Economy guide →](economy.en.md) &nbsp;·&nbsp; [← Back to README](../README.en.md)
 
@@ -649,6 +649,7 @@
 | `setpp` | `fotobot`, `cambiafoto` | — | 👑 | Change the bot's profile picture |
 | `canal` | `channelguard`, `protegercanal` | — | 👑 | `proteger <link>` · `actualizar <link>` · `quitar <link>`. If the name or description of a protected channel changes, I restore them and warn the owners. WhatsApp doesn't say who did it, so there's no one to take admin from. To restore, the bot must be a channel admin |
 | `fetch` | `get`, `url` | — | 👑 | Fetch the content of a public URL: not the machine itself or the local network, and it doesn't follow redirects |
+| `antiban` | — | — | 👑 | How much the bot sent in the last minute, hour and 24 h, and what is holding it back. `madurar` ends the warm-up: a number the antiban didn't know starts with 40 messages on day one, even if it has been in use for years. What was sent still counts |
 | `restart` | `reiniciar`, `reboot`, `reset` | — | 👑 | Restarts the bot: saves everything and exits, and the `npm start` supervisor brings it back |
 
 ```

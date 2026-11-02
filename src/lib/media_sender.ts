@@ -141,7 +141,15 @@ export async function sendCritical(
     )
     if (queued) await sessionClient.markOutboxSent([id]).catch(() => {})
     return res
-  } catch (err) {
+  } catch (err: any) {
+    // El antiban no lo dejó salir —calentamiento, enfriamiento—: no se
+    // reintenta. Reenviarlo en el próximo arranque, horas después, sería
+    // contestar un #daily de ayer. Se saca del outbox, y el aviso con el
+    // motivo ya lo escribió egress.ts: acá no hace falta otra traza.
+    if (err?.name === 'AntibanRejected') {
+      if (queued) await sessionClient.markOutboxSent([id]).catch(() => {})
+      throw err
+    }
     // Queda en el outbox con estado "encolado": replayOutbox() lo reintentará
     // en el próximo arranque. No se marca como enviado a propósito.
     logger.warn({ err, jid, id }, 'sendCritical: envío falló — queda en el outbox')
@@ -169,7 +177,7 @@ export async function replayOutbox(sock: WASocket): Promise<{ resent: number; fa
 
   logger.info(`Outbox: ${stale.length} mensajes quedaron sin enviar — reintentando`)
 
-  let resent = 0, failed = 0
+  let resent = 0, failed = 0, dropped = 0
   for (const m of stale) {
     // El reintento se cuenta ANTES de intentar: si el envío cuelga o el proceso
     // muere acá, en el próximo arranque el contador ya subió y el mensaje
@@ -180,13 +188,20 @@ export async function replayOutbox(sock: WASocket): Promise<{ resent: number; fa
       await safeSend(() => sock.sendMessage(m.jid, content, { messageId: m.id }))
       await sessionClient.markOutboxSent([m.id]).catch(() => {})
       resent++
-    } catch (err) {
+    } catch (err: any) {
+      // Como en sendCritical: lo que el antiban no deja salir no se reintenta
+      // —sería una respuesta de horas atrás— y su motivo ya lo avisó egress.ts.
+      if (err?.name === 'AntibanRejected') {
+        await sessionClient.markOutboxSent([m.id]).catch(() => {})
+        dropped++
+        continue
+      }
       logger.warn({ err, id: m.id, jid: m.jid, retry: m.retry_count }, 'Outbox: reenvío falló')
       failed++
     }
   }
 
-  logger.info(`Outbox: ${resent} reenviados, ${failed} fallidos`)
+  logger.info(`Outbox: ${resent} reenviados, ${failed} fallidos${dropped ? `, ${dropped} descartados por el antiban` : ''}`)
   return { resent, failed }
 }
 

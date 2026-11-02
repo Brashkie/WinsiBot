@@ -30,3 +30,26 @@ export function esDueno(sender: string, candidatoPn: string, duenos: readonly st
     return n !== '' && telefonos.includes(n)
   })
 }
+
+/** La parte de usuario de un jid: `31908:3@lid` → `31908`. */
+const usuario = (jid: string) => (jid.split('@')[0] ?? '').split(':')[0] ?? ''
+const dominio = (jid: string) => jid.split('@')[1] ?? ''
+
+/**
+ * Si el mensaje lo mandó la propia cuenta del bot, desde otro de sus
+ * dispositivos (el teléfono con el que se vinculó). Quien la maneja ya puede
+ * hacer cualquier cosa con ella, así que es dueño aunque su número no esté en
+ * OWNER_JID: hasta la 9.3.0 salía "Owner ✗ No".
+ *
+ * Como en `esDueno`, cada cosa contra su igual: un @lid contra el @lid del
+ * bot, un teléfono contra su teléfono. Nunca un @lid contra un número.
+ *
+ * @param botId  `sock.user.id`, el teléfono del bot (`51999:3@s.whatsapp.net`).
+ * @param botLid `sock.user.lid`, su @lid (`31908:3@lid`), si se conoce.
+ */
+export function esLaCuentaDelBot(sender: string, botId: string, botLid: string): boolean {
+  if (!sender) return false
+  return [botId, botLid].some(
+    (b) => b !== '' && dominio(b) === dominio(sender) && usuario(b) !== '' && usuario(b) === usuario(sender),
+  )
+}

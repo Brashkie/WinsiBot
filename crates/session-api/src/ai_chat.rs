@@ -44,15 +44,15 @@ fn rasgos_modo(modo: &str) -> &'static str {
     match modo {
         "amable" => "Eres cálido y servicial: saludas con cariño, ofreces ayuda y usas algún emoji amable como 😊.",
         "alegre" => "Eres pura energía: hablas con entusiasmo, exclamaciones y emojis de fiesta como 🎉 o 😄.",
-        "toxico" => "Eres tóxico en broma: contestas con desdén y flojera, como si la pregunta fuera obvia o te molestara (\"búscalo tú\", \"qué pereza\"), con 🙄 o 💀. Nada de insultos graves.",
-        "sarcastico" => "Eres sarcástico: respondes con ironía, diciendo lo contrario de lo que piensas (\"qué sorpresa\", \"claro, cómo no\"), con humor seco y algún 😏.",
+        "toxico" => "Eres tóxico en broma: contestas lo que te preguntan, pero con desdén y flojera, como si la pregunta fuera obvia o te molestara, con 🙄 o 💀. Nada de insultos graves.",
+        "sarcastico" => "Eres sarcástico: respondes con ironía, diciendo lo contrario de lo que piensas, con humor seco y algún 😏.",
         "formal" => "Eres formal y profesional: tratas siempre de usted (usted, le, su), nunca tuteas, y no usas jerga, \"bro\", \"jaja\" ni emojis. Frases completas y corteses.",
         "misterioso" => "Eres críptico y filosófico: hablas con enigmas y puntos suspensivos, del destino, el tiempo y lo que no se ve.",
         "peruano" => "Hablas como un pata peruano: usas jerga peruana como causa, pe, oe, bacán, chamba o jato en cada respuesta.",
         "gamer" => "Eres gamer: todo lo comparas con videojuegos y usas términos como GG, lag, noob, nerf, buff o respawn.",
         "amoroso" => "Eres muy cariñoso: llamas a la gente con apodos tiernos y usas emojis de corazón como ❤️ o 🥰.",
         "chistoso" => "Eres el bromista: siempre metes un chiste o un juego de palabras, y te ríes con jaja o 😂.",
-        "depresivo" => "Eres apático y nihilista: todo te da igual (\"meh\", \"qué más da\", \"nada importa\"), respondes con desgano y algún 😔.",
+        "depresivo" => "Eres apático y nihilista: todo te da igual y nada importa, respondes con desgano y algún 😔.",
         "kawaii" => "Eres kawaii estilo anime: tierno, usas uwu, owo, nyan~, ✨ y onomatopeyas.",
         _ => "Eres natural y cercano.",
     }
@@ -534,6 +534,11 @@ pub struct ChatRequest {
 /// reaprovecha su caché solo hasta el primer token distinto (ver las fotos de
 /// los perfiles). Si los comandos fueran al final del *system*, un mensaje con
 /// pregunta y el siguiente sin ella harían releer todo lo que viene después.
+/// Si una respuesta dice algo: al menos una letra o un número.
+pub fn tiene_contenido(t: &str) -> bool {
+    t.chars().any(char::is_alphanumeric)
+}
+
 pub fn pedido_con_comandos(prompt: &str, comandos: &str) -> String {
     if comandos.trim().is_empty() {
         prompt.to_string()
@@ -668,7 +673,12 @@ pub async fn respond(
     };
 
     let pedido = pedido_con_comandos(&req.prompt, &req.comandos);
-    let texto = generar_ia(&pedido, &system, req.use_gpt, req.model.as_deref(), sesion).await;
+    // Una respuesta sin una sola letra ni número ("." de un modelo chico al
+    // que le llegó el texto de otro bot) no es una respuesta: decide la
+    // plantilla. Hasta la 9.3.0 salía, y con el emoji de `imitar` quedaba ". 😄".
+    let texto = generar_ia(&pedido, &system, req.use_gpt, req.model.as_deref(), sesion)
+        .await
+        .filter(|t| tiene_contenido(t));
 
     // Si ninguna IA contestó, el motor local de plantillas. Recibe el historial
     // para no repetir las últimas respuestas, que es lo que más delata que hay
@@ -699,16 +709,22 @@ pub async fn respond(
         }
     };
 
-    // Y aunque haya contestado la IA, el texto se acerca al estilo del usuario.
+    // Y aunque haya contestado la IA, el texto se acerca al estilo del usuario
+    // (salvo que, de quitarle los emojis, no quede nada).
     let texto = if usuario.msg_count >= MIN_MSGS_PERFIL {
-        personality::imitar(
+        let imitado = personality::imitar(
             &texto,
             &EstiloUsuario {
                 avg_len: usuario.avg_len,
                 emoji_freq: usuario.emoji_freq,
                 common_words: usuario.common_words,
             },
-        )
+        );
+        if tiene_contenido(&imitado) {
+            imitado
+        } else {
+            texto
+        }
     } else {
         texto
     };
@@ -870,6 +886,42 @@ pub async fn imitate(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// Una frase entre comillas en un modo, el modelo la copia tal cual: medido
+    /// en la 9.3.0, "búscalo tú" salía literal en vez de contestar.
+    #[test]
+    fn ningun_modo_trae_frases_de_ejemplo() {
+        // `formal` sí lleva comillas, pero de palabras que NO tiene que usar.
+        for m in [
+            "amable",
+            "alegre",
+            "toxico",
+            "sarcastico",
+            "misterioso",
+            "peruano",
+            "gamer",
+            "amoroso",
+            "chistoso",
+            "depresivo",
+            "kawaii",
+        ] {
+            assert!(
+                !rasgos_modo(m).contains('"'),
+                "{m} trae una frase entre comillas"
+            );
+        }
+        assert!(rasgos_modo("toxico").contains("contestas lo que te preguntan"));
+    }
+
+    #[test]
+    fn una_respuesta_sin_letras_ni_numeros_no_es_respuesta() {
+        for t in [".", "...", " . ", "😄", "🙌 .", ""] {
+            assert!(!tiene_contenido(t), "{t:?}");
+        }
+        for t in ["56", "Es martes", "ok 😄", "¿qué?"] {
+            assert!(tiene_contenido(t), "{t:?}");
+        }
+    }
 
     #[test]
     fn la_foto_dura_media_hora_y_despues_se_vuelve_a_leer() {

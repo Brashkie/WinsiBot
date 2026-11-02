@@ -25,9 +25,16 @@ const command: Command = {
       return
     }
 
+    // Las menciones de la razón, para que al repetirla se vea el nombre y no
+    // el número (ver afkMenciones en core/events).
+    const menciones = (msg.message?.extendedTextMessage?.contextInfo?.mentionedJid ?? [])
+      .filter((j) => reason.includes(`@${j.split('@')[0]}`))
+
     const user   = getUserData(sender, pushName)
     user.profile.afk       = Date.now()
     user.profile.afkReason = reason
+    if (menciones.length) user.profile.afkMenciones = menciones
+    else delete user.profile.afkMenciones
 
     await safeSend(() => sock.sendMessage(jid, {
       text: [
@@ -36,7 +43,7 @@ const command: Command = {
         `§ @${sender.split('@')[0]} está ausente`,
         `§ Razón: _${reason}_`,
       ].join('\n'),
-      mentions: [sender],
+      mentions: [sender, ...menciones],
     }, { quoted: msg }))
   },
 }

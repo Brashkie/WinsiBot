@@ -1,6 +1,6 @@
 <div align="center">
 
-<img src="https://capsule-render.vercel.app/api?type=waving&color=0:6C63FF,100:00C9FF&height=180&section=header&text=WinsiBot&fontSize=62&fontColor=ffffff&fontAlignY=38&desc=v9.3.0%20%E2%80%94%20Enterprise%20WhatsApp%20Bot&descAlignY=58&descSize=18" width="100%"/>
+<img src="https://capsule-render.vercel.app/api?type=waving&color=0:6C63FF,100:00C9FF&height=180&section=header&text=WinsiBot&fontSize=62&fontColor=ffffff&fontAlignY=38&desc=v9.3.1%20%E2%80%94%20Enterprise%20WhatsApp%20Bot&descAlignY=58&descSize=18" width="100%"/>
 
 <br/>
 
@@ -9,7 +9,7 @@
 [![Rust](https://img.shields.io/badge/Rust-1.75%2B-CE422B?style=for-the-badge&logo=rust&logoColor=white)](https://rust-lang.org)
 
 [![License](https://img.shields.io/badge/License-GPL--3.0-blue?style=flat-square)](LICENSE)
-[![Version](https://img.shields.io/badge/Version-9.3.0-6C63FF?style=flat-square)](CHANGELOG.md)
+[![Version](https://img.shields.io/badge/Version-9.3.1-6C63FF?style=flat-square)](CHANGELOG.md)
 [![Platform](https://img.shields.io/badge/Platform-Windows%20%7C%20Linux%20%7C%20macOS%20%7C%20Android-lightgrey?style=flat-square)](https://github.com/Brashkie/WinsiBot)
 [![PRs Welcome](https://img.shields.io/badge/PRs-welcome-brightgreen?style=flat-square)](https://github.com/Brashkie/WinsiBot/pulls)
 
@@ -17,7 +17,7 @@
 
 > Bot de WhatsApp de alto rendimiento con arquitectura multi-lenguaje de tres capas.<br/>
 > Sin límite artificial de grupos, pensado para miles de mensajes por hora y múltiples instancias.<br/>
-> v9.3.0 — **Más seguro, más demostrado y más liviano.** Toda la economía pasa por Ada/SPARK —cada cambio de saldo, todo o nada y sin negativos—, y también el lector de montos y el turno de cada envío del antiban, demostrados por GNATprove. Las firmas de los mensajes de grupo, 72 veces más rápido; `#removebg` y `#toanime`, un tercio. Y `#play` ya no puede ejecutar comandos en la máquina.<br/>
+> v9.3.1 — **Lo que apareció al usarla en grupos de verdad.** Si el antiban pone un número nuevo en calentamiento, el bot le avisa al dueño y dice a qué hora vuelve a enviar; `#antiban madurar` lo termina para un número con uso. El dueño vuelve a ser dueño en grupos con @lid, la IA ya no le contesta a otros bots, y las menciones muestran nombres. Desde la 9.3.0, toda la economía pasa por Ada/SPARK.<br/>
 
 <br/>
 
@@ -66,21 +66,24 @@
 | 🛡 **Antirrobo y economía** | Ada/SPARK | La decisión del antirrobo de grupos, cada cambio de saldo de la economía —todo o nada, sin negativos, y en `#pay` y el banco el total de monedas se conserva siempre—, el lector de montos y el turno de cada envío del antiban, con sus garantías demostradas por GNATprove para toda entrada, enlazados dentro de la Session API |
 | 🧮 **Kernels nativos** | C + Zig | Anime4K y el códec JPEG, compilados con Zig dentro del binario de la Session API. Se usa el que gana midiendo, y en x86-64 la copia para AVX2 si la CPU la tiene. |
 
-### Novedades en v9.3.0
+### Novedades en v9.3.1
 
-**Más seguro, más demostrado y más liviano.** El detalle completo está en el [CHANGELOG](CHANGELOG.md).
+**Lo que apareció al usar la 9.3.0 en grupos de verdad.** El detalle completo está en el [CHANGELOG](CHANGELOG.md).
 
 | Área | Cambio |
 |------|--------|
-| **Seguridad** | `#play` podía ejecutar comandos en la máquina con un enlace armado a propósito: ahora yt-dlp se llama sin shell. El dueño se reconoce solo por su teléfono; fuera `#terminal`, `#exec` y `#backup`; `#fetch` solo sale a internet; el panel web escucha solo en esta máquina y su login no se puede robar; el webhook no arranca con el secreto de ejemplo; aviso si la sesión se copia a otro lado |
-| **Antirrobo** | También para comunidades (`#antirrobo comunidad`) y canales (`#canal`), con la misma decisión demostrada en Ada/SPARK |
-| **Economía demostrada** | Cada cambio de saldo —apuestas, ganancias, gastos, subastas, premios de grupo, la XP de cada comando— pasa por una operación en Ada/SPARK: todo o nada, sin negativos, y en `#pay` y el banco el total se conserva. El lector de montos (`1.000` son mil) también está demostrado. De paso, varios bugs: `#invest` hacía perder siempre, los premium quedaban en negativo, `#cf` exageraba lo ganado, entre otros |
-| **Más rápido** | Las firmas de los mensajes de grupo se verifican con el Ed25519 de OpenSSL: de 9,3 a 0,13 ms por mensaje (72×). `#removebg` y `#toanime`, un tercio más rápido; `#upscale`, −12 % en un núcleo y −7 % con todos. En ráfagas, la mitad de CPU de Node por mensaje |
-| **Más liviano** | La base de conversaciones guarda 365 días en vez de para siempre (`CONV_RETENCION_DIAS`): hasta ~9 GB al año menos en un bot grande |
-| **La IA** | Ayuda con los comandos del bot, sus personalidades se notan (de 21 a 60 respuestas de 72) y responde en un mensaje propio después de "Pensando…". `#rw` sale directo, sin animación |
-| **Código estricto** | Biome en cero, cuatro flags más de TypeScript, clippy y rustfmt limpios, y CI que corre los 326 tests de vitest en cada push |
+| **Antiban** | Un número que el antiban no conocía entra en calentamiento: 40 mensajes el primer día, y sube durante una semana. Antes el bot se quedaba mudo sin explicación; ahora **le avisa al dueño por privado**, el log dice a qué hora vuelve a enviar, y `#antiban` muestra cuánto salió. Si el número ya tiene uso, **`#antiban madurar`** lo termina. Lo que el antiban frena ya no queda en el outbox para reenviarse horas después |
+| **Dueño** | En grupos con @lid el dueño salía como "Owner ✗ No": ahora su teléfono se toma de la lista de participantes. Y quien escribe desde el número del propio bot también es dueño |
+| **La IA** | Ya no le contesta a otro bot que la nombra al pasar ("El comando *hepein* no existe"): el nombre tiene que estar como palabra suelta. El modo tóxico contesta en vez de copiar "búscalo tú", no salen respuestas vacías como ". 😄", y `#hepein toxico` o `#hepein modo toxico` funcionan sin el `bot` del medio |
+| **Menciones** | En grupos con @lid, lo que el bot repite —la razón de un `#afk`, por ejemplo— mostraba "@160305996898368": ahora muestra el nombre |
+| **Descargas** | `npm run ytdlp:fetch` baja yt-dlp a `bin/`, verificado. Si falta, `#play` lo dice en vez de quedarse callado |
+| **Log** | "Bad MAC" solo cuando falla el descifrado de verdad, con su motivo: la sincronización con el teléfono del bot ya no llena la consola, ni los avisos de grupo cuentan para la limpieza de claves |
 
-**Para actualizar:** `npm install`, con el bot parado si estás en Windows. Si abrías el panel web desde otra máquina, ahora hace falta `DASHBOARD_HOST=0.0.0.0` (mejor detrás de un proxy con HTTPS). Y si usabas el webhook con el secreto de `.env.example`, poné uno propio: `openssl rand -hex 32`.
+**Para actualizar:** `npm install` y `npm run build`, con el bot parado si estás en Windows. Para las descargas, `npm run ytdlp:fetch` (en Termux, `pkg install yt-dlp`).
+
+### Novedades en v9.3.0
+
+**Más seguro, más demostrado y más liviano.** Toda la economía pasa por Ada/SPARK, las firmas de grupo se verifican 72 veces más rápido, `#removebg` y `#toanime` son un tercio más rápidos, y `#play` ya no puede ejecutar comandos en la máquina. El detalle completo está en el [CHANGELOG](CHANGELOG.md).
 
 ---
 
@@ -204,7 +207,7 @@
 
 ```
 ╔════════════════════════════════════════════════╗
-║                WinsiBot v9.3.0                 ║
+║                WinsiBot v9.3.1                 ║
 ╠═════════════════════╦══════════════════════════╣
 ║      TypeScript     ║           Rust           ║
 ║    Node.js :4001    ║                          ║
@@ -248,7 +251,7 @@
 | Rust + Cargo | 1.75+ | ❌ | solo para compilar la Session API vos mismo: `npm install` baja el binario de tu plataforma |
 | [Cosxamix](https://github.com/Brashkie/Cosxamix) **u** Ollama | 0.7.0 | ❌ | IA local, sin clave de API. Cosxamix es la de por defecto y no hay que instalarlo aparte; Ollama sigue con tres líneas del `.env` — ver `.env.example`. Con el `.env` apuntando a Cosxamix, `npm install` baja su binario solo (`npm run cosxamix:fetch` para bajarlo igual), y `npm run cosxamix:model` baja el modelo preguntando, con el tamaño elegido según la RAM. Con los dos, el bot lo arranca solo y lo vigila |
 | FFmpeg | 6.x | ❌ | stickers animados, notas de voz, efectos de audio, videos de los dragones. En Windows, Linux y macOS viene con `npm install` (`ffmpeg-static`); en Termux, `pkg install ffmpeg` |
-| yt-dlp | reciente | ❌ | descargas de YouTube y otros sitios. Ejecutable en `bin/` o en el `PATH`; en Termux, `pkg install yt-dlp` |
+| yt-dlp | reciente | ❌ | descargas de YouTube y otros sitios. `npm run ytdlp:fetch` baja el ejecutable oficial a `bin/`, verificado con su SHA-256 —correrlo otra vez lo actualiza—; también sirve uno en el `PATH`. En Termux, `pkg install yt-dlp` |
 
 **Sistemas operativos soportados:** Windows 10/11 · Ubuntu 20.04+ · Debian 11+ · macOS 12+ · Android (Termux)
 
@@ -668,6 +671,7 @@ curl -H "x-api-key: TU_CLAVE" http://127.0.0.1:3001/messages/pending
 | `POST` | `/antiban/report` | Error en el *ack* de WhatsApp (429, 463) — enfría la cuenta o el contacto |
 | `POST` | `/antiban/paired` | Número recién vinculado — empieza su calentamiento |
 | `GET` | `/antiban/status` | Envíos del último minuto, hora y 24 h, y qué limita ahora |
+| `POST` | `/antiban/mature` | El dueño dice que el número ya es maduro: termina el calentamiento (`#antiban madurar`) |
 | `POST` | `/rate/check` | Si un sender está dentro del rate limit |
 | `POST` | `/spam/check` | Frecuencia + texto repetido + bloqueo progresivo |
 | `POST` | `/watchdog/ping` | Heartbeat desde Node.js |

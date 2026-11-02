@@ -416,6 +416,24 @@ impl Motor {
         true
     }
 
+    /// El dueño dice que el número ya es maduro: termina el calentamiento.
+    /// Devuelve si estaba en uno.
+    ///
+    /// El antiban no puede saber la edad de un número: uno que no había visto
+    /// nunca es "nuevo" para él, aunque lleve años en WhatsApp —pasó en la
+    /// 9.3.0: un bot en uso, vinculado otra vez, quedó con 40 mensajes por
+    /// día—. Lo que se haya enviado sigue contando: madurar no sirve para
+    /// saltarse los topes por minuto, hora ni día.
+    pub fn madurar(&mut self, sesion: &str) -> bool {
+        match self.sesiones.get_mut(sesion) {
+            Some(s) if s.emparejado_ms.is_some() => {
+                s.emparejado_ms = None;
+                true
+            }
+            _ => false,
+        }
+    }
+
     /// El bot avisa qué número tiene la sesión cada vez que conecta. Solo se
     /// anota si no se sabía: es lo que deja reconocer a una sesión madura
     /// cuando, más adelante, se escanee el QR otra vez.
@@ -561,6 +579,13 @@ impl Antiban {
         empezo
     }
 
+    pub fn madurar(&self, sesion: &str) -> bool {
+        let estaba = self.con(|m| m.madurar(sesion));
+        // Como el vínculo: es una decisión del dueño, va a disco ya.
+        self.guardar();
+        estaba
+    }
+
     pub fn conocer(&self, sesion: &str, numero: &str) {
         self.con(|m| m.conocer(sesion, numero));
         self.sucio.store(true, std::sync::atomic::Ordering::Relaxed);
@@ -682,6 +707,23 @@ pub async fn numero(
         st.antiban.conocer(&b.session, n);
     }
     Json(serde_json::json!({ "ok": true }))
+}
+
+/// `POST /antiban/mature` — `{ session }`: el dueño dice que el número ya es
+/// maduro. `{ ok, estaba }`: si estaba en calentamiento.
+pub async fn mature(
+    State(st): State<AppState>,
+    Json(b): Json<SoloSesion>,
+) -> Json<serde_json::Value> {
+    let a = st.antiban.clone();
+    let sesion = b.session.clone();
+    let estaba = tokio::task::spawn_blocking(move || a.madurar(&sesion))
+        .await
+        .unwrap_or(false);
+    if estaba {
+        tracing::info!(session = %b.session, "antiban: el dueño terminó el calentamiento");
+    }
+    Json(serde_json::json!({ "ok": true, "estaba": estaba }))
 }
 
 /// `GET /antiban/status?session=main` — cuánto envió y qué lo limita ahora.
@@ -862,6 +904,36 @@ mod tests {
                 Decision::Enviar { .. }
             ));
         }
+    }
+
+    #[test]
+    fn madurar_termina_el_calentamiento_y_no_borra_lo_enviado() {
+        let mut m = Motor::new(Politica {
+            calentamiento: vec![2],
+            espera_max_ms: 0,
+            ..sin_pausa()
+        });
+        assert!(m.emparejado("main", Some("51999"), 0));
+        assert!(matches!(pedir(&mut m, 1_000), Decision::Enviar { .. }));
+        assert!(matches!(pedir(&mut m, 2_000), Decision::Enviar { .. }));
+        assert!(matches!(
+            pedir(&mut m, 3_000),
+            Decision::Rechazar {
+                motivo: Motivo::Calentamiento,
+                ..
+            }
+        ));
+        assert!(m.madurar("main"));
+        assert!(!m.madurar("main"), "ya no estaba en calentamiento");
+        assert!(!m.madurar("otra"), "una sesión que no existe");
+        assert!(matches!(pedir(&mut m, 3_000), Decision::Enviar { .. }));
+        assert_eq!(
+            m.estado("main", 3_000).ultimas_24h,
+            3,
+            "lo enviado sigue contando"
+        );
+        // Vincular otra vez el mismo número no lo vuelve a calentar.
+        assert!(!m.emparejado("main", Some("51999"), 4_000));
     }
 
     #[test]

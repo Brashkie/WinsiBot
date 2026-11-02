@@ -107,6 +107,7 @@ const D: Record<string, Traduccion> = {
 
   // admin
   antilink:    { en: 'Turn antilink on/off in the group', pt: 'Liga/desliga o antilink no grupo' },
+  antiban:     { en: 'The send pace of the bot: how much went out and what is holding it back; "madurar" ends the warm-up of a number that is already in use  |  !antiban  ·  !antiban madurar', pt: 'O ritmo de envio do bot: quanto saiu e o que o segura; "madurar" encerra o aquecimento de um número que já está em uso  |  !antiban  ·  !antiban madurar' },
   antirrobo:   { en: 'Protects the admins of the group —or of its community— from a takeover  |  !antirrobo on  ·  off  ·  proteger @user  ·  quitar @user  ·  comunidad on', pt: 'Protege os admins do grupo —ou da sua comunidade— de um roubo  |  !antirrobo on  ·  off  ·  proteger @usuário  ·  quitar @usuário  ·  comunidad on' },
   ban:         { en: 'Ban a user from the bot', pt: 'Bane um usuário do bot' },
   banchat:     { en: 'Mute/unmute the bot in this group', pt: 'Silencia/ativa o bot neste grupo' },
