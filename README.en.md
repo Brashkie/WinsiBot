@@ -1,6 +1,6 @@
 <div align="center">
 
-<img src="https://capsule-render.vercel.app/api?type=waving&color=0:6C63FF,100:00C9FF&height=180&section=header&text=WinsiBot&fontSize=62&fontColor=ffffff&fontAlignY=38&desc=v9.3.2%20%E2%80%94%20Enterprise%20WhatsApp%20Bot&descAlignY=58&descSize=18" width="100%"/>
+<img src="https://capsule-render.vercel.app/api?type=waving&color=0:6C63FF,100:00C9FF&height=180&section=header&text=WinsiBot&fontSize=62&fontColor=ffffff&fontAlignY=38&desc=v9.3.3%20%E2%80%94%20Enterprise%20WhatsApp%20Bot&descAlignY=58&descSize=18" width="100%"/>
 
 <br/>
 
@@ -9,7 +9,7 @@
 [![Rust](https://img.shields.io/badge/Rust-1.75%2B-CE422B?style=for-the-badge&logo=rust&logoColor=white)](https://rust-lang.org)
 
 [![License](https://img.shields.io/badge/License-GPL--3.0-blue?style=flat-square)](LICENSE)
-[![Version](https://img.shields.io/badge/Version-9.3.2-6C63FF?style=flat-square)](CHANGELOG.md)
+[![Version](https://img.shields.io/badge/Version-9.3.3-6C63FF?style=flat-square)](CHANGELOG.md)
 [![Platform](https://img.shields.io/badge/Platform-Windows%20%7C%20Linux%20%7C%20macOS%20%7C%20Android-lightgrey?style=flat-square)](https://github.com/Brashkie/WinsiBot)
 [![PRs Welcome](https://img.shields.io/badge/PRs-welcome-brightgreen?style=flat-square)](https://github.com/Brashkie/WinsiBot/pulls)
 
@@ -17,7 +17,7 @@
 
 > High-performance WhatsApp bot with a three-layer multi-language architecture.<br/>
 > No artificial group limit, built for thousands of messages per hour and multiple instances.<br/>
-> v9.3.2 — **What showed up using it in real groups.** If the antiban puts a new number in warm-up, the bot tells the owner and says when it will send again; `#antiban madurar` ends it for a number already in use. The owner is the owner again in @lid groups, the AI no longer replies to other bots, and mentions show names. Since 9.3.0, the whole economy goes through Ada/SPARK.<br/>
+> v9.3.3 — **`#upscale` 20% faster on ARM (Termux), measured.** Every alternative was tried on a real ARM64 —16, 8 and 4 pixels at a time, integer sums, a C kernel with NEON— and the winner stayed, with the same bit-for-bit result. Since 9.3.0, the whole economy goes through Ada/SPARK.<br/>
 
 <br/>
 
@@ -65,6 +65,20 @@
 | ⚙️ **Session + AI** | Rust / Axum | Atomic creds and snapshots, Bad MAC tracker, rate limiter, intent classification, personality and humour, reputation, style profiles, Ollama and cloud APIs, images |
 | 🛡 **Anti-takeover and economy** | Ada/SPARK | The group anti-takeover decision, every balance change in the economy —all or nothing, never negative, and in `#pay` and the bank the total of coins is always conserved—, the amount reader and the antiban's turn for each send, their guarantees proven by GNATprove for every input, linked into the Session API |
 | 🧮 **Native kernels** | C + Zig | Anime4K and the JPEG codec, compiled with Zig into the Session API binary. The fastest one is used, measured, and on x86-64 the AVX2 copy if the CPU has it. |
+
+### What's new in v9.3.3
+
+**`#upscale` 20% faster on ARM.** On ARM —Termux, Linux ARM— the two Anime4K passes are 80% of the command, so every alternative was measured on CI's ARM64 runner, always with the same bit-for-bit result:
+
+| Pass (3072x2048, one core / four) | ARM64 |
+|------|------|
+| 16 pixels at a time (the x86 one) | 482 / 134 ms |
+| 8 at a time | 431 / 120 ms |
+| 4 at a time | 660 ms |
+| C kernel with NEON intrinsics, 8 at a time | 377–395 / 104–107 ms |
+| **8 at a time, adding the neighbours as integers** | **385 / 108 ms** |
+
+The last one stayed: **−20%** versus 9.3.2. The C kernel tied within the noise and didn't justify a second kernel to maintain, so it was removed. x86 stays at 16, the fastest there. CI measures both on ARM on every push. Details in the [CHANGELOG](CHANGELOG.md).
 
 ### What's new in v9.3.2
 
@@ -211,7 +225,7 @@ A small fix: with no session yet —before the first QR or after `npm run manage
 
 ```
 ╔════════════════════════════════════════════════╗
-║                WinsiBot v9.3.2                 ║
+║                WinsiBot v9.3.3                 ║
 ╠═════════════════════╦══════════════════════════╣
 ║      TypeScript     ║           Rust           ║
 ║    Node.js :4001    ║                          ║
@@ -418,6 +432,7 @@ RUST_LOG=winsibot_session_api=info
 | `COSXAMIX_MOTOR` | `propio` | `candle` uses Cosxamix's previous engine |
 | `DASHBOARD_HOST` | `127.0.0.1` | Where the web panel listens: this machine only by default; `0.0.0.0` opens it to the network (better behind an HTTPS proxy) |
 | `CONV_RETENCION_DIAS` | `365` | Days of group messages the conversation database keeps; older ones are deleted every hour. `0` keeps them forever |
+| `WINSI_A4K_PASADA` | by CPU | The Anime4K pass (`#upscale`): `zig16` (the x86 one) or `zig8e` (the ARM one). Only for measuring; each architecture already uses the winner |
 | `WINSI_CURVE_JS` | — | `1` goes back to verifying group message signatures with pure-JavaScript cryptography, ~70 times slower than OpenSSL |
 
 </details>

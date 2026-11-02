@@ -4,7 +4,12 @@ Todos los cambios notables de WinsiBot se documentan en este archivo, versión p
 
 ---
 
-## [9.3.3] — sin publicar
+## [9.3.3] — 2026-11-02
+
+**`#upscale` un 20 % más rápido en ARM, medido en un ARM de verdad.** En ARM las pasadas de
+Anime4K son el 80 % del comando; se probaron de a 16, 8 y 4 píxeles, la suma de vecinos en
+enteros y un kernel entero en C con intrínsecas NEON, todo con el mismo resultado bit a bit. Quedó
+de a 8 con suma entera (−20 %); el C empató y salió. x86 sigue de a 16. Session API 5.17.0.
 
 | Área | Cambio |
 |------|--------|
