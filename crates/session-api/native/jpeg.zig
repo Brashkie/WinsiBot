@@ -4,11 +4,19 @@
 //! 8x8, en orden zigzag, listos para que jpeg.c los codifique con Huffman.
 //!
 //! Lo que se vectoriza:
-//!   - la conversión a YCbCr, de a 8 píxeles por instrucción;
+//!   - la conversión a YCbCr, de a 8 píxeles por instrucción, con una sola
+//!     carga y los canales separados con @shuffle;
+//!   - el submuestreo del color, de a 8 muestras;
 //!   - la DCT de cada bloque: el bloque es 8 vectores de 8 lanes, así que una
 //!     pasada de la DCT de 1 dimensión transforma las 8 columnas A LA VEZ; se
-//!     traspone y otra pasada hace las 8 filas;
-//!   - la cuantización, 8 coeficientes por instrucción.
+//!     traspone (con @shuffle) y otra pasada hace las 8 filas;
+//!   - la cuantización, 8 coeficientes por instrucción, y el zigzag, un
+//!     @shuffle de los 64.
+//!
+//! En la 9.4.0 la carga del color, el submuestreo, la trasposición y el
+//! zigzag pasaron de escalares a vectores: de ~20,4 a ~14,6 ms en un hilo
+//! sobre 3072x2048 con AVX2, de ~26,5 a ~19,1 en SSE2. Las mismas sumas en el
+//! mismo orden: el JPEG sale igual byte a byte.
 //!
 //! La DCT es la de Arai, Agui y Nakajima (AAN) en flotante, la misma que la
 //! `jfdctflt.c` de libjpeg: 5 multiplicaciones por pasada en lugar de 64, y su
@@ -23,6 +31,18 @@ const ZZ = [64]u8{
     12, 19, 26, 33, 40, 48, 41, 34, 27, 20, 13, 6,  7,  14, 21, 28,
     35, 42, 49, 56, 57, 50, 43, 36, 29, 22, 15, 23, 30, 37, 44, 51,
     58, 59, 52, 45, 38, 31, 39, 46, 53, 60, 61, 54, 47, 55, 62, 63,
+};
+
+/// El zigzag como máscara de @shuffle sobre `q` (q[u] lane v en u*8 + v):
+/// las primeras 32 posiciones son de `a`, las otras de `b` (negativas).
+const ZIGZAG = blk: {
+    var m: [64]i32 = undefined;
+    for (0..64) |k| {
+        const nat = ZZ[k];
+        const i = (nat % 8) * 8 + nat / 8;
+        m[k] = if (i < 32) i else ~@as(i32, i - 32);
+    }
+    break :blk m;
 };
 
 /// Factores de escala de la DCT AAN: cos(k·π/16)·√2, con el 0 en 1.
@@ -71,13 +91,33 @@ inline fn fdct(d: *[8]V) void {
     d[7] = z11 - z4;
 }
 
+/// Las máscaras de un paso de la trasposición: entre las filas `r` y `r+paso`
+/// se cambian los bloques de `paso` columnas fuera de la diagonal.
+fn mascaraTras(comptime paso: usize, comptime alta: bool) [8]i32 {
+    var m: [8]i32 = undefined;
+    for (0..8) |c| {
+        const izq = c & paso == 0;
+        m[c] = if (!alta)
+            (if (izq) @intCast(c) else ~@as(i32, @intCast(c - paso)))
+        else
+            (if (izq) @intCast(c + paso) else ~@as(i32, @intCast(c)));
+    }
+    return m;
+}
+
+/// Trasponer el 8x8 con tres pasos de @shuffle entre pares de filas (de a
+/// 4, 2 y 1 columnas): cada paso cambia un bit de la fila por el de la
+/// columna. Antes pasaba por un arreglo y leía de a un flotante.
 fn trasponer(m: *[8]V) void {
-    var a: [8][8]f32 = undefined;
-    for (0..8) |i| a[i] = m[i];
-    for (0..8) |i| {
-        var fila: [8]f32 = undefined;
-        for (0..8) |j| fila[j] = a[j][i];
-        m[i] = fila;
+    inline for (.{ 4, 2, 1 }) |paso| {
+        inline for (0..8) |r| {
+            if (r & paso == 0) {
+                const a = m[r];
+                const b = m[r + paso];
+                m[r] = @shuffle(f32, a, b, mascaraTras(paso, false));
+                m[r + paso] = @shuffle(f32, a, b, mascaraTras(paso, true));
+            }
+        }
     }
 }
 
@@ -102,7 +142,7 @@ fn bloque(m: *[8]V, div: *const [8]V, out: [*]i16) void {
     fdct(m); // columnas: m[v], lanes x
     trasponer(m); // m[x], lanes v
     fdct(m); // filas: m[u], lanes v  →  coeficiente (fila v, columna u)
-    var q: [8][8]i16 = undefined;
+    var q: [8]Vi = undefined;
     inline for (0..8) |u| {
         // Redondeo a lo más cercano, la mitad lejos del cero, SIN `@round`: el
         // x86-64 básico no tiene instrucción de redondeo (llegó con SSE4.1) y
@@ -113,10 +153,25 @@ fn bloque(m: *[8]V, div: *const [8]V, out: [*]i16) void {
         const r: @Vector(8, i32) = @intFromFloat(x + medio);
         q[u] = @as(Vi, @intCast(r));
     }
-    for (0..64) |k| {
-        const nat = ZZ[k];
-        out[k] = q[nat % 8][nat / 8];
-    }
+    // El zigzag con un @shuffle de los 64 coeficientes, no 64 lecturas
+    // sueltas: q[u] lane v es el coeficiente natural v*8 + u.
+    const a: @Vector(32, i16) = @bitCast([4]Vi{ q[0], q[1], q[2], q[3] });
+    const b: @Vector(32, i16) = @bitCast([4]Vi{ q[4], q[5], q[6], q[7] });
+    out[0..64].* = @as([64]i16, @shuffle(i16, a, b, ZIGZAG));
+}
+
+const PARES = [8]i32{ 0, 2, 4, 6, 8, 10, 12, 14 };
+const IMPARES = [8]i32{ 1, 3, 5, 7, 9, 11, 13, 15 };
+
+/// El promedio de 8 bloques de 2x2: `a` y `b` son dos filas de 16 muestras.
+inline fn promedio2x2(a: [*]const f32, b: [*]const f32) V {
+    const fa: @Vector(16, f32) = a[0..16].*;
+    const fb: @Vector(16, f32) = b[0..16].*;
+    const a0: V = @shuffle(f32, fa, undefined, PARES);
+    const a1: V = @shuffle(f32, fa, undefined, IMPARES);
+    const b0: V = @shuffle(f32, fb, undefined, PARES);
+    const b1: V = @shuffle(f32, fb, undefined, IMPARES);
+    return (a0 + a1 + b0 + b1) * s(0.25);
 }
 
 /// Cuántos `f32` de borrador necesita `winsi_jpeg_coefs` para una imagen de
@@ -125,6 +180,13 @@ fn bloque(m: *[8]V, div: *const [8]V, out: [*]i16) void {
 pub fn winsi_jpeg_scratch_len(w: u32) callconv(.C) usize {
     const pw: usize = ((w + 15) / 16) * 16;
     return 16 * pw * 3 + 8 * (pw / 2) * 2;
+}
+
+/// Las posiciones del canal `k` en 8 píxeles de `C` bytes.
+fn canal(comptime C: usize, comptime k: usize) [8]i32 {
+    var m: [8]i32 = undefined;
+    for (0..8) |i| m[i] = @intCast(i * C + k);
+    return m;
 }
 
 /// Convierte la fila `sy` de la imagen a Y, Cb y Cr en flotante, `pw` muestras
@@ -136,17 +198,11 @@ fn fila_ycc(comptime C: usize, rgb: [*]const u8, w: usize, sy: usize, pw: usize,
     var x: usize = 0;
     // El interior, de a 8 píxeles por instrucción y sin recortar índices.
     while (x + 8 <= w) : (x += 8) {
-        var r: [8]f32 = undefined;
-        var g: [8]f32 = undefined;
-        var b: [8]f32 = undefined;
-        inline for (0..8) |i| {
-            r[i] = @floatFromInt(fila[(x + i) * C]);
-            g[i] = @floatFromInt(fila[(x + i) * C + 1]);
-            b[i] = @floatFromInt(fila[(x + i) * C + 2]);
-        }
-        const rv: V = r;
-        const gv: V = g;
-        const bv: V = b;
+        // Una sola carga de 8 píxeles, y los canales separados con @shuffle.
+        const px: @Vector(8 * C, u8) = fila[x * C ..][0 .. 8 * C].*;
+        const rv: V = @floatFromInt(@as(@Vector(8, u8), @shuffle(u8, px, undefined, canal(C, 0))));
+        const gv: V = @floatFromInt(@as(@Vector(8, u8), @shuffle(u8, px, undefined, canal(C, 1))));
+        const bv: V = @floatFromInt(@as(@Vector(8, u8), @shuffle(u8, px, undefined, canal(C, 2))));
         y[x..][0..8].* = rv * s(0.299) + gv * s(0.587) + bv * s(0.114) - s(128.0);
         cb[x..][0..8].* = rv * s(-0.168736) + gv * s(-0.331264) + bv * s(0.5);
         cr[x..][0..8].* = rv * s(0.5) + gv * s(-0.418688) + bv * s(-0.081312);
@@ -222,7 +278,14 @@ pub fn winsi_jpeg_coefs(
             const b = CBf + (2 * cy + 1) * pw;
             const c = CRf + (2 * cy) * pw;
             const d = CRf + (2 * cy + 1) * pw;
-            for (0..pc) |cx| {
+            // De a 8: 16 flotantes de cada fila, separados en pares e impares.
+            // Las mismas sumas y en el mismo orden que de a uno.
+            var cx: usize = 0;
+            while (cx + 8 <= pc) : (cx += 8) {
+                CB[cy * pc + cx ..][0..8].* = promedio2x2(a + 2 * cx, b + 2 * cx);
+                CR[cy * pc + cx ..][0..8].* = promedio2x2(c + 2 * cx, d + 2 * cx);
+            }
+            while (cx < pc) : (cx += 1) {
                 CB[cy * pc + cx] = (a[2 * cx] + a[2 * cx + 1] + b[2 * cx] + b[2 * cx + 1]) * 0.25;
                 CR[cy * pc + cx] = (c[2 * cx] + c[2 * cx + 1] + d[2 * cx] + d[2 * cx + 1]) * 0.25;
             }
