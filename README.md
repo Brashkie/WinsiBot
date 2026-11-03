@@ -1,6 +1,6 @@
 <div align="center">
 
-<img src="https://capsule-render.vercel.app/api?type=waving&color=0:6C63FF,100:00C9FF&height=180&section=header&text=WinsiBot&fontSize=62&fontColor=ffffff&fontAlignY=38&desc=v9.3.4%20%E2%80%94%20Enterprise%20WhatsApp%20Bot&descAlignY=58&descSize=18" width="100%"/>
+<img src="https://capsule-render.vercel.app/api?type=waving&color=0:6C63FF,100:00C9FF&height=180&section=header&text=WinsiBot&fontSize=62&fontColor=ffffff&fontAlignY=38&desc=v9.3.5%20%E2%80%94%20Enterprise%20WhatsApp%20Bot&descAlignY=58&descSize=18" width="100%"/>
 
 <br/>
 
@@ -9,7 +9,7 @@
 [![Rust](https://img.shields.io/badge/Rust-1.75%2B-CE422B?style=for-the-badge&logo=rust&logoColor=white)](https://rust-lang.org)
 
 [![License](https://img.shields.io/badge/License-GPL--3.0-blue?style=flat-square)](LICENSE)
-[![Version](https://img.shields.io/badge/Version-9.3.4-6C63FF?style=flat-square)](CHANGELOG.md)
+[![Version](https://img.shields.io/badge/Version-9.3.5-6C63FF?style=flat-square)](CHANGELOG.md)
 [![Platform](https://img.shields.io/badge/Platform-Windows%20%7C%20Linux%20%7C%20macOS%20%7C%20Android-lightgrey?style=flat-square)](https://github.com/Brashkie/WinsiBot)
 [![PRs Welcome](https://img.shields.io/badge/PRs-welcome-brightgreen?style=flat-square)](https://github.com/Brashkie/WinsiBot/pulls)
 
@@ -17,7 +17,7 @@
 
 > Bot de WhatsApp de alto rendimiento con arquitectura multi-lenguaje de tres capas.<br/>
 > Sin límite artificial de grupos, pensado para miles de mensajes por hora y múltiples instancias.<br/>
-> v9.3.4 — **`npm install` vuelve a funcionar en Termux.** Todas las dependencias salen del registro de npm, sin git ni descargas por URL, que el npm nuevo de Termux rechaza. Desde la 9.3.3, `#upscale` es un 20 % más rápido en ARM, y desde la 9.3.0 toda la economía pasa por Ada/SPARK.<br/>
+> v9.3.5 — **Más seguro y más rápido.** El nombre de cada sesión lo valida Ada/SPARK con la regla demostrada, la API key ya no filtra su largo, y el JPEG de `#anime` se codifica un 30 % más rápido en ARM, con el mismo resultado byte a byte. Desde la 9.3.4, `npm install` funciona en Termux sin git.<br/>
 
 <br/>
 
@@ -65,6 +65,20 @@
 | ⚙️ **Session + IA** | Rust / Axum | Creds atómicas y snapshots, tracker Bad MAC, rate limiter, antiban, clasificación de intenciones, personalidad y humor, reputación, perfiles de estilo, Ollama y APIs cloud, imágenes |
 | 🛡 **Antirrobo y economía** | Ada/SPARK | La decisión del antirrobo de grupos, cada cambio de saldo de la economía —todo o nada, sin negativos, y en `#pay` y el banco el total de monedas se conserva siempre—, el lector de montos, el turno de cada envío del antiban y el nombre de cada sesión —que termina siendo una carpeta del disco—, con sus garantías demostradas por GNATprove para toda entrada, enlazados dentro de la Session API |
 | 🧮 **Kernels nativos** | C + Zig | Anime4K y el códec JPEG, compilados con Zig dentro del binario de la Session API. Se usa el que gana midiendo, y en x86-64 la copia para AVX2 si la CPU la tiene. |
+
+### Novedades en v9.3.5
+
+**Seguridad, demostrada.** El nombre de una sesión llega por HTTP y termina siendo una carpeta del disco. Antes se aceptaba cualquier letra Unicode y nombres que Windows reserva (`con`, `nul`, `com1`). Ahora lo decide Ada/SPARK, y GNATprove demuestra que acepta exactamente de 1 a 64 caracteres de `a-z`, `A-Z`, `0-9`, `-` y `_` que no sean reservados. La copia en Rust da lo mismo en las 16,7 millones de cadenas de hasta 3 bytes. Además, la API key se compara siempre en el mismo tiempo, sin importar el largo de lo que llega.
+
+**El JPEG de `#anime`, más rápido**, siempre igual byte a byte:
+
+| 3072x2048, un núcleo | x86 (AVX2) | ARM64 |
+|------|------|------|
+| Huffman (C), con una máscara SIMD de los coeficientes que no son cero | 14,2 → 7,9 ms | ~10,5 → 6,0 ms |
+| Color y DCT (Zig), con carga, submuestreo, trasposición y zigzag vectoriales | 20,4 → 14,6 ms | 26,2 → 17,0 ms |
+| Redimensionado, la pasada vertical de a 4 píxeles | 60,7 → 54,3 ms | sin cambio |
+
+**La IA** ya no copia los comandos del grupo como si fueran su respuesta (contestó "#hepein bot mode toxico"), y el log deja un aviso cuando no contestó ningún modelo y salió una plantilla. **`#upscale`** ahora también llama a `#anime`. El detalle, en el [CHANGELOG](CHANGELOG.md).
 
 ### Novedades en v9.3.4
 
@@ -231,7 +245,7 @@ Un arreglo chico: sin sesión todavía —antes del primer QR o después de `npm
 
 ```
 ╔════════════════════════════════════════════════╗
-║                WinsiBot v9.3.4                 ║
+║                WinsiBot v9.3.5                 ║
 ╠═════════════════════╦══════════════════════════╣
 ║      TypeScript     ║           Rust           ║
 ║    Node.js :4001    ║                          ║

@@ -4,7 +4,13 @@ Todos los cambios notables de WinsiBot se documentan en este archivo, versión p
 
 ---
 
-## [9.4.0] — sin publicar
+## [9.3.5] — 2026-11-03
+
+**Más seguro y más rápido.** El nombre de cada sesión ahora lo valida Ada/SPARK, con la regla
+demostrada por GNATprove, y la API key ya no deja adivinar su largo midiendo tiempos. En el JPEG de
+salida, el Huffman en C baja un 44 % y color y DCT en Zig un 28 % (−35 % en ARM): `#anime` (ahora
+también `#upscale`) baja de 379,7 a 370,4 ms en un núcleo ARM. La IA ya no copia los comandos del
+grupo, y el log avisa cuando no contestó. Session API 5.18.0.
 
 | Área | Cambio |
 |------|--------|

@@ -13,7 +13,7 @@
 //!   - la cuantización, 8 coeficientes por instrucción, y el zigzag, un
 //!     @shuffle de los 64.
 //!
-//! En la 9.4.0 la carga del color, el submuestreo, la trasposición y el
+//! En la 9.3.5 la carga del color, el submuestreo, la trasposición y el
 //! zigzag pasaron de escalares a vectores: de ~20,4 a ~14,6 ms en un hilo
 //! sobre 3072x2048 con AVX2, de ~26,5 a ~19,1 en SSE2. Las mismas sumas en el
 //! mismo orden: el JPEG sale igual byte a byte.
