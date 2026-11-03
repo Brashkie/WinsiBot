@@ -49,6 +49,8 @@ export interface HepeinResponse {
   mode:       string
   hasProfile: boolean
   groupMsgs:  number
+  /** 'ia' si contestó un modelo, 'plantilla' si fue el motor local de Rust. */
+  source?:    'ia' | 'plantilla'
   error:      string | undefined
 }
 
@@ -146,6 +148,7 @@ export const hepein = {
       mode:       r.mode,
       hasProfile: r.hasProfile,
       groupMsgs:  r.groupMsgs,
+      source:     r.source,
       error:      undefined,
     }
   },

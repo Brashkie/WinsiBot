@@ -417,6 +417,16 @@ async function handleAIResponse(
 
     let reply: string | null = hepeinRes?.ok ? hepeinRes.text ?? null : null
 
+    // Que se vea cuando no contestó la IA: si no, solo se nota en respuestas
+    // de plantilla ("mm", "Y...") sin saber si fue Rust o el modelo.
+    if (!hepeinRes) {
+      logger.warn({ jid: ctx.jid }, 'IA: Rust no contestó en 44 s — plantilla local')
+    } else if (!hepeinRes.ok) {
+      logger.warn({ jid: ctx.jid, error: hepeinRes.error }, 'IA: sin respuesta de Rust — plantilla local')
+    } else if (hepeinRes.source === 'plantilla') {
+      logger.warn({ jid: ctx.jid }, 'IA: ningún modelo contestó (¿Cosxamix ocupado o caído?) — plantilla de Rust')
+    }
+
     // 3. Último recurso, si Rust no respondió en absoluto.
     //
     // Acá había un segundo viaje a `/api/v1/ai/personality/respond` de Python

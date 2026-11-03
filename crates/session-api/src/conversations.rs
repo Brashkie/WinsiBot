@@ -509,6 +509,15 @@ pub async fn ai_context(
 
 const SAMPLE_MAX_LEN: usize = 120;
 
+/// Si un mensaje sirve de ejemplo del tono: corto, y que no sea un comando
+/// (`#hepein bot mode toxico`, `!menu`, `.rw`, `/start`). Un comando no dice
+/// cómo habla nadie, y un modelo chico lo copia tal cual: en la 9.3 Hepein
+/// contestó "#hepein bot mode toxico", que era el último mensaje del grupo.
+fn sirve_de_muestra(t: &str) -> bool {
+    let t = t.trim_start();
+    !t.is_empty() && t.len() <= SAMPLE_MAX_LEN && !t.starts_with(['#', '!', '.', '/'])
+}
+
 #[derive(Debug, Clone, Serialize)]
 pub struct UserStyleProfile {
     pub jid: String,
@@ -587,7 +596,7 @@ pub fn user_profile(db: &ConvDb, jid: &str, days: i64) -> Result<UserStyleProfil
 
     let vocab_sample: Vec<String> = texts
         .iter()
-        .filter(|t| t.len() <= SAMPLE_MAX_LEN && !t.is_empty())
+        .filter(|t| sirve_de_muestra(t))
         .take(8)
         .cloned()
         .collect();
@@ -653,7 +662,7 @@ pub fn group_profile(db: &ConvDb, gjid: &str, days: i64) -> Result<GroupStylePro
 
     let vocab_sample: Vec<String> = texts
         .iter()
-        .filter(|t| t.len() <= SAMPLE_MAX_LEN && !t.is_empty())
+        .filter(|t| sirve_de_muestra(t))
         .take(10)
         .cloned()
         .collect();
@@ -1243,6 +1252,32 @@ mod tests {
         assert!(p.common_words.is_empty());
         assert!(p.active_hours.is_empty());
         assert!(!p.uses_slang);
+    }
+
+    #[test]
+    fn vocab_sample_descarta_los_comandos() {
+        let db = db_memoria();
+        for (i, t) in [
+            "#hepein bot mode toxico",
+            "!menu",
+            ".rw",
+            "/start",
+            "  #afk",
+            "jaja xd",
+        ]
+        .iter()
+        .enumerate()
+        {
+            insertar(&db, "a@s", "g@g", t, "", ahora() - i as i64 * 1_000);
+        }
+        assert_eq!(
+            user_profile(&db, "a@s", 45).unwrap().vocab_sample,
+            vec!["jaja xd"]
+        );
+        assert_eq!(
+            group_profile(&db, "g@g", 30).unwrap().vocab_sample,
+            vec!["jaja xd"]
+        );
     }
 
     #[test]

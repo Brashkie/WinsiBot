@@ -6,7 +6,9 @@ import { imagenDelMensaje } from '@lib/messages.js'
 
 const command: Command = {
   name: 'anime',
-  aliases: ['anime4k'],
+  // `upscale` porque es lo que hace y como se lo llama en el CHANGELOG: quien
+  // lo escribía recibía "el comando no existe".
+  aliases: ['anime4k', 'upscale'],
   description: 'Mejora la resolución de una imagen con Anime4K (x2 o x4) — no cambia el estilo, usa #toanime para eso',
   category: 'media',
   cooldown: 30,

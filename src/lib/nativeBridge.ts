@@ -533,7 +533,9 @@ export async function aiRespond(opts: {
     if (typeof err?.response?.status !== 'number' || err.response.status >= 500) {
       rustCircuit.recordFailure()
     }
-    logger.debug({ err: err?.message }, 'aiRespond falló')
+    // warn y no debug: si no, una IA que no contesta solo se ve como
+    // respuestas de plantilla, sin saber por qué.
+    logger.warn({ err: err?.message }, 'IA: la llamada a Rust falló')
     return null
   }
 }

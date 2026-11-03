@@ -384,7 +384,7 @@
 | `stickers` | `misstickers`, `buscarsticker` | 3s | 👤 | List or search your saved stickers by name — resends the matching one |
 | `delsticker` | `borrarsticker`, `eliminarsticker` | 3s | 👤 | Delete a sticker from your saved collection |
 | `removebg` | `rmbg`, `sinfondo`, `nobg`, `quitarfondo` | 30s | 👤 | Remove background from an image |
-| `anime` | `anime4k` | 30s | 👤 | Upscale image resolution (x2 or x4) — does not change art style |
+| `anime` | `anime4k`, `upscale` | 30s | 👤 | Upscale image resolution (x2 or x4) — does not change art style |
 | `toanime` | `animegan`, `cartoonize` | 30s | 👤 | Converts a real photo into actual anime art style (AnimeGANv2) |
 | `imagen` | `img`, `image`, `gimage`, `buscarimg` | 10s | 👤 | Search for images on the internet |
 | `lego` | `legofy`, `legoimg` | 15s | 👤 | Turns an image into a LEGO-style mosaic — reply to an image, optional brick size |
