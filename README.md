@@ -63,7 +63,7 @@
 |------|-----------|----------------|
 | 🟦 **Core** | TypeScript / Node.js | Protocolo WhatsApp, dispatcher de comandos, RPG, economía, panel web. Las firmas de los mensajes de grupo se verifican con el Ed25519 nativo de OpenSSL, 72 veces más rápido que la criptografía en JavaScript puro que traía Baileys |
 | ⚙️ **Session + IA** | Rust / Axum | Creds atómicas y snapshots, tracker Bad MAC, rate limiter, antiban, clasificación de intenciones, personalidad y humor, reputación, perfiles de estilo, Ollama y APIs cloud, imágenes |
-| 🛡 **Antirrobo y economía** | Ada/SPARK | La decisión del antirrobo de grupos, cada cambio de saldo de la economía —todo o nada, sin negativos, y en `#pay` y el banco el total de monedas se conserva siempre—, el lector de montos, el turno de cada envío del antiban y el nombre de cada sesión —que termina siendo una carpeta del disco—, con sus garantías demostradas por GNATprove para toda entrada, enlazados dentro de la Session API |
+| 🛡 **Antirrobo y economía** | Ada/SPARK | La decisión del antirrobo de grupos, cada cambio de saldo de la economía —todo o nada, sin negativos, y en `#pay` y el banco el total de monedas se conserva siempre—, el lector de montos, el turno de cada envío del antiban el nombre de cada sesión —que termina siendo una carpeta del disco— y los números de WhatsApp de la gente —lo que el bot envía y lo que escribe en el log los muestra tapados, `51••••••740`, y la base de la IA guarda a cada uno con un seudónimo SipHash-2-4—, con sus garantías demostradas por GNATprove para toda entrada, enlazados dentro de la Session API |
 | 🧮 **Kernels nativos** | C + Zig | Anime4K y el códec JPEG, compilados con Zig dentro del binario de la Session API. Se usa el que gana midiendo, y en x86-64 la copia para AVX2 si la CPU la tiene. |
 
 ### Novedades en v9.3.5
@@ -467,6 +467,7 @@ RUST_LOG=winsibot_session_api=info
 | `DASHBOARD_HOST` | `127.0.0.1` | Dónde escucha el panel web: solo esta máquina por defecto; `0.0.0.0` lo abre a la red (mejor detrás de un proxy con HTTPS) |
 | `CONV_RETENCION_DIAS` | `365` | Días de mensajes de grupo que guarda la base de conversaciones; lo más viejo se borra cada hora. `0` los guarda para siempre |
 | `WINSI_A4K_PASADA` | según la CPU | La pasada de Anime4K (`#upscale`): `zig16` (la de x86) o `zig8e` (la de ARM). Solo para medir; cada arquitectura ya usa la que ganó |
+| `WINSI_TANDAS` | `4` | En cuántas tandas reparte cada hilo las filas de `#upscale` y del JPEG: el que termina toma la siguiente, y en un teléfono los núcleos grandes no esperan a los chicos. `1` es el reparto fijo de antes, para medir |
 | `WINSI_CURVE_JS` | — | `1` vuelve a verificar las firmas de los mensajes de grupo con la criptografía en JavaScript puro, ~70 veces más lenta que OpenSSL |
 
 </details>

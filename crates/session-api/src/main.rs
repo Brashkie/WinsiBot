@@ -193,6 +193,8 @@ async fn principal() {
     bad_mac::init_schema(&conv_db);
     personality::init_schema(&conv_db);
     user_memory::init_schema(&conv_db);
+    // Lo guardado con números, a seudónimos: una vez (ver privacy.rs).
+    conversations::migrar_a_seudonimos(&conv_db);
 
     let state = AppState {
         sessions_dir: cfg.sessions_dir.clone(),
@@ -275,12 +277,12 @@ async fn principal() {
         // personalidad (ver conversations.rs y ai_chat.rs).
         .route(
             "/ai/group/recent/:gjid",
-            get(conversations::ai_group_recent),
+            post(conversations::ai_group_recent),
         )
         // Quién escribe cuánto en el grupo (#actividad, #fantasmas).
         .route(
             "/ai/group/activity/:gjid",
-            get(conversations::ai_group_activity),
+            post(conversations::ai_group_activity),
         )
         .route("/ai/summarize", post(ai_chat::summarize))
         // El teléfono descompuesto: un giro desde UN fragmento, o un título.

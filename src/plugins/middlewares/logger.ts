@@ -1,6 +1,7 @@
 import type { BotContext } from '../../types/index.js'
 import { color, themes, ascii } from 'ansimax'
 import { anchoTerminal, cortar } from '@lib/terminal.js'
+import { jidParaLog, textoParaLog } from '@lib/phoneGuard.js'
 // La hora de Lima con Intl, que Node ya trae. Era moment-timezone, con su base
 // de zonas horarias entera en memoria, para formatear HH:mm:ss en cada mensaje.
 // El formateador se arma una vez: crearlo es lo caro, usarlo no.
@@ -10,8 +11,9 @@ const HORA_LIMA = new Intl.DateTimeFormat('en-GB', {
 import { countMessage } from '@core/botStats.js'
 import { config } from '@config'
 
+// Con el número tapado (lib/phoneGuard.ts); LOG_NUMEROS=completo lo muestra.
 function formatJid(jid: string): string {
-  return jid.replace('@s.whatsapp.net', '').replace('@g.us', '')
+  return jidParaLog(jid).replace('@s.whatsapp.net', '').replace('@g.us', '')
 }
 
 function getMsgTypeLabel(ctx: BotContext): string {
@@ -61,7 +63,7 @@ export async function loggerMiddleware(ctx: BotContext): Promise<boolean> {
       `${color.dim('❖')} ${color.bold('Hora')}      ${themes.success(time)}`,
       `${color.dim('❖')} ${color.bold('Usuario')}   ${color.cyan(cortar(ctx.pushName, Math.max(4, ancho - 26 - formatJid(ctx.sender).length)))} ${color.dim(`(${formatJid(ctx.sender)})`)}`,
       `${color.dim('❖')} ${color.bold('Chat')}      ${ctx.isGroup ? color.magenta('Grupo') : themes.warning('Privado')} ${color.dim(formatJid(ctx.jid))}`,
-      `${color.dim('❖')} ${color.bold('Texto')}     ${cortar(ctx.text, Math.max(8, Math.min(60, ancho - 22)))}`,
+      `${color.dim('❖')} ${color.bold('Texto')}     ${cortar(textoParaLog(ctx.text), Math.max(8, Math.min(60, ancho - 22)))}`,
       `${color.dim('❖')} ${color.bold('Tipo')}      ${getTypeColor(type)} ${color.bold(color.magenta(`CMD: ${ctx.command}`))}`,
       `${color.dim('❖')} ${color.bold('Owner')}     ${ctx.isOwner ? themes.success('✔ Si') : themes.error('✗ No')}`,
     ].join('\n')

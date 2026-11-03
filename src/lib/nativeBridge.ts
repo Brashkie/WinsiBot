@@ -275,15 +275,6 @@ export interface GroupStyleProfile {
   vocab_sample: string[]
 }
 
-/** Un mensaje suelto de grupo: alimenta el perfil, no es un intercambio con la IA. */
-export async function observeMessage(sender: string, gjid: string, text: string): Promise<void> {
-  try {
-    await rustClient.post('/ai/observe', { sender, gjid, text })
-  } catch {
-    // fire-and-forget — ignorar errores
-  }
-}
-
 export async function getUserStyle(jid: string, days = 45): Promise<UserStyleProfile | null> {
   try {
     const res = await rustClient.get<UserStyleProfile>(
@@ -308,7 +299,7 @@ export async function getGroupStyle(gjid: string, days = 30): Promise<GroupStyle
 
 // ─── "¿Qué me perdí?" ─────────────────────────────────────────────────────────
 // Los mensajes salen del mismo corpus que alimenta el estilo del grupo (cada
-// mensaje ya pasa por observeMessage): resumir no guarda nada nuevo.
+// mensaje ya pasa por ingerirMensaje): resumir no guarda nada nuevo.
 
 export interface GroupRecent {
   messages:     Array<{ sender: string; text: string; ts: number }>
@@ -316,11 +307,16 @@ export interface GroupRecent {
   participants: Array<{ sender: string; count: number }>
 }
 
-export async function getGroupRecent(gjid: string, limit = 150, hours = 24): Promise<GroupRecent | null> {
+/**
+ * La base guarda a cada uno con un seudónimo y no con su número (ver
+ * crates/session-api/src/privacy.rs): con los JID de los miembros, Rust
+ * devuelve a cada uno con el suyo. Quien ya no está queda como `u:…`.
+ */
+export async function getGroupRecent(gjid: string, limit = 150, hours = 24, miembros: string[] = []): Promise<GroupRecent | null> {
   try {
-    const res = await rustClient.get<GroupRecent & { ok: boolean }>(
+    const res = await rustClient.post<GroupRecent & { ok: boolean }>(
       `/ai/group/recent/${encodeURIComponent(gjid)}`,
-      { params: { limit: String(limit), hours: String(hours) } },
+      { limit, hours, miembros },
     )
     return res.data?.ok ? res.data : null
   } catch {
@@ -350,10 +346,11 @@ export interface GroupActivity {
 }
 
 /** Quién escribió cuánto en el grupo en los últimos `days` días (#actividad, #fantasmas). */
-export async function getGroupActivity(gjid: string, days: number): Promise<GroupActivity | null> {
+export async function getGroupActivity(gjid: string, days: number, miembros: string[] = []): Promise<GroupActivity | null> {
   try {
-    const res = await rustClient.get<GroupActivity & { ok: boolean }>(
-      `/ai/group/activity/${encodeURIComponent(gjid)}`, { params: { days: String(days) } },
+    // Con los miembros, para volver de los seudónimos a los JID (ver getGroupRecent).
+    const res = await rustClient.post<GroupActivity & { ok: boolean }>(
+      `/ai/group/activity/${encodeURIComponent(gjid)}`, { days, miembros },
     )
     return res.data?.ok ? res.data : null
   } catch {

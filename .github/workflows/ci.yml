@@ -169,7 +169,7 @@ jobs:
       # cadenas de hasta 3 bytes.
       - name: Ada contra las copias en Rust
         working-directory: crates/session-api/ada
-        run: alr -n exec -- bash -c 'cd ../../.. && cargo test --release -p winsibot-session-api --features ada -- group_guard ledger amount send_pacing session_id'
+        run: alr -n exec -- bash -c 'cd ../../.. && cargo test --release -p winsibot-session-api --features ada -- group_guard ledger amount send_pacing session_id phone privacy'
 
       - name: Clippy con Ada
         working-directory: crates/session-api/ada

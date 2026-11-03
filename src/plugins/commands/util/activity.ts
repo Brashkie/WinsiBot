@@ -19,7 +19,10 @@ const command: Command = {
 
   async execute({ sock, jid, msg, args }) {
     const dias = Math.min(Math.max(parseInt(args[0] ?? '', 10) || 7, 1), 365)
-    const [r, ms] = await Promise.all([getGroupActivity(jid, dias), miembros(sock, jid).catch(() => [])])
+    // Los miembros primero: la base no guarda números, y con ellos Rust
+    // devuelve a cada uno con su JID (ver getGroupActivity).
+    const ms = await miembros(sock, jid).catch(() => [])
+    const r = await getGroupActivity(jid, dias, ms.flatMap(m => m.ids))
     if (!r) {
       await safeSend(() => sock.sendMessage(jid, { text: `> No pude leer la actividad ahora. Intenta en un rato.` }, { quoted: msg }))
       return

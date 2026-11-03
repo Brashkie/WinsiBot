@@ -10,6 +10,7 @@ import type { BotContext } from '../types/index.js'
 import { handleNotFound } from '@plugins/commands/general/notfound.js'
 import { analyzeIntent, learnConversation, getAIContext, ingerirMensaje } from '@lib/nativeBridge.js'
 import { hepein } from '@lib/hepein.js'
+import { conocer, jidParaLog, textoParaLog } from '@lib/phoneGuard.js'
 import { safeSend } from '@lib/media_sender.js'
 import {
   addXP,
@@ -500,12 +501,13 @@ export async function handleMessage(msg: WAMessage, sock: WASocket): Promise<voi
     const isGroupEarly  = jidEarly.endsWith('@g.us')
     const chat          = isGroupEarly ? 'Grupo' : 'Privado'
     const yo            = msg.key.fromMe ? 'fromMe' : 'entrante'
-    const id            = jidEarly.replace('@g.us', '').replace('@s.whatsapp.net', '')
+    // El número tapado: el log también se lee y se comparte (lib/phoneGuard.ts).
+    const id            = jidParaLog(jidEarly).replace('@g.us', '').replace('@s.whatsapp.net', '')
     // Un renglón por mensaje: en Termux vertical (40-50 columnas) se partía en
     // dos o tres. Se corta solo el texto, que es lo que varía, con lo que deja
     // libre el resto (ver lib/terminal.ts: truncateAnsi costaba ~290 µs).
     const fijo          = anchoTexto(`  ◈ Handler  ${chat} ${id}  ${yo}  ""`)
-    const textLabel     = textEarly ? `"${cortar(textEarly, Math.min(50, anchoTerminal() - fijo))}"` : color.dim('(sin texto)')
+    const textLabel     = textEarly ? `"${cortar(textoParaLog(textEarly), Math.min(50, anchoTerminal() - fijo))}"` : color.dim('(sin texto)')
     // stdout.write y no console.log: la misma línea, sin el formateo de console
     // (~1,5 contra ~4 µs por mensaje, medido con la salida a NUL).
     process.stdout.write(`  ${themes.success('◈')} ${color.bold('Handler')}  ${isGroupEarly ? color.magenta(chat) : themes.warning(chat)} ${color.dim(id)}  ${msg.key.fromMe ? color.dim(yo) : color.cyan(yo)}  ${textLabel}
@@ -514,6 +516,8 @@ export async function handleMessage(msg: WAMessage, sock: WASocket): Promise<voi
     if (msg.key.fromMe) return
 
     const base = buildBaseContext(msg, sock)
+    // Quien escribe es alguien: su número se tapa en lo que salga del bot.
+    conocer(base.sender); conocer(msg.key.participant)
     if (!base.jid || base.jid === 'status@broadcast') return
 
     if (KNOWN_BOTS.has(base.sender)) return
@@ -523,7 +527,7 @@ export async function handleMessage(msg: WAMessage, sock: WASocket): Promise<voi
     // cada mensaje: ~157 µs y ~150 µs de CPU de Node para sumar uno a un
     // contador (ver lib/senderRate.ts). Misma regla, menos de 1 µs.
     if (!base.isOwner && base.text && !limitePorRemitente.permitir(base.sender)) {
-      console.log(`  ${themes.error('◈')} ${color.bold(themes.error('Rate'))}  ${color.dim(base.sender.replace('@s.whatsapp.net','').replace('@lid',''))}  ${color.dim('15 mensajes en 10 s')}`)
+      console.log(`  ${themes.error('◈')} ${color.bold(themes.error('Rate'))}  ${color.dim(jidParaLog(base.sender).replace('@s.whatsapp.net','').replace('@lid',''))}  ${color.dim('15 mensajes en 10 s')}`)
       return
     }
 

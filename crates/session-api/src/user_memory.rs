@@ -108,6 +108,9 @@ fn json_a<T: for<'de> Deserialize<'de> + Default>(s: &str) -> T {
 
 /// El perfil de `jid`: del caché si está, y si no de la base.
 fn leer(db: &ConvDb, jid: &str) -> Result<Perfil, String> {
+    // En la base y en el caché, cada uno con su seudónimo (ver privacy.rs).
+    let seudonimo = crate::privacy::seudonimo(jid);
+    let jid = seudonimo.as_str();
     if let Some(p) = db
         .perfiles
         .lock()
@@ -291,6 +294,8 @@ pub struct UpdateRequest {
 /// `BaseConv` y lo marca para el próximo vaciado: sin SELECT ni UPSERT por
 /// mensaje, que eran 124 µs (ver `benches/message.rs`).
 pub fn actualizar(db: &ConvDb, jid: &str, req: &UpdateRequest) -> Result<Perfil, String> {
+    let seudonimo = crate::privacy::seudonimo(jid);
+    let jid = seudonimo.as_str();
     let mut p = leer(db, jid)?;
     let ahora = Utc::now();
     let ts = ahora.timestamp_millis();
@@ -381,7 +386,7 @@ pub async fn get(
     Path(jid): Path<String>,
 ) -> Json<serde_json::Value> {
     let db = state.conv_db.clone();
-    match tokio::task::spawn_blocking(move || leer(&db, &jid)).await {
+    match tokio::task::spawn_blocking(move || leer(&db, &jid).map(|p| Perfil { jid, ..p })).await {
         Ok(Ok(p)) => Json(serde_json::json!({ "success": true, "data": p })),
         Ok(Err(e)) => Json(serde_json::json!({ "success": false, "error": e })),
         Err(e) => Json(serde_json::json!({ "success": false, "error": e.to_string() })),

@@ -27,7 +27,9 @@ interface Pendiente { quien: string; lista: Miembro[]; vence: number }
 const pendientes = new Map<string, Pendiente>()   // gjid → la expulsión por confirmar
 
 async function fantasmas(sock: any, jid: string, dias: number) {
-  const [r, ms] = await Promise.all([getGroupActivity(jid, dias), miembros(sock, jid)])
+  // Los miembros primero: con ellos Rust devuelve los JID (ver getGroupActivity).
+  const ms = await miembros(sock, jid)
+  const r = await getGroupActivity(jid, dias, ms.flatMap(m => m.ids))
   if (!r) return null
   const activos = new Set(r.activity.miembros.map(m => m.sender))
   // El bot no cuenta: ni como fantasma ni en el total ("2 de 5" con el bot era 2 de 4).

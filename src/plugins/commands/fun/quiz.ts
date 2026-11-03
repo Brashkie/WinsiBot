@@ -5,7 +5,6 @@ import {
   type QuizCategory,
   type QuizDifficulty,
   type QuizProfile,
-  type QuizSession,
 } from '@lib/quiz.js'
 
 const CATEGORIES  = new Set<QuizCategory>(['javascript', 'python', 'algoritmos', 'web', 'general'])
@@ -15,11 +14,6 @@ function getProfile(jid: string, name: string): QuizProfile {
   return getUserData(jid, name).quizProfile ?? QuizManager.defaultProfile()
 }
 
-export const activeQuizSessions = QuizManager['activeSessions' as never] as unknown as Map<string, QuizSession>
-
-export function handleQuizAnswer(jid: string, _text: string): QuizSession | undefined {
-  return QuizManager.getSession(jid)
-}
 
 const command: Command = {
   name:        'quiz',

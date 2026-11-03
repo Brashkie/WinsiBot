@@ -145,12 +145,6 @@ export function addToInventory(jid: string, char: RollCharacter, groupJid: strin
   registerGroupClaim(groupJid, char, jid)
 }
 
-export function removeFromInventory(jid: string, charName: string): RollCharacter | null {
-  const inv = getUserInventory(jid)
-  const idx = inv.findIndex(c => c.name.toLowerCase() === charName.toLowerCase())
-  if (idx === -1) return null
-  return inv.splice(idx, 1)[0] ?? null
-}
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 export async function getCharacters(source: string): Promise<RollCharacter[]> {

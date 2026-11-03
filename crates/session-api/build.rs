@@ -42,7 +42,9 @@ fn compilar_ada() {
 
     // Cada unidad de Ada del crate: el antirrobo (9.2), el libro de saldos
     // de la economía, el lector de montos y el ritmo de salida (9.3), y el
-    // nombre de una sesión (9.4). Todas Pure, sin elaboración y demostradas.
+    // nombre de una sesión (9.3.5), los números de WhatsApp de la gente y el
+    // SipHash de los seudónimos (9.4). Todas Pure, sin elaboración y
+    // demostradas.
     let mut objetos = Vec::new();
     for unidad in [
         "group_guard",
@@ -50,6 +52,8 @@ fn compilar_ada() {
         "amount_parser",
         "send_pacing",
         "session_name",
+        "phone_guard",
+        "sip_hash",
     ] {
         let objeto = salida.join(format!("{unidad}.o"));
         let estado = Command::new(&gcc)

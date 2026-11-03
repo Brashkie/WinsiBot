@@ -1,7 +1,6 @@
 import {
   getPersonalityModes, setPersonalityMode, resetPersonalityMode,
 } from '@lib/nativeBridge.js'
-import { hepein }               from '@lib/hepein.js'
 
 export const MODES = [
   'amable',
@@ -76,37 +75,5 @@ export async function getAllModes(): Promise<{ global: string; groups: Record<st
     }
   } catch {
     return { global: 'amable', groups: {} }
-  }
-}
-
-/**
- * Registra un mensaje en el pipeline de entrenamiento Hepein.
- * Fire-and-forget — no bloquea el handler.
- */
-export function recordMessage(
-  groupJid:  string,
-  senderJid: string,
-  text:      string,
-  isReply    = false,
-): void {
-  hepein.record({ groupJid, senderJid, text, isReply })
-}
-
-/**
- * Obtiene el modo activo del grupo y su perfil de estilo aprendido
- * en paralelo, para usarlos juntos al construir respuestas.
- */
-export async function getModeWithProfile(
-  groupJid:  string,
-  senderJid: string,
-): Promise<{ mode: PersonalityMode; hasProfile: boolean; msgCount: number }> {
-  const [mode, profile] = await Promise.all([
-    getMode(groupJid),
-    hepein.getProfile(senderJid),
-  ])
-  return {
-    mode,
-    hasProfile: (profile?.msg_count ?? 0) >= 15,
-    msgCount:   profile?.msg_count ?? 0,
   }
 }

@@ -186,7 +186,7 @@ impl RateLimiter {
 
         if !allowed {
             tracing::debug!(
-                sender    = %sender,
+                sender    = %crate::privacy::jid_para_log(sender),
                 count     = count,
                 limit     = RATE_LIMIT,
                 "rate limit excedido"
@@ -376,7 +376,7 @@ pub async fn spam_check(
     );
 
     if !allowed {
-        tracing::debug!(sender = %body.sender, ?reason, cooldown_ms, "spam_check bloqueó");
+        tracing::debug!(sender = %crate::privacy::jid_para_log(&body.sender), ?reason, cooldown_ms, "spam_check bloqueó");
     }
 
     (

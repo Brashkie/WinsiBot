@@ -5,6 +5,7 @@ import { writeFile, readFile, mkdir, rename } from 'node:fs/promises'
 import { existsSync } from 'node:fs'
 import { logger } from './logger.js'
 import { setGroupMetadata } from './groupCache.js'
+import { conocer } from '@lib/phoneGuard.js'
 import { config } from '@config'
 
 // ─── Tipos ────────────────────────────────────────────────────────────────────
@@ -95,6 +96,8 @@ class WinsiStore {
         }
         if (c.name || c.notify) this.nameMap.set(jid, c.name ?? c.notify ?? '')
         if (c.lid)              this.lidMap.set(c.lid, jid)
+        // Un contacto es de alguien: su número se tapa al salir (lib/phoneGuard.ts).
+        conocer(jid); conocer(c.lid)
       }
       if (vacios) {
         this.dirty = true
@@ -131,6 +134,7 @@ class WinsiStore {
 
   // ─── Registrar contacto ─────────────────────────────────────────────────────
   private registerContact(id: string, name?: string, lid?: string): void {
+    conocer(id); conocer(lid)
     const existing = this.data.contacts[id] ?? { id }
     // Un participante de un grupo con LID llega con id = lid y sin nombre: un
     // LID que apunta a sí mismo, que no resuelve nada. Eran el 90% de la

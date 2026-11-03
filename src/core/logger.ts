@@ -1,5 +1,6 @@
 import pino from 'pino'
 import { config } from '@config'
+import { jidParaLog, textoParaLog } from '@lib/phoneGuard.js'
 
 const BAD_MAC_PATTERNS = [
   'Bad MAC', 'Failed to decrypt', 'Session error',
@@ -10,12 +11,33 @@ function isSuppressed(msg: string): boolean {
   return BAD_MAC_PATTERNS.some(p => msg?.includes(p))
 }
 
+// Los campos con un JID de persona: el número va tapado (lib/phoneGuard.ts),
+// porque el log también se lee y se comparte. LOG_NUMEROS=completo lo muestra.
+const CAMPOS_JID = ['sender', 'jid', 'participant', 'owner', 'from', 'to', 'remoteJid', 'target', 'user']
+
+function taparNumeros(args: unknown[]): unknown[] {
+  return args.map((a) => {
+    if (typeof a === 'string') return textoParaLog(a)
+    if (!a || typeof a !== 'object' || Array.isArray(a) || a instanceof Error) return a
+    let copia: Record<string, unknown> | null = null
+    for (const k of CAMPOS_JID) {
+      const v = (a as Record<string, unknown>)[k]
+      if (typeof v !== 'string') continue
+      const t = jidParaLog(v)
+      if (t === v) continue
+      copia ??= { ...(a as Record<string, unknown>) }
+      copia[k] = t
+    }
+    return copia ?? a
+  })
+}
+
 const hooks: pino.LoggerOptions['hooks'] = {
   logMethod(args, method) {
     const first = args[0] as Record<string, any>
     const msg = String(first?.err?.message ?? first?.msg ?? first ?? '')
     if (isSuppressed(msg)) return
-    method.apply(this, args as any)
+    method.apply(this, taparNumeros(args) as any)
   },
 }
 

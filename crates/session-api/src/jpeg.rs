@@ -251,47 +251,40 @@ fn calcular_coefs(
     // MCU es independiente. El Huffman también va en franjas desde la 8.17.0,
     // con marcadores de reinicio (ver `entropia`).
     let filas_mcu = h.div_ceil(16);
-    let n = (crate::anime4k::hilos() as u32).min(filas_mcu);
-    let paso = filas_mcu.div_ceil(n);
     let (src, dst) = (px.as_ptr() as usize, coefs.as_mut_ptr() as usize);
     let (qyp, qcp) = (qy.as_ptr() as usize, qc.as_ptr() as usize);
-    std::thread::scope(|s| {
-        for t in 0..n {
-            let (my0, my1) = (t * paso, ((t + 1) * paso).min(filas_mcu));
-            if my0 >= my1 {
-                continue;
-            }
-            s.spawn(move || {
-                // SAFETY: `px` mide w·h·canales; `coefs` mide 6·64 por MCU y cada
-                // hilo escribe solo los de sus filas de MCU; el `scratch` es de
-                // este hilo y mide lo que pide el propio kernel.
-                unsafe {
-                    let mut scratch = vec![
-                        0f32;
-                        crate::zig!(
-                            ffi::winsi_jpeg_scratch_len,
-                            ffi::winsi_jpeg_scratch_len_v3,
-                            w
-                        )
-                    ];
-                    crate::zig!(
-                        ffi::winsi_jpeg_coefs,
-                        ffi::winsi_jpeg_coefs_v3,
-                        src as *const u8,
-                        w,
-                        h,
-                        qyp as *const u8,
-                        qcp as *const u8,
-                        dst as *mut i16,
-                        scratch.as_mut_ptr(),
-                        my0,
-                        my1,
-                        canales
-                    );
-                }
-            });
-        }
-    });
+    // En tandas de filas de MCU que los hilos van tomando (ver
+    // anime4k::repartir): la posición de cada MCU en `coefs` es fija.
+    // SAFETY (del kernel): `px` mide w·h·canales; `coefs` mide 6·64 por MCU y
+    // cada tanda escribe solo los de sus filas de MCU; el `scratch` es de este
+    // hilo y mide lo que pide el propio kernel.
+    let largo = unsafe {
+        crate::zig!(
+            ffi::winsi_jpeg_scratch_len,
+            ffi::winsi_jpeg_scratch_len_v3,
+            w
+        )
+    };
+    crate::anime4k::repartir(
+        filas_mcu,
+        || vec![0f32; largo],
+        |scratch, my0, my1| unsafe {
+            crate::zig!(
+                ffi::winsi_jpeg_coefs,
+                ffi::winsi_jpeg_coefs_v3,
+                src as *const u8,
+                w,
+                h,
+                qyp as *const u8,
+                qcp as *const u8,
+                dst as *mut i16,
+                scratch.as_mut_ptr(),
+                my0,
+                my1,
+                canales
+            );
+        },
+    );
     (coefs, qy, qc)
 }
 

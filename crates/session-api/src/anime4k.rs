@@ -465,29 +465,74 @@ pub fn hilos() -> usize {
     })
 }
 
-/// Corre `k(y0, y1)` sobre franjas de filas de `0..h` en `hilos()` hilos.
+/// Cuántas tandas le tocan a cada hilo en [`repartir`]. `WINSI_TANDAS`
+/// la cambia; con 1 es el reparto fijo de antes, para medir.
+pub fn tandas_por_hilo() -> u32 {
+    use std::sync::OnceLock;
+    static T: OnceLock<u32> = OnceLock::new();
+    *T.get_or_init(|| {
+        std::env::var("WINSI_TANDAS")
+            .ok()
+            .and_then(|v| v.parse().ok())
+            .unwrap_or(TANDAS_POR_HILO)
+            .max(1)
+    })
+}
+
+/// Medido con #upscale de 3072x2048 en 12 hilos, la mediana de las dos
+/// pasadas: sin carga, 38,2 ms de a una tanda (el reparto fijo), 35,3 de a
+/// dos, 32,9 de a cuatro y 36,3 de a ocho —con más tandas, cada una vuelve a
+/// calcular sus filas de borde—; otra vez, 34,1 contra 33,8 de a cuatro. Con
+/// seis núcleos ocupados por otro proceso, que es lo más parecido a un
+/// teléfono que hay en una PC: 53,8, 49,8, 48,8 y 49,7. Cuatro.
+const TANDAS_POR_HILO: u32 = 4;
+
+/// Corre `k(&mut estado, y0, y1)` sobre las filas `0..h`, en `hilos()` hilos
+/// que van tomando tandas de filas a medida que terminan la anterior.
 ///
-/// Un puntero crudo no es `Send`; se pasa como `usize` porque cada hilo
+/// Hasta la 9.3 cada hilo recibía una franja fija, todas del mismo alto. En un
+/// teléfono, con núcleos grandes y chicos, los chicos tardan dos o tres veces
+/// más con la suya y la imagen entera los espera. Con tandas, el que termina
+/// toma la siguiente: los rápidos hacen más. Cada fila se calcula igual en
+/// cualquier tanda, así que el resultado no cambia, bit a bit.
+///
+/// `nuevo` arma el estado de cada hilo —los búferes de borrador— una sola vez,
+/// y no en cada tanda.
+///
+/// Un puntero crudo no es `Send`; se pasa como `usize` porque cada tanda
 /// escribe filas DISJUNTAS de la salida y nadie escribe la entrada, que es lo
 /// que hace seguro compartirlos.
-#[cfg(feature = "native")]
-fn en_franjas(h: u32, k: impl Fn(u32, u32) + Sync) {
+pub fn repartir<E>(h: u32, nuevo: impl Fn() -> E + Sync, k: impl Fn(&mut E, u32, u32) + Sync) {
+    use std::sync::atomic::{AtomicU32, Ordering};
     let n = (hilos() as u32).min(h.max(1));
     if n <= 1 {
-        k(0, h);
+        k(&mut nuevo(), 0, h);
         return;
     }
-    let paso = h.div_ceil(n);
+    let tandas = (n * tandas_por_hilo()).min(h);
+    let alto = h.div_ceil(tandas);
+    let siguiente = AtomicU32::new(0);
     std::thread::scope(|s| {
-        for i in 0..n {
-            let (y0, y1) = (i * paso, ((i + 1) * paso).min(h));
-            if y0 >= y1 {
-                continue;
-            }
-            let k = &k;
-            s.spawn(move || k(y0, y1));
+        for _ in 0..n {
+            let (nuevo, k, siguiente) = (&nuevo, &k, &siguiente);
+            s.spawn(move || {
+                let mut estado = nuevo();
+                loop {
+                    let y0 = siguiente.fetch_add(alto, Ordering::Relaxed);
+                    if y0 >= h {
+                        break;
+                    }
+                    k(&mut estado, y0, (y0 + alto).min(h));
+                }
+            });
         }
     });
+}
+
+/// [`repartir`] sin estado por hilo.
+#[cfg(feature = "native")]
+fn en_franjas(h: u32, k: impl Fn(u32, u32) + Sync) {
+    repartir(h, || (), |_, y0, y1| k(y0, y1));
 }
 
 /// `push_color` en C (native/anime4k.c), en franjas sobre todos los núcleos.
@@ -861,9 +906,8 @@ fn pasada_zig_con(
     let (w, h) = (img.width(), img.height());
     assert_eq!(salida.dimensions(), (w, h));
     let (src, dst) = (img.as_ptr() as usize, salida.as_mut_ptr() as usize);
-    en_franjas(h, |y0, y1| {
-        let mut anillo_c = vec![0u8; w as usize * 4 * 5];
-        let mut anillo_g = vec![0u8; w as usize * 4 * 3];
+    let anillos = || (vec![0u8; w as usize * 4 * 5], vec![0u8; w as usize * 4 * 3]);
+    repartir(h, anillos, |(anillo_c, anillo_g), y0, y1| {
         // SAFETY: como en push_color_c; los anillos son de este hilo y miden
         // las cinco y tres filas que pide el kernel.
         let (s, d, fc, fg, l) = (

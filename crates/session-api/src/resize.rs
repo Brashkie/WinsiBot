@@ -131,44 +131,38 @@ fn catmullrom_nativo_con(img: &RgbaImage, w: u32, h: u32, luma: bool) -> Option<
     let mut salida = RgbaImage::new(w, h);
     let dst = salida.as_mut_ptr() as usize;
     let src = img.as_ptr() as usize;
-    let hilos = (crate::anime4k::hilos() as u32).min(h);
-    let paso = h.div_ceil(hilos);
-    std::thread::scope(|s| {
-        for t in 0..hilos {
-            let (y0, y1) = (t * paso, ((t + 1) * paso).min(h));
-            if y0 >= y1 {
-                continue;
+    // En tandas que los hilos van tomando (ver anime4k::repartir): cada fila
+    // de salida sale igual en cualquiera.
+    crate::anime4k::repartir(
+        h,
+        || vec![0f32; w0 as usize * 4],
+        |fila, y0, y1| {
+            // SAFETY: `src` mide w0·h0·4 y los pesos solo apuntan dentro
+            // (left + n <= h0, y lo mismo en x); `dst` mide w·h·4 y cada
+            // tanda escribe solo sus filas [y0, y1); `fila` es de este hilo.
+            unsafe {
+                crate::zig!(
+                    winsi_resize_rgba,
+                    winsi_resize_rgba_v3,
+                    src as *const u8,
+                    w0,
+                    dst as *mut u8,
+                    w,
+                    vl.as_ptr(),
+                    vn.as_ptr(),
+                    vw.as_ptr(),
+                    hl.as_ptr(),
+                    hn.as_ptr(),
+                    hw.as_ptr(),
+                    MAXT as u32,
+                    y0,
+                    y1,
+                    fila.as_mut_ptr(),
+                    u32::from(luma)
+                )
             }
-            let (vl, vn, vw, hl, hn, hw) = (&vl, &vn, &vw, &hl, &hn, &hw);
-            s.spawn(move || {
-                let mut fila = vec![0f32; w0 as usize * 4];
-                // SAFETY: `src` mide w0·h0·4 y los pesos solo apuntan dentro
-                // (left + n <= h0, y lo mismo en x); `dst` mide w·h·4 y cada
-                // hilo escribe solo sus filas [y0, y1); `fila` es de este hilo.
-                unsafe {
-                    crate::zig!(
-                        winsi_resize_rgba,
-                        winsi_resize_rgba_v3,
-                        src as *const u8,
-                        w0,
-                        dst as *mut u8,
-                        w,
-                        vl.as_ptr(),
-                        vn.as_ptr(),
-                        vw.as_ptr(),
-                        hl.as_ptr(),
-                        hn.as_ptr(),
-                        hw.as_ptr(),
-                        MAXT as u32,
-                        y0,
-                        y1,
-                        fila.as_mut_ptr(),
-                        u32::from(luma)
-                    )
-                }
-            });
-        }
-    });
+        },
+    );
     Some(salida)
 }
 

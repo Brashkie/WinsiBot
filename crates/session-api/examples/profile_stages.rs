@@ -44,6 +44,10 @@ fn main() {
         winsibot_session_api::simd::nombre(),
         anime4k::variante()
     );
+    println!(
+        "plataforma: {}",
+        winsibot_session_api::platform::detect().summary()
+    );
 
     let (t_dec, img) = mediana(v, || image::load_from_memory(&bytes).unwrap());
     let (w, h) = (img.width() * escala, img.height() * escala);

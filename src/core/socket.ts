@@ -31,9 +31,11 @@ import { logger } from './logger.js'
 import { anotarExpulsion } from './sessionAlert.js'
 import { esLaCuentaDelBot } from '@lib/owner.js'
 import { anotar as anotarMenciones } from '@lib/mentions.js'
+import { jidParaLog } from '@lib/phoneGuard.js'
 
+// Con el número tapado: el log también se lee y se comparte (lib/phoneGuard.ts).
 function fmtJid(jid: string): string {
-  return jid.replace('@s.whatsapp.net', '').replace('@g.us', '').replace('@lid', '')
+  return jidParaLog(jid).replace('@s.whatsapp.net', '').replace('@g.us', '').replace('@lid', '')
 }
 
 interface WinsiEvents {

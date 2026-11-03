@@ -2,12 +2,13 @@ import type { Command } from '../../../types/index.js'
 import { safeSend } from '@lib/media_sender.js'
 import { getGroupRecent, summarizeTranscript, type GroupRecent } from '@lib/nativeBridge.js'
 import { winsiStore } from '@core/store.js'
+import { miembros } from '@lib/members.js'
 import { horaLocal } from '@lib/utils.js'
 
 // "¿Qué me perdí?": un resumen de lo que se dijo en el grupo.
 //
 // Los mensajes ya están en la Session API —cada mensaje de grupo pasa por
-// /ai/observe para el estilo del grupo—, así que esto no guarda nada nuevo.
+// /msg/ingest para el estilo del grupo—, así que esto no guarda nada nuevo.
 // Con IA, la IA resume; sin IA (o si no contesta) se arma uno con lo que sí se
 // puede contar sin inventar: quién habló, de qué palabras, qué quedó sin
 // responder. Nunca una frase de plantilla: eso no es un resumen.
@@ -16,7 +17,8 @@ const MAX_TRANSCRIPT = 6000   // caracteres que se le mandan a la IA
 const MAX_LINEA      = 220    // un mensaje largo no se come el resto
 
 function nombre(jid: string): string {
-  return winsiStore.getName(jid)
+  // `u:…` es alguien que ya no está en el grupo: la base no guarda su número.
+  return jid.startsWith('u:') ? 'alguien' : winsiStore.getName(jid)
 }
 
 /** "Nombre: mensaje" por línea, de lo más nuevo hacia atrás hasta llenar el tope. */
@@ -64,7 +66,8 @@ const command: Command = {
   async execute({ sock, jid, msg, args }) {
     const horas = Math.min(Math.max(parseInt(args[0] ?? '', 10) || 12, 1), 72)
 
-    const r = await getGroupRecent(jid, 150, horas)
+    const ms = await miembros(sock, jid).catch(() => [])
+    const r = await getGroupRecent(jid, 150, horas, ms.flatMap(m => m.ids))
     if (!r) {
       await safeSend(() => sock.sendMessage(jid, {
         text: `> No pude leer el historial ahora. Intenta en un rato.`,

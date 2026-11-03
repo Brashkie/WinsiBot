@@ -6,6 +6,7 @@
 
 import type { WASocket, GroupMetadata } from '@whiskeysockets/baileys'
 import { createCache, registerCache } from '@lib/cacheManager.js'
+import { conocer } from '@lib/phoneGuard.js'
 
 const GROUP_META_TTL = 5 * 60 * 1000
 
@@ -26,6 +27,7 @@ export async function getGroupMetadata(sock: WASocket, jid: string): Promise<Gro
     const metadata = await sock.groupMetadata(jid)
     groupMetaCache.set(jid, metadata)
     lastGoodMeta.set(jid, metadata)
+    conocerMiembros(metadata)
     return metadata
   } catch {
     return lastGoodMeta.get(jid)
@@ -42,4 +44,13 @@ export async function getGroupParticipants(sock: WASocket, jid: string): Promise
 export function setGroupMetadata(jid: string, metadata: GroupMetadata): void {
   groupMetaCache.set(jid, metadata)
   lastGoodMeta.set(jid, metadata)
+  conocerMiembros(metadata)
+}
+
+/** Los números de los miembros son de alguien: se tapan al salir (ver lib/phoneGuard.ts). */
+function conocerMiembros(metadata: GroupMetadata): void {
+  for (const p of metadata.participants ?? []) {
+    const q = p as typeof p & { lid?: string; jid?: string; phoneNumber?: string }
+    conocer(q.id); conocer(q.lid); conocer(q.jid); conocer(q.phoneNumber)
+  }
 }

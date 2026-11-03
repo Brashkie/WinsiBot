@@ -26,6 +26,7 @@ pub fn open(path: &str) -> Result<Db, rusqlite::Error> {
     conn.execute_batch(
         "PRAGMA journal_mode = WAL;
          PRAGMA synchronous  = NORMAL;
+         PRAGMA secure_delete = ON;
          PRAGMA cache_size   = -8000;
          PRAGMA foreign_keys = ON;
 
@@ -84,6 +85,18 @@ pub fn open(path: &str) -> Result<Db, rusqlite::Error> {
         if !msg.contains("duplicate column name") {
             tracing::warn!(error = %msg, "no se pudo añadir outbox.payload");
         }
+    }
+
+    match tapar_auditoria_vieja(&conn) {
+        Ok(0) => {}
+        Ok(n) => {
+            let _ = conn.execute_batch("VACUUM; PRAGMA wal_checkpoint(TRUNCATE);");
+            tracing::info!(
+                n,
+                "privacidad: la auditoría vieja quedó con los números tapados"
+            );
+        }
+        Err(e) => tracing::warn!(error = %e, "privacidad: no se pudo tapar la auditoría vieja"),
     }
 
     tracing::info!(path, "SQLite abierta (WAL)");
@@ -385,6 +398,15 @@ pub fn cleanup(db: &Db, days: i64) -> Result<usize, rusqlite::Error> {
     let cutoff = Utc::now().timestamp() - days * 86_400;
     let n = conn.execute("DELETE FROM outbox WHERE sent_at < ?1", params![cutoff])?;
     tracing::info!(n, days, "outbox: registros eliminados");
+    let viejo = Utc::now().timestamp() - AUDITORIA_DIAS * 86_400;
+    let a = conn.execute("DELETE FROM audit_log WHERE ts < ?1", params![viejo])?;
+    if a > 0 {
+        tracing::info!(
+            n = a,
+            dias = AUDITORIA_DIAS,
+            "auditoría: registros eliminados"
+        );
+    }
     Ok(n)
 }
 
@@ -398,12 +420,46 @@ pub fn audit_log(
     event: &str,
     detail: Option<&str>,
 ) -> Result<(), rusqlite::Error> {
+    // Un rastro forense no necesita el número de nadie: los JID de personas
+    // van tapados (ver privacy.rs), lo mande quien lo mande.
+    let detail = detail.map(crate::privacy::tapar_jids);
     let conn = db.lock().unwrap();
     conn.execute(
         "INSERT INTO audit_log (ts, category, event, detail) VALUES (?1, ?2, ?3, ?4)",
-        params![Utc::now().timestamp(), category, event, detail],
+        params![Utc::now().timestamp(), category, event, detail.as_deref()],
     )?;
     Ok(())
+}
+
+/// Días que se guarda la auditoría. Hasta la 9.3 crecía para siempre.
+const AUDITORIA_DIAS: i64 = 90;
+
+/// Lo que la auditoría guardó antes de la 9.4.0 con números, tapado: una vez,
+/// marcada con `PRAGMA user_version = 1`, y con `VACUUM` después para que el
+/// texto viejo no quede en las páginas libres.
+fn tapar_auditoria_vieja(conn: &Connection) -> rusqlite::Result<usize> {
+    let v: i64 = conn.query_row("PRAGMA user_version", [], |r| r.get(0))?;
+    if v >= 1 {
+        return Ok(0);
+    }
+    let tx = conn.unchecked_transaction()?;
+    let filas: Vec<(i64, String)> = tx
+        .prepare("SELECT id, detail FROM audit_log WHERE detail LIKE '%@%'")?
+        .query_map([], |r| Ok((r.get(0)?, r.get(1)?)))?
+        .filter_map(Result::ok)
+        .collect();
+    let mut n = 0;
+    for (id, d) in filas {
+        if let std::borrow::Cow::Owned(t) = crate::privacy::tapar_jids(&d) {
+            n += tx.execute(
+                "UPDATE audit_log SET detail = ?1 WHERE id = ?2",
+                params![t, id],
+            )?;
+        }
+    }
+    tx.execute_batch("PRAGMA user_version = 1")?;
+    tx.commit()?;
+    Ok(n)
 }
 
 // ─── Contadores del bot ──────────────────────────────────────────────────────
@@ -512,4 +568,56 @@ pub fn top_commands(db: &Db, limit: i64) -> Result<Vec<TopCommand>, rusqlite::Er
         })
     })?;
     rows.collect()
+}
+
+#[cfg(test)]
+mod tests_privacidad {
+    use super::*;
+
+    #[test]
+    fn la_auditoria_guarda_y_migra_con_los_numeros_tapados() {
+        let ruta = std::env::temp_dir().join(format!("winsi_audit_{}.db", std::process::id()));
+        let _ = std::fs::remove_file(&ruta);
+        {
+            let c = Connection::open(&ruta).unwrap();
+            c.execute_batch(
+                "CREATE TABLE audit_log (id INTEGER PRIMARY KEY AUTOINCREMENT, ts INTEGER NOT NULL,
+                   category TEXT NOT NULL, event TEXT NOT NULL, detail TEXT);",
+            )
+            .unwrap();
+            c.execute(
+                "INSERT INTO audit_log (ts, category, event, detail) VALUES (1, 'x', 'y', ?1)",
+                params![r#"{"jid":"51924360740@s.whatsapp.net"}"#],
+            )
+            .unwrap();
+        }
+        let db = open(ruta.to_str().unwrap()).unwrap();
+        audit_log(
+            &db,
+            "subbot",
+            "register",
+            Some(r#"{"phone":"31908117356669@lid"}"#),
+        )
+        .unwrap();
+        let detalles: Vec<String> = db
+            .lock()
+            .unwrap()
+            .prepare("SELECT detail FROM audit_log ORDER BY id")
+            .unwrap()
+            .query_map([], |r| r.get(0))
+            .unwrap()
+            .filter_map(Result::ok)
+            .collect();
+        assert_eq!(
+            detalles,
+            [
+                r#"{"jid":"51••••••740@s.whatsapp.net"}"#,
+                r#"{"phone":"31•••••••••669@lid"}"#
+            ]
+        );
+        drop(db);
+        for sufijo in ["", "-wal", "-shm"] {
+            let _ = std::fs::remove_file(format!("{}{sufijo}", ruta.display()));
+        }
+    }
 }

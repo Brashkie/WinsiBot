@@ -5,6 +5,7 @@
  */
 
 import { logger } from '@core/logger.js'
+import type { Numero } from './phoneGuard.js'
 import { rustCircuit } from '@lib/circuitBreaker.js'
 import { rustRequest } from '@lib/rustHttp.js'
 
@@ -129,7 +130,9 @@ export interface AckItem {
 
 /** Respuesta de /antiban/permit. `reason` dice qué limitó el turno. */
 export type AntibanPermit =
-  | { send: true;  waitMs: number;    reason: string }
+  // `numeros`: los que hay en el texto que se mandó, si se mandó uno (ver
+  // lib/phoneGuard.ts); falta con un binario anterior a la 9.4.0.
+  | { send: true;  waitMs: number;    reason: string; numeros?: Numero[] }
   | { send: false; retryInMs: number; reason: string }
 
 export interface PendingMsg {
@@ -281,14 +284,14 @@ export class SessionClient {
    * es lo que había antes. El timeout es corto a propósito, porque esto está
    * en el camino de CADA envío y Rust contesta en menos de un milisegundo.
    */
-  async antibanPermit(account: string, jid: string): Promise<AntibanPermit | null> {
+  async antibanPermit(account: string, jid: string, texto?: string): Promise<AntibanPermit | null> {
     // Un binario de Rust anterior a la 8.14.0 no tiene la ruta: se deja de
     // preguntar un rato en vez de pagar un viaje inútil en cada envío.
     if (Date.now() < this._antibanOffUntil) return null
     try {
       return await apiFetch<AntibanPermit>(
         '/antiban/permit',
-        { method: 'POST', body: JSON.stringify({ session: account, jid }) },
+        { method: 'POST', body: JSON.stringify({ session: account, jid, ...(texto ? { texto } : {}) }) },
         { timeoutMs: 500 },
       )
     } catch (err: any) {

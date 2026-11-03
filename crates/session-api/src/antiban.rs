@@ -630,10 +630,16 @@ impl Antiban {
 pub struct PedidoPermiso {
     session: String,
     jid: String,
+    /// El texto que va a salir, si tiene: vuelve con los números que hay en
+    /// él (ver phone.rs). En el mismo viaje que el turno, para que filtrar
+    /// cada envío no cueste una petición más.
+    #[serde(default)]
+    texto: Option<String>,
 }
 
-/// `POST /antiban/permit` — `{ session, jid }` →
-/// `{ ok, send, waitMs, reason }` o `{ ok, send: false, retryInMs, reason }`.
+/// `POST /antiban/permit` — `{ session, jid, texto? }` →
+/// `{ ok, send, waitMs, reason, numeros? }` o
+/// `{ ok, send: false, retryInMs, reason }`.
 /// `ok` va siempre: el cliente de TypeScript trata su ausencia como error.
 pub async fn permit(
     State(st): State<AppState>,
@@ -641,7 +647,11 @@ pub async fn permit(
 ) -> Json<serde_json::Value> {
     Json(match st.antiban.permiso(&b.session, &b.jid) {
         Decision::Enviar { esperar_ms, motivo } => {
-            serde_json::json!({ "ok": true, "send": true, "waitMs": esperar_ms, "reason": motivo })
+            let mut r = serde_json::json!({ "ok": true, "send": true, "waitMs": esperar_ms, "reason": motivo });
+            if let Some(t) = b.texto.as_deref().filter(|t| !t.is_empty()) {
+                r["numeros"] = serde_json::json!(crate::phone::buscar(t));
+            }
+            r
         }
         Decision::Rechazar {
             reintentar_en_ms,
@@ -663,7 +673,7 @@ pub struct Reporte {
 pub async fn report(State(st): State<AppState>, Json(b): Json<Reporte>) -> Json<serde_json::Value> {
     let espera = st.antiban.reportar(&b.session, &b.jid, b.code);
     if espera > 0 {
-        tracing::warn!(session = %b.session, jid = %b.jid, code = b.code, cooldown_ms = espera, "antiban: WhatsApp rechazó un envío");
+        tracing::warn!(session = %b.session, jid = %crate::privacy::jid_para_log(&b.jid), code = b.code, cooldown_ms = espera, "antiban: WhatsApp rechazó un envío");
     }
     Json(serde_json::json!({ "ok": true, "cooldownMs": espera }))
 }

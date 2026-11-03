@@ -1,0 +1,234 @@
+{
+  "buscar": [
+    {
+      "numeros": [
+        {
+          "digitos": "51924360740",
+          "fin": 28,
+          "ini": 13,
+          "tapado": "51••••••740"
+        }
+      ],
+      "texto": "mi numero es +51 924-360-740, escribime"
+    },
+    {
+      "numeros": [
+        {
+          "digitos": "31908117356669",
+          "fin": 15,
+          "ini": 1,
+          "tapado": "31•••••••••669"
+        }
+      ],
+      "texto": "@31908117356669 hola"
+    },
+    {
+      "numeros": [
+        {
+          "digitos": "51924360740",
+          "fin": 16,
+          "ini": 1,
+          "tapado": "51••••••740"
+        }
+      ],
+      "texto": "(51) 924 360 740"
+    },
+    {
+      "numeros": [],
+      "texto": "abc924360740"
+    },
+    {
+      "numeros": [],
+      "texto": "924360740x"
+    },
+    {
+      "numeros": [],
+      "texto": "12345"
+    },
+    {
+      "numeros": [
+        {
+          "digitos": "123456",
+          "fin": 6,
+          "ini": 0,
+          "tapado": "12•456"
+        }
+      ],
+      "texto": "123456"
+    },
+    {
+      "numeros": [
+        {
+          "digitos": "123456",
+          "fin": 11,
+          "ini": 0,
+          "tapado": "12•456"
+        }
+      ],
+      "texto": "1 2 3 4 5 6"
+    },
+    {
+      "numeros": [],
+      "texto": "1  2  3"
+    },
+    {
+      "numeros": [],
+      "texto": "123456789012345678901"
+    },
+    {
+      "numeros": [
+        {
+          "digitos": "10000000000",
+          "fin": 18,
+          "ini": 7,
+          "tapado": "10••••••000"
+        }
+      ],
+      "texto": "Tienes 10000000000 monedas"
+    },
+    {
+      "numeros": [
+        {
+          "digitos": "1000000",
+          "fin": 9,
+          "ini": 0,
+          "tapado": "10••000"
+        },
+        {
+          "digitos": "2500000000",
+          "fin": 25,
+          "ini": 12,
+          "tapado": "25•••••000"
+        }
+      ],
+      "texto": "1.000.000 y 2.500.000.000"
+    },
+    {
+      "numeros": [
+        {
+          "digitos": "924360740",
+          "fin": 15,
+          "ini": 6,
+          "tapado": "92••••740"
+        },
+        {
+          "digitos": "51987654321",
+          "fin": 29,
+          "ini": 18,
+          "tapado": "51••••••321"
+        },
+        {
+          "digitos": "5491123456789",
+          "fin": 51,
+          "ini": 33,
+          "tapado": "54••••••••789"
+        }
+      ],
+      "texto": "ñandú 924360740 y 51987654321 😄 +54 9 11 2345-6789"
+    },
+    {
+      "numeros": [
+        {
+          "digitos": "51924360740",
+          "fin": 11,
+          "ini": 0,
+          "tapado": "51••••••740"
+        }
+      ],
+      "texto": "51924360740:12@s.whatsapp.net"
+    },
+    {
+      "numeros": [
+        {
+          "digitos": "51924360740",
+          "fin": 13,
+          "ini": 1,
+          "tapado": "51••••••740"
+        }
+      ],
+      "texto": "a+51924360740"
+    },
+    {
+      "numeros": [
+        {
+          "digitos": "51924360740",
+          "fin": 13,
+          "ini": 2,
+          "tapado": "51••••••740"
+        }
+      ],
+      "texto": "+-51924360740"
+    },
+    {
+      "numeros": [],
+      "texto": ""
+    }
+  ],
+  "jid": [
+    {
+      "jid": "51924360740@s.whatsapp.net",
+      "leido": {
+        "numero": "51924360740",
+        "tipo": "numero"
+      }
+    },
+    {
+      "jid": "51924360740:12@s.whatsapp.net",
+      "leido": {
+        "numero": "51924360740",
+        "tipo": "numero"
+      }
+    },
+    {
+      "jid": "31908117356669@lid",
+      "leido": {
+        "numero": "31908117356669",
+        "tipo": "lid"
+      }
+    },
+    {
+      "jid": "120363363621316758@g.us",
+      "leido": {
+        "numero": "120363363621316758",
+        "tipo": "grupo"
+      }
+    },
+    {
+      "jid": "51924360740@broadcast",
+      "leido": {
+        "numero": "51924360740",
+        "tipo": "otro"
+      }
+    },
+    {
+      "jid": "51924360740@c.us",
+      "leido": {
+        "numero": "51924360740",
+        "tipo": "numero"
+      }
+    },
+    {
+      "jid": "status@broadcast",
+      "leido": null
+    },
+    {
+      "jid": "@lid",
+      "leido": null
+    },
+    {
+      "jid": "519@",
+      "leido": null
+    },
+    {
+      "jid": "5192:@lid",
+      "leido": {
+        "numero": "5192",
+        "tipo": "lid"
+      }
+    },
+    {
+      "jid": "123456789012345678901@lid",
+      "leido": null
+    }
+  ]
+}

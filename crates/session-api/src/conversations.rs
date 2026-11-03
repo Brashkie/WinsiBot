@@ -232,6 +232,13 @@ pub fn init(path: &str) -> Result<ConvDb, rusqlite::Error> {
         let _ = std::fs::create_dir_all(parent);
     }
     let conn = Connection::open(path)?;
+    // La clave de los seudónimos vive al lado de la base (ver privacy.rs).
+    if let Some(dir) = std::path::Path::new(path).parent() {
+        crate::privacy::iniciar(dir);
+    }
+    // Lo que se borra —la poda de la retención, un usuario que pide que se lo
+    // olvide— se sobrescribe con ceros en vez de quedar en páginas libres.
+    let _ = conn.pragma_update(None, "secure_delete", "ON");
     // WAL + NORMAL: mismo criterio que db.rs. A diferencia de DuckDB, SQLite en
     // WAL admite lectores concurrentes mientras hay un escritor.
     let _ = conn.pragma_update(None, "journal_mode", "WAL");
@@ -289,6 +296,12 @@ pub async fn ai_learn(
     let conv_db = state.conv_db.clone();
 
     let res = tokio::task::spawn_blocking(move || -> Result<(), String> {
+        // A disco va el seudónimo y no el número, y los textos con los
+        // números tapados (ver privacy.rs). El largo es el del original: es
+        // parte del estilo de quien escribe.
+        let sender = crate::privacy::seudonimo(&req.sender);
+        let texto = crate::phone::tapar_todos(&req.text);
+        let reply = crate::phone::tapar_todos(&req.reply);
         let conn = conv_db.lock().map_err(|e| e.to_string())?;
 
         let has_emoji = req.text.chars().any(|c| (c as u32) > 0x2500);
@@ -300,9 +313,7 @@ pub async fn ai_learn(
             "INSERT INTO conversations
              (sender, gjid, text, intent, reply, mode, ts, len, has_emoji)
              VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
-            params![
-                req.sender, req.gjid, req.text, req.intent, req.reply, req.mode, ts, len, has_emoji
-            ],
+            params![sender, req.gjid, texto, req.intent, reply, req.mode, ts, len, has_emoji],
         )
         .map_err(|e| e.to_string())?;
 
@@ -317,7 +328,7 @@ pub async fn ai_learn(
                 "SELECT COUNT(*), AVG(len), AVG(CAST(has_emoji AS INTEGER)), \
                  AVG(CASE WHEN text LIKE '%?%' THEN 1.0 ELSE 0.0 END) \
                  FROM conversations WHERE sender = ?",
-                params![req.sender],
+                params![sender],
                 |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?, r.get(3)?)),
             )
             .unwrap_or((
@@ -328,11 +339,11 @@ pub async fn ai_learn(
             ));
 
         let common_words = if total % 20 == 0 {
-            compute_common_words(&conn, &req.sender)
+            compute_common_words(&conn, &sender)
         } else {
             conn.query_row(
                 "SELECT COALESCE(common_words, '[]') FROM user_style WHERE sender = ?",
-                params![req.sender],
+                params![sender],
                 |r| r.get::<_, String>(0),
             )
             .unwrap_or_else(|_| "[]".to_string())
@@ -350,7 +361,7 @@ pub async fn ai_learn(
                common_words  = excluded.common_words,
                updated_at    = excluded.updated_at",
             params![
-                req.sender,
+                sender,
                 total,
                 avg_len,
                 emoji_freq,
@@ -434,6 +445,7 @@ pub async fn ai_context(
 ) -> Json<serde_json::Value> {
     let limit = params.limit.unwrap_or(8).clamp(1, 50);
     let conv_db = state.conv_db.clone();
+    let sender = crate::privacy::seudonimo(&sender);
 
     let res = tokio::task::spawn_blocking(move || -> Result<_, String> {
         let conn = conv_db.lock().map_err(|e| e.to_string())?;
@@ -551,6 +563,8 @@ const SLANG: [&str; 12] = [
 ];
 
 pub fn user_profile(db: &ConvDb, jid: &str, days: i64) -> Result<UserStyleProfile, String> {
+    let seudonimo = crate::privacy::seudonimo(jid);
+    let jid = seudonimo.as_str();
     let conn = db.lock().map_err(|e| e.to_string())?;
     let cutoff = Utc::now().timestamp_millis() - days * 86_400_000;
 
@@ -680,6 +694,8 @@ pub fn group_profile(db: &ConvDb, gjid: &str, days: i64) -> Result<GroupStylePro
 
 /// Borra todo lo de un usuario — el equivalente de delete_user_data (RGPD).
 pub fn delete_user(db: &ConvDb, jid: &str) -> Result<usize, String> {
+    let seudonimo = crate::privacy::seudonimo(jid);
+    let jid = seudonimo.as_str();
     let conn = db.lock().map_err(|e| e.to_string())?;
     let a = conn
         .execute("DELETE FROM conversations WHERE sender = ?1", params![jid])
@@ -772,12 +788,125 @@ pub fn podar(db: &BaseConv, corte: i64) -> usize {
 /// próximo vaciado (ver [`BaseConv`]). Es lo que corre por CADA mensaje de cada
 /// grupo, así que es lo que mide `benches/message.rs`.
 pub fn observar(db: &BaseConv, req: ObserveRequest) -> usize {
+    // El seudónimo y los números tapados, antes de encolar: a disco no llega
+    // nunca el original (ver privacy.rs).
+    let text = match crate::phone::tapar_todos(&req.text) {
+        std::borrow::Cow::Borrowed(_) => req.text,
+        std::borrow::Cow::Owned(t) => t,
+    };
     db.encolar(Observado {
-        sender: req.sender,
+        sender: crate::privacy::seudonimo(&req.sender),
         gjid: req.gjid,
-        text: req.text,
+        text,
         ts: Utc::now().timestamp_millis(),
     })
+}
+
+/// Los seudónimos de los miembros que manda el bot, para devolver a cada uno
+/// con su JID: la base no lo tiene (ver privacy.rs). Quien ya no está en el
+/// grupo queda como seudónimo.
+pub fn por_seudonimo(miembros: &[String]) -> HashMap<String, String> {
+    miembros
+        .iter()
+        .map(|j| (crate::privacy::seudonimo(j), j.clone()))
+        .collect()
+}
+
+fn con_jid(s: String, mapa: &HashMap<String, String>) -> String {
+    mapa.get(&s).cloned().unwrap_or(s)
+}
+
+/// Lo que ya estaba guardado con números, a seudónimos y números tapados: una
+/// sola vez, marcada con `PRAGMA user_version = 1`. Después, `VACUUM`, para
+/// que el texto viejo no quede en las páginas libres del archivo.
+pub fn migrar_a_seudonimos(db: &ConvDb) {
+    let Ok(conn) = db.lock() else { return };
+    let r = (|| -> rusqlite::Result<usize> {
+        let v: i64 = conn.query_row("PRAGMA user_version", [], |r| r.get(0))?;
+        if v >= 1 {
+            return Ok(0);
+        }
+        let tx = conn.unchecked_transaction()?;
+        let mut n = 0;
+        for (tabla, col) in [
+            ("conversations", "sender"),
+            ("user_style", "sender"),
+            ("user_memory", "jid"),
+            ("bad_mac_events", "jid"),
+        ] {
+            let existe: bool = tx.query_row(
+                "SELECT COUNT(*) > 0 FROM sqlite_master WHERE type = 'table' AND name = ?1",
+                params![tabla],
+                |r| r.get(0),
+            )?;
+            if !existe {
+                continue;
+            }
+            let viejos: Vec<String> = tx
+                .prepare(&format!("SELECT DISTINCT {col} FROM {tabla}"))?
+                .query_map([], |r| r.get(0))?
+                .filter_map(Result::ok)
+                // `*global*` es el contador de toda la cuenta en bad_mac.rs.
+                .filter(|s: &String| {
+                    !s.is_empty() && s != "*global*" && !crate::privacy::es_seudonimo(s)
+                })
+                .collect();
+            for viejo in viejos {
+                let nuevo = crate::privacy::seudonimo(&viejo);
+                // En las tablas de una fila por persona, si el seudónimo ya
+                // estaba (el mismo número con y sin dispositivo) queda ese.
+                if tabla != "conversations" && tabla != "bad_mac_events" {
+                    tx.execute(
+                        &format!(
+                            "DELETE FROM {tabla} WHERE {col} = ?1
+                              AND EXISTS (SELECT 1 FROM {tabla} WHERE {col} = ?2)"
+                        ),
+                        params![viejo, nuevo],
+                    )?;
+                }
+                n += tx.execute(
+                    &format!("UPDATE {tabla} SET {col} = ?1 WHERE {col} = ?2"),
+                    params![nuevo, viejo],
+                )?;
+            }
+        }
+        let filas: Vec<(i64, String, String)> = tx
+            .prepare(
+                "SELECT id, text, reply FROM conversations
+                  WHERE text GLOB '*[0-9][0-9][0-9][0-9][0-9][0-9]*'
+                     OR reply GLOB '*[0-9][0-9][0-9][0-9][0-9][0-9]*'",
+            )?
+            .query_map([], |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?)))?
+            .filter_map(Result::ok)
+            .collect();
+        for (id, text, reply) in filas {
+            let t = crate::phone::tapar_todos(&text);
+            let r = crate::phone::tapar_todos(&reply);
+            if t != text || r != reply {
+                n += tx.execute(
+                    "UPDATE conversations SET text = ?1, reply = ?2 WHERE id = ?3",
+                    params![t.as_ref(), r.as_ref(), id],
+                )?;
+            }
+        }
+        tx.execute_batch("PRAGMA user_version = 1")?;
+        tx.commit()?;
+        Ok(n)
+    })();
+    match r {
+        Ok(0) => {}
+        Ok(n) => {
+            let _ = conn.execute_batch("VACUUM; PRAGMA wal_checkpoint(TRUNCATE);");
+            tracing::info!(
+                filas = n,
+                "privacidad: la base de la IA pasó a seudónimos y números tapados"
+            );
+        }
+        Err(e) => tracing::warn!(
+            error = %e,
+            "privacidad: no se pudo migrar a seudónimos; se reintenta al reiniciar"
+        ),
+    }
 }
 
 /// POST /ai/observe — un mensaje de grupo cualquiera, sin intercambio con la IA.
@@ -851,6 +980,10 @@ pub struct RecientesQuery {
     pub limit: usize,
     #[serde(default = "veinticuatro")]
     pub hours: i64,
+    /// Los JID de los miembros, para devolver a cada uno con el suyo (ver
+    /// [`por_seudonimo`]).
+    #[serde(default)]
+    pub miembros: Vec<String>,
 }
 fn cien() -> usize {
     100
@@ -859,18 +992,29 @@ fn veinticuatro() -> i64 {
     24
 }
 
-/// GET /ai/group/recent/{gjid}?limit=100&hours=24 — los mensajes recientes del
-/// grupo, quién habló cuánto, y de qué se habló (las palabras más usadas).
+/// POST /ai/group/recent/{gjid} `{ limit, hours, miembros }` — los mensajes
+/// recientes del grupo, quién habló cuánto, y de qué se habló (las palabras
+/// más usadas).
 pub async fn ai_group_recent(
     State(state): State<AppState>,
     Path(gjid): Path<String>,
-    Query(q): Query<RecientesQuery>,
+    Json(q): Json<RecientesQuery>,
 ) -> Json<serde_json::Value> {
     let db = state.conv_db.clone();
     let limite = q.limit.clamp(1, 500);
     let desde = Utc::now().timestamp_millis() - q.hours.clamp(1, 24 * 7) * 3_600_000;
-    let r =
-        tokio::task::spawn_blocking(move || mensajes_recientes(&db, &gjid, limite, desde)).await;
+    let r = tokio::task::spawn_blocking(move || {
+        let mapa = por_seudonimo(&q.miembros);
+        mensajes_recientes(&db, &gjid, limite, desde).map(|v| {
+            v.into_iter()
+                .map(|m| MensajeReciente {
+                    sender: con_jid(m.sender, &mapa),
+                    ..m
+                })
+                .collect::<Vec<_>>()
+        })
+    })
+    .await;
     match r {
         Ok(Ok(msgs)) => {
             let textos: Vec<String> = msgs.iter().map(|m| m.text.clone()).collect();
@@ -950,16 +1094,33 @@ pub fn actividad(db: &ConvDb, gjid: &str, desde_ts: i64) -> Result<Actividad, St
     })
 }
 
-/// GET /ai/group/activity/{gjid}?days=7
+#[derive(Deserialize)]
+pub struct ActividadQuery {
+    pub days: Option<i64>,
+    /// Los JID de los miembros (ver [`por_seudonimo`]).
+    #[serde(default)]
+    pub miembros: Vec<String>,
+}
+
+/// POST /ai/group/activity/{gjid} `{ days, miembros }`
 pub async fn ai_group_activity(
     State(state): State<AppState>,
     Path(gjid): Path<String>,
-    Query(q): Query<DaysParams>,
+    Json(q): Json<ActividadQuery>,
 ) -> Json<serde_json::Value> {
     let db = state.conv_db.clone();
     let dias = q.days.unwrap_or(7).clamp(1, 3650);
     let desde = Utc::now().timestamp_millis() - dias * 86_400_000;
-    match tokio::task::spawn_blocking(move || actividad(&db, &gjid, desde)).await {
+    let r = tokio::task::spawn_blocking(move || {
+        let mapa = por_seudonimo(&q.miembros);
+        actividad(&db, &gjid, desde).map(|mut a| {
+            for m in &mut a.miembros {
+                m.sender = con_jid(std::mem::take(&mut m.sender), &mapa);
+            }
+            a
+        })
+    });
+    match r.await {
         Ok(Ok(a)) => Json(serde_json::json!({ "ok": true, "days": dias, "activity": a })),
         Ok(Err(e)) => Json(serde_json::json!({ "ok": false, "error": e })),
         Err(e) => Json(serde_json::json!({ "ok": false, "error": e.to_string() })),
@@ -1100,7 +1261,8 @@ mod tests {
         conn.execute(
             "INSERT INTO conversations (sender, gjid, text, intent, reply, mode, ts, len, has_emoji)
              VALUES (?1, ?2, ?3, 'x', ?4, 'x', ?5, ?6, ?7)",
-            params![sender, gjid, text, reply, ts, text.len() as i32, has_emoji],
+            // Como guarda la aplicación: con el seudónimo (ver privacy.rs).
+            params![crate::privacy::seudonimo(sender), gjid, text, reply, ts, text.len() as i32, has_emoji],
         ).unwrap();
     }
 
@@ -1255,6 +1417,77 @@ mod tests {
     }
 
     #[test]
+    fn lo_guardado_con_numeros_pasa_a_seudonimos_una_vez() {
+        let db = db_memoria();
+        crate::user_memory::init_schema(&db);
+        {
+            let conn = db.lock().unwrap();
+            conn.execute(
+                "INSERT INTO conversations (sender, gjid, text, intent, reply, mode, ts, len, has_emoji)
+                 VALUES ('51924360740:3@s.whatsapp.net', 'g@g.us', 'llamame al 51924360740', 'x',
+                         'ok, al +51 924 360 740', 'x', 1, 1, 0)",
+                [],
+            )
+            .unwrap();
+            conn.execute(
+                "INSERT INTO user_style (sender) VALUES ('51924360740@s.whatsapp.net')",
+                [],
+            )
+            .unwrap();
+            conn.execute(
+                "INSERT INTO user_memory (jid) VALUES ('31908117356669@lid')",
+                [],
+            )
+            .unwrap();
+        }
+        migrar_a_seudonimos(&db);
+        let conn = db.lock().unwrap();
+        let (sender, text, reply): (String, String, String) = conn
+            .query_row("SELECT sender, text, reply FROM conversations", [], |r| {
+                Ok((r.get(0)?, r.get(1)?, r.get(2)?))
+            })
+            .unwrap();
+        let seud = crate::privacy::seudonimo("51924360740@s.whatsapp.net");
+        assert_eq!(sender, seud, "el dispositivo no cuenta");
+        assert_eq!(text, "llamame al 51••••••740");
+        assert_eq!(reply, "ok, al 51••••••740");
+        let estilo: String = conn
+            .query_row("SELECT sender FROM user_style", [], |r| r.get(0))
+            .unwrap();
+        assert_eq!(estilo, seud);
+        let memoria: String = conn
+            .query_row("SELECT jid FROM user_memory", [], |r| r.get(0))
+            .unwrap();
+        assert_eq!(memoria, crate::privacy::seudonimo("31908117356669@lid"));
+        let v: i64 = conn
+            .query_row("PRAGMA user_version", [], |r| r.get(0))
+            .unwrap();
+        assert_eq!(v, 1, "marcada: no se repite");
+    }
+
+    #[test]
+    fn lo_observado_se_guarda_sin_numeros() {
+        let db = db_memoria();
+        observar(
+            &db,
+            ObserveRequest {
+                sender: "51924360740@s.whatsapp.net".into(),
+                gjid: "g@g.us".into(),
+                text: "mi número es 51924360740".into(),
+            },
+        );
+        db.vaciar_pendientes();
+        let conn = db.lock().unwrap();
+        let (sender, text): (String, String) = conn
+            .query_row("SELECT sender, text FROM conversations", [], |r| {
+                Ok((r.get(0)?, r.get(1)?))
+            })
+            .unwrap();
+        assert!(crate::privacy::es_seudonimo(&sender), "{sender}");
+        assert_eq!(text, "mi número es 51••••••740");
+    }
+
+    #[test]
     fn vocab_sample_descarta_los_comandos() {
         let db = db_memoria();
         for (i, t) in [
@@ -1311,7 +1544,9 @@ mod tests {
 
         let g = group_profile(&db, "g1@g", 30).unwrap();
         assert_eq!(g.msg_count, 6, "no debe mezclar grupos");
-        assert_eq!(g.active_users, vec!["hablador@s", "callado@s"]);
+        // En la base no hay números: los más activos salen como seudónimos.
+        let seud = crate::privacy::seudonimo;
+        assert_eq!(g.active_users, vec![seud("hablador@s"), seud("callado@s")]);
     }
 
     #[test]
@@ -1323,8 +1558,11 @@ mod tests {
         {
             let conn = db.lock().unwrap();
             for s in ["a@s", "b@s"] {
-                conn.execute("INSERT INTO user_style (sender) VALUES (?1)", params![s])
-                    .unwrap();
+                conn.execute(
+                    "INSERT INTO user_style (sender) VALUES (?1)",
+                    params![crate::privacy::seudonimo(s)],
+                )
+                .unwrap();
             }
         }
 
@@ -1404,16 +1642,19 @@ mod tests {
             "el registro arranca en el más viejo"
         );
         assert_eq!(a.total, 3);
-        let v: Vec<(&str, i64)> = a
+        // La base guarda seudónimos; con la lista de miembros vuelve cada JID.
+        let mapa = por_seudonimo(&["a@s".into(), "b@s".into()]);
+        let v: Vec<(String, i64)> = a
             .miembros
             .iter()
-            .map(|m| (m.sender.as_str(), m.mensajes))
+            .map(|m| (con_jid(m.sender.clone(), &mapa), m.mensajes))
             .collect();
         assert_eq!(
             v,
-            [("a@s", 2), ("b@s", 1)],
+            [("a@s".to_string(), 2), ("b@s".to_string(), 1)],
             "del que más escribió al que menos, sin otros grupos"
         );
+        assert!(crate::privacy::es_seudonimo(&a.miembros[0].sender));
         assert_eq!(a.miembros[0].ultimo, t - 500);
     }
 

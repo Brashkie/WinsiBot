@@ -63,7 +63,7 @@
 |-------|-----------|----------------|
 | 🟦 **Core** | TypeScript / Node.js | WhatsApp protocol, command dispatcher, RPG, economy, web panel. Group message signatures are verified with OpenSSL's native Ed25519, 72 times faster than the pure-JavaScript cryptography Baileys shipped with |
 | ⚙️ **Session + AI** | Rust / Axum | Atomic creds and snapshots, Bad MAC tracker, rate limiter, intent classification, personality and humour, reputation, style profiles, Ollama and cloud APIs, images |
-| 🛡 **Anti-takeover and economy** | Ada/SPARK | The group anti-takeover decision, every balance change in the economy —all or nothing, never negative, and in `#pay` and the bank the total of coins is always conserved—, the amount reader, the antiban's turn for each send and the name of each session —which ends up as a folder on disk—, their guarantees proven by GNATprove for every input, linked into the Session API |
+| 🛡 **Anti-takeover and economy** | Ada/SPARK | The group anti-takeover decision, every balance change in the economy —all or nothing, never negative, and in `#pay` and the bank the total of coins is always conserved—, the amount reader, the antiban's turn for each send the name of each session —which ends up as a folder on disk— and people's WhatsApp numbers —what the bot sends and writes to the log shows them masked, `51••••••740`, and the AI database stores each person under a SipHash-2-4 pseudonym—, their guarantees proven by GNATprove for every input, linked into the Session API |
 | 🧮 **Native kernels** | C + Zig | Anime4K and the JPEG codec, compiled with Zig into the Session API binary. The fastest one is used, measured, and on x86-64 the AVX2 copy if the CPU has it. |
 
 ### What's new in v9.3.5
@@ -466,6 +466,7 @@ RUST_LOG=winsibot_session_api=info
 | `COSXAMIX_MOTOR` | `propio` | `candle` uses Cosxamix's previous engine |
 | `DASHBOARD_HOST` | `127.0.0.1` | Where the web panel listens: this machine only by default; `0.0.0.0` opens it to the network (better behind an HTTPS proxy) |
 | `CONV_RETENCION_DIAS` | `365` | Days of group messages the conversation database keeps; older ones are deleted every hour. `0` keeps them forever |
+| `WINSI_TANDAS` | `4` | How many batches each thread splits the rows of `#upscale` and the JPEG into: whoever finishes takes the next, so on a phone the big cores don't wait for the small ones. `1` is the old fixed split, for measuring |
 | `WINSI_A4K_PASADA` | by CPU | The Anime4K pass (`#upscale`): `zig16` (the x86 one) or `zig8e` (the ARM one). Only for measuring; each architecture already uses the winner |
 | `WINSI_CURVE_JS` | — | `1` goes back to verifying group message signatures with pure-JavaScript cryptography, ~70 times slower than OpenSSL |
 

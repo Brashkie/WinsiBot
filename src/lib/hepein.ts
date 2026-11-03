@@ -18,9 +18,6 @@
 //  Uso rápido:
 //    import { hepein } from '@lib/hepein.js'
 //
-//    // En el handler de mensajes, para entrenar (fire-and-forget):
-//    hepein.record({ groupJid, senderJid, text, isReply })
-//
 //    // Cuando el bot es mencionado (hepein activado en el grupo):
 //    const res = await hepein.respond({ prompt, groupJid, senderJid })
 //    if (res.ok) sock.sendMessage(jid, { text: res.text })
@@ -30,12 +27,11 @@
 // ─────────────────────────────────────────────────────────────────────────────
 
 import {
-  observeMessage, getUserStyle, getGroupStyle,
+  getUserStyle, getGroupStyle,
   deleteUserStyle, getCorpusStats,
   aiRespond, aiImitate,
   type UserStyleProfile, type GroupStyleProfile,
 } from './nativeBridge.js'
-import { logger } from '../core/logger.js'
 
 // ─── Tipos ────────────────────────────────────────────────────────────────────
 
@@ -80,24 +76,8 @@ function _canRespond(groupJid: string): boolean {
 
 export const hepein = {
 
-  /**
-   * Registra un mensaje en el pipeline de entrenamiento.
-   * Fire-and-forget — no bloquea el handler.
-   */
-  record(opts: {
-    groupJid:  string
-    senderJid: string
-    text:      string
-    isReply?:  boolean
-  }): void {
-    const { groupJid, senderJid, text } = opts
-    if (!text?.trim() || text.length < 3) return
-    // isReply se acepta por compatibilidad con los puntos de llamada, pero no
-    // se guarda: trainer.py lo escribía en Parquet y ninguna agregación lo
-    // llegaba a leer nunca.
-    observeMessage(senderJid, groupJid, text)
-      .catch(err => logger.debug({ err }, 'Hepein record silenciado'))
-  },
+  // `record` ya no está: cada mensaje de grupo lo guarda `ingerirMensaje` en
+  // un solo viaje (ver core/handler.ts y crates/session-api/src/ingest.rs).
 
   /**
    * Genera una respuesta contextual usando el estilo aprendido del grupo.

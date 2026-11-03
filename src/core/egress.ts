@@ -24,6 +24,10 @@
 import type { WASocket } from '@whiskeysockets/baileys'
 import { rateLimiter } from '@lib/rateLimiter.js'
 import { completar } from '@lib/mentions.js'
+import { leerJid, tapar, type Numero } from '@lib/phoneGuard.js'
+import { esDueno } from '@lib/owner.js'
+import { config } from '@config'
+import { winsiStore } from './store.js'
 import { sessionClient } from '@lib/session.js'
 import { logger } from './logger.js'
 
@@ -46,11 +50,15 @@ export function wrapEgress(sock: WASocket, label = 'main'): WASocket {
   // nada: mismos argumentos, misma promesa de vuelta.
   const limited: WASocket['sendMessage'] = (async (jid: any, content: any, options: any) => {
     const to = String(jid ?? '')
-    await antibanTurn(label, to)
     // Un "@<número>" del texto que alguien mencionó, como mención de verdad:
     // si no, WhatsApp muestra el número crudo (ver lib/mentions.ts).
     const conMenciones = completar(content)
-    return rateLimiter.directForJid(to, () => original(jid, conMenciones, options))
+    // El texto viaja con el turno: vuelve con los números que tiene, que Ada
+    // encontró y tapó, sin una petición más.
+    const texto = textoDe(conMenciones)
+    const numeros = await antibanTurn(label, to, texto?.valor)
+    const seguro = texto ? protegerNumeros(conMenciones, texto, numeros, to) : conMenciones
+    return rateLimiter.directForJid(to, () => original(jid, seguro, options))
   }) as WASocket['sendMessage']
 
   sock.sendMessage = limited
@@ -94,9 +102,9 @@ export class AntibanRejected extends Error {
  * funcionaba el bot hasta ahora. Que la API se caiga no puede dejar al bot
  * sin enviar.
  */
-async function antibanTurn(account: string, jid: string): Promise<void> {
-  const turn = await sessionClient.antibanPermit(account, jid)
-  if (!turn) return
+async function antibanTurn(account: string, jid: string, texto?: string): Promise<Numero[] | null> {
+  const turn = await sessionClient.antibanPermit(account, jid, texto)
+  if (!turn) return null
   if (!turn.send) {
     // Qué lo frena y a qué hora vuelve, en palabras: "retryInMs: 82264044" no
     // le decía nada a nadie, y el bot parecía roto.
@@ -111,5 +119,36 @@ async function antibanTurn(account: string, jid: string): Promise<void> {
     }
     await new Promise<void>((r) => setTimeout(r, turn.waitMs))
   }
+  return turn.numeros ?? null
+}
+
+/** El texto de un mensaje, si tiene: el de un texto o el pie de una foto. */
+function textoDe(content: any): { campo: 'text' | 'caption'; valor: string } | null {
+  if (typeof content?.text === 'string' && content.text) return { campo: 'text', valor: content.text }
+  if (typeof content?.caption === 'string' && content.caption) return { campo: 'caption', valor: content.caption }
+  return null
+}
+
+/**
+ * El mensaje con los números de la gente tapados (ver lib/phoneGuard.ts).
+ *
+ * No se tapan: en el privado con el owner, nada —los necesita para moderar—;
+ * en cualquier privado, el número de quien lo recibe; y los mencionados de
+ * verdad, que WhatsApp muestra con el nombre. `numeros` es lo que encontró
+ * Ada en la Session API; si no contestó, se buscan acá con la misma regla.
+ */
+function protegerNumeros(content: any, texto: { campo: 'text' | 'caption'; valor: string },
+                         numeros: Numero[] | null, to: string): any {
+  const privado = !to.endsWith('@g.us')
+  const pn = privado ? winsiStore.resolveJid(to).jid : ''
+  if (privado && esDueno(pn || to, '', config.ownerJid)) return content
+
+  const permitidos = new Set<string>()
+  for (const j of [privado ? to : '', pn, ...(Array.isArray(content?.mentions) ? content.mentions : [])]) {
+    const n = typeof j === 'string' ? leerJid(j) : null
+    if (n) permitidos.add(n.numero)
+  }
+  const nuevo = tapar(texto.valor, numeros, permitidos)
+  return nuevo === texto.valor ? content : { ...content, [texto.campo]: nuevo }
 }
 

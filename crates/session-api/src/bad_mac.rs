@@ -171,7 +171,7 @@ impl BadMacTracker {
         if should_clear {
             entry.lifetime_clears += 1;
             tracing::warn!(
-                jid             = %jid,
+                jid             = %crate::privacy::jid_para_log(jid),
                 count           = count,
                 threshold       = BAD_MAC_THRESHOLD,
                 lifetime_clears = entry.lifetime_clears,
@@ -366,7 +366,11 @@ pub async fn report_bad_mac(
         );
     }
 
-    let (count, should_clear_group, lifetime_clears) = state.bad_mac.report(&body.jid);
+    // En memoria y en la base, con el seudónimo: bad_mac_events no guarda
+    // números (ver privacy.rs). Lo de afuera —alertas, auditoría—, tapado.
+    let clave = crate::privacy::seudonimo(&body.jid);
+    let jid_log = crate::privacy::jid_para_log(&body.jid);
+    let (count, should_clear_group, lifetime_clears) = state.bad_mac.report(&clave);
     // El chequeo global corre SIEMPRE, sin importar el resultado del check
     // por grupo de arriba — ver comentario del módulo.
     let (global_count, should_clear_global, global_lifetime_clears) = state.bad_mac.report_global();
@@ -378,14 +382,14 @@ pub async fn report_bad_mac(
             &state,
             &format!(
                 "🟠 WinsiBot: Bad MAC threshold en grupo {} ({count} eventos, reincidencia #{lifetime_clears}) — limpiando sesiones Signal (cooldown {cooldown}s)",
-                body.jid
+                jid_log
             ),
         ).await;
 
         // Persistencia — fire-and-forget, no bloquea la respuesta ni afecta
         // la decisión en caliente (que ya se tomó arriba, en memoria).
         let conv_db = state.conv_db.clone();
-        let jid_c = body.jid.clone();
+        let jid_c = clave.clone();
         tokio::task::spawn_blocking(move || {
             if let Err(e) = record_clear(&conv_db, &jid_c, count, lifetime_clears, cooldown) {
                 tracing::warn!(error = %e, "bad_mac: fallo al persistir evento");
@@ -394,7 +398,7 @@ pub async fn report_bad_mac(
 
         let audit_db = state.db.clone();
         let detail = serde_json::json!({
-            "jid": body.jid, "count": count,
+            "jid": jid_log, "count": count,
             "lifetimeClears": lifetime_clears, "cooldownSecs": cooldown,
         })
         .to_string();
