@@ -131,10 +131,14 @@ fn catmullrom_nativo_con(img: &RgbaImage, w: u32, h: u32, luma: bool) -> Option<
     let mut salida = RgbaImage::new(w, h);
     let dst = salida.as_mut_ptr() as usize;
     let src = img.as_ptr() as usize;
-    // En tandas que los hilos van tomando (ver anime4k::repartir): cada fila
-    // de salida sale igual en cualquiera.
-    crate::anime4k::repartir(
+    // Una franja fija por hilo, y no en tandas como las pasadas: medido en el
+    // ARM64 de CI con 4 hilos, en tandas pasaba de ~13,7 a 15-19 ms. Acá no
+    // hay filas de borde que se repitan, y cada salida reusa las filas de
+    // entrada de la anterior: con franjas contiguas, cada núcleo las tiene en
+    // su caché.
+    crate::anime4k::repartir_en(
         h,
+        1,
         || vec![0f32; w0 as usize * 4],
         |fila, y0, y1| {
             // SAFETY: `src` mide w0·h0·4 y los pesos solo apuntan dentro

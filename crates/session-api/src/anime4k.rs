@@ -503,13 +503,24 @@ const TANDAS_POR_HILO: u32 = 4;
 /// escribe filas DISJUNTAS de la salida y nadie escribe la entrada, que es lo
 /// que hace seguro compartirlos.
 pub fn repartir<E>(h: u32, nuevo: impl Fn() -> E + Sync, k: impl Fn(&mut E, u32, u32) + Sync) {
+    repartir_en(h, tandas_por_hilo(), nuevo, k);
+}
+
+/// [`repartir`] con `por_hilo` tandas por hilo: con 1, una franja fija por
+/// hilo, como hasta la 9.3.
+pub fn repartir_en<E>(
+    h: u32,
+    por_hilo: u32,
+    nuevo: impl Fn() -> E + Sync,
+    k: impl Fn(&mut E, u32, u32) + Sync,
+) {
     use std::sync::atomic::{AtomicU32, Ordering};
     let n = (hilos() as u32).min(h.max(1));
     if n <= 1 {
         k(&mut nuevo(), 0, h);
         return;
     }
-    let tandas = (n * tandas_por_hilo()).min(h);
+    let tandas = (n * por_hilo.max(1)).min(h);
     let alto = h.div_ceil(tandas);
     let siguiente = AtomicU32::new(0);
     std::thread::scope(|s| {

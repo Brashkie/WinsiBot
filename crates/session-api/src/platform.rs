@@ -201,10 +201,11 @@ impl PlatformInfo {
         if self.termux {
             s += " · Termux";
         }
-        s + &format!(
-            " · {} hilos de a {} tandas",
-            self.hilos, self.tandas_por_hilo
-        )
+        let hilos = match self.hilos {
+            1 => "1 hilo".to_string(),
+            n => format!("{n} hilos"),
+        };
+        s + &format!(" · {hilos} de a {} tandas", self.tandas_por_hilo)
     }
 }
 
