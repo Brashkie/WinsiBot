@@ -38,6 +38,7 @@ pub mod send_pacing;
 pub mod session_id;
 pub mod simd;
 pub mod snapshot;
+pub mod sticker;
 pub mod subbots;
 pub mod tasks;
 pub mod user_memory;

@@ -123,6 +123,14 @@ jobs:
           medir WINSI_A4K_PASADA=zig16
           medir WINSI_A4K_PASADA=zig8e
 
+      # Un sticker por etapas (decodificar, redimensionar, WebP con libwebp),
+      # desde un PNG, un JPEG y una foto de 4000x3000 (ver sticker.rs).
+      - name: "Medir un sticker en ARM"
+        run: |
+          cargo build --release -p winsibot-session-api --features native --example profile_sticker
+          WINSI_HILOS=1 ./target/release/examples/profile_sticker
+          ./target/release/examples/profile_sticker
+
   # ─── Antirrobo en Ada/SPARK ──────────────────────────────────────────────────
   # La decisión del antirrobo de grupos (crates/session-api/ada) está en SPARK:
   # GNATprove demuestra sus garantías para toda entrada, y con

@@ -297,7 +297,7 @@ A small fix: with no session yet —before the first QR or after `npm run manage
 >
 > **Two things to expect on weaker devices (Termux/Android, single-board ARM):**
 >
-> - The Node dependency that genuinely builds from source on Android is **`sharp`** (it bundles libvips): you need `clang`, `make` and `pkg-config` installed *before* running `npm install` (see the Termux section below). `cbor-x` used to be listed here and did not belong — its native part (`cbor-extract`) is an **optional** dependency, and if it fails to build it falls back to pure JavaScript with nothing breaking.
+> - The Node dependency that genuinely builds from source on Android is **`sharp`** (it bundles libvips): you need `clang`, `make` and `pkg-config` installed *before* running `npm install` (see the Termux section below). Since 9.4.0 image stickers do not use it —the Session API makes them, with libwebp—, so those keep working if it fails to build. `cbor-x` used to be listed here and did not belong — its native part (`cbor-extract`) is an **optional** dependency, and if it fails to build it falls back to pure JavaScript with nothing breaking.
 > - **Python left the project in 8.15.0.** It hadn't been on any message path since 8.12.0; now the two console tools are gone too, moved to Node. The only external thing that may pull in Python is **yt-dlp**, for the download commands: its releases ship a standalone executable for Windows, Linux and macOS that doesn't need it, and on Termux `pkg install yt-dlp` installs it.
 > - The first Rust build (`npm run rust:build`) takes a few minutes (~3 min on a desktop; considerably longer on a phone) because it compiles the whole dependency tree with LTO. That's expected — don't close the terminal, just let it run (and keep the device from sleeping).
 
@@ -370,7 +370,7 @@ Then the same 5 steps from [Installation](#installation), unchanged.
 
 The image commands (`#toanime`, `#removebg`, `#upscale`) **work on the phone**, because ONNX Runtime ships a build for that target with **NNAPI**, Android's hardware acceleration.
 
-**The only thing that may build from source** is `sharp` (it bundles libvips), which has no Android binary. If `npm install` fails there, run `pkg install -y clang make pkg-config` and retry.
+**The only thing that may build from source** is `sharp` (it bundles libvips), which has no Android binary. If `npm install` fails there, run `pkg install -y clang make pkg-config` and retry. Image stickers no longer depend on it since 9.4.0.
 
 **Start it with `./start.sh`.** It does everything that's easy to forget on a phone: checks Node (20.12 or newer), runs `npm install` if dependencies are missing, rebuilds if `src/` changed (after a `git pull`), takes the Termux **wake lock** so Android doesn't put the bot to sleep with the screen off (if `termux-api` is installed), and starts the supervisor, which restarts the bot if it crashes or hangs and, on Termux, caps the heap at 512 MB. Without a terminal (`nohup`, a log file) or with `NO_COLOR=1`, it runs without colors or animations.
 

@@ -34,6 +34,16 @@ tracing-appender = "0.2.5"
 # tiff, bmp, ico, avif...) que este proyecto no usa y que alargan el build y
 # engordan el binario.
 image    = { version = "0.25", default-features = false, features = ["png", "jpeg"] }
+# libwebp de Google, compilado de su código C dentro del binario —como el
+# SQLite de rusqlite—: los stickers (ver sticker.rs). Reemplaza a sharp, que
+# era un addon .node con libvips (30 MB en disco). Sin `parallel`: compila
+# en serie, y así no arrastra jobserver.
+libwebp-sys = { version = "0.14", default-features = false, features = ["std"] }
+# El decodificador de JPEG que `image` ya usa por dentro, directo: así sale en
+# RGBA sin pasar por RGB (en una foto de 4000x3000, la conversión del crate
+# costaba 17 ms). No suma crates: ya estaban en el árbol.
+zune-jpeg = "0.5"
+zune-core = "0.5"
 # ONNX Runtime para los modelos de imagen (ver vision.rs). `download-binaries`
 # baja el runtime nativo al compilar, asi que no hay que instalarlo aparte.
 ort      = { version = "=2.0.0-rc.13", default-features = false, features = ["std", "download-binaries", "tls-rustls", "ndarray"] }

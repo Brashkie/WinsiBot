@@ -297,7 +297,7 @@ Un arreglo chico: sin sesión todavía —antes del primer QR o después de `npm
 >
 > **Dos cosas a tener en cuenta en dispositivos débiles (Termux/Android, ARM de placa única):**
 >
-> - De las dependencias de Node, la que de verdad compila desde código fuente en Android es **`sharp`** (lleva libvips): necesitás `clang`, `make` y `pkg-config` instalados *antes* de correr `npm install` (ver sección Termux más abajo). `cbor-x` se mencionaba acá y no hacía falta — su parte nativa (`cbor-extract`) es una dependencia **opcional**, y si no compila cae a la implementación en JavaScript puro sin que nada deje de funcionar.
+> - De las dependencias de Node, la que de verdad compila desde código fuente en Android es **`sharp`** (lleva libvips): necesitás `clang`, `make` y `pkg-config` instalados *antes* de correr `npm install` (ver sección Termux más abajo). Desde la 9.4.0 los stickers de imágenes no la usan —los hace la Session API, con libwebp—, así que si no compila esos siguen andando. `cbor-x` se mencionaba acá y no hacía falta — su parte nativa (`cbor-extract`) es una dependencia **opcional**, y si no compila cae a la implementación en JavaScript puro sin que nada deje de funcionar.
 > - **Python salió del proyecto en la 8.15.0.** Ya no estaba en el camino de ningún mensaje desde la 8.12.0; ahora tampoco quedan las dos herramientas de consola, que pasaron a Node. Lo único externo que puede tirar de Python es **yt-dlp**, para los comandos de descarga: sus releases traen un ejecutable autónomo para Windows, Linux y macOS que no lo necesita, y en Termux `pkg install yt-dlp` lo instala.
 > - La primera compilación de Rust (`npm run rust:build`) tarda unos minutos (~3 min en un PC de escritorio; bastante más en un teléfono) porque compila todo el árbol de dependencias con LTO. Es normal — no cierres la terminal, solo dale tiempo (y evitá que el dispositivo se duerma).
 
@@ -370,7 +370,7 @@ Y después los mismos 5 pasos de [Instalación](#instalación), sin cambios.
 
 Los comandos de imagen (`#toanime`, `#removebg`, `#upscale`) **funcionan en el teléfono**, porque ONNX Runtime publica build para ese target con **NNAPI**, la aceleración por hardware de Android.
 
-**Lo único que puede compilar desde fuente** es `sharp` (lleva libvips), que no trae binario para Android. Si `npm install` falla ahí, instalá `pkg install -y clang make pkg-config` y repetí.
+**Lo único que puede compilar desde fuente** es `sharp` (lleva libvips), que no trae binario para Android. Si `npm install` falla ahí, instalá `pkg install -y clang make pkg-config` y repetí. Los stickers de imágenes no dependen de él desde la 9.4.0.
 
 **Arrancar: `./start.sh`.** Hace todo lo que en el teléfono es fácil olvidarse: verifica Node (20.12 o más nuevo), corre `npm install` si faltan dependencias, compila si hay cambios en `src/` (después de un `git pull`), pide el **wake lock** de Termux para que Android no duerma el bot con la pantalla apagada (si está instalado `termux-api`), y arranca el supervisor, que reinicia el bot si se cae o se cuelga y en Termux le pone un techo de 512 MB al heap. Sin terminal (con `nohup`, a un log) o con `NO_COLOR=1`, sale sin colores ni animaciones.
 

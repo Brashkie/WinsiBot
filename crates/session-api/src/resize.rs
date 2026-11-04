@@ -33,19 +33,31 @@ fn catmullrom(x: f32) -> f32 {
     k / 6.0
 }
 
-/// Cuántos pesos por coordenada, como mucho. Catmull-Rom tiene soporte 2: al
-/// agrandar son 4 o 5; al achicar crecería con la razón, y ahí se usa el crate.
-const MAXT: usize = 8;
+/// Cuántos pesos por coordenada, como mucho, en un eje que va de `n_in` a
+/// `n_out`. Catmull-Rom tiene soporte 2: al agrandar son 4 o 5; al achicar
+/// crece con la razón —el soporte es 2·razón a cada lado—, así que `right -
+/// left` no pasa de 4·razón + 2. Hasta la 9.3.5 el tope era fijo en 8, y al
+/// achicar más de ~1,75 veces (un sticker) se usaba el crate, en un hilo.
+#[cfg_attr(not(feature = "native"), allow(dead_code))]
+fn maxt(n_in: u32, n_out: u32) -> usize {
+    let ratio = (n_in as f32 / n_out as f32).max(1.0);
+    (4.0 * ratio).ceil() as usize + 2
+}
+
+/// Más que esto (achicar más de 64 veces) no se pide nunca: se usa el crate.
+#[cfg_attr(not(feature = "native"), allow(dead_code))]
+const MAXT_TOPE: usize = 258;
 
 /// Los pesos de un eje, con el mismo cálculo que `horizontal_sample` y
 /// `vertical_sample` del crate: por cada coordenada de salida, la primera
-/// entrada, cuántas, y sus pesos normalizados. `None` si no entran en MAXT.
+/// entrada, cuántas, y sus pesos normalizados, `mt` por coordenada. `None` si
+/// no entran en `mt`.
 #[cfg_attr(not(feature = "native"), allow(dead_code))]
-fn pesos(n_in: u32, n_out: u32) -> Option<(Vec<u32>, Vec<u32>, Vec<f32>)> {
+fn pesos(n_in: u32, n_out: u32, mt: usize) -> Option<(Vec<u32>, Vec<u32>, Vec<f32>)> {
     let ratio = n_in as f32 / n_out as f32;
     let sratio = if ratio < 1.0 { 1.0 } else { ratio };
     let src_support = 2.0 * sratio;
-    let (mut lefts, mut ns, mut ws) = (Vec::new(), Vec::new(), vec![0f32; n_out as usize * MAXT]);
+    let (mut lefts, mut ns, mut ws) = (Vec::new(), Vec::new(), vec![0f32; n_out as usize * mt]);
     for o in 0..n_out {
         let input = (o as f32 + 0.5) * ratio;
         let left = ((input - src_support).floor() as i64).clamp(0, i64::from(n_in) - 1) as u32;
@@ -53,10 +65,10 @@ fn pesos(n_in: u32, n_out: u32) -> Option<(Vec<u32>, Vec<u32>, Vec<f32>)> {
             .clamp(i64::from(left) + 1, i64::from(n_in)) as u32;
         let input = input - 0.5;
         let n = (right - left) as usize;
-        if n > MAXT {
+        if n > mt {
             return None;
         }
-        let fila = &mut ws[o as usize * MAXT..o as usize * MAXT + n];
+        let fila = &mut ws[o as usize * mt..o as usize * mt + n];
         let mut sum = 0.0;
         for (k, i) in (left..right).enumerate() {
             let w = catmullrom((i as f32 - input) / sratio);
@@ -112,7 +124,8 @@ unsafe extern "C" {
 }
 
 /// Catmull-Rom en Zig, en franjas sobre todos los núcleos. `None` si el caso
-/// no está cubierto (vacío, o achicar mucho) y hay que usar el crate.
+/// no está cubierto (vacío, o achicar más de 64 veces) y hay que usar el
+/// crate.
 #[cfg(feature = "native")]
 pub fn catmullrom_nativo(img: &RgbaImage, w: u32, h: u32) -> Option<RgbaImage> {
     catmullrom_nativo_con(img, w, h, false)
@@ -126,8 +139,13 @@ fn catmullrom_nativo_con(img: &RgbaImage, w: u32, h: u32, luma: bool) -> Option<
     if w0 == 0 || h0 == 0 || w == 0 || h == 0 || (w0, h0) == (w, h) {
         return None;
     }
-    let (vl, vn, vw) = pesos(h0, h)?;
-    let (hl, hn, hw) = pesos(w0, w)?;
+    // El kernel usa el mismo `maxt` en los dos ejes.
+    let mt = maxt(h0, h).max(maxt(w0, w));
+    if mt > MAXT_TOPE {
+        return None;
+    }
+    let (vl, vn, vw) = pesos(h0, h, mt)?;
+    let (hl, hn, hw) = pesos(w0, w, mt)?;
     let mut salida = RgbaImage::new(w, h);
     let dst = salida.as_mut_ptr() as usize;
     let src = img.as_ptr() as usize;
@@ -158,7 +176,7 @@ fn catmullrom_nativo_con(img: &RgbaImage, w: u32, h: u32, luma: bool) -> Option<
                     hl.as_ptr(),
                     hn.as_ptr(),
                     hw.as_ptr(),
-                    MAXT as u32,
+                    mt as u32,
                     y0,
                     y1,
                     fila.as_mut_ptr(),
@@ -267,6 +285,27 @@ mod tests {
                     img.color()
                 );
             }
+        }
+    }
+
+    #[test]
+    fn al_achicar_tambien_da_lo_mismo_que_el_crate() {
+        // Lo de un sticker: de 2 a 8 veces más chico, y razones que no son
+        // enteras; y un eje que achica con el otro que agranda.
+        for (i, &(w, h, w2, h2)) in [
+            (1536, 1024, 512, 341),
+            (400, 300, 51, 38),
+            (333, 77, 100, 9),
+            (97, 61, 13, 7),
+            (60, 20, 7, 80),
+        ]
+        .iter()
+        .enumerate()
+        {
+            let img = imagen(w, h, 71 + i as u32);
+            let nuestro = catmullrom_nativo(&img, w2, h2).unwrap();
+            let suyo = image::imageops::resize(&img, w2, h2, FilterType::CatmullRom);
+            assert!(nuestro == suyo, "{w}x{h} → {w2}x{h2}: distinto del crate");
         }
     }
 

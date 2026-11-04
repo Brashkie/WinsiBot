@@ -71,7 +71,10 @@ export function rustRequest<T = any>(
     const s = q.toString()
     if (s) ruta += (ruta.includes('?') ? '&' : '?') + s
   }
-  const payload = body === undefined ? undefined : Buffer.from(JSON.stringify(body))
+  // Un Buffer va crudo (una imagen: sin base64 ni JSON); lo demás, en JSON.
+  const crudoSale = Buffer.isBuffer(body)
+  const payload = body === undefined ? undefined : crudoSale ? body : Buffer.from(JSON.stringify(body))
+  const tipo = crudoSale ? 'application/octet-stream' : 'application/json'
 
   return new Promise((resolve, reject) => {
     const req = http.request(
@@ -83,7 +86,7 @@ export function rustRequest<T = any>(
         agent,
         headers: {
           'x-api-key': config.sessionApiKey,
-          ...(payload ? { 'content-type': 'application/json', 'content-length': payload.length } : {}),
+          ...(payload ? { 'content-type': tipo, 'content-length': payload.length } : {}),
           ...opts.headers,
         },
       },
@@ -93,7 +96,10 @@ export function rustRequest<T = any>(
         res.on('end', () => {
           const crudo = Buffer.concat(partes)
           let data: any = null
-          if (crudo.length) {
+          // Una imagen vuelve como Buffer, tal cual.
+          if (crudo.length && String(res.headers['content-type'] ?? '').startsWith('image/')) {
+            data = crudo
+          } else if (crudo.length) {
             try { data = JSON.parse(crudo.toString('utf8')) } catch { data = crudo.toString('utf8') }
           }
           resolve({ status: res.statusCode ?? 0, data })

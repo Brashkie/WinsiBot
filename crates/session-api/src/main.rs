@@ -3,7 +3,7 @@
 use winsibot_session_api::{
     ai_chat, analytics, antiban, auth, bad_mac, config, conversations, db, imagefx, imagesearch,
     lock_manager, metrics, nlp, personality, platform, rate_limiter, routes, session_id, snapshot,
-    subbots, tasks, user_memory, vision, watchdog,
+    sticker, subbots, tasks, user_memory, vision, watchdog,
 };
 
 use axum::{
@@ -109,6 +109,14 @@ fn hilos_tokio() -> usize {
         return n;
     }
     std::thread::available_parallelism().map_or(2, |n| n.get().min(4))
+}
+
+/// El límite de las rutas que reciben una imagen en base64 dentro de un JSON.
+/// El de axum por defecto es 2 MB: hasta la 9.4.0, una foto de más de ~1,5 MB
+/// fallaba en #upscale, #removebg, #toanime y LEGO antes de llegar al
+/// handler. Es lo que acepta /image/sticker crudo, más el tercio del base64.
+fn imagen_b64() -> axum::extract::DefaultBodyLimit {
+    axum::extract::DefaultBodyLimit::max(sticker::MAX_ENTRADA / 3 * 4 + 4096)
 }
 
 fn main() {
@@ -289,7 +297,9 @@ async fn principal() {
         .route("/ai/story", post(ai_chat::story))
         .route("/ai/corpus/stats", get(conversations::ai_corpus_stats))
         // Portados de Python en la 8.11.0 (ver imagefx.rs e imagesearch.rs).
-        .route("/imagefx/lego", post(imagefx::lego))
+        .route("/imagefx/lego", post(imagefx::lego).layer(imagen_b64()))
+        // Una imagen a sticker WebP, sin sharp (ver sticker.rs).
+        .route("/image/sticker", sticker::ruta())
         .route("/search/image", post(imagesearch::search_image))
         .route("/search/images", post(imagesearch::search_images))
         // Portados de Python en la 8.11.0: personalidad, reputacion y la IA
@@ -307,9 +317,15 @@ async fn principal() {
         .route("/ai/chat/imitate", post(ai_chat::imitate))
         // Modelos de imagen con ONNX Runtime (ver vision.rs). Portados de
         // Python: dos de los tres comandos de anime ni siquiera usaban torch.
-        .route("/vision/removebg", post(vision::removebg))
-        .route("/vision/toanime", post(vision::toanime))
-        .route("/vision/upscale", post(vision::upscale_handler))
+        .route(
+            "/vision/removebg",
+            post(vision::removebg).layer(imagen_b64()),
+        )
+        .route("/vision/toanime", post(vision::toanime).layer(imagen_b64()))
+        .route(
+            "/vision/upscale",
+            post(vision::upscale_handler).layer(imagen_b64()),
+        )
         // ─── Bad MAC per-group tracker ────────────────────────────────────────
         .route("/badmac/report", post(bad_mac::report_bad_mac))
         // ─── Economía: mover un saldo a otro, en Ada/SPARK (ver ledger.rs) ─────
