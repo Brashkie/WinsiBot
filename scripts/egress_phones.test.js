@@ -8,6 +8,7 @@ vi.mock('@config', () => ({ config: { ownerJid: [owner], prefix: ['#'] } }))
 vi.mock('@lib/owner.js', async () => await import('../src/lib/owner.ts'))
 vi.mock('@lib/mentions.js', async () => await import('../src/lib/mentions.ts'))
 vi.mock('@lib/phoneGuard.js', async () => await import('../src/lib/phoneGuard.ts'))
+vi.mock('@lib/mediaThumb.js', async () => await import('../src/lib/mediaThumb.ts'))
 vi.mock('@lib/session.js', () => ({
   sessionClient: { antibanPermit: async () => null, antibanReport: async () => {} },
 }))

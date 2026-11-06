@@ -36,9 +36,10 @@ export function ffmpegPath(): string {
  * (un GIF de 499 px de ancho hace fallar a ffmpeg).
  *
  * La usaban los dragones (#pet, .webm) con su propia copia; ahora también
- * #slap (.gif de nekos.best).
+ * #slap (.gif de nekos.best) y #toimg (MJPEG de la Session API, con
+ * `opcionesEntrada` = ['-framerate', '15']).
  */
-export async function aMp4(entrada: Buffer, ext: string): Promise<Buffer> {
+export async function aMp4(entrada: Buffer, ext: string, opcionesEntrada: string[] = []): Promise<Buffer> {
   const dir = await carpetaTmp()
   const id = randomUUID()
   const inFile = join(dir, `${id}.${ext}`)
@@ -46,7 +47,7 @@ export async function aMp4(entrada: Buffer, ext: string): Promise<Buffer> {
   try {
     await writeFile(inFile, entrada)
     await run(ffmpegPath(), [
-      '-y', '-i', inFile,
+      '-y', ...opcionesEntrada, '-i', inFile,
       '-vf', 'scale=trunc(iw/2)*2:trunc(ih/2)*2',
       '-c:v', 'libx264', '-pix_fmt', 'yuv420p', '-movflags', '+faststart', '-an', outFile,
     ], { timeout: 20_000, windowsHide: true })

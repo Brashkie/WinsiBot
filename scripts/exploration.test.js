@@ -1,13 +1,28 @@
 // La cueva de #explorar (ver src/lib/exploration.ts y explorationMap.ts): que
 // salga siempre igual de la semilla, que todo el suelo se pueda alcanzar, que
 // lo agarrado no se vuelva a agarrar, y que la imagen salga.
-import { describe, expect, it } from 'vitest'
-import sharp from 'sharp'
+import { describe, expect, it, vi } from 'vitest'
+import { imagen } from './fixtures/imageHelpers.js'
 import {
   C, ANCHO, ALTO, generar, distancias, nuevaTemporada, mover, repartoReliquia, progreso,
   bitsVacios, poner, tiene, aTexto, deTexto, contar, xy, DIRECCION,
 } from '../src/lib/exploration.ts'
 import { vistaDe, recorte, svgMapa, imagenMapa } from '../src/lib/explorationMap.ts'
+
+// La imagen la dibuja la Session API (render.rs, con sus tests en Rust): acá
+// un rustHttp falso anota qué se le pidió y devuelve un JPEG de prueba.
+const pedidos = vi.hoisted(() => [])
+vi.mock('../src/lib/rustHttp.ts', () => ({
+  rustHttp: {
+    post: async (ruta, cuerpo, opts) => {
+      pedidos.push({ ruta, cuerpo, params: opts?.params })
+      if (ruta === '/image/convert' && !cuerpo.subarray(0, 3).equals(Buffer.from([0xff, 0xd8, 0xff]))) {
+        throw Object.assign(new Error('HTTP 422'), { response: { status: 422 } })
+      }
+      return { status: 200, data: imagen('small.jpeg') }
+    },
+  },
+}))
 
 const SEMILLAS = [1, 2, 3, 42, 20261025, 0xdeadbeef]
 
@@ -123,7 +138,7 @@ describe('el dibujo', () => {
     expect(filas[3]).toContain('🧭')
   })
 
-  it('el título no mete elementos en el SVG, y la imagen sale', async () => {
+  it('el título no mete elementos en el SVG, y la imagen se pide en JPEG', async () => {
     const e = nuevaTemporada('x@g.us', 1)
     const m = generar(e.semilla)
     const svg = svgMapa(m, e.pos, deTexto(e.vistas), deTexto(e.usadas), '<script>', '1%')
@@ -131,10 +146,11 @@ describe('el dibujo', () => {
     // Con todo visto, las filas juntan casillas iguales: muchos menos de 1600.
     const lleno = svgMapa(m, e.pos, bitsVacios().fill(255), bitsVacios(), 't', 'p')
     expect((lleno.match(/<rect/g) ?? []).length).toBeLessThan(900)
-    const img = await imagenMapa(m, e.pos, deTexto(e.vistas), deTexto(e.usadas), 'CUEVA', '1%')
-    const meta = await sharp(img).metadata()
-    expect(meta.format).toBe('jpeg')
-    expect(meta.width).toBe(ANCHO * 16 + 40)
+    pedidos.length = 0
+    await imagenMapa(m, e.pos, deTexto(e.vistas), deTexto(e.usadas), 'CUEVA', '1%')
+    expect(pedidos).toHaveLength(1)
+    expect(pedidos[0]).toMatchObject({ ruta: '/image/svg', params: { formato: 'jpeg', calidad: 85 } })
+    expect(pedidos[0].cuerpo.toString()).toContain(`width="${ANCHO * 16 + 40}"`)
   })
 
   it('progreso: al empezar se ve poco, con todo visto es 1', () => {

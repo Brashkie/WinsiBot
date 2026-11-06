@@ -1,6 +1,6 @@
 <div align="center">
 
-<img src="https://capsule-render.vercel.app/api?type=waving&color=0:6C63FF,100:00C9FF&height=180&section=header&text=WinsiBot&fontSize=62&fontColor=ffffff&fontAlignY=38&desc=v9.3.5%20%E2%80%94%20Enterprise%20WhatsApp%20Bot&descAlignY=58&descSize=18" width="100%"/>
+<img src="https://capsule-render.vercel.app/api?type=waving&color=0:6C63FF,100:00C9FF&height=180&section=header&text=WinsiBot&fontSize=62&fontColor=ffffff&fontAlignY=38&desc=v9.4.0%20%E2%80%94%20Enterprise%20WhatsApp%20Bot&descAlignY=58&descSize=18" width="100%"/>
 
 <br/>
 
@@ -9,7 +9,7 @@
 [![Rust](https://img.shields.io/badge/Rust-1.75%2B-CE422B?style=for-the-badge&logo=rust&logoColor=white)](https://rust-lang.org)
 
 [![License](https://img.shields.io/badge/License-GPL--3.0-blue?style=flat-square)](LICENSE)
-[![Version](https://img.shields.io/badge/Version-9.3.5-6C63FF?style=flat-square)](CHANGELOG.md)
+[![Version](https://img.shields.io/badge/Version-9.4.0-6C63FF?style=flat-square)](CHANGELOG.md)
 [![Platform](https://img.shields.io/badge/Platform-Windows%20%7C%20Linux%20%7C%20macOS%20%7C%20Android-lightgrey?style=flat-square)](https://github.com/Brashkie/WinsiBot)
 [![PRs Welcome](https://img.shields.io/badge/PRs-welcome-brightgreen?style=flat-square)](https://github.com/Brashkie/WinsiBot/pulls)
 
@@ -17,7 +17,7 @@
 
 > Bot de WhatsApp de alto rendimiento con arquitectura multi-lenguaje de tres capas.<br/>
 > Sin límite artificial de grupos, pensado para miles de mensajes por hora y múltiples instancias.<br/>
-> v9.3.5 — **Más seguro y más rápido.** El nombre de cada sesión lo valida Ada/SPARK con la regla demostrada, la API key ya no filtra su largo, y el JPEG de `#anime` se codifica un 30 % más rápido en ARM, con el mismo resultado byte a byte. Desde la 9.3.4, `npm install` funciona en Termux sin git.<br/>
+> v9.4.0 — **Los números de la gente, protegidos, y sin sharp.** Lo que el bot envía y lo que escribe en el log muestran los números de WhatsApp tapados (`51••••••740`), con la regla demostrada en Ada/SPARK, y la base de la IA guarda a cada uno con un seudónimo. Los stickers —también animados—, las tarjetas y `#toimg` los hace la Session API con libwebp, resvg y Zig: 30 MB menos en disco, 35 MB menos de RAM y nada que compilar en Termux.<br/>
 
 <br/>
 
@@ -65,6 +65,25 @@
 | ⚙️ **Session + IA** | Rust / Axum | Creds atómicas y snapshots, tracker Bad MAC, rate limiter, antiban, clasificación de intenciones, personalidad y humor, reputación, perfiles de estilo, Ollama y APIs cloud, imágenes |
 | 🛡 **Antirrobo y economía** | Ada/SPARK | La decisión del antirrobo de grupos, cada cambio de saldo de la economía —todo o nada, sin negativos, y en `#pay` y el banco el total de monedas se conserva siempre—, el lector de montos, el turno de cada envío del antiban el nombre de cada sesión —que termina siendo una carpeta del disco— y los números de WhatsApp de la gente —lo que el bot envía y lo que escribe en el log los muestra tapados, `51••••••740`, y la base de la IA guarda a cada uno con un seudónimo SipHash-2-4—, con sus garantías demostradas por GNATprove para toda entrada, enlazados dentro de la Session API |
 | 🧮 **Kernels nativos** | C + Zig | Anime4K y el códec JPEG, compilados con Zig dentro del binario de la Session API. Se usa el que gana midiendo, y en x86-64 la copia para AVX2 si la CPU la tiene. |
+
+### Novedades en v9.4.0
+
+**Los números de WhatsApp de la gente, protegidos en tiempo real.** WhatsApp esconde los números en los grupos con LID, y el bot sabe a quién corresponde cada uno: si lo escribía —un comando que lo muestra, la IA que lo repite— rompía esa privacidad. Ahora todo lo que sale del bot pasa por un filtro: un número que es de alguien sale tapado, `51924360740` → `51••••••740`. En el privado con el owner se ve entero, porque lo necesita para moderar. Quién encuentra y tapa los números es **Ada/SPARK**, y GNATprove demuestra que lo tapado deja ver solo los dos primeros y los tres últimos dígitos (420 checks en total). El log tapa igual los números (`LOG_NUMEROS=completo` los muestra, para depurar). La base de la IA ya no guarda números: cada persona es un **seudónimo SipHash-2-4** con una clave propia (`privacy.key`), y lo viejo se migró una vez al arrancar. La auditoría también los tapa y se borra a los 90 días.
+
+**Sin sharp.** Los stickers —también los de GIF y WebP animado—, las tarjetas de `#qc`, `#texto`, `#perfil` y el mapa, `#toimg` y el QR ya no pasan por sharp (libvips, un addon `.node`): los hace la Session API, con libwebp en C, resvg y el redimensionado de Zig. Las tarjetas se ven iguales.
+
+| Medido | Con sharp | Ahora |
+|------|------|------|
+| Sticker desde un PNG / un JPEG de 1536x1024 | 43,8 / 56,8 ms | 28,1 / 21,3 ms |
+| Sticker animado (GIF de 20 cuadros) | 421 ms | 334 ms |
+| Disco (`node_modules`) | +30 MB | — |
+| RAM del bot, desde el primer sticker | +35 MB | — |
+
+En Termux ya no hay nada que compilar desde fuente. `.npmrc` evita que npm instale sharp porque Baileys lo pide; las miniaturas de las fotos y la foto de perfil (`#setpp`) las prepara la Session API.
+
+**Más.** Un detector de plataforma (SIMD, núcleos grandes y chicos, RAM, Termux), y el trabajo de las imágenes repartido en tandas para que los núcleos rápidos no esperen a los lentos. **Arreglos:** las fotos de más de ~1,5 MB fallaban en `#upscale`, `#removebg`, `#toanime` y LEGO; y el bot se reconectaba cada 11 minutos en grupos tranquilos, porque confundía el silencio con una conexión colgada. **Limpieza:** 1,5 GB menos en `data/`. El detalle, en el [CHANGELOG](CHANGELOG.md).
+
+**Para actualizar:** `git pull`, `npm install` (saca sharp solo) y `npm run build`.
 
 ### Novedades en v9.3.5
 
@@ -245,7 +264,7 @@ Un arreglo chico: sin sesión todavía —antes del primer QR o después de `npm
 
 ```
 ╔════════════════════════════════════════════════╗
-║                WinsiBot v9.3.5                 ║
+║                WinsiBot v9.4.0                 ║
 ╠═════════════════════╦══════════════════════════╣
 ║      TypeScript     ║           Rust           ║
 ║    Node.js :4001    ║                          ║
@@ -297,7 +316,7 @@ Un arreglo chico: sin sesión todavía —antes del primer QR o después de `npm
 >
 > **Dos cosas a tener en cuenta en dispositivos débiles (Termux/Android, ARM de placa única):**
 >
-> - De las dependencias de Node, la que de verdad compila desde código fuente en Android es **`sharp`** (lleva libvips): necesitás `clang`, `make` y `pkg-config` instalados *antes* de correr `npm install` (ver sección Termux más abajo). Desde la 9.4.0 los stickers de imágenes no la usan —los hace la Session API, con libwebp—, así que si no compila esos siguen andando. `cbor-x` se mencionaba acá y no hacía falta — su parte nativa (`cbor-extract`) es una dependencia **opcional**, y si no compila cae a la implementación en JavaScript puro sin que nada deje de funcionar.
+> - Ninguna dependencia de Node tiene que compilar desde código fuente en Android. Hasta la 9.3.5 lo hacía **`sharp`** (libvips); desde la 9.4.0 no está —los stickers, también animados, las tarjetas (#qc, #texto, #perfil, el mapa), #toimg y el QR los hace la Session API, con libwebp y resvg— y `.npmrc` (`legacy-peer-deps=true`) evita que npm lo instale porque Baileys lo pide. La parte nativa de `cbor-x` (`cbor-extract`) es una dependencia **opcional**: si no compila, cae a la implementación en JavaScript puro sin que nada deje de funcionar.
 > - **Python salió del proyecto en la 8.15.0.** Ya no estaba en el camino de ningún mensaje desde la 8.12.0; ahora tampoco quedan las dos herramientas de consola, que pasaron a Node. Lo único externo que puede tirar de Python es **yt-dlp**, para los comandos de descarga: sus releases traen un ejecutable autónomo para Windows, Linux y macOS que no lo necesita, y en Termux `pkg install yt-dlp` lo instala.
 > - La primera compilación de Rust (`npm run rust:build`) tarda unos minutos (~3 min en un PC de escritorio; bastante más en un teléfono) porque compila todo el árbol de dependencias con LTO. Es normal — no cierres la terminal, solo dale tiempo (y evitá que el dispositivo se duerma).
 
@@ -370,7 +389,7 @@ Y después los mismos 5 pasos de [Instalación](#instalación), sin cambios.
 
 Los comandos de imagen (`#toanime`, `#removebg`, `#upscale`) **funcionan en el teléfono**, porque ONNX Runtime publica build para ese target con **NNAPI**, la aceleración por hardware de Android.
 
-**Lo único que puede compilar desde fuente** es `sharp` (lleva libvips), que no trae binario para Android. Si `npm install` falla ahí, instalá `pkg install -y clang make pkg-config` y repetí. Los stickers de imágenes no dependen de él desde la 9.4.0.
+**Nada tiene que compilar desde fuente**: `sharp` (libvips), que era lo único, no está desde la 9.4.0. `cbor-x` intenta compilar su parte nativa y, si no puede, usa JavaScript; para que compile, `pkg install -y clang make pkg-config`.
 
 **Arrancar: `./start.sh`.** Hace todo lo que en el teléfono es fácil olvidarse: verifica Node (20.12 o más nuevo), corre `npm install` si faltan dependencias, compila si hay cambios en `src/` (después de un `git pull`), pide el **wake lock** de Termux para que Android no duerma el bot con la pantalla apagada (si está instalado `termux-api`), y arranca el supervisor, que reinicia el bot si se cae o se cuelga y en Termux le pone un techo de 512 MB al heap. Sin terminal (con `nohup`, a un log) o con `NO_COLOR=1`, sale sin colores ni animaciones.
 
@@ -467,6 +486,7 @@ RUST_LOG=winsibot_session_api=info
 | `DASHBOARD_HOST` | `127.0.0.1` | Dónde escucha el panel web: solo esta máquina por defecto; `0.0.0.0` lo abre a la red (mejor detrás de un proxy con HTTPS) |
 | `CONV_RETENCION_DIAS` | `365` | Días de mensajes de grupo que guarda la base de conversaciones; lo más viejo se borra cada hora. `0` los guarda para siempre |
 | `WINSI_A4K_PASADA` | según la CPU | La pasada de Anime4K (`#upscale`): `zig16` (la de x86) o `zig8e` (la de ARM). Solo para medir; cada arquitectura ya usa la que ganó |
+| `WINSI_FUENTES` | — | Una carpeta con fuentes para las tarjetas (#qc, #texto, #perfil), además de las del sistema |
 | `WINSI_TANDAS` | `4` | En cuántas tandas reparte cada hilo las filas de `#upscale` y del JPEG: el que termina toma la siguiente, y en un teléfono los núcleos grandes no esperan a los chicos. `1` es el reparto fijo de antes, para medir |
 | `WINSI_CURVE_JS` | — | `1` vuelve a verificar las firmas de los mensajes de grupo con la criptografía en JavaScript puro, ~70 veces más lenta que OpenSSL |
 

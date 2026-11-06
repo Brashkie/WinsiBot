@@ -52,7 +52,7 @@ if (deps) {
   // para saber qué pesa; NO es lo que carga el bot, que puede no tocar alguna.
   for (const dep of [
     '@whiskeysockets/baileys', 'pino', 'ansimax', 'axios', 'cbor-x', 'hono', 'ws',
-    'htmlparser2', 'css-select', 'sharp', '@brashkie/signalis-core',
+    'htmlparser2', 'css-select', '@brashkie/signalis-core',
   ]) {
     try {
       await step(dep, () => import(dep))
@@ -79,7 +79,6 @@ if (!deps) {
   // Lo que se carga AL USARSE y no al arrancar. Si cuesta algo acá, es que el
   // arranque no lo había cargado: eso es lo que se ahorra quien no lo usa.
   await step('↳ después: htmlparser2 + css-select (al primer #rule34video)', () => Promise.all([import('htmlparser2'), import('css-select')]))
-  await step('↳ después: stickers (al primer #sticker)', () => import('sharp'))
 }
 
 console.log()

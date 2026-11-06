@@ -96,8 +96,8 @@ export function rustRequest<T = any>(
         res.on('end', () => {
           const crudo = Buffer.concat(partes)
           let data: any = null
-          // Una imagen vuelve como Buffer, tal cual.
-          if (crudo.length && String(res.headers['content-type'] ?? '').startsWith('image/')) {
+          // Una imagen o un video vuelve como Buffer, tal cual.
+          if (crudo.length && /^(image|video)\//.test(String(res.headers['content-type'] ?? ''))) {
             data = crudo
           } else if (crudo.length) {
             try { data = JSON.parse(crudo.toString('utf8')) } catch { data = crudo.toString('utf8') }

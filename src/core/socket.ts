@@ -32,6 +32,7 @@ import { anotarExpulsion } from './sessionAlert.js'
 import { esLaCuentaDelBot } from '@lib/owner.js'
 import { anotar as anotarMenciones } from '@lib/mentions.js'
 import { jidParaLog } from '@lib/phoneGuard.js'
+import { RitmoMensajes } from '@lib/messagePace.js'
 
 // Con el número tapado: el log también se lee y se comparte (lib/phoneGuard.ts).
 function fmtJid(jid: string): string {
@@ -164,14 +165,20 @@ export class WinsiSocket extends EventEmitter<WinsiEvents> {
   // puede ser lo que hace que WhatsApp empiece a limitar la entrega de
   // mensajes en tiempo real a este dispositivo (círculo vicioso). 10min de
   // margen para observar sin seguir ajustando a ciegas.
+  //
+  // 9.4.0: los 10 minutos fijos suponían 400+ grupos activos. Con pocos
+  // grupos tranquilos —4 en la cuenta de prueba— el bot se reconectaba cada
+  // ~11 min todo el día por puro silencio. Ahora el límite sale del ritmo
+  // medido de mensajes nuevos (lib/messagePace.ts): 10 min con tráfico, como
+  // antes, y hasta 3 h sin él. El ritmo se conserva entre reconexiones.
   private lastMessageEventAt = 0
-  private readonly MESSAGE_STALENESS_LIMIT_MS = 10 * 60_000
+  private readonly ritmo = new RitmoMensajes()
 
   // Precarga completa de grupos — solo re-correr si pasó bastante desde la
   // última vez que terminó bien. Antes esto corría en CADA 'open' (cada
   // reconexión, no solo el arranque en frío), y con 400+ grupos cada corrida
   // es una ráfaga real de requests a WhatsApp; el comentario de arriba sobre
-  // MESSAGE_STALENESS_LIMIT_MS ya documentaba la sospecha de que reconectar
+  // lastMessageEventAt ya documentaba la sospecha de que reconectar
   // seguido + refetchear todo en cada una es lo que hace que WhatsApp empiece
   // a limitar la entrega de mensajes (círculo vicioso: reconexión → refetch
   // pesado → más probabilidad de zombie/Bad MAC → más reconexión). Los
@@ -636,6 +643,8 @@ export class WinsiSocket extends EventEmitter<WinsiEvents> {
       // después, el mensaje se está filtrando o el semáforo está lleno.
       logger.debug({ count: messages.length, type }, 'messages.upsert')
       this.lastMessageEventAt = Date.now()
+      // Solo lo nuevo mide el ritmo: el backlog ('append') no es tráfico de ahora.
+      if (type === 'notify') this.ritmo.anotar(this.lastMessageEventAt)
 
       // 'notify' = mensaje nuevo normal
       // 'append' = Baileys entrega mensajes recientes post-sync — aceptar si son del último minuto
@@ -798,10 +807,11 @@ export class WinsiSocket extends EventEmitter<WinsiEvents> {
       }
 
       const idleMs = Date.now() - this.lastMessageEventAt
-      if (idleMs > this.MESSAGE_STALENESS_LIMIT_MS) {
+      const limiteMs = this.ritmo.limite()
+      if (idleMs > limiteMs) {
         forceReconnect(
           'Conexión zombie detectada (conectado pero sin mensajes entrantes) — forzando reconexión',
-          { idleMinutes: Math.round(idleMs / 60_000) },
+          { idleMinutes: Math.round(idleMs / 60_000), limitMinutes: Math.round(limiteMs / 60_000) },
         )
       }
     }, this.ZOMBIE_CHECK_INTERVAL_MS).unref()

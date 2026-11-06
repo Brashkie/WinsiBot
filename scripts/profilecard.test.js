@@ -1,8 +1,24 @@
 // La tarjeta de #perfil (ver src/lib/profileCard.ts): los números cortos, que
-// lo del usuario no pueda meter elementos en el SVG, y que la imagen salga.
-import { describe, expect, it } from 'vitest'
-import sharp from 'sharp'
+// lo del usuario no pueda meter elementos en el SVG, y que la imagen se pida
+// bien a la Session API.
+import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { corto, svgTarjeta, tarjetaPerfil } from '../src/lib/profileCard.ts'
+import { imagen } from './fixtures/imageHelpers.js'
+
+// La imagen la dibuja la Session API (render.rs, con sus tests en Rust): acá
+// un rustHttp falso anota qué se le pidió y devuelve un JPEG de prueba.
+const pedidos = vi.hoisted(() => [])
+vi.mock('../src/lib/rustHttp.ts', () => ({
+  rustHttp: {
+    post: async (ruta, cuerpo, opts) => {
+      pedidos.push({ ruta, cuerpo, params: opts?.params })
+      if (ruta === '/image/convert' && !cuerpo.subarray(0, 3).equals(Buffer.from([0xff, 0xd8, 0xff]))) {
+        throw Object.assign(new Error('HTTP 422'), { response: { status: 422 } })
+      }
+      return { status: 200, data: imagen('small.jpeg') }
+    },
+  },
+}))
 
 const et = { nivel: 'Nivel', puesto: 'Puesto', experiencia: 'Experiencia', salud: 'Salud', monedas: 'Monedas', oro: 'Oro', dragones: 'Dragones', harem: 'Harem', brasas: 'BrasEmbers', comandos: 'Comandos', pareja: 'Pareja', cumple: 'Cumpleaños' }
 const datos = { nombre: 'Ana', rol: 'Guerrero', nivel: 12, exp: 500, expNecesaria: 1000, puesto: 3, salud: 80, monedas: 1_254_300, oro: 9999, dragones: 2, harem: 0, brasas: 1, comandos: 50 }
@@ -41,18 +57,29 @@ describe('svgTarjeta', () => {
 })
 
 describe('tarjetaPerfil', () => {
-  it('sale un JPEG de 1000x560, con foto y sin foto', async () => {
-    const foto = await sharp({ create: { width: 640, height: 640, channels: 3, background: '#3a6' } }).jpeg().toBuffer()
-    for (const f of [foto, null]) {
-      const img = await tarjetaPerfil(datos, et, f)
-      const meta = await sharp(img).metadata()
-      expect(meta.format).toBe('jpeg')
-      expect([meta.width, meta.height]).toEqual([1000, 560])
-    }
+  beforeEach(() => { pedidos.length = 0 })
+
+  it('con foto: la achica a 200 px y la mete en el SVG, que sale JPEG', async () => {
+    const foto = imagen('size-1536x1024.jpeg')
+    const img = await tarjetaPerfil(datos, et, foto)
+    expect(img.subarray(0, 3)).toEqual(Buffer.from([0xff, 0xd8, 0xff]))
+    expect(pedidos.map((p) => p.ruta)).toEqual(['/image/convert', '/image/svg'])
+    expect(pedidos[0].params).toMatchObject({ formato: 'jpeg', ancho: 200, alto: 200, ajuste: 'cover' })
+    const svg = pedidos[1].cuerpo.toString()
+    expect(pedidos[1].params).toMatchObject({ formato: 'jpeg', calidad: 88 })
+    expect(svg).toContain('width="1000" height="560"')
+    // La foto que va en el SVG es la achicada, no la original.
+    expect(svg).toContain(imagen('small.jpeg').toString('base64'))
   })
 
-  it('una foto que no se puede leer no rompe la tarjeta', async () => {
-    const img = await tarjetaPerfil(datos, et, Buffer.from('no es una imagen'))
-    expect((await sharp(img).metadata()).format).toBe('jpeg')
+  it('sin foto, o con una que no se puede leer, la tarjeta sale igual (con la inicial)', async () => {
+    for (const f of [null, Buffer.from('no es una imagen')]) {
+      pedidos.length = 0
+      await tarjetaPerfil(datos, et, f)
+      const svg = pedidos.at(-1).cuerpo.toString()
+      expect(pedidos.at(-1).ruta).toBe('/image/svg')
+      expect(svg).toContain('>A</text>')
+      expect(svg).not.toContain('<image')
+    }
   })
 })

@@ -1,6 +1,6 @@
 [package]
 name = "winsibot-session-api"
-version = "5.18.0"
+version = "5.19.0"
 edition = "2021"
 
 [lib]
@@ -30,10 +30,11 @@ rusqlite = { version = "0.31", features = ["bundled"] }
 regex    = { version = "1", features = ["unicode"] }
 reqwest  = { version = "0.12", default-features = false, features = ["json", "rustls-tls"] }
 tracing-appender = "0.2.5"
-# Solo PNG y JPEG: default-features trae una docena de decodificadores (webp,
-# tiff, bmp, ico, avif...) que este proyecto no usa y que alargan el build y
-# engordan el binario.
-image    = { version = "0.25", default-features = false, features = ["png", "jpeg"] }
+# Solo PNG, JPEG y GIF (los stickers animados, ver animation.rs; el crate gif
+# ya estaba en el árbol por resvg): default-features trae una docena de
+# decodificadores (tiff, bmp, ico, avif...) que este proyecto no usa y que
+# alargan el build y engordan el binario.
+image    = { version = "0.25", default-features = false, features = ["png", "jpeg", "gif"] }
 # libwebp de Google, compilado de su código C dentro del binario —como el
 # SQLite de rusqlite—: los stickers (ver sticker.rs). Reemplaza a sharp, que
 # era un addon .node con libvips (30 MB en disco). Sin `parallel`: compila
@@ -44,6 +45,13 @@ libwebp-sys = { version = "0.14", default-features = false, features = ["std"] }
 # costaba 17 ms). No suma crates: ya estaban en el árbol.
 zune-jpeg = "0.5"
 zune-core = "0.5"
+# SVG a imagen (ver render.rs): las tarjetas de #qc, #texto, el perfil y el
+# mapa. Rust puro, con las fuentes del sistema. Sin `svgz` (SVG comprimido,
+# que el bot no arma).
+resvg = { version = "0.49", default-features = false, features = ["text", "system-fonts", "memmap-fonts", "raster-images"] }
+# El lector de fuentes que usvg ya usa por dentro: para elegir el respaldo de
+# un símbolo (ver render::respaldo). No suma crates.
+skrifa = "0.44"
 # ONNX Runtime para los modelos de imagen (ver vision.rs). `download-binaries`
 # baja el runtime nativo al compilar, asi que no hay que instalarlo aparte.
 ort      = { version = "=2.0.0-rc.13", default-features = false, features = ["std", "download-binaries", "tls-rustls", "ndarray"] }

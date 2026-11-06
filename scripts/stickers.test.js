@@ -3,8 +3,8 @@
 // días que faltan para un cumpleaños. Y que ningún alias choque entre comandos.
 import { describe, expect, it } from 'vitest'
 import { existsSync, readFileSync } from 'node:fs'
-import sharp from 'sharp'
 import { escribirExif, leerExif } from '../src/lib/webpExif.ts'
+import { bloquesDeImagen, imagen } from './fixtures/imageHelpers.js'
 import { leerMeta } from '../src/lib/stickerMeta.ts'
 import { esAnimado } from '../src/lib/mime.ts'
 import { rellenar } from '../src/lib/welcomeTemplate.ts'
@@ -27,18 +27,14 @@ describe('leerMeta', () => {
   })
 })
 
-const cuadro = (c) => sharp({ create: { width: 16, height: 16, channels: 4, background: c } }).png().toBuffer()
-/** Un WebP fijo, o uno animado de tres cuadros (rojo, verde, azul). */
-const webp = async (animado) => animado
-  ? sharp([await cuadro('#f00'), await cuadro('#0f0'), await cuadro('#00f')], { join: { animated: true } })
-      .webp({ loop: 0, delay: [100, 100, 100] }).toBuffer()
-  : sharp({ create: { width: 16, height: 16, channels: 4, background: '#f00' } }).webp().toBuffer()
+/** Un WebP fijo, o uno animado de tres cuadros (rojo, verde, azul), de fixtures/images/. */
+const webp = async (animado) => imagen(animado ? 'animated.webp' : 'alpha.webp')
 
 describe('stickers', () => {
   it('esAnimado distingue un WebP animado de uno fijo', async () => {
     expect(esAnimado(await webp(false))).toBe(false)
     const anim = await webp(true)
-    expect((await sharp(anim, { animated: true }).metadata()).pages).toBe(3)
+    expect(bloquesDeImagen(anim).filter((b) => b.startsWith('ANMF')).length).toBe(3)
     expect(esAnimado(anim)).toBe(true)
     expect(esAnimado(Buffer.from('no es un webp'))).toBe(false)
   })
@@ -50,9 +46,8 @@ describe('stickers', () => {
       const meta = leerExif(nuevo)
       expect(meta['sticker-pack-name']).toBe('Pack de otro')
       expect(meta['sticker-pack-publisher']).toBe('Yo')
-      // Los mismos píxeles, cuadro por cuadro: no se recodificó.
-      const px = (b) => sharp(b, { animated: true }).raw().toBuffer()
-      expect((await px(nuevo)).equals(await px(original))).toBe(true)
+      // Los mismos bloques de imagen, cuadro por cuadro: no se recodificó.
+      expect(bloquesDeImagen(nuevo)).toEqual(bloquesDeImagen(original))
       expect(esAnimado(nuevo)).toBe(animado)
     }
   })

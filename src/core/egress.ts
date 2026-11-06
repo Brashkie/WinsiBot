@@ -24,6 +24,7 @@
 import type { WASocket } from '@whiskeysockets/baileys'
 import { rateLimiter } from '@lib/rateLimiter.js'
 import { completar } from '@lib/mentions.js'
+import { conMiniatura } from '@lib/mediaThumb.js'
 import { leerJid, tapar, type Numero } from '@lib/phoneGuard.js'
 import { esDueno } from '@lib/owner.js'
 import { config } from '@config'
@@ -54,10 +55,11 @@ export function wrapEgress(sock: WASocket, label = 'main'): WASocket {
     // si no, WhatsApp muestra el número crudo (ver lib/mentions.ts).
     const conMenciones = completar(content)
     // El texto viaja con el turno: vuelve con los números que tiene, que Ada
-    // encontró y tapó, sin una petición más.
+    // encontró y tapó, sin una petición más. Mientras, la miniatura de una
+    // foto, para que Baileys no busque sharp (ver lib/mediaThumb.ts).
     const texto = textoDe(conMenciones)
-    const numeros = await antibanTurn(label, to, texto?.valor)
-    const seguro = texto ? protegerNumeros(conMenciones, texto, numeros, to) : conMenciones
+    const [numeros, conFoto] = await Promise.all([antibanTurn(label, to, texto?.valor), conMiniatura(conMenciones)])
+    const seguro = texto ? protegerNumeros(conFoto, texto, numeros, to) : conFoto
     return rateLimiter.directForJid(to, () => original(jid, seguro, options))
   }) as WASocket['sendMessage']
 

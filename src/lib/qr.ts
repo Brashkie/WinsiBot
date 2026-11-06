@@ -10,7 +10,10 @@
 // mismos módulos, el mismo texto de consola y los mismos píxeles en cientos
 // de textos, incluidos los del largo del QR de Baileys (~240 caracteres).
 //
-// Lógica pura salvo `qrPng`, que carga sharp al usarse.
+// Lógica pura. El PNG lo escribe `pngGris`, con el zlib de Node: desde la
+// 9.4.0, sin sharp.
+
+import { deflateSync } from 'node:zlib'
 
 /** Total de codewords por versión (datos + corrección). */
 const CODEWORDS = [0, 26, 44, 70, 100, 134, 172, 196, 242, 292, 346, 404, 466, 532, 581, 655, 733, 815, 901, 991, 1085,
@@ -354,6 +357,49 @@ export async function qrPng(texto: string, escala = 8, margen = 4): Promise<Buff
       }
     }
   }
-  const sharp = (await import('sharp')).default
-  return sharp(px, { raw: { width: total, height: total, channels: 1 } }).png().toBuffer()
+  return pngGris(px, total, total)
+}
+
+// ── PNG en escala de grises, sin sharp ──────────────────────────────────────
+// Lo único que se le pedía a sharp era escribir el PNG, y un PNG de grises de
+// 8 bits son tres bloques: la cabecera, los píxeles comprimidos con zlib (que
+// trae Node) con un byte de filtro 0 por fila, y el final; cada uno con su
+// CRC-32.
+
+const CRC = new Uint32Array(256)
+for (let n = 0; n < 256; n++) {
+  let c = n
+  for (let k = 0; k < 8; k++) c = c & 1 ? 0xedb88320 ^ (c >>> 1) : c >>> 1
+  CRC[n] = c >>> 0
+}
+function crc32(b: Uint8Array): number {
+  let c = 0xffffffff
+  for (const x of b) c = CRC[(c ^ x) & 0xff]! ^ (c >>> 8)
+  return (c ^ 0xffffffff) >>> 0
+}
+
+function bloque(tipo: string, datos: Uint8Array): Buffer {
+  const b = Buffer.alloc(12 + datos.length)
+  b.writeUInt32BE(datos.length, 0)
+  b.write(tipo, 4, 'latin1')
+  b.set(datos, 8)
+  b.writeUInt32BE(crc32(b.subarray(4, 8 + datos.length)), 8 + datos.length)
+  return b
+}
+
+/** Píxeles de grises (un byte cada uno, fila por fila) a PNG. */
+export function pngGris(px: Uint8Array, ancho: number, alto: number): Buffer {
+  const cabecera = Buffer.alloc(13)
+  cabecera.writeUInt32BE(ancho, 0)
+  cabecera.writeUInt32BE(alto, 4)
+  cabecera[8] = 8 // bits por muestra
+  cabecera[9] = 0 // grises
+  const filas = Buffer.alloc((ancho + 1) * alto)
+  for (let y = 0; y < alto; y++) filas.set(px.subarray(y * ancho, (y + 1) * ancho), y * (ancho + 1) + 1)
+  return Buffer.concat([
+    Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]),
+    bloque('IHDR', cabecera),
+    bloque('IDAT', deflateSync(filas)),
+    bloque('IEND', new Uint8Array(0)),
+  ])
 }

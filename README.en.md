@@ -1,6 +1,6 @@
 <div align="center">
 
-<img src="https://capsule-render.vercel.app/api?type=waving&color=0:6C63FF,100:00C9FF&height=180&section=header&text=WinsiBot&fontSize=62&fontColor=ffffff&fontAlignY=38&desc=v9.3.5%20%E2%80%94%20Enterprise%20WhatsApp%20Bot&descAlignY=58&descSize=18" width="100%"/>
+<img src="https://capsule-render.vercel.app/api?type=waving&color=0:6C63FF,100:00C9FF&height=180&section=header&text=WinsiBot&fontSize=62&fontColor=ffffff&fontAlignY=38&desc=v9.4.0%20%E2%80%94%20Enterprise%20WhatsApp%20Bot&descAlignY=58&descSize=18" width="100%"/>
 
 <br/>
 
@@ -9,7 +9,7 @@
 [![Rust](https://img.shields.io/badge/Rust-1.75%2B-CE422B?style=for-the-badge&logo=rust&logoColor=white)](https://rust-lang.org)
 
 [![License](https://img.shields.io/badge/License-GPL--3.0-blue?style=flat-square)](LICENSE)
-[![Version](https://img.shields.io/badge/Version-9.3.5-6C63FF?style=flat-square)](CHANGELOG.md)
+[![Version](https://img.shields.io/badge/Version-9.4.0-6C63FF?style=flat-square)](CHANGELOG.md)
 [![Platform](https://img.shields.io/badge/Platform-Windows%20%7C%20Linux%20%7C%20macOS%20%7C%20Android-lightgrey?style=flat-square)](https://github.com/Brashkie/WinsiBot)
 [![PRs Welcome](https://img.shields.io/badge/PRs-welcome-brightgreen?style=flat-square)](https://github.com/Brashkie/WinsiBot/pulls)
 
@@ -17,7 +17,7 @@
 
 > High-performance WhatsApp bot with a three-layer multi-language architecture.<br/>
 > No artificial group limit, built for thousands of messages per hour and multiple instances.<br/>
-> v9.3.5 — **Safer and faster.** Each session name is validated by Ada/SPARK with the rule proven, the API key no longer leaks its length, and `#anime`'s JPEG encodes 30% faster on ARM, with the same result byte for byte. Since 9.3.4, `npm install` works on Termux without git.<br/>
+> v9.4.0 — **People's numbers, protected, and no more sharp.** What the bot sends and what it writes to the log show WhatsApp numbers masked (`51••••••740`), with the rule proven in Ada/SPARK, and the AI database stores everyone under a pseudonym. Stickers —animated ones too—, the cards and `#toimg` are made by the Session API with libwebp, resvg and Zig: 30 MB less on disk, 35 MB less RAM and nothing to build on Termux.<br/>
 
 <br/>
 
@@ -65,6 +65,25 @@
 | ⚙️ **Session + AI** | Rust / Axum | Atomic creds and snapshots, Bad MAC tracker, rate limiter, intent classification, personality and humour, reputation, style profiles, Ollama and cloud APIs, images |
 | 🛡 **Anti-takeover and economy** | Ada/SPARK | The group anti-takeover decision, every balance change in the economy —all or nothing, never negative, and in `#pay` and the bank the total of coins is always conserved—, the amount reader, the antiban's turn for each send the name of each session —which ends up as a folder on disk— and people's WhatsApp numbers —what the bot sends and writes to the log shows them masked, `51••••••740`, and the AI database stores each person under a SipHash-2-4 pseudonym—, their guarantees proven by GNATprove for every input, linked into the Session API |
 | 🧮 **Native kernels** | C + Zig | Anime4K and the JPEG codec, compiled with Zig into the Session API binary. The fastest one is used, measured, and on x86-64 the AVX2 copy if the CPU has it. |
+
+### What's new in v9.4.0
+
+**People's WhatsApp numbers, protected in real time.** WhatsApp hides numbers in LID groups, and the bot knows who each one belongs to: if it wrote one —a command that shows it, the AI repeating it— it broke that privacy. Now everything the bot sends goes through a filter: a number that belongs to someone comes out masked, `51924360740` → `51••••••740`. In the owner's private chat it shows in full, since it's needed for moderation. Finding and masking the numbers is done by **Ada/SPARK**, and GNATprove proves that the masked form only shows the first two and the last three digits (420 checks in total). The log masks them too (`LOG_NUMEROS=completo` shows them, for debugging). The AI database no longer stores numbers: each person is a **SipHash-2-4 pseudonym** with its own key (`privacy.key`), and the old data was migrated once at startup. The audit log masks them too and is deleted after 90 days.
+
+**No more sharp.** Stickers —GIF and animated WebP ones too—, the `#qc`, `#texto`, `#perfil` and map cards, `#toimg` and the QR no longer go through sharp (libvips, a `.node` addon): the Session API makes them, with libwebp in C, resvg and the Zig resizer. The cards look the same.
+
+| Measured | With sharp | Now |
+|------|------|------|
+| Sticker from a 1536x1024 PNG / JPEG | 43.8 / 56.8 ms | 28.1 / 21.3 ms |
+| Animated sticker (20-frame GIF) | 421 ms | 334 ms |
+| Disk (`node_modules`) | +30 MB | — |
+| Bot RAM, from the first sticker | +35 MB | — |
+
+Nothing has to build from source on Termux anymore. `.npmrc` keeps npm from installing sharp because Baileys asks for it; photo thumbnails and the profile picture (`#setpp`) are prepared by the Session API.
+
+**More.** A platform detector (SIMD, big and small cores, RAM, Termux), and image work split into batches so fast cores don't wait for slow ones. **Fixes:** photos over ~1.5 MB failed in `#upscale`, `#removebg`, `#toanime` and LEGO; and the bot reconnected every 11 minutes in quiet groups, mistaking silence for a hung connection. **Cleanup:** 1.5 GB less in `data/`. The details are in the [CHANGELOG](CHANGELOG.md).
+
+**To update:** `git pull`, `npm install` (it removes sharp by itself) and `npm run build`.
 
 ### What's new in v9.3.5
 
@@ -245,7 +264,7 @@ A small fix: with no session yet —before the first QR or after `npm run manage
 
 ```
 ╔════════════════════════════════════════════════╗
-║                WinsiBot v9.3.5                 ║
+║                WinsiBot v9.4.0                 ║
 ╠═════════════════════╦══════════════════════════╣
 ║      TypeScript     ║           Rust           ║
 ║    Node.js :4001    ║                          ║
@@ -297,7 +316,7 @@ A small fix: with no session yet —before the first QR or after `npm run manage
 >
 > **Two things to expect on weaker devices (Termux/Android, single-board ARM):**
 >
-> - The Node dependency that genuinely builds from source on Android is **`sharp`** (it bundles libvips): you need `clang`, `make` and `pkg-config` installed *before* running `npm install` (see the Termux section below). Since 9.4.0 image stickers do not use it —the Session API makes them, with libwebp—, so those keep working if it fails to build. `cbor-x` used to be listed here and did not belong — its native part (`cbor-extract`) is an **optional** dependency, and if it fails to build it falls back to pure JavaScript with nothing breaking.
+> - No Node dependency has to build from source on Android. Up to 9.3.5 **`sharp`** (libvips) did; since 9.4.0 it is gone —stickers, animated ones too, the cards (#qc, #texto, #perfil, the map), #toimg and the QR are made by the Session API, with libwebp and resvg— and `.npmrc` (`legacy-peer-deps=true`) keeps npm from installing it because Baileys asks for it. The native part of `cbor-x` (`cbor-extract`) is an **optional** dependency: if it fails to build it falls back to pure JavaScript with nothing breaking.
 > - **Python left the project in 8.15.0.** It hadn't been on any message path since 8.12.0; now the two console tools are gone too, moved to Node. The only external thing that may pull in Python is **yt-dlp**, for the download commands: its releases ship a standalone executable for Windows, Linux and macOS that doesn't need it, and on Termux `pkg install yt-dlp` installs it.
 > - The first Rust build (`npm run rust:build`) takes a few minutes (~3 min on a desktop; considerably longer on a phone) because it compiles the whole dependency tree with LTO. That's expected — don't close the terminal, just let it run (and keep the device from sleeping).
 
@@ -370,7 +389,7 @@ Then the same 5 steps from [Installation](#installation), unchanged.
 
 The image commands (`#toanime`, `#removebg`, `#upscale`) **work on the phone**, because ONNX Runtime ships a build for that target with **NNAPI**, Android's hardware acceleration.
 
-**The only thing that may build from source** is `sharp` (it bundles libvips), which has no Android binary. If `npm install` fails there, run `pkg install -y clang make pkg-config` and retry. Image stickers no longer depend on it since 9.4.0.
+**Nothing has to build from source**: `sharp` (libvips), the only one that did, is gone since 9.4.0. `cbor-x` tries to build its native part and, if it can't, uses JavaScript; to let it build, `pkg install -y clang make pkg-config`.
 
 **Start it with `./start.sh`.** It does everything that's easy to forget on a phone: checks Node (20.12 or newer), runs `npm install` if dependencies are missing, rebuilds if `src/` changed (after a `git pull`), takes the Termux **wake lock** so Android doesn't put the bot to sleep with the screen off (if `termux-api` is installed), and starts the supervisor, which restarts the bot if it crashes or hangs and, on Termux, caps the heap at 512 MB. Without a terminal (`nohup`, a log file) or with `NO_COLOR=1`, it runs without colors or animations.
 
@@ -466,6 +485,7 @@ RUST_LOG=winsibot_session_api=info
 | `COSXAMIX_MOTOR` | `propio` | `candle` uses Cosxamix's previous engine |
 | `DASHBOARD_HOST` | `127.0.0.1` | Where the web panel listens: this machine only by default; `0.0.0.0` opens it to the network (better behind an HTTPS proxy) |
 | `CONV_RETENCION_DIAS` | `365` | Days of group messages the conversation database keeps; older ones are deleted every hour. `0` keeps them forever |
+| `WINSI_FUENTES` | — | A folder of fonts for the cards (#qc, #texto, #perfil), on top of the system ones |
 | `WINSI_TANDAS` | `4` | How many batches each thread splits the rows of `#upscale` and the JPEG into: whoever finishes takes the next, so on a phone the big cores don't wait for the small ones. `1` is the old fixed split, for measuring |
 | `WINSI_A4K_PASADA` | by CPU | The Anime4K pass (`#upscale`): `zig16` (the x86 one) or `zig8e` (the ARM one). Only for measuring; each architecture already uses the winner |
 | `WINSI_CURVE_JS` | — | `1` goes back to verifying group message signatures with pure-JavaScript cryptography, ~70 times slower than OpenSSL |

@@ -46,8 +46,8 @@ async function main() {
 
   // 2. npm install
   if (TERMUX) {
-    console.log('\n  ℹ️  Termux detectado — algunas dependencias nativas (sharp, cbor-x) compilan desde fuente.')
-    console.log('     Si falta algo: pkg install clang make pkg-config\n')
+    console.log('\n  ℹ️  Termux detectado — cbor-x intenta compilar su parte nativa; si no puede, usa JavaScript.')
+    console.log('     Para que compile: pkg install clang make pkg-config\n')
   }
   step('Dependencias Node.js ...')
   const npmR = run('npm install --prefer-offline --loglevel=error')

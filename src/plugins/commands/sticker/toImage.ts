@@ -3,6 +3,7 @@ import { downloadMediaMessage } from '@whiskeysockets/baileys'
 import { safeSend } from '@lib/media_sender.js'
 import { aMp4 } from '@lib/ffmpeg.js'
 import { esAnimado } from '@lib/mime.js'
+import { animacionAMjpeg, convertirImagen } from '@lib/imageApi.js'
 import { tx } from '@lib/i18n.js'
 import { logger } from '@core/logger.js'
 
@@ -10,9 +11,10 @@ import { logger } from '@core/logger.js'
 // animado, a video en bucle. El README lo listaba desde hace rato pero el
 // comando no existía.
 //
-// Un animado va WebP → GIF con sharp (libvips lee las páginas del WebP) y de
-// ahí a MP4: ffmpeg no decodifica bien el WebP animado, y un GIF suelto
-// WhatsApp lo manda como archivo, no como algo que se reproduzca.
+// Un animado va a MP4: ffmpeg no decodifica bien el WebP animado, así que la
+// Session API saca los cuadros como MJPEG (animation.rs; hasta la 9.3.5, un
+// GIF con sharp), y un GIF suelto WhatsApp lo manda como archivo, no como
+// algo que se reproduzca.
 
 const T = {
   uso:   { es: '✗ Cita un sticker con `{p}toimg`.', en: '✗ Quote a sticker with `{p}toimg`.', pt: '✗ Cite uma figurinha com `{p}toimg`.' },
@@ -35,13 +37,15 @@ const command: Command = {
     }
     try {
       const webp = await downloadMediaMessage({ ...msg, message: quoted } as any, 'buffer', {}) as Buffer
-      const sharp = (await import('sharp')).default
       if (esAnimado(webp)) {
-        const gif = await sharp(webp, { animated: true }).gif().toBuffer()
-        const video = await aMp4(gif, 'gif')
+        // Los cuadros, como MJPEG desde la Session API (animation.rs), y de
+        // ahí a MP4.
+        const fps = 15
+        const video = await aMp4(await animacionAMjpeg(webp, fps), 'mjpeg', ['-framerate', String(fps)])
         await safeSend(() => sock.sendMessage(jid, { video, gifPlayback: true }, { quoted: msg }))
       } else {
-        const image = await sharp(webp).png().toBuffer()
+        // El estático, en la Session API (render.rs) desde la 9.4.0.
+        const image = await convertirImagen(webp, 'png')
         await safeSend(() => sock.sendMessage(jid, { image }, { quoted: msg }))
       }
     } catch (err) {

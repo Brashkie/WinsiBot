@@ -1,9 +1,9 @@
 // Los módulos viven en la lib (src/lib.rs) para que benches y tests puedan
 // importarlos; el binario los reutiliza desde ahí.
 use winsibot_session_api::{
-    ai_chat, analytics, antiban, auth, bad_mac, config, conversations, db, imagefx, imagesearch,
-    lock_manager, metrics, nlp, personality, platform, rate_limiter, routes, session_id, snapshot,
-    sticker, subbots, tasks, user_memory, vision, watchdog,
+    ai_chat, analytics, animation, antiban, auth, bad_mac, config, conversations, db, imagefx,
+    imagesearch, lock_manager, metrics, nlp, personality, platform, rate_limiter, render, routes,
+    session_id, snapshot, sticker, subbots, tasks, user_memory, vision, watchdog,
 };
 
 use axum::{
@@ -185,6 +185,11 @@ async fn principal() {
         platform.summary()
     );
 
+    // Las fuentes de las tarjetas (render.rs), en segundo plano: con el disco
+    // frío, leer las ~360 de Windows tardó 3,6 s una vez (y 23 ms con el
+    // disco caliente). Así no le toca esperar al primero que pide un #perfil.
+    tokio::task::spawn_blocking(render::cuantas_fuentes);
+
     // Crear directorio para la DB si no existe
     if let Some(parent) = Path::new(&cfg.db_path).parent() {
         if !parent.exists() {
@@ -300,6 +305,11 @@ async fn principal() {
         .route("/imagefx/lego", post(imagefx::lego).layer(imagen_b64()))
         // Una imagen a sticker WebP, sin sharp (ver sticker.rs).
         .route("/image/sticker", sticker::ruta())
+        // SVG a imagen, y convertir o redimensionar una (ver render.rs).
+        .route("/image/svg", render::ruta_svg())
+        .route("/image/convert", render::ruta_convert())
+        // Un GIF o WebP animado a MJPEG, para #toimg (ver animation.rs).
+        .route("/image/mjpeg", animation::ruta_mjpeg())
         .route("/search/image", post(imagesearch::search_image))
         .route("/search/images", post(imagesearch::search_images))
         // Portados de Python en la 8.11.0: personalidad, reputacion y la IA

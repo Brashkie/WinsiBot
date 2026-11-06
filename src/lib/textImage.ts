@@ -1,9 +1,12 @@
 // Imágenes con texto, para stickers: la cita de un mensaje (#qc) y un texto
-// grande con borde (#texto). Se arman como SVG y `sharp` —que ya viene con los
-// stickers— los pasa a PNG: sin canvas nativo, sin fuentes que instalar.
+// grande con borde (#texto). Se arman como SVG y la Session API los pasa a
+// imagen con resvg (render.rs; hasta la 9.3.5, sharp): sin canvas nativo, con
+// las fuentes del sistema.
 //
 // Todo lo que viene del chat se ESCAPA antes de entrar al SVG: si no, alguien
 // que escriba `</text><image href="…">` podría meter elementos en la imagen.
+
+import { svgAImagen } from './imageApi.js'
 
 const LADO = 512
 /** Con "sans-serif" a secas, en Windows librsvg cae en una fuente de ancho fijo. */
@@ -46,13 +49,15 @@ export function colorDe(nombre: string): string {
   return paleta[h % paleta.length]!
 }
 
-async function aPng(svg: string): Promise<Buffer> {
-  const sharp = (await import('sharp')).default
-  return sharp(Buffer.from(svg)).png().toBuffer()
-}
+const aPng = (svg: string): Promise<Buffer> => svgAImagen(svg, 'png')
 
 /** La burbuja de un mensaje citado: avatar (o inicial), nombre y texto. */
-export async function cita(nombre: string, texto: string, avatar?: Buffer | null): Promise<Buffer> {
+export function cita(nombre: string, texto: string, avatar?: Buffer | null): Promise<Buffer> {
+  return aPng(svgCita(nombre, texto, avatar))
+}
+
+/** El SVG de `cita`, aparte para probarlo. */
+export function svgCita(nombre: string, texto: string, avatar?: Buffer | null): string {
   const fuente = 28
   const alto = Math.round(fuente * 1.25)
   const x0 = 96
@@ -79,11 +84,16 @@ export async function cita(nombre: string, texto: string, avatar?: Buffer | null
   <text x="${x0 + 20}" y="${y0 + 20 + fuente}" font-size="${fuente - 2}" font-family="${FUENTES}" font-weight="bold" fill="${color}">${escapar(nombreCorto)}</text>
   ${lineas.map((l, i) => `<text x="${x0 + 20}" y="${y0 + 20 + alto + fuente + i * alto}" font-size="${fuente}" font-family="${FUENTES}" fill="#e9edef">${escapar(l)}</text>`).join('\n  ')}
 </svg>`
-  return aPng(svg)
+  return svg
 }
 
 /** Texto grande, centrado y con borde, sobre fondo transparente. */
-export async function textoGrande(texto: string): Promise<Buffer> {
+export function textoGrande(texto: string): Promise<Buffer> {
+  return aPng(svgTextoGrande(texto))
+}
+
+/** El SVG de `textoGrande`, aparte para probarlo. */
+export function svgTextoGrande(texto: string): string {
   // El tamaño de letra más grande con el que entra todo.
   let fuente = 120
   let lineas: string[] = []
@@ -97,5 +107,5 @@ export async function textoGrande(texto: string): Promise<Buffer> {
   const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="${LADO}" height="${LADO}">
   ${lineas.map((l, i) => `<text x="${LADO / 2}" y="${y0 + i * alto}" font-size="${fuente}" font-family="${FUENTES}" font-weight="900" text-anchor="middle" fill="#ffffff" stroke="#000000" stroke-width="${Math.max(3, fuente / 12)}" paint-order="stroke">${escapar(l)}</text>`).join('\n  ')}
 </svg>`
-  return aPng(svg)
+  return svg
 }

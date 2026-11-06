@@ -156,7 +156,7 @@ fn premultiplicar(img: &mut RgbaImage) {
     }
 }
 
-fn despremultiplicar(img: &mut RgbaImage) {
+pub(crate) fn despremultiplicar(img: &mut RgbaImage) {
     for p in img.as_mut().as_chunks_mut::<4>().0 {
         let a = u32::from(p[3]);
         if a == 0 {
@@ -170,7 +170,7 @@ fn despremultiplicar(img: &mut RgbaImage) {
 }
 
 /// Redimensiona a `w`×`h`; en alfa premultiplicado si hay transparencia.
-fn redimensionar(mut img: RgbaImage, w: u32, h: u32) -> RgbaImage {
+pub(crate) fn redimensionar(mut img: RgbaImage, w: u32, h: u32) -> RgbaImage {
     if img.dimensions() == (w, h) {
         return img;
     }
@@ -188,12 +188,22 @@ fn redimensionar(mut img: RgbaImage, w: u32, h: u32) -> RgbaImage {
 /// La imagen, de sticker. `completo`: ocupa 512×512, centrada y con lo que
 /// sobra transparente —como se ven los animados—; si no, con su proporción y
 /// como mucho 512 de lado.
+///
+/// Un GIF o un WebP animado sale WebP animado (ver animation.rs).
 pub fn sticker(b: &[u8], calidad: f32, completo: bool) -> Result<Vec<u8>, String> {
-    let img = decodificar(b)?;
+    if crate::animation::es_animado(b) {
+        return crate::animation::sticker_animado(b, calidad, completo);
+    }
+    codificar_webp(&encuadrar(decodificar(b)?, completo), calidad)
+}
+
+/// La imagen al tamaño de sticker: con `completo`, centrada en 512×512 y
+/// transparente alrededor; si no, con su proporción y como mucho 512 de lado.
+pub(crate) fn encuadrar(img: RgbaImage, completo: bool) -> RgbaImage {
     let (w, h) = tamano(img.width(), img.height(), completo);
     let img = redimensionar(img, w, h);
     if !completo || (w, h) == (LADO, LADO) {
-        return codificar_webp(&img, calidad);
+        return img;
     }
     let mut lienzo = RgbaImage::new(LADO, LADO);
     image::imageops::replace(
@@ -202,7 +212,7 @@ pub fn sticker(b: &[u8], calidad: f32, completo: bool) -> Result<Vec<u8>, String
         i64::from((LADO - w) / 2),
         i64::from((LADO - h) / 2),
     );
-    codificar_webp(&lienzo, calidad)
+    lienzo
 }
 
 // ── Endpoint ─────────────────────────────────────────────────────────────────

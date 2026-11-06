@@ -4,6 +4,7 @@ import { safeSend } from '@lib/media_sender.js'
 import { winsiStore } from '@core/store.js'
 import { logger } from '@core/logger.js'
 import { cita } from '@lib/textImage.js'
+import { convertirImagen } from '@lib/imageApi.js'
 import { stickerDeImagen, metaDe } from '@lib/sticker.js'
 import { getUserData } from '@core/events.js'
 
@@ -18,8 +19,7 @@ async function avatar(sock: any, jid: string): Promise<Buffer | null> {
     const url = await sock.profilePictureUrl(jid, 'image')
     if (!url) return null
     const r = await axios.get<ArrayBuffer>(url, { responseType: 'arraybuffer', timeout: 8_000 })
-    const sharp = (await import('sharp')).default
-    return await sharp(Buffer.from(r.data)).resize(64, 64).jpeg({ quality: 80 }).toBuffer()
+    return await convertirImagen(Buffer.from(r.data), 'jpeg', 80, { ancho: 64, alto: 64, ajuste: 'cover' })
   } catch {
     return null
   }

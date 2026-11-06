@@ -4,14 +4,14 @@
 // y ffmpeg —que el bot ya tiene— más nueve librerías propias (13 MB). Ahora
 // es este archivo y `webpExif.ts`:
 //
-// - imagen → WebP en la Session API (sticker.rs, 9.4.0), sin sharp; un GIF
-//   o un WebP animado, y lo que la API no pueda, todavía por sharp;
+// - imagen, GIF o WebP animado → WebP en la Session API (sticker.rs y
+//   animation.rs, 9.4.0; hasta la 9.3.5, sharp);
 // - video → WebP animado en UNA pasada de ffmpeg. La librería pasaba el video
 //   entero a GIF —sin tope de largo ni de cuadros, el formato más pesado que
 //   hay— y recién después a WebP con sharp;
 // - el pack y el autor, en el bloque EXIF, sin recodificar (`#take`).
 //
-// sharp se carga al hacer el primer sticker, no al arrancar.
+// Ni sharp ni librerías nativas en el proceso del bot: lo pesado es Rust.
 
 import { readFile, unlink, writeFile } from 'node:fs/promises'
 import { execFile } from 'node:child_process'
@@ -19,16 +19,14 @@ import { promisify } from 'node:util'
 import { join } from 'node:path'
 import { randomUUID } from 'node:crypto'
 import { config } from '@config'
-import { logger } from '@core/logger.js'
 import { ffmpegPath } from './ffmpeg.js'
-import { rustHttp } from './rustHttp.js'
-import { esAnimado, mimeDe } from './mime.js'
+import { stickerEnRust } from './imageApi.js'
+import { mimeDe } from './mime.js'
 import { carpetaTmp, getTempPath } from './utils.js'
 import { escribirExif } from './webpExif.js'
 export { leerMeta } from './stickerMeta.js'
 
 const run = promisify(execFile)
-const sharpDe = () => import('sharp').then((m) => m.default)
 
 export interface StickerOptions {
   pack?: string
@@ -49,7 +47,6 @@ const LADO = 512
 /** Tope de un sticker animado: más largo o más fluido solo pesa más. */
 const SEGUNDOS_MAX = 10
 const FPS_MAX = 15
-const TRANSPARENTE = { r: 0, g: 0, b: 0, alpha: 0 }
 
 /**
  * Le cambia el pack y el autor a un sticker que ya es WebP, sin volver a
@@ -86,26 +83,6 @@ async function videoAWebp(video: Buffer, calidad: number): Promise<Buffer> {
 }
 
 /**
- * Un sticker estático en la Session API (sticker.rs): PNG, JPEG o WebP,
- * redimensionado en Zig y codificado con libwebp. Medido sobre una imagen de
- * 1536×1024: 28 ms desde PNG y 21 desde JPEG, contra 44 y 57 con sharp, y
- * sin cargar sharp en el proceso (+35 MB). `null` si no puede —la API caída,
- * un formato que no lee—, y ahí sigue sharp.
- */
-async function estaticoEnRust(media: Buffer, calidad: number, completo: boolean): Promise<Buffer | null> {
-  try {
-    const r = await rustHttp.post<Buffer>('/image/sticker', media, {
-      params: { calidad, completo: completo ? 1 : 0 },
-      timeout: 20_000,
-    })
-    return Buffer.isBuffer(r.data) ? r.data : null
-  } catch (err: any) {
-    logger.debug({ err: err?.message, status: err?.response?.status }, '[sticker] la Session API no lo hizo: sigue sharp')
-    return null
-  }
-}
-
-/**
  * La imagen o el video, a WebP de sticker.
  *
  * `completo`: el sticker ocupa 512×512 con lo que sobra transparente, que es
@@ -116,16 +93,11 @@ async function estaticoEnRust(media: Buffer, calidad: number, completo: boolean)
 async function aWebp(media: Buffer, calidad: number, completo: boolean): Promise<Buffer> {
   const mime = mimeDe(media)
   if (mime.startsWith('video/')) return videoAWebp(media, calidad)
-  const animado = mime === 'image/gif' || (mime === 'image/webp' && esAnimado(media))
-  if (!animado) {
-    const webp = await estaticoEnRust(media, calidad, completo)
-    if (webp) return webp
-  }
-  const sharp = await sharpDe()
-  const img = sharp(media, { animated: animado })
-  if (completo) img.resize(LADO, LADO, { fit: 'contain', background: TRANSPARENTE })
-  else img.resize(LADO, LADO, { fit: 'inside', withoutEnlargement: true })
-  return img.webp({ quality: calidad, lossless: false }).toBuffer()
+  // En la Session API (sticker.rs y animation.rs): redimensionado en Zig y
+  // libwebp, también un GIF o un WebP animado (como mucho 10 s a 15 fps, como
+  // un video). Sobre 1536×1024, 28 ms desde PNG y 21 desde JPEG, contra 44 y
+  // 57 con sharp, que hasta la 9.3.5 sumaba 35 MB al proceso.
+  return stickerEnRust(media, calidad, completo)
 }
 
 /** Sticker a partir de una imagen o video en memoria. */

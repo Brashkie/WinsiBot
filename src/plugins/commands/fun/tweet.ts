@@ -2,43 +2,29 @@ import type { Command } from '../../../types/index.js'
 import { downloadBuffer } from '@lib/downloader.js'
 import { safeSend } from '@lib/media_sender.js'
 import { imagenDelMensaje } from '@lib/messages.js'
+import { convertirImagen, svgAImagen } from '@lib/imageApi.js'
+import { dimensiones, mimeDe } from '@lib/mime.js'
 
 const DEFAULT_AVATAR = 'https://i.imgur.com/8fK4h6J.png'
 const MAX_PHOTO_HEIGHT = 700 // evita tweets absurdamente largos con fotos muy verticales
 
 // Pega la foto adjunta debajo de la tarjeta del tweet, como un tweet real con
-// imagen. `sharp` es optionalDependency — si no está disponible (o falla),
-// se degrada mandando solo la tarjeta de texto sin la foto.
+// imagen: la foto, al ancho de la tarjeta y recortada al centro, y las dos en
+// un SVG que la Session API pasa a PNG (render.rs; hasta la 9.3.5, sharp). Si
+// falla, se manda solo la tarjeta.
 async function attachPhoto(cardBuffer: Buffer, photoBuffer: Buffer): Promise<Buffer> {
-  const sharp  = (await import('sharp')).default
-  const card   = sharp(cardBuffer)
-  const meta   = await card.metadata()
-  const width  = meta.width ?? 600
-
-  const photoMeta = await sharp(photoBuffer).metadata()
-  const scale     = width / (photoMeta.width ?? width)
-  const height    = Math.min(MAX_PHOTO_HEIGHT, Math.round((photoMeta.height ?? width) * scale))
-
-  const resizedPhoto = await sharp(photoBuffer)
-    .resize({ width, height, fit: 'cover' })
-    .toBuffer()
-
-  const cardHeight = meta.height ?? 0
-
-  return sharp({
-    create: {
-      width,
-      height: cardHeight + height,
-      channels: 4,
-      background: { r: 0, g: 0, b: 0, alpha: 0 },
-    },
-  })
-    .composite([
-      { input: cardBuffer,    top: 0,         left: 0 },
-      { input: resizedPhoto,  top: cardHeight, left: 0 },
-    ])
-    .png()
-    .toBuffer()
+  const card = dimensiones(cardBuffer)
+  const foto = dimensiones(photoBuffer)
+  if (!card || !foto) throw new Error('no se pudo leer el tamaño de la tarjeta o de la foto')
+  const width  = card.ancho
+  const height = Math.min(MAX_PHOTO_HEIGHT, Math.round(foto.alto * (width / foto.ancho)))
+  const resizedPhoto = await convertirImagen(photoBuffer, 'jpeg', 90, { ancho: width, alto: height, ajuste: 'cover' })
+  const dato = (b: Buffer) => `data:${mimeDe(b)};base64,${b.toString('base64')}`
+  const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="${width}" height="${card.alto + height}">` +
+    `<image x="0" y="0" width="${width}" height="${card.alto}" href="${dato(cardBuffer)}"/>` +
+    `<image x="0" y="${card.alto}" width="${width}" height="${height}" href="${dato(resizedPhoto)}"/>` +
+    `</svg>`
+  return svgAImagen(svg, 'png')
 }
 
 const command: Command = {
@@ -89,7 +75,7 @@ const command: Command = {
       try {
         buffer = await attachPhoto(buffer, photo)
       } catch {
-        // sharp no disponible o falló componiendo — se manda igual el tweet sin la foto
+        // No se pudo componer: se manda igual el tweet sin la foto
       }
     }
 

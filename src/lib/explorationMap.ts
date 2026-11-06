@@ -8,6 +8,7 @@
 
 import { C, ANCHO, ALTO, tiene, xy, type Mapa } from './exploration.js'
 import { escapar, FUENTES } from './textImage.js'
+import { svgAImagen } from './imageApi.js'
 
 /** Lo que muestra una casilla, con lo que se sabe de ella. */
 export type Vista = 'oculta' | 'pared' | 'suelo' | 'tesoro' | 'trampa' | 'monstruo' | 'fuente' | 'secreta' | 'reliquia'
@@ -91,7 +92,6 @@ export function svgMapa(mapa: Mapa, pos: number, vistas: Uint8Array, usadas: Uin
 }
 
 /** El mapa en JPEG. */
-export async function imagenMapa(mapa: Mapa, pos: number, vistas: Uint8Array, usadas: Uint8Array, titulo: string, pie: string): Promise<Buffer> {
-  const sharp = (await import('sharp')).default
-  return sharp(Buffer.from(svgMapa(mapa, pos, vistas, usadas, titulo, pie))).jpeg({ quality: 85 }).toBuffer()
+export function imagenMapa(mapa: Mapa, pos: number, vistas: Uint8Array, usadas: Uint8Array, titulo: string, pie: string): Promise<Buffer> {
+  return svgAImagen(svgMapa(mapa, pos, vistas, usadas, titulo, pie), 'jpeg', 85)
 }

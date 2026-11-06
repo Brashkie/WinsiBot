@@ -8,8 +8,8 @@
 // módulo, este test lo dice.
 import { describe, expect, it } from 'vitest'
 import { createHash } from 'node:crypto'
-import sharp from 'sharp'
 import { qr, qrPng, qrTerminal } from '../src/lib/qr.ts'
+import { leerPngGris } from './fixtures/imageHelpers.js'
 
 const huella = (q) => createHash('sha256').update(Buffer.from(q.modulos)).digest('hex').slice(0, 32)
 
@@ -46,7 +46,23 @@ describe('qr', () => {
     const t = 'https://github.com/Brashkie/WinsiBot'
     const q = qr(t)
     expect(qrTerminal(t).split('\n').length).toBe(Math.ceil((q.lado + 2) / 2) + 1)
-    const m = await sharp(await qrPng(t, 8)).metadata()
-    expect(m.width).toBe((q.lado + 8) * 8)
+    expect(leerPngGris(await qrPng(t, 8)).ancho).toBe((q.lado + 8) * 8)
+  })
+
+  it('el PNG trae el QR, píxel por píxel', async () => {
+    // Desde la 9.4.0 el PNG lo escribe pngGris, con el zlib de Node.
+    const t = 'ñandú 🐉 dragón'
+    const q = qr(t)
+    const escala = 3, margen = 4
+    const lado = (q.lado + margen * 2) * escala
+    const { ancho, alto, px: data } = leerPngGris(await qrPng(t, escala, margen))
+    expect([ancho, alto]).toEqual([lado, lado])
+    for (let y = 0; y < lado; y++) {
+      for (let x = 0; x < lado; x++) {
+        const f = Math.floor(y / escala) - margen, c = Math.floor(x / escala) - margen
+        const oscuro = f >= 0 && c >= 0 && f < q.lado && c < q.lado && q.modulos[f * q.lado + c] === 1
+        if (data[y * lado + x] !== (oscuro ? 0 : 255)) throw new Error(`píxel ${x},${y}`)
+      }
+    }
   })
 })

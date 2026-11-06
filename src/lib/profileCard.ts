@@ -1,9 +1,9 @@
 // La tarjeta de #perfil: una imagen con la foto, el nivel, las barras de
 // experiencia y salud, y los números del RPG.
 //
-// Como #qc y #texto (textImage.ts): un SVG armado en memoria que `sharp` —que
-// es libvips, C nativo, y ya viene con el bot— pasa a imagen. Sin canvas, sin
-// fuentes que instalar, sin archivos temporales. Sale en JPEG: WhatsApp
+// Como #qc y #texto (textImage.ts): un SVG armado en memoria que la Session
+// API pasa a imagen con resvg (render.rs; hasta la 9.3.5, sharp). Sin canvas,
+// sin fuentes que instalar, sin archivos temporales. Sale en JPEG: WhatsApp
 // recomprime todo a JPEG igual, y pesa una fracción de un PNG.
 //
 // Todo lo que viene del usuario (nombre, descripción, clan) se ESCAPA antes de
@@ -13,6 +13,7 @@
 // Los textos ya vienen traducidos (`Etiquetas`): esto solo dibuja.
 
 import { escapar, FUENTES, colorDe } from './textImage.js'
+import { convertirImagen, svgAImagen } from './imageApi.js'
 import { anchoTexto, cortar } from './terminal.js'
 
 const W = 1000
@@ -101,9 +102,9 @@ export function svgTarjeta(d: DatosTarjeta, et: Etiquetas, avatar?: Buffer | nul
   const extras = [
     d.clan ? `⚔ ${d.clan}` : '',
     d.pareja ? `♡ ${et.pareja}: ${d.pareja}` : '',
-    // Sin emojis de color: librsvg los dibuja con la fuente del sistema, y en un
+    // Sin emojis de color: se dibujan con la fuente del sistema, y en un
     // servidor sin fuente de emojis salen como un cuadrado. ⚔ y ♡ están en
-    // las fuentes comunes.
+    // las fuentes de símbolos comunes.
     d.cumple ? `${et.cumple}: ${d.cumple}` : '',
   ].filter(Boolean).map((s, i) => t(150, 352 + i * 32, 17, cortar(s, 28), 'fill="#c9d1d9" text-anchor="middle"')).join('')
 
@@ -144,11 +145,10 @@ export function svgTarjeta(d: DatosTarjeta, et: Etiquetas, avatar?: Buffer | nul
 </svg>`
 }
 
-/** La tarjeta en JPEG. `avatar`: la foto ya bajada (cualquier formato que lea sharp). */
+/** La tarjeta en JPEG. `avatar`: la foto ya bajada (PNG, JPEG o WebP). */
 export async function tarjetaPerfil(d: DatosTarjeta, et: Etiquetas, avatar?: Buffer | null): Promise<Buffer> {
-  const sharp = (await import('sharp')).default
   // La foto achicada a lo que se ve (200 px): embebida en base64 en el SVG,
   // una de 640 px pesaría y se decodificaría tres veces más para nada.
-  const chica = avatar ? await sharp(avatar).resize(200, 200, { fit: 'cover' }).jpeg({ quality: 85 }).toBuffer().catch(() => null) : null
-  return sharp(Buffer.from(svgTarjeta(d, et, chica))).jpeg({ quality: 88 }).toBuffer()
+  const chica = avatar ? await convertirImagen(avatar, 'jpeg', 85, { ancho: 200, alto: 200, ajuste: 'cover' }).catch(() => null) : null
+  return svgAImagen(svgTarjeta(d, et, chica), 'jpeg', 88)
 }

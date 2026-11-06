@@ -40,3 +40,43 @@ export function mimeDe(b: Uint8Array): string {
  *  sus banderas, siempre en el byte 20. Uno simple (VP8/VP8L) no es animado. */
 export const esAnimado = (webp: Uint8Array) =>
   webp.length > 20 && ascii(webp, 12, 4) === 'VP8X' && (webp[20]! & 0x02) !== 0
+
+/**
+ * El ancho y el alto de un PNG, JPEG o WebP, leídos de su cabecera (sin
+ * decodificarlo). null si no es uno de esos o está cortado.
+ */
+export function dimensiones(b: Uint8Array): { ancho: number; alto: number } | null {
+  const u16be = (i: number) => (b[i]! << 8) | b[i + 1]!
+  const u24le = (i: number) => b[i]! | (b[i + 1]! << 8) | (b[i + 2]! << 16)
+  const tipo = mimeDe(b)
+  if (tipo === 'image/png') {
+    if (b.length < 24) return null
+    const v = new DataView(b.buffer, b.byteOffset, b.byteLength)
+    return { ancho: v.getUint32(16), alto: v.getUint32(20) }
+  }
+  if (tipo === 'image/jpeg') {
+    // Los segmentos, hasta un SOF (0xC0-0xCF salvo DHT C4, JPG C8 y DAC CC).
+    let i = 2
+    while (i + 9 < b.length) {
+      if (b[i] !== 0xff) return null
+      const m = b[i + 1]!
+      if (m === 0xff) { i++; continue }
+      if (m >= 0xc0 && m <= 0xcf && m !== 0xc4 && m !== 0xc8 && m !== 0xcc) {
+        return { ancho: u16be(i + 7), alto: u16be(i + 5) }
+      }
+      i += 2 + u16be(i + 2)
+    }
+    return null
+  }
+  if (tipo === 'image/webp' && b.length >= 30) {
+    const bloque = ascii(b, 12, 4)
+    if (bloque === 'VP8X') return { ancho: u24le(24) + 1, alto: u24le(27) + 1 }
+    // Con pérdida: después de la etiqueta del cuadro y el código 9d 01 2a.
+    if (bloque === 'VP8 ') return { ancho: (b[26]! | (b[27]! << 8)) & 0x3fff, alto: (b[28]! | (b[29]! << 8)) & 0x3fff }
+    if (bloque === 'VP8L') {
+      const bits = b[21]! | (b[22]! << 8) | (b[23]! << 16) | (b[24]! << 24)
+      return { ancho: (bits & 0x3fff) + 1, alto: ((bits >>> 14) & 0x3fff) + 1 }
+    }
+  }
+  return null
+}

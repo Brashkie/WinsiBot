@@ -1,24 +1,24 @@
 // El pack y el autor de los stickers (ver src/lib/webpExif.ts): que se escriban
-// en los cuatro tipos de WebP que salen de sharp y de ffmpeg, sin tocar un
-// píxel, y que se lean de vuelta.
+// en los cuatro tipos de WebP de un sticker, sin tocar la imagen, y que se
+// lean de vuelta. Los WebP son de fixtures/images/ (hechos con sharp antes de
+// sacarlo, en la 9.4.0).
 //
 // Antes de sacar `wa-sticker-formatter` se comparó contra ella: el mismo EXIF
 // byte a byte, y el mismo tamaño de archivo resultante en los cuatro tipos.
 import { describe, expect, it } from 'vitest'
-import sharp from 'sharp'
 import { armarExif, escribirExif, leerExif } from '../src/lib/webpExif.ts'
+import { dimensiones } from '../src/lib/mime.ts'
+import { bloquesDeImagen, imagen } from './fixtures/imageHelpers.js'
 
-const cuadro = (c) => sharp({ create: { width: 37, height: 21, channels: 4, background: c } }).png().toBuffer()
 const casos = async () => ({
   // VP8 simple: con pérdida, sin transparencia.
-  conPerdida: await sharp({ create: { width: 37, height: 21, channels: 3, background: '#f00' } }).webp({ quality: 50 }).toBuffer(),
+  conPerdida: imagen('lossy.webp'),
   // VP8L simple: sin pérdida.
-  sinPerdida: await sharp({ create: { width: 37, height: 21, channels: 3, background: '#0f0' } }).webp({ lossless: true }).toBuffer(),
+  sinPerdida: imagen('lossless.webp'),
   // VP8X ya extendido, por la transparencia.
-  transparente: await sharp({ create: { width: 37, height: 21, channels: 4, background: { r: 0, g: 0, b: 255, alpha: 0.5 } } }).webp().toBuffer(),
-  animado: await sharp([await cuadro('#f00'), await cuadro('#0f0')], { join: { animated: true } }).webp({ loop: 0, delay: [100, 100] }).toBuffer(),
+  transparente: imagen('alpha.webp'),
+  animado: imagen('animated.webp'),
 })
-const pixeles = (b) => sharp(b, { animated: true }).raw().toBuffer()
 
 describe('webpExif', () => {
   it('escribe y lee el pack y el autor en los cuatro tipos, sin tocar la imagen', async () => {
@@ -27,10 +27,10 @@ describe('webpExif', () => {
       const meta = leerExif(con)
       expect(meta?.['sticker-pack-name'], nombre).toBe('Mi pack ñ 😀')
       expect(meta?.['sticker-pack-publisher'], nombre).toBe('Yo')
-      expect((await pixeles(con)).equals(await pixeles(w)), nombre).toBe(true)
-      // sharp lo sigue leyendo con el mismo tamaño.
-      const m = await sharp(con, { animated: true }).metadata()
-      expect([m.width, m.pageHeight ?? m.height], nombre).toEqual([37, 21])
+      // Los mismos bloques de imagen, byte a byte: no se recodificó.
+      expect(bloquesDeImagen(con), nombre).toEqual(bloquesDeImagen(w))
+      // Y el lienzo sigue diciendo el mismo tamaño.
+      expect(dimensiones(con), nombre).toEqual({ ancho: 37, alto: 21 })
     }
   })
 
