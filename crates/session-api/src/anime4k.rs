@@ -465,6 +465,24 @@ pub fn hilos() -> usize {
     })
 }
 
+/// Cuánto tiene que llevarse cada hilo para que valga crearlo, en nanosegundos
+/// de cuenta en un solo hilo.
+///
+/// [`repartir_en`] crea los hilos en cada llamada, y en Windows eso cuesta
+/// decenas de microsegundos por hilo. Con una imagen chica es más que la
+/// cuenta entera: la miniatura de 32 px de cada foto que sale achicaba un
+/// 230×345 en 0,70 ms con 12 hilos y en 0,18 con uno, y su JPEG tardaba 0,40
+/// contra 0,07 (`profile_thumbnail`). Con una grande pasa al revés: achicar un
+/// 1536×1024 es 2,3 ms con 12 hilos y 5,0 con uno. Con ~0,2 ms por hilo, las
+/// chicas van en uno y las grandes en todos.
+pub const NS_POR_HILO: u64 = 200_000;
+
+/// Cuántos hilos usar para un trabajo que en uno tardaría `ns` nanosegundos:
+/// entre 1 y [`hilos`].
+pub fn hilos_para(ns: u64) -> u32 {
+    (ns / NS_POR_HILO).clamp(1, hilos() as u64) as u32
+}
+
 /// Cuántas tandas le tocan a cada hilo en [`repartir`]. `WINSI_TANDAS`
 /// la cambia; con 1 es el reparto fijo de antes, para medir.
 pub fn tandas_por_hilo() -> u32 {
@@ -506,6 +524,17 @@ pub fn repartir<E>(h: u32, nuevo: impl Fn() -> E + Sync, k: impl Fn(&mut E, u32,
     repartir_en(h, tandas_por_hilo(), nuevo, k);
 }
 
+/// [`repartir`] en como mucho los hilos que justifica un trabajo de `ns`
+/// nanosegundos (ver [`hilos_para`]).
+pub fn repartir_para<E>(
+    h: u32,
+    ns: u64,
+    nuevo: impl Fn() -> E + Sync,
+    k: impl Fn(&mut E, u32, u32) + Sync,
+) {
+    repartir_hasta(h, tandas_por_hilo(), hilos_para(ns), nuevo, k);
+}
+
 /// [`repartir`] con `por_hilo` tandas por hilo: con 1, una franja fija por
 /// hilo, como hasta la 9.3.
 pub fn repartir_en<E>(
@@ -514,8 +543,19 @@ pub fn repartir_en<E>(
     nuevo: impl Fn() -> E + Sync,
     k: impl Fn(&mut E, u32, u32) + Sync,
 ) {
+    repartir_hasta(h, por_hilo, hilos() as u32, nuevo, k);
+}
+
+/// [`repartir_en`] con como mucho `max_hilos` hilos.
+pub fn repartir_hasta<E>(
+    h: u32,
+    por_hilo: u32,
+    max_hilos: u32,
+    nuevo: impl Fn() -> E + Sync,
+    k: impl Fn(&mut E, u32, u32) + Sync,
+) {
     use std::sync::atomic::{AtomicU32, Ordering};
-    let n = (hilos() as u32).min(h.max(1));
+    let n = (hilos() as u32).min(max_hilos.max(1)).min(h.max(1));
     if n <= 1 {
         k(&mut nuevo(), 0, h);
         return;

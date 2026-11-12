@@ -45,6 +45,7 @@ pub fn is_healthy(path: &Path) -> bool {
     }
     fs::read(path)
         .ok()
+        .and_then(|b| crate::vault::abrir_respaldo(path, b).ok())
         .and_then(|b| serde_json::from_slice::<serde_json::Value>(&b).ok())
         .is_some()
 }

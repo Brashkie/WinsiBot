@@ -165,6 +165,16 @@ pub async fn write(
 
     let bytes_len = bytes.len();
 
+    // Sellado (9.5): en disco va cifrado con la clave de respaldos de la
+    // bóveda, que no sale de la Session API. Sin bóveda no se escribe en
+    // claro: se avisa y se devuelve el error.
+    let bytes = crate::vault::sellar_respaldo(&path, &bytes).map_err(|e| {
+        err(
+            StatusCode::SERVICE_UNAVAILABLE,
+            format!("no se pudo sellar: {e}"),
+        )
+    })?;
+
     // Snapshot + escritura atómica (con fsync) en un hilo bloqueante — esto
     // corre en CADA creds.update de Baileys, de cada bot y sub-bot (debounced
     // a ~5s pero con muchos sub-bots activos se acumula). fsync es una
@@ -209,6 +219,23 @@ pub async fn write(
     )))
 }
 
+// ── GET /vault/auth ───────────────────────────────────────────────────────────
+// La clave con la que el bot sella auth/ (ver vault.rs). Detrás de la API key
+// como todo lo de sesión, y la Session API solo escucha en 127.0.0.1.
+
+pub async fn vault_auth() -> (StatusCode, Json<serde_json::Value>) {
+    match crate::vault::claves() {
+        Ok(k) => (
+            StatusCode::OK,
+            Json(serde_json::json!({ "ok": true, "key": B64.encode(k.auth) })),
+        ),
+        Err(e) => (
+            StatusCode::SERVICE_UNAVAILABLE,
+            Json(serde_json::json!({ "ok": false, "error": e })),
+        ),
+    }
+}
+
 // ── GET /read?sessionId=bot1 ──────────────────────────────────────────────────
 
 #[derive(Deserialize)]
@@ -234,21 +261,26 @@ pub async fn read(
     let path = resolve_path(&state.sessions_dir, &q.session_id)?;
 
     let path_for_read = path.clone();
-    let bytes = tokio::task::spawn_blocking(move || std::fs::read(&path_for_read))
-        .await
-        .map_err(|e| {
-            err(
-                StatusCode::INTERNAL_SERVER_ERROR,
-                format!("tarea interna falló: {e}"),
-            )
-        })?
-        .map_err(|e| {
-            tracing::warn!(session = %q.session_id, error = %e, "sesión no encontrada");
-            err(
-                StatusCode::NOT_FOUND,
-                format!("sesión '{}' no encontrada", q.session_id),
-            )
-        })?;
+    let bytes = tokio::task::spawn_blocking(move || {
+        std::fs::read(&path_for_read).and_then(|b| {
+            crate::vault::abrir_respaldo(&path_for_read, b)
+                .map_err(|e| std::io::Error::new(std::io::ErrorKind::InvalidData, e))
+        })
+    })
+    .await
+    .map_err(|e| {
+        err(
+            StatusCode::INTERNAL_SERVER_ERROR,
+            format!("tarea interna falló: {e}"),
+        )
+    })?
+    .map_err(|e| {
+        tracing::warn!(session = %q.session_id, error = %e, "sesión no encontrada");
+        err(
+            StatusCode::NOT_FOUND,
+            format!("sesión '{}' no encontrada", q.session_id),
+        )
+    })?;
 
     let healthy = serde_json::from_slice::<serde_json::Value>(&bytes).is_ok();
     state.metrics.inc_read(bytes.len());
@@ -382,7 +414,10 @@ pub async fn read_backup(
         let path = path.clone();
         move || {
             // 1. Intentar el backup actual
-            if let Ok(bytes) = std::fs::read(&path) {
+            if let Some(bytes) = std::fs::read(&path)
+                .ok()
+                .and_then(|b| crate::vault::abrir_respaldo(&path, b).ok())
+            {
                 if serde_json::from_slice::<serde_json::Value>(&bytes).is_ok() {
                     return ("current".to_string(), 0usize, Some(bytes));
                 }

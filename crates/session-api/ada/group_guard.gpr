@@ -1,4 +1,5 @@
 with "config/group_guard_config.gpr";
+with "sparknacl.gpr";
 project Group_Guard is
 
    for Library_Name use "Group_Guard";

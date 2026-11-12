@@ -33,6 +33,11 @@ import { esLaCuentaDelBot } from '@lib/owner.js'
 import { anotar as anotarMenciones } from '@lib/mentions.js'
 import { jidParaLog } from '@lib/phoneGuard.js'
 import { RitmoMensajes } from '@lib/messagePace.js'
+import { nuevoMediaCache, recordar as recordarMediaCache } from '@lib/mediaUploadCache.js'
+
+// Las subidas a WhatsApp que ya se hicieron (ver mediaUploadCache.ts). Una para
+// la cuenta del bot, que sobrevive a las reconexiones.
+const MEDIA_CACHE = nuevoMediaCache()
 
 // Con el número tapado: el log también se lee y se comparte (lib/phoneGuard.ts).
 function fmtJid(jid: string): string {
@@ -336,6 +341,7 @@ export class WinsiSocket extends EventEmitter<WinsiEvents> {
 
     this.sock = makeWASocket({
       version,
+      mediaCache: MEDIA_CACHE,
       auth: {
         creds: state.creds,
         keys: makeCacheableSignalKeyStore(state.keys, pino({ level: 'silent' }) as any),
@@ -370,6 +376,7 @@ export class WinsiSocket extends EventEmitter<WinsiEvents> {
     // limiter, se haya escrito con safeSend o no. Va inmediatamente después de
     // crear el socket, antes de que nada pueda usarlo. Ver core/egress.ts.
     wrapEgress(this.sock, 'main')
+    recordarMediaCache(this.sock, MEDIA_CACHE)
 
     winsiStore.bind(this.sock)
 

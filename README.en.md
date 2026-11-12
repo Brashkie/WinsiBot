@@ -1,6 +1,6 @@
 <div align="center">
 
-<img src="https://capsule-render.vercel.app/api?type=waving&color=0:6C63FF,100:00C9FF&height=180&section=header&text=WinsiBot&fontSize=62&fontColor=ffffff&fontAlignY=38&desc=v9.4.0%20%E2%80%94%20Enterprise%20WhatsApp%20Bot&descAlignY=58&descSize=18" width="100%"/>
+<img src="https://capsule-render.vercel.app/api?type=waving&color=0:6C63FF,100:00C9FF&height=180&section=header&text=WinsiBot&fontSize=62&fontColor=ffffff&fontAlignY=38&desc=v9.5.0%20%E2%80%94%20Enterprise%20WhatsApp%20Bot&descAlignY=58&descSize=18" width="100%"/>
 
 <br/>
 
@@ -9,7 +9,7 @@
 [![Rust](https://img.shields.io/badge/Rust-1.75%2B-CE422B?style=for-the-badge&logo=rust&logoColor=white)](https://rust-lang.org)
 
 [![License](https://img.shields.io/badge/License-GPL--3.0-blue?style=flat-square)](LICENSE)
-[![Version](https://img.shields.io/badge/Version-9.4.0-6C63FF?style=flat-square)](CHANGELOG.md)
+[![Version](https://img.shields.io/badge/Version-9.5.0-6C63FF?style=flat-square)](CHANGELOG.md)
 [![Platform](https://img.shields.io/badge/Platform-Windows%20%7C%20Linux%20%7C%20macOS%20%7C%20Android-lightgrey?style=flat-square)](https://github.com/Brashkie/WinsiBot)
 [![PRs Welcome](https://img.shields.io/badge/PRs-welcome-brightgreen?style=flat-square)](https://github.com/Brashkie/WinsiBot/pulls)
 
@@ -17,6 +17,7 @@
 
 > High-performance WhatsApp bot with a three-layer multi-language architecture.<br/>
 > No artificial group limit, built for thousands of messages per hour and multiple instances.<br/>
+> v9.5.0 — **The WhatsApp session, sealed, and images with no API.** Copying `auth/` is no longer enough to log in as the bot: every file is encrypted with ChaCha20-Poly1305 and, on Windows, DPAPI protects the key; the backups are sealed by SPARKNaCl, in Ada/SPARK. `#imagine` creates images on the PC with SD-Turbo and `#gpt` answers with the local Qwen, with no OpenAI key. And the bot's photos are no longer uploaded whole on every send.<br/>
 > v9.4.0 — **People's numbers, protected, and no more sharp.** What the bot sends and what it writes to the log show WhatsApp numbers masked (`51••••••740`), with the rule proven in Ada/SPARK, and the AI database stores everyone under a pseudonym. Stickers —animated ones too—, the cards and `#toimg` are made by the Session API with libwebp, resvg and Zig: 30 MB less on disk, 35 MB less RAM and nothing to build on Termux.<br/>
 
 <br/>
@@ -63,8 +64,25 @@
 |-------|-----------|----------------|
 | 🟦 **Core** | TypeScript / Node.js | WhatsApp protocol, command dispatcher, RPG, economy, web panel. Group message signatures are verified with OpenSSL's native Ed25519, 72 times faster than the pure-JavaScript cryptography Baileys shipped with |
 | ⚙️ **Session + AI** | Rust / Axum | Atomic creds and snapshots, Bad MAC tracker, rate limiter, intent classification, personality and humour, reputation, style profiles, Ollama and cloud APIs, images |
-| 🛡 **Anti-takeover and economy** | Ada/SPARK | The group anti-takeover decision, every balance change in the economy —all or nothing, never negative, and in `#pay` and the bank the total of coins is always conserved—, the amount reader, the antiban's turn for each send the name of each session —which ends up as a folder on disk— and people's WhatsApp numbers —what the bot sends and writes to the log shows them masked, `51••••••740`, and the AI database stores each person under a SipHash-2-4 pseudonym—, their guarantees proven by GNATprove for every input, linked into the Session API |
+| 🛡 **Anti-takeover and economy** | Ada/SPARK | The group anti-takeover decision, every balance change in the economy —all or nothing, never negative, and in `#pay` and the bank the total of coins is always conserved—, the amount reader, the antiban's turn for each send the name of each session —which ends up as a folder on disk— and people's WhatsApp numbers —what the bot sends and writes to the log shows them masked, `51••••••740`, and the AI database stores each person under a SipHash-2-4 pseudonym—, and the seal on the WhatsApp session backups (SPARKNaCl's ChaCha20-Poly1305), their guarantees proven by GNATprove for every input, linked into the Session API |
 | 🧮 **Native kernels** | C + Zig | Anime4K and the JPEG codec, compiled with Zig into the Session API binary. The fastest one is used, measured, and on x86-64 the AVX2 copy if the CPU has it. |
+
+### What's new in v9.5.0
+
+**The WhatsApp session, sealed.** Whoever has the files in `auth/` *is* the bot: anyone who copied them —a backup, a shared folder, Termux storage— logged into WhatsApp as it, with no QR. Now every file is stored encrypted and authenticated with **ChaCha20-Poly1305**, and the Session API's backups are sealed by **SPARKNaCl, in Ada/SPARK** (493 proven checks). The key lives in `vault.key`; on Windows **DPAPI** protects it, so only your user on your PC can open it. Whatever was in the clear gets sealed once, at startup: 302 files in 372 ms. **If `vault.key` is lost, the QR has to be scanned again**; that is why, if the key is missing or wrong, the bot does not start the session and touches nothing, instead of asking for a QR or deleting files.
+
+**`#imagine` and `#gpt`, no API.** `#imagine` creates the image **on this machine**: SD-Turbo on the CPU, inside Cosxamix, ~17 s at 512×512 and no paid key. The prompt is translated to English with the local Qwen, not with Google. `#gpt` answers with that same Qwen. OpenAI stays as a fallback, if there is a key. The image model (~2.6 GB) is downloaded with `npm run modelo:imagen`; every image carries "Powered by Stability AI", as its license asks.
+
+**Photos that are not uploaded again.** `WinsiBot.png` (1.8 MB) was uploaded whole to WhatsApp on every welcome and on `#ping`, and a menu video —up to 9.6 MB— on every `#menu`. Now the upload is reused for an hour, and each file's thumbnail is computed only once. The thumbnail of a `#rw` character goes from ~1.9 to ~1.2 ms.
+
+| Measured | Before | Now |
+|------|------|------|
+| `#imagine` without an OpenAI key | did not work | ~17 s, on the PC |
+| Decoding the image (VAE → TAESD) | 27 s | 3 s |
+| `WinsiBot.png` thumbnail, from the second send | 15.6 ms | 0 (cached) |
+| Shrinking a 230×345 character to 32 px | 0.70 ms | 0.18 ms |
+
+**To update:** `git pull`, `npm install` (fetches Session API 5.20.0 and Cosxamix 0.10.0) and `npm run build`. For `#imagine` without an API, also `npm run modelo:imagen`. The details are in the [CHANGELOG](CHANGELOG.md).
 
 ### What's new in v9.4.0
 
@@ -190,6 +208,7 @@ A small fix: with no session yet —before the first QR or after `npm run manage
 - Curve25519 key integrity check at startup
 - Auto QR-free restore from Rust snapshot
 - Atomic `auth/` writes on the Node side too, with `creds.cbor.bak` and no silently created credentials
+- The session, sealed on disk: `auth/` and its backups are encrypted and authenticated with ChaCha20-Poly1305 —the Session API's with SPARKNaCl, in Ada/SPARK— and the key is protected by DPAPI on Windows. Copying the folder is no longer enough to log in as the bot
 - Antiban: per-minute/hour/day caps, warm-up for new numbers, 463 and 429; the decision for each turn, in Ada/SPARK and proven: no send ever breaks a cap
 - Infinite reconnect with exponential backoff (max 64s)
 - Supervisor (`npm start`) that restarts the bot if the process dies or hangs without a heartbeat
@@ -264,7 +283,7 @@ A small fix: with no session yet —before the first QR or after `npm run manage
 
 ```
 ╔════════════════════════════════════════════════╗
-║                WinsiBot v9.4.0                 ║
+║                WinsiBot v9.5.0                 ║
 ╠═════════════════════╦══════════════════════════╣
 ║      TypeScript     ║           Rust           ║
 ║    Node.js :4001    ║                          ║
@@ -489,6 +508,7 @@ RUST_LOG=winsibot_session_api=info
 | `WINSI_TANDAS` | `4` | How many batches each thread splits the rows of `#upscale` and the JPEG into: whoever finishes takes the next, so on a phone the big cores don't wait for the small ones. `1` is the old fixed split, for measuring |
 | `WINSI_A4K_PASADA` | by CPU | The Anime4K pass (`#upscale`): `zig16` (the x86 one) or `zig8e` (the ARM one). Only for measuring; each architecture already uses the winner |
 | `WINSI_CURVE_JS` | — | `1` goes back to verifying group message signatures with pure-JavaScript cryptography, ~70 times slower than OpenSSL |
+| `WINSI_VAULT_KEY` | — | The two keys that seal the WhatsApp session (128 hex digits), instead of `vault.key`. Without it the Session API creates them itself; on Windows, protected with DPAPI. **If they are lost, the QR has to be scanned again** |
 
 </details>
 

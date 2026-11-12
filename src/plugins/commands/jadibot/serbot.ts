@@ -20,6 +20,7 @@ import { qrPng } from '@lib/qr.js'
 import path from 'node:path'
 import fs from 'node:fs'
 import { rustRequest } from '@lib/rustHttp.js'
+import { nuevoMediaCache, recordar as recordarMediaCache } from '@lib/mediaUploadCache.js'
 
 // ─── Config ────────────────────────────────────────────────────────────────────
 
@@ -299,8 +300,11 @@ export async function startSubBot(
   // socket por completo, así que para ese momento subSockRef ya está seteada.
   let subSockRef: any
 
+  // Las subidas de esta cuenta: un sub-bot no reusa lo que subió otra.
+  const mediaCache = nuevoMediaCache()
   const subSock = makeWASocket({
     version,
+    mediaCache,
     logger:            SILENT_LOGGER,
     printQRInTerminal: false,
     auth: {
@@ -326,6 +330,7 @@ export async function startSubBot(
   // el techo lo pone la cuenta y la conexión, no cada instancia por su cuenta,
   // así que veinte sub-bots no pueden multiplicar por veinte el tráfico.
   wrapEgress(subSock, phone)
+  recordarMediaCache(subSock, mediaCache)
 
   subBots.set(phone, {
     phone,

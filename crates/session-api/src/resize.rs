@@ -154,9 +154,14 @@ fn catmullrom_nativo_con(img: &RgbaImage, w: u32, h: u32, luma: bool) -> Option<
     // hay filas de borde que se repitan, y cada salida reusa las filas de
     // entrada de la anterior: con franjas contiguas, cada núcleo las tiene en
     // su caché.
-    crate::anime4k::repartir_en(
+    // ~0,6 ns por multiplicación en un hilo (medido con profile_thumbnail):
+    // la pasada vertical recorre el ancho de entrada y la horizontal el de
+    // salida, `mt` pesos cada una, por cada fila de salida.
+    let ns = (u64::from(w0) + u64::from(w)) * u64::from(h) * mt as u64 * 3 / 5;
+    crate::anime4k::repartir_hasta(
         h,
         1,
+        crate::anime4k::hilos_para(ns),
         || vec![0f32; w0 as usize * 4],
         |fila, y0, y1| {
             // SAFETY: `src` mide w0·h0·4 y los pesos solo apuntan dentro

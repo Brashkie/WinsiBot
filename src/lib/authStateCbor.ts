@@ -31,10 +31,18 @@
 // además por fsync y deja una copia .bak de la versión anterior, y un creds
 // ilegible se intenta recuperar del .bak antes de rendirse; si tampoco se
 // puede, el roto se aparta con otro nombre en vez de pisarlo, y se dice.
+//
+// ─── Sellado (9.5) ───────────────────────────────────────────────────────────
+// Cada archivo se guarda sellado (cifrado y autenticado) con la clave que
+// custodia la Session API: ver authSeal.ts. Lo que estaba en claro se sella
+// una vez al arrancar. Sin la clave —la Session API no contestó— el bot sigue
+// en claro si auth/ estaba en claro, y NO arranca la sesión si estaba sellada:
+// leerla sin la clave daría "ilegible" y terminaría en un QR nuevo.
 import { conCandado } from './fileLock.js'
 import { chmod, copyFile, mkdir, open, readFile, readdir, rename, stat, unlink, writeFile } from 'node:fs/promises'
 import { existsSync } from 'node:fs'
-import { join } from 'node:path'
+import { basename, join } from 'node:path'
+import { abrirArchivo, claveAuth, estaSellado, guardarArchivo } from './authSeal.js'
 import { encode as cborEncode, decode as cborDecode } from 'cbor-x'
 import { proto, initAuthCreds, BufferJSON } from '@whiskeysockets/baileys'
 import type { AuthenticationState, AuthenticationCreds } from '@whiskeysockets/baileys'
@@ -101,19 +109,56 @@ async function atomicWrite(path: string, bytes: Uint8Array, durable: boolean): P
 
 const CREDS_FILE = 'creds.json'
 
+/** Si un archivo de auth/ es de la sesión: los .cbor y la copia de creds. */
+const esDeSesion = (f: string): boolean => f.endsWith('.cbor') || f === 'creds.cbor.bak'
+
+/**
+ * Antes de leer nada: con la clave, sella lo que está en claro (una vez; después
+ * ya no queda nada). Sin la clave, si hay algo sellado no se puede seguir.
+ */
+export async function prepararSello(folder: string, clave: Buffer | null): Promise<number> {
+  const archivos = (await readdir(folder).catch(() => [] as string[])).filter(esDeSesion)
+  let sellados = 0
+  for (const f of archivos) {
+    const ruta = join(folder, f)
+    await conCandado(ruta, async () => {
+      const b = await readFile(ruta).catch(() => null)
+      if (!b || b.length === 0) return
+      if (estaSellado(b)) {
+        if (!clave) {
+          throw new Error(
+            `[auth] ${folder} está sellada y la Session API no dio la clave: no se arranca la sesión ` +
+            '(leerla sin la clave terminaría pidiendo QR). ¿Está corriendo la Session API? ¿Se perdió vault.key?')
+        }
+        return
+      }
+      if (!clave) return
+      await atomicWrite(ruta, guardarArchivo(clave, f, b), f.startsWith('creds'))
+      sellados++
+    })
+  }
+  return sellados
+}
+
 export const useMultiFileAuthStateCBOR = async (
   folder: string,
+  // La clave de auth/. Sin pasarla, la de la Session API (authSeal.ts); los
+  // tests la pasan, o null para "la Session API no la dio".
+  opciones: { clave?: Buffer | null } = {},
 ): Promise<{ state: AuthenticationState; saveCreds: () => Promise<void> }> => {
+  const clave = opciones.clave !== undefined ? opciones.clave : await claveAuth()
+
   const writeData = async (data: unknown, file: string): Promise<void> => {
     const filePath = cborPathFor(folder, file)
+    const bytes = guardarArchivo(clave, basename(filePath), cborEncode(data))
     await conCandado(filePath, async () => {
       if (file === CREDS_FILE) {
         // La versión que está en disco es entera (se escribió así), y es la
         // última que funcionó: se guarda como .bak antes de reemplazarla.
         await copyFile(filePath, `${filePath}.bak`).catch(() => {})
-        await atomicWrite(filePath, cborEncode(data), true)
+        await atomicWrite(filePath, bytes, true)
       } else {
-        await atomicWrite(filePath, cborEncode(data), false)
+        await atomicWrite(filePath, bytes, false)
       }
     })
   }
@@ -123,7 +168,10 @@ export const useMultiFileAuthStateCBOR = async (
     return conCandado(filePath, async () => {
       try {
         const buf = await readFile(filePath)
-        return cborDecode(buf)
+        // Uno sellado que no abre (un byte cambiado) cuenta como roto: lo
+        // mismo que un CBOR ilegible. Que falte la clave no llega acá:
+        // prepararSello ya cortó.
+        return cborDecode(abrirArchivo(clave, basename(filePath), buf))
       } catch {
         // Sin .cbor todavía — ¿hay un .json legado de antes de este cambio?
         const legacyPath = legacyJsonPathFor(folder, file)
@@ -131,7 +179,8 @@ export const useMultiFileAuthStateCBOR = async (
         try {
           const raw   = await readFile(legacyPath, { encoding: 'utf-8' })
           const value = JSON.parse(raw, BufferJSON.reviver)
-          await writeFile(filePath, cborEncode(value), { mode: SOLO_YO_ARCHIVO }).catch(() => {})
+          const bytes = guardarArchivo(clave, basename(filePath), cborEncode(value))
+          await writeFile(filePath, bytes, { mode: SOLO_YO_ARCHIVO }).catch(() => {})
           await unlink(legacyPath).catch(() => {})
           return value
         } catch {
@@ -168,7 +217,14 @@ export const useMultiFileAuthStateCBOR = async (
     if (f.endsWith('.tmp')) await unlink(join(folder, f)).catch(() => {})
   }
 
-  const creds: AuthenticationCreds = (await loadCreds(folder, readData)) || initAuthCreds()
+  const inicio = Date.now()
+  const sellados = await prepararSello(folder, clave)
+  if (sellados > 0) {
+    const { logger } = await import('@core/logger.js')
+    logger.info(`[auth] ${sellados} archivos de la sesión sellados en ${Date.now() - inicio} ms`)
+  }
+
+  const creds: AuthenticationCreds = (await loadCreds(folder, readData, clave)) || initAuthCreds()
 
   return {
     state: {
@@ -218,6 +274,7 @@ export const useMultiFileAuthStateCBOR = async (
 async function loadCreds(
   folder: string,
   readData: (file: string) => Promise<any>,
+  clave: Buffer | null,
 ): Promise<AuthenticationCreds | null> {
   const path = cborPathFor(folder, CREDS_FILE)
   const value = await readData(CREDS_FILE)
@@ -226,13 +283,22 @@ async function loadCreds(
 
   const { logger } = await import('@core/logger.js')
   try {
-    const bak = cborDecode(await readFile(`${path}.bak`))
+    const bak = cborDecode(abrirArchivo(clave, 'creds.cbor.bak', await readFile(`${path}.bak`)))
     if (bak && typeof bak === 'object' && (bak as any).noiseKey) {
       await copyFile(`${path}.bak`, path)
       logger.warn('[auth] creds.cbor ilegible — restaurado desde creds.cbor.bak, sin QR')
       return bak as AuthenticationCreds
     }
   } catch {}
+
+  // Sellado y que no abre, con la copia tampoco: lo más probable es que la
+  // clave sea otra (otro vault.key), no que los dos estén rotos. No se aparta
+  // nada ni se pide QR: se para, y los archivos quedan como están.
+  if (estaSellado(await readFile(path).catch(() => Buffer.alloc(0)))) {
+    throw new Error(
+      '[auth] creds.cbor está sellado y no abre con esta clave, ni su copia: ¿otro vault.key? ' +
+      'No se toca nada. Si la clave se perdió de verdad, hay que borrar auth/ y escanear el QR.')
+  }
 
   const aside = `${path}.roto-${new Date().toISOString().replace(/[:.]/g, '-')}`
   await rename(path, aside).catch(() => {})

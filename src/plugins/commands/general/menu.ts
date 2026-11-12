@@ -2,6 +2,7 @@ import type { Command } from '../../../types/index.js'
 import { commandRegistry } from '../index.js'
 import { config, CREDIT_LINE } from '@config'
 import { findMediaRandom, safeSend } from '@lib/media_sender.js'
+import { mediaCacheDe } from '@lib/mediaUploadCache.js'
 import { sendReply } from '@lib/interactive.js'
 import { generateWAMessageFromContent, prepareWAMessageMedia } from '@whiskeysockets/baileys'
 import { CATEGORY_SYMBOLS } from './categorySymbols.js'
@@ -103,9 +104,12 @@ const command: Command = {
           },
         } : undefined
         const mediaKey  = media.type === 'video' ? 'video' : 'image'
+        // Por ruta y con el caché del socket: el mismo menu*.mp4 —hasta 9,6
+        // MB— no se vuelve a subir en cada #menu (ver mediaUploadCache.ts).
+        const mediaCache = mediaCacheDe(sock)
         const prepared  = await prepareWAMessageMedia(
-          { [mediaKey]: media.buffer! } as any,
-          { upload: sock.waUploadToServer },
+          { [mediaKey]: media.path ? { url: media.path } : media.buffer! } as any,
+          { upload: sock.waUploadToServer, ...(mediaCache && { mediaCache }) },
         )
         const msgKey    = media.type === 'video' ? 'videoMessage' : 'imageMessage'
         const waMsg     = generateWAMessageFromContent(jid, {

@@ -33,6 +33,8 @@
 import { readdir, readFile, writeFile, unlink } from 'node:fs/promises'
 import { join } from 'node:path'
 import { encode as cborEncode, decode as cborDecode } from 'cbor-x'
+import { basename } from 'node:path'
+import { abrirArchivo, claveAuth, ErrorSello, estaSellado, guardarArchivo } from './authSeal.js'
 import { logger } from '@core/logger.js'
 import {
   Curve25519,
@@ -112,10 +114,15 @@ function normalizeCredsBuffers(value: any): any {
   return value
 }
 
+// La clave de auth/ (authSeal.ts), pedida una vez por pasada del verificador.
+let claveDeEstaPasada: Buffer | null = null
+
 // Lee y parsea un archivo de auth sin importar su formato de serialización.
+// Sellado (9.5) se abre con la clave; si falta o es otra lanza ErrorSello, que
+// NO cuenta como archivo roto (ver verifyAuthDir).
 function readAuthFile(path: string): Promise<Record<string, any>> {
   if (path.endsWith('.cbor')) {
-    return readFile(path).then(buf => cborDecode(buf))
+    return readFile(path).then(buf => cborDecode(abrirArchivo(claveDeEstaPasada, basename(path), buf)))
   }
   return readFile(path, 'utf-8').then(content => JSON.parse(content))
 }
@@ -329,6 +336,26 @@ async function verifyAuthDir(authDir: string): Promise<VerifyReport> {
 
   report.totalFiles = files.length
 
+  // Sellada (9.5): sin la clave, o si creds no abre con ella —otro vault.key—,
+  // no se verifica nada: leer daría "ilegible" en todos y se borraría la
+  // sesión entera. Se avisa y se deja como está.
+  claveDeEstaPasada = await claveAuth()
+  const credsArchivo = files.find(f => f === 'creds.cbor')
+  if (credsArchivo) {
+    const b = await readFile(join(authDir, credsArchivo)).catch(() => null)
+    if (b && estaSellado(b)) {
+      try {
+        abrirArchivo(claveDeEstaPasada, credsArchivo, b)
+      } catch (e) {
+        if (e instanceof ErrorSello && e.motivo !== 'largo') {
+          logger.warn(`[authVerifier] auth/ está sellada y ${e.motivo === 'sin-clave' ? 'no hay clave' : 'creds no abre con esta clave'}: no se verifica ni se borra nada`)
+          report.totalFiles = 0
+          return report
+        }
+      }
+    }
+  }
+
   for (const file of files) {
     const path      = join(authDir, file)
     const isCreds   = file === 'creds.json' || file === 'creds.cbor'
@@ -486,7 +513,8 @@ async function _restoreCredsFromRust(credsPath: string): Promise<string | null> 
     // en lugar de un Buffer la próxima vez que arranque.
     const tmp = `${credsPath}.tmp`
     if (credsPath.endsWith('.cbor')) {
-      await writeFile(tmp, cborEncode(normalizeCredsBuffers(backup.creds)))
+      const clave = await claveAuth()
+      await writeFile(tmp, guardarArchivo(clave, basename(credsPath), cborEncode(normalizeCredsBuffers(backup.creds))))
     } else {
       const content = JSON.stringify(backup.creds, null, 2)
       await writeFile(tmp, content, 'utf-8')

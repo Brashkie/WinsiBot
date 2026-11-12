@@ -2949,7 +2949,7 @@ dependencies = [
 
 [[package]]
 name = "winsibot-session-api"
-version = "5.19.0"
+version = "5.20.0"
 dependencies = [
  "axum",
  "base64 0.22.1",
@@ -2957,6 +2957,7 @@ dependencies = [
  "criterion",
  "dashmap",
  "dotenvy",
+ "getrandom 0.4.2",
  "image",
  "libwebp-sys",
  "ndarray",

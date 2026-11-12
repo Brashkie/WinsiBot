@@ -29,11 +29,18 @@ describe('conMiniatura', () => {
     expect(estado.pedidos).toEqual([{ ruta: '/image/convert', params: expect.objectContaining({ formato: 'jpeg', calidad: 50, ancho: 32, ajuste: 'inside' }) }])
   })
 
-  it('una foto desde un archivo se lee y sigue como Buffer', async () => {
+  it('una foto desde un archivo sigue como ruta, y su miniatura se hace una sola vez', async () => {
+    // Como ruta, para que Baileys reuse la subida (mediaUploadCache.ts).
     const ruta = new URL('./fixtures/images/size-37x1201.png', import.meta.url)
     const r = await conMiniatura({ image: { url: ruta.href } })
-    expect(Buffer.isBuffer(r.image)).toBe(true)
+    expect(r.image).toEqual({ url: ruta.href })
+    expect(Buffer.from(r.jpegThumbnail, 'base64')).toEqual(imagen('small.jpeg'))
     expect([r.width, r.height]).toEqual([37, 1201])
+    // La segunda vez, del caché: ni se lee ni se le pide nada a la Session API.
+    const r2 = await conMiniatura({ image: { url: ruta.href }, caption: 'otra' })
+    expect(r2.jpegThumbnail).toBe(r.jpegThumbnail)
+    expect(r2.caption).toBe('otra')
+    expect(estado.pedidos).toHaveLength(1)
   })
 
   it('lo que no es una foto, o ya trae miniatura, no se toca', async () => {

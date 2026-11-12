@@ -41,12 +41,21 @@ pub fn create(path: &Path) -> std::io::Result<()> {
     atomic_write(&snap(path, 1), &data)
 }
 
-/// Restaura desde el snapshot más reciente que sea JSON válido.
+/// Si lo que hay en `data` —abierto, si está sellado— es JSON válido.
+fn valido(ruta: &Path, data: &[u8]) -> bool {
+    crate::vault::abrir_respaldo(ruta, data.to_vec())
+        .ok()
+        .is_some_and(|b| serde_json::from_slice::<serde_json::Value>(&b).is_ok())
+}
+
+/// Restaura desde el snapshot más reciente que sea JSON válido. Se copia tal
+/// cual, sellado: el snapshot y el archivo principal son de la misma sesión y
+/// se abren con los mismos datos asociados.
 pub fn recover(path: &Path) -> Option<String> {
     for i in 1..=MAX {
         let s = snap(path, i);
         if let Ok(data) = fs::read(&s) {
-            if serde_json::from_slice::<serde_json::Value>(&data).is_ok() {
+            if valido(&s, &data) {
                 atomic_write(path, &data).ok()?;
                 return Some(format!("snapshot #{i}"));
             }
@@ -80,10 +89,14 @@ pub fn latest_meta(session_path: &Path) -> Option<SnapMeta> {
 /// Lee el contenido del primer snapshot válido sin sobreescribir el archivo principal.
 /// Útil para recuperar creds.json sin tocar sessions/main.json.
 /// Devuelve (datos_crudos, índice_snapshot).
+/// El primer snapshot válido, en claro.
 pub fn read_best_valid(path: &Path) -> Option<(Vec<u8>, usize)> {
     for i in 1..=MAX {
         let s = snap(path, i);
-        if let Ok(data) = fs::read(&s) {
+        if let Some(data) = fs::read(&s)
+            .ok()
+            .and_then(|d| crate::vault::abrir_respaldo(&s, d).ok())
+        {
             if serde_json::from_slice::<serde_json::Value>(&data).is_ok() {
                 return Some((data, i));
             }

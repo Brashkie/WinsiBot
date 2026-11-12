@@ -157,7 +157,16 @@ fn entropia(coefs: &[i16], w: u32, h: u32, hilos: usize) -> Option<(u32, Vec<u8>
 /// JPEG con el códec propio en C y Zig.
 #[cfg(feature = "native")]
 pub fn codificar_nativo(img: &RgbImage, calidad: u8) -> Vec<u8> {
-    codificar_nativo_con(img, calidad, crate::anime4k::hilos())
+    codificar_nativo_con(img, calidad, tramos_huffman(img.width(), img.height()))
+}
+
+/// En cuántos tramos va el Huffman: ~1,3 ns por píxel en un hilo, y un tramo
+/// por hilo que valga la pena crear (ver `anime4k::hilos_para`). La miniatura
+/// de 32 px de cada foto que sale era un JPEG de 3 filas de bloques en 12
+/// hilos.
+#[cfg(feature = "native")]
+fn tramos_huffman(w: u32, h: u32) -> usize {
+    crate::anime4k::hilos_para(u64::from(w) * u64::from(h) * 13 / 10) as usize
 }
 
 /// Como [`codificar_nativo`], con el Huffman repartido en `hilos` tramos.
@@ -188,9 +197,7 @@ pub fn codificar_rgba(img: &image::RgbaImage, calidad: u8) -> Vec<u8> {
             && w <= 65_535
             && h <= 65_535
         {
-            if let Some(jpg) =
-                coefs_y_armar(img.as_raw(), 4, w, h, calidad, crate::anime4k::hilos())
-            {
+            if let Some(jpg) = coefs_y_armar(img.as_raw(), 4, w, h, calidad, tramos_huffman(w, h)) {
                 return jpg;
             }
         }
@@ -265,8 +272,10 @@ fn calcular_coefs(
             w
         )
     };
-    crate::anime4k::repartir(
+    // ~2,3 ns por píxel en un hilo (color y DCT).
+    crate::anime4k::repartir_para(
         filas_mcu,
+        u64::from(w) * u64::from(h) * 23 / 10,
         || vec![0f32; largo],
         |scratch, my0, my1| unsafe {
             crate::zig!(

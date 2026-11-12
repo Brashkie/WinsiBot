@@ -1,6 +1,6 @@
 [package]
 name = "winsibot-session-api"
-version = "5.19.0"
+version = "5.20.0"
 edition = "2021"
 
 [lib]
@@ -23,6 +23,10 @@ tower-http = { version = "0.5", features = ["timeout"] }
 tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 uuid = { version = "1", features = ["v4"] }
+# Los nonces y las claves del sello de la sesión (seal.rs, vault.rs), del
+# generador del sistema operativo. Ya llegaba por uuid, en la misma versión:
+# se declara porque el código propio la usa.
+getrandom = "0.4"
 base64 = "0.22"
 dotenvy = "0.15"
 chrono = { version = "0.4", features = ["serde"] }

@@ -18,6 +18,7 @@
 import './env.js'
 import { createHash } from 'node:crypto'
 import { spawn } from 'node:child_process'
+import { createDecipheriv } from 'node:crypto'
 import { cpSync, existsSync, mkdirSync, readFileSync, readdirSync, rmSync, statSync, unlinkSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { createInterface } from 'node:readline/promises'
@@ -79,11 +80,35 @@ function credsFile(base) {
   return null
 }
 
+// Desde la 9.5 la sesión va SELLADA (src/lib/authSeal.ts): "WSB1", nonce,
+// etiqueta y el CBOR cifrado con ChaCha20-Poly1305. Para leer creds hace falta
+// la clave, que custodia la Session API. Sin ella, una sesión sellada NO es una
+// sesión rota: no se puede verificar, y entonces no se repara ni se reemplaza.
+const SELLO = Buffer.from('WSB1', 'latin1')
+const estaSellado = (b) => b.length >= 32 && SELLO.equals(b.subarray(0, 4))
+let claveAuth = null
+
+async function pedirClave() {
+  const r = await rust('GET', '/vault/auth')
+  if (r?.ok && r.key) claveAuth = Buffer.from(r.key, 'base64')
+}
+
+function abrirSellado(b, nombre) {
+  const d = createDecipheriv('chacha20-poly1305', claveAuth, b.subarray(4, 16), { authTagLength: 16 })
+  d.setAAD(Buffer.from(`winsibot:auth:${nombre}`, 'utf8'), { plaintextLength: b.length - 32 })
+  d.setAuthTag(b.subarray(16, 32))
+  return Buffer.concat([d.update(b.subarray(32)), d.final()])
+}
+
 function readCreds(base) {
   const p = credsFile(base)
   if (!p) return null
   try {
-    return p.endsWith('.cbor') ? cborDecode(readFileSync(p)) : JSON.parse(readFileSync(p, 'utf8'))
+    if (!p.endsWith('.cbor')) return JSON.parse(readFileSync(p, 'utf8'))
+    const b = readFileSync(p)
+    if (!estaSellado(b)) return cborDecode(b)
+    if (!claveAuth) return { sinClave: true }
+    return cborDecode(abrirSellado(b, 'creds.cbor'))
   } catch {
     return null
   }
@@ -96,6 +121,9 @@ function sessionHealth() {
   const p = credsFile(AUTH_DIR)
   if (!p) return { healthy: false, reason: 'falta creds.cbor/creds.json' }
   const d = readCreds(AUTH_DIR)
+  // Sellada y sin la Session API: se da por buena —no se puede saber— y se
+  // dice; tratarla como rota haría que `repair` la pise con un backup viejo.
+  if (d?.sinClave) return { healthy: true, sinVerificar: true, files: files.length, jid: '?', name: 'sesión sellada' }
   if (!d) return { healthy: false, reason: `${p.split(/[\\/]/).pop()} ilegible` }
   for (const k of ['noiseKey', 'signedIdentityKey', 'registrationId']) {
     if (!d[k]) return { healthy: false, reason: `falta el campo '${k}'` }
@@ -251,7 +279,8 @@ async function cmdDiagnose() {
 
   section('Sesión local (auth/)')
   const h = sessionHealth()
-  if (h.healthy) ok(`credenciales válidas → ${h.name || '?'} (+${phone(h.jid)})`)
+  if (h.sinVerificar) warn('sesión sellada y la Session API no está corriendo: no se puede verificar (ni se toca)')
+  else if (h.healthy) ok(`credenciales válidas → ${h.name || '?'} (+${phone(h.jid)})`)
   else { err(`credenciales: ${h.reason}`); issues.push(['error', `creds: ${h.reason}`]) }
   if (existsSync(join(AUTH_DIR, 'creds.cbor.bak'))) info('hay creds.cbor.bak (copia de la versión anterior)')
   if (existsSync(AUTH_DIR)) {
@@ -435,6 +464,9 @@ async function menu() {
     else err(`"${a}" no es una opción`)
   }
 }
+
+// La clave de la sesión sellada, si la Session API está corriendo.
+await pedirClave()
 
 const arg = process.argv[2]?.toLowerCase()
 if (!arg) await menu()

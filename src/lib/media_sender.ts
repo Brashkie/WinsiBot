@@ -238,7 +238,9 @@ export async function broadcastSend(
 
 // ─── Media finder ─────────────────────────────────────────────────────────────
 type MediaType = 'video' | 'image' | 'gif' | null
-interface MediaResult { type: MediaType; buffer: Buffer | null }
+// `path` es la ruta del archivo: los envíos lo pasan por ruta (`{ url }`) para
+// que Baileys reuse la subida (ver mediaUploadCache.ts).
+interface MediaResult { type: MediaType; buffer: Buffer | null; path?: string }
 
 export async function findMedia(name: string, sock?: WASocket): Promise<MediaResult> {
   const exts: Array<[string, Exclude<MediaType, null>]> = [
@@ -256,7 +258,7 @@ export async function findMedia(name: string, sock?: WASocket): Promise<MediaRes
       try {
         const path = join(dir, file)
         await access(path)
-        return { type, buffer: await readFile(path) }
+        return { type, buffer: await readFile(path), path }
       } catch {}
     }
   }
@@ -286,7 +288,8 @@ async function findMediaRandomIn(dir: string, name: string): Promise<MediaResult
       : null
 
     if (!type) return { type: null, buffer: null }
-    return { type, buffer: await readFile(join(dir, chosen)) }
+    const path = join(dir, chosen)
+    return { type, buffer: await readFile(path), path }
   } catch {
     return null
   }
@@ -316,14 +319,16 @@ export async function sendWithMedia(
   const mention = mentions ? { mentions } : {}
   const media   = random ? await findMediaRandom(name, sock) : await findMedia(name, sock)
 
+  // Por ruta y no como Buffer: así Baileys reusa la subida (mediaUploadCache.ts).
+  const archivo = (b: Buffer) => (media.path ? { url: media.path } : b)
   if (media.type === 'video' && media.buffer) {
-    return safeSend(() => sock.sendMessage(jid, { video: media.buffer!, caption: text, gifPlayback: false, ...mention }, opts))
+    return safeSend(() => sock.sendMessage(jid, { video: archivo(media.buffer!), caption: text, gifPlayback: false, ...mention }, opts))
   }
   if (media.type === 'gif' && media.buffer) {
-    return safeSend(() => sock.sendMessage(jid, { video: media.buffer!, caption: text, gifPlayback: true, ...mention }, opts))
+    return safeSend(() => sock.sendMessage(jid, { video: archivo(media.buffer!), caption: text, gifPlayback: true, ...mention }, opts))
   }
   if (media.type === 'image' && media.buffer) {
-    return safeSend(() => sock.sendMessage(jid, { image: media.buffer!, caption: text, ...mention }, opts))
+    return safeSend(() => sock.sendMessage(jid, { image: archivo(media.buffer!), caption: text, ...mention }, opts))
   }
   return safeSend(() => sock.sendMessage(jid, { text, ...mention }, opts))
 }

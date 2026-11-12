@@ -165,19 +165,23 @@ jobs:
         working-directory: crates/session-api/ada
         run: alr -n build
 
+      # Solo las unidades propias: SPARKNaCl (9.5) se demuestra en su propio
+      # proyecto, y volver a hacerlo acá tarda ~25 minutos.
       - name: Demostrar con GNATprove
         working-directory: crates/session-api/ada
-        run: alr -n exec -- gnatprove -P group_guard.gpr --level=4 -j0 --checks-as-errors=on
+        run: alr -n exec -- gnatprove -P group_guard.gpr --level=4 -j0 --checks-as-errors=on --no-subprojects
 
       # El antirrobo, en sus 1.280 entradas; el libro de saldos, en los bordes
       # y en un millón de entradas al azar; el lector de montos, en las
       # 2.396.745 tiras cortas (la misma huella que el test de TypeScript) y
       # en un millón de largas; el ritmo de salida, en un millón de pedidos y
       # en los bordes de la escalada; el nombre de una sesión, en todas las
-      # cadenas de hasta 3 bytes.
+      # cadenas de hasta 3 bytes; el sello de la sesión (SPARKNaCl) contra la
+      # copia en Rust en largos de 1 a 300 y hasta 1 MiB, y los vectores que
+      # comprueba el bot con Node.
       - name: Ada contra las copias en Rust
         working-directory: crates/session-api/ada
-        run: alr -n exec -- bash -c 'cd ../../.. && cargo test --release -p winsibot-session-api --features ada -- group_guard ledger amount send_pacing session_id phone privacy'
+        run: alr -n exec -- bash -c 'cd ../../.. && cargo test --release -p winsibot-session-api --features ada -- group_guard ledger amount send_pacing session_id phone privacy seal vault'
 
       - name: Clippy con Ada
         working-directory: crates/session-api/ada

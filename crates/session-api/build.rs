@@ -39,13 +39,59 @@ fn compilar_ada() {
     let salida = PathBuf::from(std::env::var("OUT_DIR").expect("OUT_DIR"));
     let gcc = std::env::var("WINSI_GNAT_GCC").unwrap_or_else(|_| "gcc".into());
     println!("cargo:rerun-if-env-changed=WINSI_GNAT_GCC");
+    let manifiesto = std::env::var("CARGO_MANIFEST_DIR").expect("CARGO_MANIFEST_DIR");
+
+    // SPARKNaCl (9.5): el AEAD con el que se sellan los respaldos de la
+    // sesión. Es una dependencia de Alire, así que sus fuentes están donde
+    // Alire las dejó: `alr exec` exporta esa carpeta en
+    // SPARKNACL_ALIRE_PREFIX. WINSI_SPARKNACL la reemplaza.
+    println!("cargo:rerun-if-env-changed=SPARKNACL_ALIRE_PREFIX");
+    println!("cargo:rerun-if-env-changed=WINSI_SPARKNACL");
+    let nacl = std::env::var("WINSI_SPARKNACL")
+        .or_else(|_| std::env::var("SPARKNACL_ALIRE_PREFIX"))
+        .map(|d| PathBuf::from(d).join("src"))
+        .unwrap_or_else(|_| {
+            panic!(
+                "no encuentro las fuentes de SPARKNaCl: compilá con `alr exec` desde ada/                  (que exporta SPARKNACL_ALIRE_PREFIX) o poné la carpeta en WINSI_SPARKNACL"
+            )
+        });
+    let mut objetos = Vec::new();
+    // Solo lo que usa el sello (el cierre de `with` de Stream y MAC),
+    // con las opciones de su propio proyecto: -O2 y -gnatn; -gnatp porque sus
+    // chequeos están demostrados; -fno-tree-vrp, el arreglo de SPARKNaCl para
+    // un error de código de GNAT 14. Los `separate` de sparknacl.adb se
+    // compilan con él.
+    for unidad in [
+        "sparknacl",
+        "sparknacl-car",
+        "sparknacl-core",
+        "sparknacl-hashing-sha2_common",
+        "sparknacl-hashing-sha256",
+        "sparknacl-mac",
+        "sparknacl-stream",
+    ] {
+        let objeto = salida.join(format!("{unidad}.o"));
+        let estado = Command::new(&gcc)
+            .args(["-c", "-O2", "-gnatp", "-gnatn", "-fno-tree-vrp", "-fPIC"])
+            .args(["-ffunction-sections", "-fdata-sections"])
+            .arg(format!("-I{}", nacl.display()))
+            .arg(nacl.join(format!("{unidad}.adb")))
+            .arg("-o")
+            .arg(&objeto)
+            .current_dir(&salida)
+            .status();
+        match estado {
+            Ok(s) if s.success() => {}
+            otro => panic!("GNAT no compiló SPARKNaCl ({unidad}): {otro:?}"),
+        }
+        objetos.push(objeto);
+    }
 
     // Cada unidad de Ada del crate: el antirrobo (9.2), el libro de saldos
     // de la economía, el lector de montos y el ritmo de salida (9.3), y el
     // nombre de una sesión (9.3.5), los números de WhatsApp de la gente y el
-    // SipHash de los seudónimos (9.4). Todas Pure, sin elaboración y
-    // demostradas.
-    let mut objetos = Vec::new();
+    // SipHash de los seudónimos (9.4), y el sello de los respaldos (9.5).
+    // Todas Pure, sin elaboración y demostradas.
     for unidad in [
         "group_guard",
         "ledger",
@@ -54,16 +100,18 @@ fn compilar_ada() {
         "session_name",
         "phone_guard",
         "sip_hash",
+        "sealed_box",
     ] {
         let objeto = salida.join(format!("{unidad}.o"));
         let estado = Command::new(&gcc)
             .args(["-c", "-O2", "-gnatp", "-gnatn", "-fPIC"])
             .arg("-Iada/src")
+            .arg(format!("-I{}", nacl.display()))
             .arg(format!("ada/src/{unidad}.adb"))
             .arg("-o")
             .arg(&objeto)
             // gcc deja el .ali junto al objeto; que no ensucie ada/src.
-            .current_dir(std::env::var("CARGO_MANIFEST_DIR").expect("CARGO_MANIFEST_DIR"))
+            .current_dir(&manifiesto)
             .status();
         match estado {
             Ok(s) if s.success() => {}

@@ -103,9 +103,9 @@
 
 | Comando | Aliases | Cooldown | Permiso | Descripción |
 |---------|---------|:--------:|:-------:|-------------|
-| `gpt` | `ai`, `chatgpt`, `ask` | — | 👤 | Chat con GPT-4o-mini, conserva historial por usuario |
+| `gpt` | `ai`, `chatgpt`, `ask` | — | 👤 | Chat con la IA de este bot (el Qwen de Cosxamix, sin API); sin ella, GPT-4o-mini si hay clave. Conserva historial por usuario |
 | `gptreset` | — | — | 👤 | Borra tu historial de conversación con la IA |
-| `imagine` | `dalle`, `img`, `imagen` | — | ⭐ | Genera una imagen con DALL-E 3 |
+| `imagine` | `dalle`, `crear` | — | ⭐ | Crea una imagen en esta máquina, sin API (SD-Turbo en Cosxamix, ~17 s; `npm run modelo:imagen`); sin modelo, con DALL-E 3 si hay clave |
 | `traducir` | `tl`, `translate`, `tr` | — | 👤 | Traduce texto a cualquier idioma (50+ idiomas) |
 | `hepein` | `bot` | — | 🔑 | Cambia la **personalidad del bot** en este grupo (12 modos) |
 | `imitar` | `imitate`, `hablar`, `copy` | — | 👤 | El bot responde imitando el estilo de un usuario del grupo |

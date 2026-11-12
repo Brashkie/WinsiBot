@@ -2,6 +2,11 @@ import type { Command } from '../../../types/index.js'
 import { chat, type Mensaje } from '@lib/openai.js'
 import { config } from '@config'
 import { createCache, registerCache } from '@lib/cacheManager.js'
+import { chatLocal } from '@lib/localChat.js'
+
+// Primero la IA de esta máquina (el Qwen de Cosxamix, ver localChat.ts), sin
+// API ni clave; si no contesta, GPT-4o-mini de OpenAI, si hay clave. El
+// historial es el mismo para los dos.
 
 // stdTTL de NodeCache iba en segundos; la Cache del cacheManager usa ms.
 // maxSize acota el historial a los 300 usuarios más activos — NodeCache no
@@ -16,15 +21,10 @@ type Message = { role: 'user' | 'assistant' | 'system'; content: string }
 const command: Command = {
   name: 'gpt',
   aliases: ['ai', 'chatgpt', 'ask', 'gptreset'],
-  description: 'Chatea con GPT-4 | !gptreset para borrar historial',
+  description: 'Chatea con la IA de este bot (o GPT-4o-mini) | !gptreset para borrar historial',
   category: 'ai',
 
   async execute({ sock, jid, msg, args, sender, command: cmd }) {
-    if (!config.openaiKey) {
-      await sock.sendMessage(jid, { text: '❌ OpenAI no configurado.' }, { quoted: msg })
-      return
-    }
-
     // Limpiar historial
     if (cmd === 'gptreset') {
       historyCache.delete(sender)
@@ -60,11 +60,24 @@ const command: Command = {
     await sock.sendPresenceUpdate('composing', jid)
 
     try {
-      const respuesta = await chat(history as Mensaje[], {
-        model:       'gpt-4o-mini',
-        max_tokens:  1024,
-        temperature: 0.8,
-      })
+      // La IA local: ~15 tokens por segundo con el 3B en CPU, así que 512 de
+      // tope (unos 35 s) y no los 1024 de OpenAI.
+      let respuesta = await chatLocal(history, { max_tokens: 512, temperature: 0.8 })
+      if (!respuesta) {
+        if (!config.openaiKey) {
+          history.pop()
+          await sock.sendPresenceUpdate('paused', jid)
+          await sock.sendMessage(jid, {
+            text: '❌ La IA de este bot no está disponible ahora (¿Cosxamix cargando?) y no hay clave de OpenAI.',
+          }, { quoted: msg })
+          return
+        }
+        respuesta = (await chat(history as Mensaje[], {
+          model:       'gpt-4o-mini',
+          max_tokens:  1024,
+          temperature: 0.8,
+        })) ?? null
+      }
 
       let reply = respuesta?.trim() || '❌ Sin respuesta.'
       if (reply.length > MAX_REPLY) reply = `${reply.slice(0, MAX_REPLY)}…`

@@ -8,3 +8,9 @@ tags = []
 
 [[depends-on]]
 gnatprove = "^16.1.0"
+
+# El AEAD con el que la Session API sella sus respaldos de la sesion de
+# WhatsApp (src/sealed_box.ads): TweetNaCl reescrito en SPARK por Rod
+# Chapman, con la ausencia de errores de ejecucion demostrada. BSD-3-Clause.
+[[depends-on]]
+sparknacl = "^4.0.1"

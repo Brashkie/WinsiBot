@@ -3,7 +3,7 @@
 use winsibot_session_api::{
     ai_chat, analytics, animation, antiban, auth, bad_mac, config, conversations, db, imagefx,
     imagesearch, lock_manager, metrics, nlp, personality, platform, rate_limiter, render, routes,
-    session_id, snapshot, sticker, subbots, tasks, user_memory, vision, watchdog,
+    session_id, snapshot, sticker, subbots, tasks, user_memory, vault, vision, watchdog,
 };
 
 use axum::{
@@ -197,6 +197,22 @@ async fn principal() {
         }
     }
 
+    // La bóveda con las claves de la sesión (vault.rs), al lado de la base. Si
+    // vault.key existe y no se puede abrir no se crea otra: se avisa, y el bot
+    // no arranca la sesión en vez de perderla.
+    let dir_datos = Path::new(&cfg.db_path)
+        .parent()
+        .unwrap_or_else(|| Path::new("."));
+    match vault::iniciar(dir_datos) {
+        Ok(()) => {
+            let n = vault::sellar_respaldos_viejos(Path::new(&cfg.sessions_dir));
+            if n > 0 {
+                tracing::info!(archivos = n, "bóveda: respaldos de la sesión sellados");
+            }
+        }
+        Err(e) => tracing::error!("bóveda: {e}"),
+    }
+
     let database = db::open(&cfg.db_path).expect("no se pudo abrir SQLite");
 
     // Conexión SQLite única, compartida entre conversations.rs y bad_mac.rs
@@ -262,6 +278,8 @@ async fn principal() {
             post(routes::clear_signal_sessions),
         )
         .route("/sessions/backup", get(routes::read_backup))
+        // La clave con la que el bot sella auth/ (vault.rs).
+        .route("/vault/auth", get(routes::vault_auth))
         // ─── NLP fast-path ───────────────────────────────────────────────────
         .route("/nlp/fast", post(nlp::nlp_fast))
         // Clasificar, observar y la memoria del remitente en UN viaje: lo que el

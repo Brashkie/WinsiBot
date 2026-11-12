@@ -31,7 +31,8 @@ const command: Command = {
 
     if (media.type === 'image' && media.buffer) {
       await safeSend(() => sock.sendMessage(jid, {
-        image:    media.buffer!,
+        // Por ruta: Baileys reusa la subida (mediaUploadCache.ts).
+        image:    media.path ? { url: media.path } : media.buffer!,
         caption:  text,
         mentions: [target],
       }, { quoted: msg }))
