@@ -4,6 +4,13 @@ Todos los cambios notables de WinsiBot se documentan en este archivo, versión p
 
 ---
 
+## [Sin publicar]
+
+- Licencia declarada en todas las piezas propias: `winsibot-cluster` y
+  `winsibot-session-api` llevan `license = "GPL-3.0-or-later"` en su
+  `Cargo.toml`, y el crate de Ada (`group_guard`) pasa de `GPL-3.0-only` a
+  `GPL-3.0-or-later`, la misma del bot.
+
 ## [9.5.0] — 2026-11-11
 
 **La sesión de WhatsApp, sellada.** Copiar `auth/` ya no alcanza para entrar como el bot: cada archivo va cifrado y autenticado con ChaCha20-Poly1305, con la clave en una bóveda que en Windows protege DPAPI, y los respaldos de la Session API los sella SPARKNaCl, en Ada/SPARK. `#imagine` y `#gpt` funcionan en esta máquina, sin API —SD-Turbo y el Qwen de Cosxamix—, y las fotos y videos del bot —el menú, las bienvenidas— ya no se suben enteros a WhatsApp en cada envío. Session API 5.20.0, con Cosxamix 0.10.0.

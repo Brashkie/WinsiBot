@@ -3,6 +3,7 @@ name = "winsibot-cluster"
 version = "0.1.0"
 edition = "2021"
 description = "Motor de almacenamiento LSM propio de WinsiBot: WAL, memtable, SSTables y compactación, sin dependencias"
+license = "GPL-3.0-or-later"
 publish = false
 
 [lib]

@@ -3,7 +3,7 @@ description = "Antirrobo de grupos de WinsiBot: la decision, demostrada con SPAR
 version = "0.1.0"
 
 authors = ["Brashkie"]
-licenses = "GPL-3.0-only"
+licenses = "GPL-3.0-or-later"
 tags = []
 
 [[depends-on]]
